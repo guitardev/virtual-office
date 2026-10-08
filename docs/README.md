@@ -279,16 +279,22 @@ interface Member {
 
 ---
 
-## 🗄️ ฐานข้อมูลและสกีมา (Database & Supabase Integration)
+## 🗄️ ฐานข้อมูลและการเชื่อมต่อสด (Supabase Live & Vercel Marketplace Integration)
 
-ไฟล์ [supabase/schema.sql](file:///c:/Users/GuitarDev/virtual-office/supabase/schema.sql) จัดเตรียมโครงสร้าง DDL สำหรับ PostgreSQL ไว้อย่างสมบูรณ์:
+ระบบ OmniOffice รองรับการเชื่อมต่อฐานข้อมูลจริงผ่าน **Vercel Marketplace (Integrations > Supabase)** โดยอัตโนมัติ พร้อมระบบ Smart Fallback:
 
-1. **`public.members`**: จัดเก็บข้อมูลบุคลากรภาครัฐครบ 13 คอลัมน์ พร้อม UUID Primary Key
-2. **`public.system_modules`**: จัดเก็บสถานะโมดูล (เปิด/ปิด), ข้อมูลไอคอน, และ Maintenance Notice
-3. **`public.module_permissions`**: เมทริกซ์สิทธิ์ระดับ Granular แยกตามบทบาทและโมดูล
-4. **`public.audit_logs`**: บันทึกเหตุการณ์ความปลอดภัย พร้อมผู้กระทำ วันเวลา และประเภทกิจกรรม
-5. **`public.car_bookings`**: ตารางการจองรถยนต์ราชการพร้อมขั้นตอนการอนุมัติ 3 ระดับ
-6. **Row-Level Security (RLS) Policies**: ควบคุมสิทธิ์การอ่าน/เขียนตามบทบาทผ่าน Supabase JWT
+### 1. วิธีเชื่อมต่อผ่าน Vercel Marketplace (1-Click Integration):
+1. **Import Git Project:** ไปที่ [vercel.com/new](https://vercel.com/new) แล้ว Import Repository `guitardev/virtual-office`
+2. **Connect Supabase Marketplace:** 
+   - ที่แท็บ **Integrations** ใน Vercel Dashboard ค้นหา **Supabase**
+   - เลือก Connect ไปยังโปรเจกต์ Supabase ของคุณ
+   - Vercel จะตั้งค่าตัวแปร `NEXT_PUBLIC_SUPABASE_URL` และ `NEXT_PUBLIC_SUPABASE_ANON_KEY` ให้กับ Environment Variables ทุกสภาพแวดล้อม (Production / Preview / Development) อัตโนมัติ
+3. **รันสคริปต์สกีมา:** นำเนื้อหาในไฟล์ [supabase/schema.sql](file:///c:/Users/GuitarDev/virtual-office/supabase/schema.sql) ไปวางและกด Run ใน **Supabase SQL Editor** (จะสร้างตารางและ Seed รายชื่อบุคลากรจริง พมจ.กำแพงเพชร ทั้ง 11 ท่านทันที)
+
+### 2. สถาปัตยกรรมระบบเชื่อมต่อ ([lib/supabase.ts](file:///c:/Users/GuitarDev/virtual-office/lib/supabase.ts)):
+- **Smart Fallback Engine:** หากยังไม่พบ Environment Variables ระบบจะทำงานในโหมด `In-Memory Mode` ได้ปกติโดยไม่เกิด Error ตอน Build หรือ Deploy
+- **Live Realtime WebSocket:** เมื่อตรวจพบค่า Config ระบบจะแสดง Badge `🟢 Supabase Live` บน Header และเปิดช่องทาง Realtime Channel ติดตามการเปลี่ยนแปลงตาราง `users` สดหลายหน้าจอ
+- **Auto-Sync CRUD:** การเพิ่ม แก้ไข หรือลบสมาชิก จะถูกบันทึกไปยัง Supabase ทันที พร้อมอัปเดตเซสชันของผู้ใช้งาน
 
 ---
 

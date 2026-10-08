@@ -15,6 +15,13 @@ import {
 } from "@/lib/rbac";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { LogoutConfirmModal } from "@/components/auth/LogoutConfirmModal";
+import {
+  isSupabaseConfigured,
+  fetchMembers,
+  saveMember,
+  deleteMember,
+  subscribeToMembers,
+} from "@/lib/supabase";
 
 interface NavItem {
   id: ModuleId;
@@ -137,6 +144,8 @@ export default function OmniOfficeApp() {
     role: "member" as Role,
   });
 
+  const isLiveConnected = isSupabaseConfigured();
+
   // Load session from localStorage on client mount
   useEffect(() => {
     setIsHydrated(true);
@@ -154,6 +163,25 @@ export default function OmniOfficeApp() {
       console.error("Failed to load saved session:", e);
     }
   }, []);
+
+  // Fetch live members from Supabase & subscribe to realtime changes
+  useEffect(() => {
+    if (isLiveConnected) {
+      fetchMembers().then((liveMembers) => {
+        if (liveMembers && liveMembers.length > 0) {
+          setMembers(liveMembers);
+        }
+      });
+
+      const unsubscribe = subscribeToMembers((updatedMembers) => {
+        setMembers(updatedMembers);
+      });
+
+      return () => {
+        unsubscribe();
+      };
+    }
+  }, [isLiveConnected]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -416,6 +444,7 @@ export default function OmniOfficeApp() {
     };
 
     setMembers((prev) => prev.map((m) => (m.id === updatedMember.id ? updatedMember : m)));
+    saveMember(updatedMember).catch(console.error);
 
     // Synchronize session if the edited member is the logged-in user
     if (currentUser && currentUser.id === updatedMember.id) {
@@ -464,6 +493,7 @@ export default function OmniOfficeApp() {
     }
 
     setMembers((prev) => prev.filter((m) => m.id !== memberToDelete.id));
+    deleteMember(memberToDelete.id).catch(console.error);
 
     addAuditLog(
       currentUser ? currentUser.name : "Admin",
@@ -507,6 +537,7 @@ export default function OmniOfficeApp() {
     };
 
     setMembers((prev) => [newM, ...prev]);
+    saveMember(newM).catch(console.error);
     addAuditLog(
       currentUser ? currentUser.name : "Admin",
       `เพิ่มบุคลากรใหม่ ${newM.name} (${ROLE_CONFIG[newM.role].label} - ${newM.personnelType || "ข้าราชการ"})`,
@@ -571,6 +602,7 @@ export default function OmniOfficeApp() {
 
     setCurrentUser(updatedUser);
     setMembers((prev) => prev.map((m) => (m.id === updatedUser.id ? updatedUser : m)));
+    saveMember(updatedUser).catch(console.error);
 
     if (typeof window !== "undefined") {
       try {
@@ -1373,6 +1405,29 @@ export default function OmniOfficeApp() {
           </div>
 
           <div className="flex items-center space-x-3 shrink-0">
+            {/* Supabase Live Status Indicator */}
+            <div
+              className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                isLiveConnected
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200 shadow-2xs"
+                  : "bg-slate-100 text-slate-600 border-slate-200"
+              }`}
+              title={
+                isLiveConnected
+                  ? "🟢 เชื่อมต่อฐานข้อมูล Supabase Live ผ่าน Vercel Marketplace Integration เรียบร้อยแล้ว (Realtime Sync Active)"
+                  : "🟡 โหมดจำลอง In-Memory (เมื่อเชื่อมต่อ Vercel Marketplace Supabase ระบบจะสลับเป็น Live อัตโนมัติ)"
+              }
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  isLiveConnected ? "bg-emerald-500 animate-pulse" : "bg-amber-400"
+                }`}
+              />
+              <span className="font-heading tracking-wide">
+                {isLiveConnected ? "Supabase Live" : "In-Memory"}
+              </span>
+            </div>
+
             {/* Interactive Role Simulator Pill */}
             <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-slate-100 border border-slate-200">
               <span className="text-[11px] font-bold text-slate-500 px-2 hidden lg:inline">

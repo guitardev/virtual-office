@@ -15,14 +15,14 @@ create table organizations (
 -- ===============================
 -- 2. Users
 -- ===============================
-create table users (
-  id uuid primary key default gen_random_uuid(),
+create table if not exists users (
+  id text primary key default gen_random_uuid()::text,
   prefix text default 'นาย',
   first_name text not null,
   last_name text not null,
   nickname text, -- ชื่อเล่น (เช่น เสก, บอย, เจมส์, ขวัญ)
   name text not null,
-  personnel_type text default 'ข้าราชการ' check (personnel_type in ('ข้าราชการ', 'ลูกจ้างประจำ', 'พนักงานราชการ', 'พนักงานกองทุน', 'พนักงานจ้างเหมาบริการ', 'ที่ปรึกษา / ผู้ทรงคุณวุฒิ')),
+  personnel_type text default 'ข้าราชการ' check (personnel_type in ('ข้าราชการ', 'ลูกจ้างประจำ', 'พนักงานราชการ', 'พนักงานกองทุน', 'พนักงานจ้างเหมาบริการ', 'ที่ปรึกษา/ผู้ทรงคุณวุฒิ', 'ที่ปรึกษา / ผู้ทรงคุณวุฒิ')),
   position text not null,
   division text not null, -- กลุ่ม/ฝ่าย (เช่น กลุ่มเทคโนโลยีดิจิทัลและสารสนเทศ)
   email text unique not null,
@@ -34,6 +34,14 @@ create table users (
 );
 
 alter table users enable row level security;
+
+create policy "Allow read users for all"
+on users for select
+using (true);
+
+create policy "Allow write users for all"
+on users for all
+using (true);
 
 -- ===============================
 -- 3. Organization Members
@@ -227,3 +235,34 @@ using (
     and om.user_id = auth.uid()
   )
 );
+
+-- ===============================
+-- 7. Seed Initial Personnel (ทำเนียบจริง พมจ. กำแพงเพชร)
+-- ===============================
+insert into users (id, prefix, first_name, last_name, nickname, name, personnel_type, position, division, email, phone, line_id, role, avatar_url)
+values
+  ('usr_1', 'นางสาว', 'มะลิวัน', 'สิทธิโยธี', 'มิ', 'นางสาวมะลิวัน สิทธิโยธี', 'ข้าราชการ', 'พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร', 'สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร (ผู้บริหาร)', 'maliwan.s@m-society.go.th', '055-705031 ต่อ 101', 'maliwan_kpp', 'admin', 'https://kamphaengphet.m-society.go.th/wp-content/uploads/2024/10/S__2457668.jpg'),
+  ('usr_2', 'นาย', 'เสกพล', 'ดิษฐโชติ', 'เสก', 'นายเสกพล ดิษฐโชติ', 'ข้าราชการ', 'นักพัฒนาสังคมชำนาญการ (หัวหน้าฝ่ายบริหารทั่วไป)', 'ฝ่ายบริหารทั่วไป', 'sekpol.d@m-society.go.th', '055-705031 ต่อ 102', 'sek_kpp', 'manager', 'https://kamphaengphet.m-society.go.th/wp-content/uploads/2024/12/2b6d8e58-bfd5-44a7-a18d-4fb8e685452f-e1734057934925.png'),
+  ('usr_3', 'นาย', 'วรวุฒิ', 'พึ่งพัก', 'เจมส์', 'นายวรวุฒิ พึ่งพัก', 'ข้าราชการ', 'นักพัฒนาสังคมชำนาญการพิเศษ (หัวหน้ากลุ่มการพัฒนาสังคมและสวัสดิการ)', 'กลุ่มการพัฒนาสังคมและสวัสดิการ', 'worawut.p@m-society.go.th', '055-705031 ต่อ 104', 'james_kpp', 'manager', 'https://kamphaengphet.m-society.go.th/wp-content/uploads/2024/11/e735d8a3-9afc-4271-803e-0438ae7cb5371-1-1-e1731912123637.png'),
+  ('usr_4', 'นาย', 'พนมศักย์', 'บริภัทรจิรากร', 'บอย', 'นายพนมศักย์ บริภัทรจิรากร', 'ข้าราชการ', 'นักพัฒนาสังคมชำนาญการ (รักษาการหัวหน้ากลุ่มนโยบายและวิชาการ)', 'กลุ่มนโยบายและวิชาการ', 'phanomsak.b@m-society.go.th', '055-705031 ต่อ 103', 'boy_kpp', 'manager', 'https://kamphaengphet.m-society.go.th/wp-content/uploads/2024/11/%E0%B8%9E%E0%B8%B5%E0%B9%88%E0%B8%94%E0%B8%B2%E0%B8%A7-1-1-e1734061864108.png'),
+  ('usr_5', 'นางสาว', 'ขวัญนภา', 'ศิริสมบัติ', 'ขวัญ', 'นางสาวขวัญนภา ศิริสมบัติ', 'พนักงานราชการ', 'เจ้าหน้าที่ระบบงานคอมพิวเตอร์', 'กลุ่มนโยบายและวิชาการ', 'kwannapa.s@m-society.go.th', '055-705031 ต่อ 106', 'kwan_kpp', 'member', 'https://kamphaengphet.m-society.go.th/wp-content/uploads/2024/11/a864cd1c-9230-490f-b838-5f62aa24bfca-e1732079225217.png'),
+  ('usr_6', 'นางสาว', 'สุมาลี', 'แสงแก้ว', 'ส้ม', 'นางสาวสุมาลี แสงแก้ว', 'พนักงานกองทุน', 'นักสังคมสงเคราะห์ (เจ้าหน้าที่กองทุนส่งเสริมและพัฒนาคุณภาพชีวิตคนพิการ)', 'ศูนย์บริการคนพิการจังหวัดกำแพงเพชร', 'sumalee.s@m-society.go.th', '055-705031 ต่อ 107', 'som_kpp', 'member', 'https://kamphaengphet.m-society.go.th/wp-content/uploads/2024/11/e69828cb-560e-4c87-a197-91e98179257a-e1732768762731.png'),
+  ('usr_7', 'นางสาว', 'พิชชาภา', 'ห้าวหาญ', 'ญาญ่า', 'นางสาวพิชชาภา ห้าวหาญ', 'ข้าราชการ', 'นักสังคมสงเคราะห์ปฏิบัติการ', 'กลุ่มการพัฒนาสังคมและสวัสดิการ', 'pitchapa.h@m-society.go.th', '055-705031 ต่อ 108', 'yaya_kpp', 'member', 'https://kamphaengphet.m-society.go.th/wp-content/uploads/2024/12/88a864d8-a374-4867-87c8-4daa2671153e-e1734057993409.png'),
+  ('usr_8', 'นางสาว', 'อารีวรรณ', 'ประเสริฐอุดมศักดิ์', 'ดาว', 'น.ส.อารีวรรณ ประเสริฐอุดมศักดิ์', 'ข้าราชการ', 'เจ้าพนักงานการเงินและบัญชีชำนาญงาน (การเงินและบัญชี)', 'ฝ่ายบริหารทั่วไป', 'areewan.p@m-society.go.th', '055-705031 ต่อ 109', 'dao_kpp', 'member', 'https://kamphaengphet.m-society.go.th/wp-content/uploads/2024/11/%E0%B8%9E%E0%B8%99%E0%B8%A1%E0%B8%A8%E0%B8%B1%E0%B8%81%E0%B8%A2%E0%B9%8C-%E0%B8%9A%E0%B8%A3%E0%B8%B4%E0%B8%A0%E0%B8%B1%E0%B8%97%E0%B8%A3%E0%B8%88%E0%B8%B4%E0%B8%A3%E0%B8%B2%E0%B8%81%E0%B8%A3-1-e1734061426233.png'),
+  ('usr_9', 'นาย', 'สมหมาย', 'มั่นคง', 'หมาย', 'นายสมหมาย มั่นคง', 'ลูกจ้างประจำ', 'พนักงานขับรถยนต์ ชำนาญงาน (งานยานพาหนะ)', 'ฝ่ายบริหารทั่วไป', 'sommai.m@m-society.go.th', '055-705031 ต่อ 110', 'sommai_van', 'member', null),
+  ('usr_10', 'นาย', 'ธีรพัฒน์', 'บุญยืน', 'อาร์ม', 'นายธีรพัฒน์ บุญยืน', 'พนักงานจ้างเหมาบริการ', 'เจ้าหน้าที่สนับสนุนงานสารบรรณและเทคโนโลยีดิจิทัล', 'ฝ่ายบริหารทั่วไป', 'theerapat.b@m-society.go.th', '055-705031 ต่อ 111', 'arm_kpp', 'member', null),
+  ('usr_11', 'ดร.', 'ศรัณย์', 'สิทธิโชค', 'รัน', 'ดร. ศรัณย์ สิทธิโชค', 'ที่ปรึกษา/ผู้ทรงคุณวุฒิ', 'ผู้ทรงคุณวุฒิด้านสวัสดิการสังคม (คณะอนุกรรมการฟื้นฟูสมรรถภาพคนพิการ)', 'คณะทำงานที่ปรึกษาและภาคีเครือข่ายภายนอก', 'saran.s@socialadvisor.org', '089-854-1234', 'dr_saran', 'guest', null)
+on conflict (id) do update set
+  prefix = excluded.prefix,
+  first_name = excluded.first_name,
+  last_name = excluded.last_name,
+  nickname = excluded.nickname,
+  name = excluded.name,
+  personnel_type = excluded.personnel_type,
+  position = excluded.position,
+  division = excluded.division,
+  email = excluded.email,
+  phone = excluded.phone,
+  line_id = excluded.line_id,
+  role = excluded.role,
+  avatar_url = excluded.avatar_url;
