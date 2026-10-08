@@ -24,6 +24,10 @@ import {
   subscribeToMembers,
   fetchAccessRequests,
   saveAccessRequest,
+  getSupabaseSession,
+  subscribeToAuthChanges,
+  signOutUser,
+  findOrMapAuthMember,
 } from "@/lib/supabase";
 
 interface NavItem {
@@ -66,7 +70,7 @@ interface MeetingItem {
 
 export default function OmniOfficeApp() {
   // ─── AUTH & SESSION STATE ───
-  const [currentUser, setCurrentUser] = useState<Member | null>(INITIAL_MEMBERS[0]);
+  const [currentUser, setCurrentUser] = useState<Member | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
@@ -203,7 +207,7 @@ export default function OmniOfficeApp() {
     }
   }, []);
 
-  // Fetch live members & access requests from Supabase & subscribe to realtime changes
+  // Fetch live members & access requests from Supabase & subscribe to realtime changes & Supabase Auth
   useEffect(() => {
     if (isLiveConnected) {
       fetchMembers().then((liveMembers) => {
@@ -218,12 +222,39 @@ export default function OmniOfficeApp() {
         }
       });
 
+      // Check current Supabase Auth session
+      getSupabaseSession().then((session: any) => {
+        if (session?.user) {
+          setMembers((currentMembers) => {
+            const authMember = findOrMapAuthMember(session.user, currentMembers);
+            setCurrentUser(authMember);
+            setCurrentUserRole(authMember.role);
+            return currentMembers;
+          });
+        }
+      });
+
+      // Subscribe to Supabase Auth state changes
+      const authSub = subscribeToAuthChanges((event: string, session: any) => {
+        if (event === "SIGNED_IN" && session?.user) {
+          setMembers((currentMembers) => {
+            const authMember = findOrMapAuthMember(session.user, currentMembers);
+            setCurrentUser(authMember);
+            setCurrentUserRole(authMember.role);
+            return currentMembers;
+          });
+        } else if (event === "SIGNED_OUT") {
+          setCurrentUser(null);
+        }
+      });
+
       const unsubscribe = subscribeToMembers((updatedMembers) => {
         setMembers(updatedMembers);
       });
 
       return () => {
         unsubscribe();
+        authSub?.unsubscribe?.();
       };
     }
   }, [isLiveConnected]);
@@ -308,6 +339,7 @@ export default function OmniOfficeApp() {
         localStorage.removeItem("omnioffice_auth_session");
       } catch (e) {}
     }
+    signOutUser().catch(console.error);
     setCurrentUser(null);
     setCurrentPage("dashboard");
     setShowLogoutModal(false);

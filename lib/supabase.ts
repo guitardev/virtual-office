@@ -283,3 +283,266 @@ export async function saveAccessRequest(req: AccessRequest): Promise<boolean> {
   }
 }
 
+// ==========================================
+// SUPABASE AUTHENTICATION (Real Supabase Auth)
+// ==========================================
+
+export interface SupabaseAuthResult {
+  success: boolean;
+  user?: any;
+  session?: any;
+  error?: string;
+  isConfirmationNeeded?: boolean;
+}
+
+/**
+ * Sign in with email and password using Supabase Auth
+ */
+export async function signInWithEmail(
+  email: string,
+  password: string
+): Promise<SupabaseAuthResult> {
+  if (!supabase) {
+    return { success: false, error: "ไม่ได้กำหนดค่าเชื่อมต่อ Supabase" };
+  }
+
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+
+    if (error) {
+      if (error.message.includes("Email not confirmed")) {
+        return {
+          success: false,
+          error: "อีเมลนี้ยังไม่ได้ยืนยันตัวตน (Email not confirmed) กรุณาตรวจสอบลิงก์ในอีเมล หรือตั้งค่า Auto Confirm ใน Supabase Dashboard",
+          isConfirmationNeeded: true,
+        };
+      }
+      if (error.message.includes("Invalid login credentials")) {
+        return {
+          success: false,
+          error: "อีเมลหรือรหัสผ่านไม่ถูกต้อง (Invalid login credentials)",
+        };
+      }
+      return { success: false, error: error.message };
+    }
+
+    return {
+      success: true,
+      user: data.user,
+      session: data.session,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || "เกิดข้อผิดพลาดในการเชื่อมต่อ Supabase Auth",
+    };
+  }
+}
+
+/**
+ * Sign up with email and password using Supabase Auth
+ */
+export async function signUpWithEmail(
+  email: string,
+  password: string,
+  metadata?: {
+    fullName?: string;
+    position?: string;
+    division?: string;
+    role?: Role;
+  }
+): Promise<SupabaseAuthResult> {
+  if (!supabase) {
+    return { success: false, error: "ไม่ได้กำหนดค่าเชื่อมต่อ Supabase" };
+  }
+
+  try {
+    const redirectUrl = typeof window !== "undefined" ? window.location.origin : undefined;
+    const { data, error } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
+      options: {
+        emailRedirectTo: redirectUrl,
+        data: {
+          full_name: metadata?.fullName || "",
+          position: metadata?.position || "",
+          division: metadata?.division || "",
+          role: metadata?.role || "member",
+        },
+      },
+    });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    const needsConfirmation = !data.session;
+
+    return {
+      success: true,
+      user: data.user,
+      session: data.session,
+      isConfirmationNeeded: needsConfirmation,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || "เกิดข้อผิดพลาดในการลงทะเบียน Supabase Auth",
+    };
+  }
+}
+
+/**
+ * Sign in with OAuth provider (Google or GitHub)
+ */
+export async function signInWithOAuth(
+  provider: "google" | "github"
+): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: "ไม่ได้กำหนดค่าเชื่อมต่อ Supabase" };
+  }
+
+  try {
+    const redirectUrl = typeof window !== "undefined" ? window.location.origin : undefined;
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: redirectUrl,
+      },
+    });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || `เกิดข้อผิดพลาดในการล็อกอินด้วย ${provider}`,
+    };
+  }
+}
+
+/**
+ * Sign out current user from Supabase Auth
+ */
+export async function signOutUser(): Promise<boolean> {
+  if (!supabase) return true;
+  try {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.warn("Supabase signOut error:", error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("Error signing out:", err);
+    return false;
+  }
+}
+
+/**
+ * Get current active Supabase Auth session
+ */
+export async function getSupabaseSession(): Promise<any> {
+  if (!supabase) return null;
+  try {
+    const { data } = await supabase.auth.getSession();
+    return data.session;
+  } catch (err) {
+    return null;
+  }
+}
+
+/**
+ * Get current active Supabase Auth user
+ */
+export async function getSupabaseUser(): Promise<any> {
+  if (!supabase) return null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    return data.user;
+  } catch (err) {
+    return null;
+  }
+}
+
+/**
+ * Subscribe to Supabase Auth state changes
+ */
+export function subscribeToAuthChanges(
+  callback: (event: string, session: any) => void
+) {
+  if (!supabase) return { unsubscribe: () => {} };
+  const { data: { subscription } } = supabase.auth.onAuthStateChange(callback);
+  return subscription;
+}
+
+/**
+ * Send password reset email via Supabase Auth
+ */
+export async function sendPasswordResetEmail(
+  email: string
+): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: "ไม่ได้กำหนดค่าเชื่อมต่อ Supabase" };
+  }
+  try {
+    const redirectUrl = typeof window !== "undefined" ? window.location.origin : undefined;
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: redirectUrl,
+    });
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "เกิดข้อผิดพลาดในการส่งอีเมลรีเซ็ตรหัสผ่าน" };
+  }
+}
+
+/**
+ * Find or create a Member object linked to a Supabase Auth User
+ */
+export function findOrMapAuthMember(authUser: any, availableMembers: Member[]): Member {
+  const emailLower = (authUser?.email || "").toLowerCase().trim();
+  const matched = availableMembers.find(
+    (m) => m.email.toLowerCase().trim() === emailLower || m.id === authUser.id
+  );
+
+  if (matched) {
+    return matched;
+  }
+
+  // Create member from metadata if not in existing directory
+  const metadata = authUser?.user_metadata || {};
+  const fullName = metadata.full_name || metadata.name || authUser?.email?.split("@")[0] || "ผู้ใช้งานใหม่";
+  const nameParts = fullName.split(" ");
+  const firstName = nameParts[0] || "ผู้ใช้งาน";
+  const lastName = nameParts.slice(1).join(" ") || "";
+
+  return {
+    id: authUser.id || `usr_${Date.now()}`,
+    prefix: "นาย/นางสาว",
+    firstName,
+    lastName,
+    name: fullName,
+    personnelType: "ข้าราชการ",
+    position: metadata.position || "เจ้าหน้าที่ปฏิบัติการ",
+    division: metadata.division || "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์",
+    department: metadata.division || "ฝ่ายบริหารทั่วไป",
+    email: authUser.email || "user@m-society.go.th",
+    phone: "-",
+    lineId: "-",
+    role: (metadata.role as Role) || "member",
+    status: "active",
+    avatarUrl: metadata.avatar_url || undefined,
+    avatarText: firstName.slice(0, 2),
+    joinedDate: "วันนี้",
+  };
+}
+
