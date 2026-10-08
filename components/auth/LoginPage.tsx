@@ -50,11 +50,13 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
   });
   const [showSignupPassword, setShowSignupPassword] = useState(false);
 
-  // Modals state
   const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotSuccess, setForgotSuccess] = useState(false);
   const [forgotError, setForgotError] = useState<string | null>(null);
+
+  // LINE Login Modal state
+  const [showLineModal, setShowLineModal] = useState(false);
 
   const [showRequestAccessModal, setShowRequestAccessModal] = useState(false);
   const [requestForm, setRequestForm] = useState({
@@ -193,25 +195,65 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
     }
   };
 
-  // ─── REAL SUPABASE OAUTH (Google / GitHub) ───
-  const handleOAuthLogin = async (provider: "google" | "github") => {
+  // ─── REAL SUPABASE & SSO OAUTH (Google / LINE) ───
+  const handleOAuthLogin = async (provider: "google" | "line") => {
     setErrorMessage(null);
     setSuccessMessage(null);
+
+    if (provider === "line") {
+      const lineChannelId = process.env.NEXT_PUBLIC_LINE_CHANNEL_ID;
+      if (!lineChannelId) {
+        setShowLineModal(true);
+        return;
+      }
+    }
+
     setIsLoading(true);
 
     try {
       const res = await signInWithOAuth(provider);
       if (!res.success) {
         setIsLoading(false);
-        setErrorMessage(
-          `⚠️ การเชื่อมต่อผ่าน ${provider.toUpperCase()} ยังไม่พร้อมใช้งาน: ${res.error || "Provider ยังไม่ได้เปิดใช้งานใน Supabase Dashboard (ไปที่ Authentication > Providers แล้วเปิดใช้งาน)"}`
-        );
+        if (provider === "line") {
+          setShowLineModal(true);
+        } else {
+          setErrorMessage(
+            `⚠️ การเชื่อมต่อผ่าน ${provider.toUpperCase()} ยังไม่พร้อมใช้งาน: ${res.error || "Provider ยังไม่ได้เปิดใช้งานใน Supabase Dashboard (ไปที่ Authentication > Providers แล้วเปิดใช้งาน)"}`
+          );
+        }
       }
       // If success, browser will redirect to OAuth provider
     } catch (err: any) {
       setIsLoading(false);
       setErrorMessage(err?.message || `เกิดข้อผิดพลาดในการเชื่อมต่อ ${provider}`);
     }
+  };
+
+  const handleDemoLineLogin = () => {
+    setShowLineModal(false);
+    setIsLoading(true);
+    const lineMember: Member = {
+      id: "usr_line_user",
+      prefix: "นาย",
+      firstName: "ไลน์",
+      lastName: "ผู้ใช้งาน",
+      name: "ผู้ใช้งาน LINE (LINE User)",
+      personnelType: "พนักงานราชการ",
+      position: "เจ้าหน้าที่สื่อสารและสารสนเทศ",
+      division: GOVERNMENT_DIVISIONS[0],
+      department: GOVERNMENT_DIVISIONS[0],
+      email: "line.user@m-society.go.th",
+      phone: "055-705031",
+      lineId: "@line_staff",
+      role: "member",
+      status: "active",
+      joinedDate: "วันนี้",
+      avatarText: "LN",
+    };
+    setTimeout(() => {
+      setIsLoading(false);
+      onLogin(lineMember, rememberMe);
+    }, 400);
   };
 
   // Quick 1-click login for demo / role evaluation
@@ -503,7 +545,7 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
           {/* OAuth SSO Buttons */}
           <div className="space-y-2">
             <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-              เข้าสู่ระบบด่วนด้วย OAuth SSO (Supabase)
+              เข้าสู่ระบบด่วนด้วย OAuth SSO (Google / LINE)
             </div>
             <div className="grid grid-cols-2 gap-2.5">
               <button
@@ -536,13 +578,13 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
               <button
                 type="button"
                 disabled={isLoading}
-                onClick={() => handleOAuthLogin("github")}
-                className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all shadow-2xs cursor-pointer disabled:opacity-50"
+                onClick={() => handleOAuthLogin("line")}
+                className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-[#06C755] hover:bg-[#05b34c] text-white text-xs font-bold transition-all shadow-2xs cursor-pointer disabled:opacity-50"
               >
                 <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24">
-                  <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+                  <path d="M24 10.304c0-5.369-5.383-9.738-12-9.738-6.616 0-12 4.369-12 9.738 0 4.814 4.269 8.846 10.019 9.572.39.084.922.258 1.057.592.121.303.079.778.039 1.085l-.171 1.027c-.053.303-.242 1.186 1.039.647 1.281-.54 6.911-4.069 9.428-6.967 1.739-1.907 2.589-3.864 2.589-5.956zm-14.771 2.458h-2.193c-.328 0-.594-.266-.594-.594v-3.729c0-.328.266-.594.594-.594s.594.266.594.594v3.135h1.599c.328 0 .594.266.594.594s-.266.594-.594.594zm2.145-.594c0 .328-.266.594-.594.594s-.594-.266-.594-.594v-3.729c0-.328.266-.594.594-.594s.594.266.594.594v3.729zm4.275 0c0 .248-.153.468-.382.553-.069.026-.142.041-.212.041-.167 0-.33-.07-.442-.198l-1.924-2.589v2.193c0 .328-.266.594-.594.594s-.594-.266-.594-.594v-3.729c0-.248.153-.468.382-.553.069-.026.142-.041-.212-.041.167 0 .33.07.442.198l1.924 2.589v-2.193c0-.328.266-.594.594-.594s.594.266.594.594v3.729zm3.504-2.541h-1.599v.76h1.599c.328 0 .594.266.594.594s-.266.594-.594.594h-2.193c-.328 0-.594-.266-.594-.594v-3.729c0-.328.266-.594.594-.594h2.193c.328 0 .594.266.594.594s-.266.594-.594.594h-1.599v.787h1.599c.328 0 .594.266.594.594s-.266.594-.594.594z" />
                 </svg>
-                <span>GitHub</span>
+                <span>LINE</span>
               </button>
             </div>
           </div>
@@ -874,6 +916,75 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
           </div>
         </div>
       </div>
+
+      {/* ─── LINE LOGIN MODAL / SETUP & DEMO ─── */}
+      {showLineModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in text-slate-800">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#06C755]/15 text-[#06C755] flex items-center justify-center text-xl font-bold">
+                    💬
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold font-heading text-slate-900">
+                      เข้าสู่ระบบด้วย LINE (LINE Login)
+                    </h3>
+                    <p className="text-[11px] text-slate-500">LINE OAuth 2.0 / OpenID Connect SSO</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowLineModal(false)}
+                  className="text-slate-400 hover:text-slate-600 text-sm font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200/80 text-xs space-y-2 text-emerald-950">
+                <div className="font-bold flex items-center gap-1.5 text-emerald-800">
+                  <span>💡</span>
+                  <span>ขั้นตอนการเชื่อมต่อ LINE Login จริง:</span>
+                </div>
+                <ol className="list-decimal pl-4 space-y-1.5 text-[11px] text-emerald-900 leading-relaxed">
+                  <li>
+                    เข้าสู่ <a href="https://developers.line.biz" target="_blank" rel="noreferrer" className="text-emerald-700 underline font-semibold">LINE Developers Console</a> แล้วสร้าง Provider & Channel ชนิด <strong>LINE Login</strong>
+                  </li>
+                  <li>
+                    ระบุ Callback URL:
+                    <div className="mt-0.5 font-mono bg-white px-2 py-1 rounded border border-emerald-200 text-[10px] select-all break-all text-emerald-800">
+                      https://xkeiuyhkokmecefzzynb.supabase.co/auth/v1/callback
+                    </div>
+                  </li>
+                  <li>
+                    นำ Channel ID มาระบุใน <code className="bg-emerald-100/80 px-1 py-0.5 rounded text-[10px]">NEXT_PUBLIC_LINE_CHANNEL_ID</code>
+                  </li>
+                </ol>
+              </div>
+
+              <div className="space-y-2 pt-1">
+                <button
+                  type="button"
+                  onClick={handleDemoLineLogin}
+                  className="w-full py-2.5 rounded-xl bg-[#06C755] hover:bg-[#05b34c] text-white text-xs font-bold shadow-md shadow-[#06C755]/20 flex items-center justify-center gap-2 cursor-pointer transition-all"
+                >
+                  <span>⚡ ทดสอบเข้าสู่ระบบด้วยบัญชี LINE (Demo Profile) ➜</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowLineModal(false)}
+                  className="w-full py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-semibold cursor-pointer"
+                >
+                  ปิดหน้าต่าง
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── FORGOT PASSWORD MODAL ─── */}
       {showForgotPasswordModal && (

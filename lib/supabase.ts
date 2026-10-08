@@ -396,11 +396,15 @@ export async function signUpWithEmail(
 }
 
 /**
- * Sign in with OAuth provider (Google or GitHub)
+ * Sign in with OAuth provider (Google or LINE)
  */
 export async function signInWithOAuth(
-  provider: "google" | "github"
+  provider: "google" | "line" | "github"
 ): Promise<{ success: boolean; error?: string }> {
+  if (provider === "line") {
+    return signInWithLine();
+  }
+
   if (!supabase) {
     return { success: false, error: "ไม่ได้กำหนดค่าเชื่อมต่อ Supabase" };
   }
@@ -408,7 +412,7 @@ export async function signInWithOAuth(
   try {
     const redirectUrl = typeof window !== "undefined" ? window.location.origin : undefined;
     const { error } = await supabase.auth.signInWithOAuth({
-      provider,
+      provider: provider as any,
       options: {
         redirectTo: redirectUrl,
       },
@@ -423,6 +427,38 @@ export async function signInWithOAuth(
     return {
       success: false,
       error: err?.message || `เกิดข้อผิดพลาดในการล็อกอินด้วย ${provider}`,
+    };
+  }
+}
+
+/**
+ * Sign in with LINE Login (OAuth 2.0 / OpenID Connect)
+ */
+export async function signInWithLine(): Promise<{ success: boolean; error?: string }> {
+  const lineChannelId = process.env.NEXT_PUBLIC_LINE_CHANNEL_ID;
+  const redirectUrl = typeof window !== "undefined" ? `${window.location.origin}` : "";
+
+  if (!lineChannelId) {
+    return {
+      success: false,
+      error: "ยังไม่ได้ระบุ NEXT_PUBLIC_LINE_CHANNEL_ID ใน .env.local หรือ Supabase",
+    };
+  }
+
+  try {
+    const state = Math.random().toString(36).substring(2, 15);
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("line_oauth_state", state);
+      const lineAuthUrl = `https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id=${lineChannelId}&redirect_uri=${encodeURIComponent(
+        redirectUrl
+      )}&state=${state}&scope=profile%20openid%20email`;
+      window.location.href = lineAuthUrl;
+    }
+    return { success: true };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || "เกิดข้อผิดพลาดในการเชื่อมต่อ LINE Login",
     };
   }
 }
