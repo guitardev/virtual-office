@@ -240,12 +240,28 @@ export default function OmniOfficeApp() {
 
             if (data.success && data.profile) {
               const p = data.profile;
+              const displayName = (p.displayName || "ผู้ใช้งาน LINE").trim();
+
+              // Check if display name explicitly starts with a standard Thai title
+              const KNOWN_PREFIXES = ["ว่าที่ ร.ต.", "ว่าที่ร้อยตรี", "นางสาว", "น.ส.", "นาย", "นาง", "ดร.", "ผศ.", "รศ."];
+              let detectedPrefix = "";
+              let cleanFirstName = displayName;
+              let cleanLastName = "";
+
+              for (const pref of KNOWN_PREFIXES) {
+                if (displayName.startsWith(pref)) {
+                  detectedPrefix = pref === "น.ส." ? "นางสาว" : pref;
+                  cleanFirstName = displayName.slice(pref.length).trim();
+                  break;
+                }
+              }
+
               const lineMember: Member = {
                 id: `usr_line_${p.userId.slice(0, 12)}`,
-                prefix: "นาย/นางสาว",
-                firstName: p.displayName.split(" ")[0] || "ผู้ใช้งาน",
-                lastName: p.displayName.split(" ").slice(1).join(" ") || "LINE",
-                name: p.displayName,
+                prefix: detectedPrefix, // เว้นว่างไว้หากไม่มีคำนำหน้าใน LINE
+                firstName: cleanFirstName,
+                lastName: cleanLastName,
+                name: displayName,
                 personnelType: "ข้าราชการ",
                 position: "เจ้าหน้าที่ปฏิบัติการ (LINE SSO)",
                 division: GOVERNMENT_DIVISIONS[0],
@@ -256,7 +272,7 @@ export default function OmniOfficeApp() {
                 role: "member",
                 status: "active",
                 avatarUrl: p.pictureUrl,
-                avatarText: (p.displayName || "LN").slice(0, 2),
+                avatarText: (cleanFirstName || "LN").slice(0, 2),
                 joinedDate: "วันนี้",
               };
 
@@ -911,9 +927,9 @@ export default function OmniOfficeApp() {
   const handleOpenEditProfile = () => {
     if (!currentUser) return;
     setEditProfileForm({
-      prefix: currentUser.prefix || "นาย",
-      firstName: currentUser.firstName || currentUser.name.split(" ")[0] || "",
-      lastName: currentUser.lastName || currentUser.name.split(" ").slice(1).join(" ") || "",
+      prefix: currentUser.prefix || "",
+      firstName: currentUser.firstName || currentUser.name.split(" ")[0] || currentUser.name || "",
+      lastName: currentUser.lastName || (currentUser.name.includes(" ") ? currentUser.name.split(" ").slice(1).join(" ") : ""),
       nickname: currentUser.nickname || "",
       personnelType: currentUser.personnelType || "ข้าราชการ",
       position: currentUser.position || "",
@@ -929,7 +945,11 @@ export default function OmniOfficeApp() {
     e.preventDefault();
     if (!currentUser) return;
 
-    const fullName = `${editProfileForm.prefix}${editProfileForm.firstName} ${editProfileForm.lastName}`.trim();
+    const namesCombined = `${editProfileForm.firstName.trim()} ${editProfileForm.lastName.trim()}`.trim();
+    const fullName = editProfileForm.prefix
+      ? `${editProfileForm.prefix}${namesCombined}`
+      : namesCombined;
+
     const updatedUser: Member = {
       ...currentUser,
       prefix: editProfileForm.prefix,
@@ -1066,9 +1086,9 @@ export default function OmniOfficeApp() {
   const handleContinueWithLineProfile = async () => {
     const lineMember: Member = {
       id: `usr_line_${Date.now()}`,
-      prefix: "นาย/นางสาว",
-      firstName: "ผู้ใช้งาน",
-      lastName: "LINE",
+      prefix: "",
+      firstName: "ผู้ใช้งาน LINE",
+      lastName: "",
       name: "ผู้ใช้งาน LINE (LINE Verified)",
       personnelType: "พนักงานราชการ",
       position: "เจ้าหน้าที่สื่อสารและสารสนเทศ (LINE SSO)",
@@ -2013,6 +2033,7 @@ export default function OmniOfficeApp() {
                     onChange={(e) => setEditProfileForm({ ...editProfileForm, prefix: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800"
                   >
+                    <option value="">(ไม่ระบุคำนำหน้า)</option>
                     <option value="นาย">นาย</option>
                     <option value="นาง">นาง</option>
                     <option value="นางสาว">นางสาว</option>
@@ -4097,7 +4118,7 @@ export default function OmniOfficeApp() {
                       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                         <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100">
                           <div className="text-[11px] text-slate-400">คำนำหน้า</div>
-                          <div className="text-sm font-bold text-slate-800 mt-0.5">{currentUser.prefix || "นาย"}</div>
+                          <div className="text-sm font-bold text-slate-800 mt-0.5">{currentUser.prefix || "-"}</div>
                         </div>
                         <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100">
                           <div className="text-[11px] text-slate-400">ชื่อ</div>

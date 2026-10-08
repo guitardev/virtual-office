@@ -570,7 +570,7 @@ export function findOrMapAuthMember(authUser: any, availableMembers: Member[]): 
 
   return {
     id: authUser.id || `usr_${Date.now()}`,
-    prefix: "นาย/นางสาว",
+    prefix: "",
     firstName,
     lastName,
     name: fullName,
