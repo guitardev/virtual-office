@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { Member, Role, AccessRequest, PersonnelType } from "@/lib/types";
 import { ROLE_CONFIG, GOVERNMENT_DIVISIONS } from "@/lib/rbac";
 import {
@@ -390,8 +391,17 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
         </div>
 
         {/* Footer Info */}
-        <div className="relative z-10 text-xs text-slate-400 pt-6 border-t border-white/10 flex items-center justify-between">
-          <span>© 2026 OmniOffice Enterprise.</span>
+        <div className="relative z-10 text-xs text-slate-400 pt-6 border-t border-white/10 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span>© 2026 OmniOffice.</span>
+            <Link href="/policy" className="hover:text-white underline underline-offset-2">
+              Privacy Policy
+            </Link>
+            <span>·</span>
+            <Link href="/term" className="hover:text-white underline underline-offset-2">
+              Terms
+            </Link>
+          </div>
           <span className="flex items-center gap-1.5 text-emerald-400 font-semibold">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             Supabase Live Connected
@@ -846,6 +856,20 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
                   </div>
                 );
               })}
+            </div>
+
+            {/* Legal Links Footer */}
+            <div className="pt-3 border-t border-slate-200/80 flex items-center justify-between text-[11px] text-slate-400">
+              <div className="flex items-center gap-2">
+                <Link href="/policy" className="hover:text-indigo-600 transition-colors">
+                  นโยบายความเป็นส่วนตัว (PDPA)
+                </Link>
+                <span>·</span>
+                <Link href="/term" className="hover:text-indigo-600 transition-colors">
+                  ข้อกำหนดการใช้งาน
+                </Link>
+              </div>
+              <span>v2.4 Live</span>
             </div>
           </div>
         </div>
