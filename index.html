@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Virtual Office — ระบบออฟฟิศเสมือน</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<div class="app">
+
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div class="logo">Σ</div>
+      <span class="logo" style="font-size:18px;">OmniOffice</span>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="#" class="active" data-page="dashboard">
+        <span class="icon">📊</span> หน้าแรก
+      </a>
+      <a href="#" data-page="chat">
+        <span class="icon">💬</span> แชท
+      </a>
+      <a href="#" data-page="task">
+        <span class="icon">📋</span> งาน
+      </a>
+      <a href="#" data-page="meetings">
+        <span class="icon">📹</span> การประชุม
+      </a>
+      <a href="#" data-page="carbooking">
+        <span class="icon">🚗</span> รถเช่า
+      </a>
+      <a href="#" data-page="user">
+        <span class="icon">👤</span> ผู้ใช้
+      <a href="#" data-page="user">
+        <span class="icon">👤</span> ผู้ใช้
+      </a>
+      <a href="#" data-page="admin">
+        <span class="icon">⚙️</span> ระบบจัดการ
+      </a>
+      <a href="#" data-page="reports">
+        <span class="icon">📈</span> รายงาน
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <button class="sidebar-expand" id="sidebarToggle">☰</button>
+      <div class="avatar">AW</div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="main">
+
+    <!-- Header -->
+    <header class="header">
+      <div class="header-left">
+        <input class="search-box" type="text" placeholder="ค้นหา...">
+      </div>
+      <div class="header-right">
+        <button class="btn-notif">
+          🔔 <span class="badge">3</span>
+        </button>
+        <button class="btn-user">
+          <span class="avatar-icon">AW</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Pages -->
+    <div class="page active" id="page-login">
+      <div class="login-wrap">
+        <div class="login-card">
+          <div class="login-brand">
+            <div class="logo-big">Σ</div>
+            <h1>OmniOffice</h1>
+            <p>ระบบออฟฟิศเสมือนสำหรับองค์กร</p>
+          </div>
+          <form class="login-form" id="loginForm">
+            <div class="form-group">
+              <label>อีเมล</label>
+              <input type="email" placeholder="name@company.com" required>
+            </div>
+            <div class="form-group">
+              <label>รหัสผ่าน</label>
+              <input type="password" placeholder="••••••••" required>
+            </div>
+            <div class="row">
+              <div class="remember">
+                <input type="checkbox" id="remember">
+                <label for="remember">จำฉันไว้</label>
+              </div>
+              <a href="#" style="font-size:13px;">ลืมรหัสผ่าน?</a>
+            </div>
+            <button type="submit" class="btn-primary">เข้าสู่ระบบ</button>
+            <button type="button" class="btn-outline" style="margin-top:10px;">สมัครสมาชิก</button>
+          </form>
+          <div class="login-footer">คุณเป็นองค์กร? ติดต่อผู้ดูแลระบบ</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div class="page" id="page-dashboard">
+      <div class="dashboard-grid">
+        <div class="widget">
+          <h3>ภาพรวมวันนี้</h3>
+          <div class="stat">
+            <div class="icon blue">📋</div>
+            <div>
+              <div class="num">9</div>
+              <div class="label">งานครบกำหนดวันนี้</div>
+            </div>
+          </div>
+          <div class="stat">
+            <div class="icon green">📹</div>
+            <div>
+              <div class="num">2</div>
+              <div class="label">การประชุมที่จะมาถึง</div>
+            </div>
+          </div>
+          <div class="stat">
+            <div class="icon amber">📢</div>
+            <div>
+              <div class="num">4</div>
+              <div class="label">ประกาศที่ยังไม่ได้อ่าน</div>
+            </div>
+          </div>
+        </div>
+        <div class="widget">
+          <h3>กิจกรรมล่าสุด</h3>
+          <ul class="activity-list">
+            <li>
+              <div class="avatar-sm">JS</div>
+              <div>
+                <div class="name">Jamie Smith</div>
+                <div class="name" style="font-size:13px;color:var(--text-secondary);">ย้ายสถานะ "ทีมออกแบบ"</div>
+              </div>
+            </li>
+            <li>
+              <div class="avatar-sm">PW</div>
+              <div>
+                <div class="name">Priya Wong</div>
+                <div style="font-size:13px;color:var(--text-secondary);">ส่งไฟล์รายงาน Q3</div>
+              </div>
+            </li>
+            <li>
+              <div class="avatar-sm">MK</div>
+              <div>
+                <div class="name">Mark Lee</div>
+                <div style="font-size:13px;color:var(--text-secondary);">เช่าเครื่องต่อพ่วง</div>
+              </div>
+            </li>
+            <li>
+              <div class="avatar-sm">SL</div>
+              <div>
+                <div class="name">Siti Laohaki</div>
+                <div style="font-size:13px;color:var(--text-secondary);">นัดประชุม 14:00</div>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(260px,1fr)); gap:16px;">
+        <div class="widget">
+          <div class="widget-header">
+            <h3>งานที่ใกล้หมด</h3>
+            <button class="btn-sm">ดูเพิ่ม →</button>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <div class="stat" style="padding:10px;">
+              <div class="icon" style="width:32px;height:32px;font-size:16px;">✍️</div>
+              <div style="flex:1;min-width:0;">
+                <div class="card-title" style="font-size:14px;font-weight:600;">สร้างโปรโตไทป์หน้า Login</div>
+                <div style="font-size:12px;color:var(--text-secondary);">🔄 In Progress · 12 ชม.</div>
+              </div>
+              <span class="priority-badge high" style="font-size:10px;">🔥</span>
+            </div>
+            <div class="stat" style="padding:10px;">
+              <div class="icon" style="width:32px;height:32px;font-size:16px;">📹</div>
+              <div style="flex:1;min-width:0;">
+                <div class="card-title" style="font-size:14px;font-weight:600;">นัดประชุม UX</div>
+                <div style="font-size:12px;color:var(--text-secondary);">📅 14:00 · 30 นาที</div>
+              </div>
+              <span class="priority-badge medium" style="font-size:10px;">🟡</span>
+            </div>
+            <div class="stat" style="padding:10px;">
+              <div class="icon" style="width:32px;height:32px;font-size:16px;">📁</div>
+              <div style="flex:1;min-width:0;">
+                <div class="card-title" style="font-size:14px;font-weight:600;">จัดเก็บเอกสารคณะทำงาน</div>
+                <div style="font-size:12px;color:var(--text-secondary);">📂 ยังไม่ได้ทำ</div>
+              </div>
+              <span class="priority-badge low" style="font-size:10px;">🟢</span>
+            </div>
+          </div>
+        </div>
+        <div class="widget">
+          <div class="widget-header">
+            <h3>การประชุมพรุ่งนี้</h3>
+            <button class="btn-sm">ดูทั้งหมด →</button>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div class="stat" style="padding:12px;border-bottom:1px solid var(--border);">
+              <div class="icon" style="width:36px;height:36px;font-size:18px;">🎙️</div>
+              <div style="flex:1;min-width:0;">
+                <div class="card-title" style="font-size:14px;font-weight:600;">ทีมวางแผนผลิตภัณฑ์</div>
+                <div style="font-size:12px;color:var(--text-secondary);">📅 10 ต.ค. 10:00 — 11:30</div>
+              </div>
+              <span class="time" style="font-size:12px;font-weight:600;color:var(--primary);">⏰ 10:00</span>
+            </div>
+            <div class="stat" style="padding:12px;border-bottom:1px solid var(--border);">
+              <div class="icon" style="width:36px;height:36px;font-size:18px;">👥</div>
+              <div style="flex:1;min-width:0;">
+                <div class="card-title" style="font-size:14px;font-weight:600;">การอบรม Salesforce</div>
+                <div style="font-size:12px;color:var(--text-secondary);">📅 11 ต.ค. 14:00 — 16:00</div>
+              </div>
+              <span class="time" style="font-size:12px;font-weight:600;color:var(--primary);">📅 14:00</span>
+            </div>
+            <div class="stat" style="padding:12px;">
+              <div class="icon" style="width:36px;height:36px;font-size:18px;">🏢</div>
+              <div style="flex:1;min-width:0;">
+                <div class="card-title" style="font-size:14px;font-weight:600;">เช่าพื้นที่ทำงานร่วม</div>
+                <div style="font-size:12px;color:var(--text-secondary);">📅 12 ต.ค. 09:00 — 18:00</div>
+              </div>
+              <span class="time" style="font-size:12px;font-weight:600;color:var(--primary);">⚡ 09:00</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chat -->
+    <div class="page" id="page-chat">
+      <div class="chat-main">
+        <div class="chat-side">
+          <div class="chat-side-header">แชททั้งหมด</div>
+          <div class="chat-list">
+            <div class="chat-item active">
+              <div class="avatar">👥</div>
+              <div class="info">
+                <div class="name">ทีมออกแบบ UI/UX</div>
+                <div class="time">วันนี้ 10:24</div>
+                <div class="unread">3</div>
+              </div>
+            </div>
+            <div class="chat-item">
+              <div class="avatar">📋</div>
+              <div class="info">
+                <div class="name">ทีมพัฒนาซอฟต์แวร์</div>
+                <div class="time">วันนี้ 09:10</div>
+              </div>
+            </div>
+            <div class="chat-item">
+              <div class="avatar">📊</div>
+              <div class="info">
+                <div class="name">ฝ่ายการตลาด</div>
+                <div class="time">เมื่อ 15 นาทีที่แล้ว</div>
+              </div>
+            </div>
+            <div class="chat-item">
+              <div class="avatar">🚗</div>
+              <div class="info">
+                <div class="name">รถเช่าสำนักงาน</div>
+                <div class="time">เมื่อวานัน 16:45</div>
+              </div>
+            </div>
+            <div class="chat-item">
+              <div class="avatar">📁</div>
+              <div class="info">
+                <div class="name">โครงการ Q4 2026</div>
+                <div class="time">เมื่อวานัน 08:30</div>
+              </div>
+            </div>
+            <div class="chat-item">
+              <div class="avatar">👤</div>
+              <div class="info">
+                <div class="name">สื่อสารระหว่างบุคคล (ประกาศทั่ว)</div>
+                <div class="time">วันนี้ 08:00</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="chat-body">
+          <div class="chat-messages">
+            <div class="message received">
+              สวัสดีครับ วันนี้มีอะไรใหม่บ้างในโครงการ?
+              <div class="meta">คุณ พนม · วันนี้ 10:24</div>
+            </div>
+            <div class="message sent">
+              สวัสดีครับ เรากำหนด feature ใหม่สำหรับหน้า dashboard แล้ว
+              <div class="meta">ทีมออกแบบ · วันนี้ 10:25</div>
+            </div>
+            <div class="message received">
+              ยอดมากครับ ภาพรวมแล้วจะใช้เวลาเท่าไหร่?
+              <div class="meta">คุณ พนม · วันนี้ 10:26</div>
+            </div>
+            <div class="message sent">
+              คาดว่าจะใช้เวลาประมาณ 3-5 วัน
+              <div class="meta">ทีมออกแบบ · วันนี้ 10:27</div>
+            </div>
+            <div class="message received">
+              ได้รับเลยครับ จะเริ่มทำกันในวันพรุ่งนี้ใช่หรือไม่?
+              <div class="meta">คุณ พนม · วันนี้ 10:30</div>
+            </div>
+            <div class="message sent">
+              ได้ครับ สามารถเริ่มได้เลย
+              <div class="meta">ทีมออกแบบ · วันนี้ 10:31</div>
+            </div>
+          </div>
+          <div class="chat-input-row">
+            <input type="text" placeholder="พิมพ์ข้อความ...">
+            <button style="padding:10px 16px;border-radius:20px;background:var(--primary);color:#fff;font-weight:600;font-size:14px;">ส่ง</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Task (Kanban) -->
+    <div class="page" id="page-task">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <h2 style="font-family:var(--font-heading);font-size:20px;font-weight:700;">งานทั้งหมด</h2>
+        <button class="btn-sm" style="background:var(--primary);color:#fff;">+ เพิ่มงาน</button>
+      </div>
+      <div class="kanban">
+        <div class="kanban-col" style="flex:1;">
+          <h2><span class="col-icon">📝</span> ยังไม่ได้ทำ</h2>
+          <div class="kanban-card">
+            <div class="card-top">
+              <div class="card-title">สร้างโปรโตไทป์หน้า Login</div>
+              <span class="priority-badge high">🔥</span>
+            </div>
+            <div class="card-meta">👤 คุณ พนม · 📅 2 ชั่วโมง · 🏷️ เว็บไซต์ใหม่</div>
+          </div>
+          <div class="kanban-card">
+            <div class="card-top">
+              <div class="card-title">จดบันทึกการประชุมครั้งที่ 3</div>
+              <span class="priority-badge medium">🟡</span>
+            </div>
+            <div class="card-meta">👤 คุณ นพมาศ · 📅 1 ชั่วโมง</div>
+          </div>
+          <div class="kanban-card">
+            <div class="card-top">
+              <div class="card-title">ตรวจสอบเอกสาร Q4</div>
+              <span class="priority-badge low">🟢</span>
+            </div>
+            <div class="card-meta">👤 ทีมการเงิน · 📅 6 ชั่วโมง</div>
+          </div>
+          <button class="kanban-add">+ เพิ่มงาน</button>
+        </div>
+        <div class="kanban-col primary" style="flex:1;">
+          <h2><span class="col-icon">🔄</span> กำลังดำเนินการ</h2>
+          <div class="kanban-card">
+            <div class="card-top">
+              <div class="card-title">พัฒนาส่วน API สำหรับระบบรถเช่า</div>
+              <span class="priority-badge high">🔥</span>
+            </div>
+            <div class="card-meta">👤 คุณ ปุณณุพันธ์ · 📅 4 ชั่วโมง · 🏷️ รถเช่า</div>
+          </div>
+          <div class="kanban-card">
+            <div class="card-top">
+              <div class="card-title">เชื่อมต่อระบบทำ_minutes_กับซิงโครนี</div>
+              <span class="priority-badge medium">🟡</span>
+            </div>
+            <div class="card-meta">👤 คุณ ธนพล · 📅 2 วัน</div>
+          </div>
+          <button class="kanban-add">+ เพิ่มงาน</button>
+        </div>
+        <div class="kanban-col secondary" style="flex:1;">
+          <h2><span class="col-icon">🔍</span> ตรวจสอบแล้ว</h2>
+          <div class="kanban-card">
+            <div class="card-top">
+              <div class="card-title">ทดสอบหน้าเข้าสู่ระบบ</div>
+              <span class="priority-badge low">🟢</span>
+            </div>
+            <div class="card-meta">👤 คุณ วิภา · ✅ เสร็จสิ้น</div>
+          </div>
+          <div class="kanban-card">
+            <div class="card-top">
+              <div class="card-title">กำหนดรูปแบบการประชุมทีม</div>
+              <span class="priority-badge low">🟢</span>
+            </div>
+            <div class="card-meta">👤 คุณ ศรีวิชญ์ · ✅ เสร็จสิ้น</div>
+          </div>
+          <button class="kanban-add">+ เพิ่มงาน</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Meetings -->
+    <div class="page" id="page-meetings">
+      <h2 style="font-family:var(--font-heading);font-size:20px;font-weight:700;margin-bottom:16px;">การประชุม</h2>
+      <div class="meetings-grid">
+        <div class="meeting-card">
+          <div class="meet-top">
+            <div class="meet-time">วันพุธที่ 14 ตุลาคม · 10:00–11:30</div>
+            <div class="meet-date">📅</div>
+          </div>
+          <h4>ทีมวางแผนผลิตภัณฑ์</h4>
+          <div class="meet-desc">การวางแผน roadmap ไตรมาสที่ 4 และทบทวนโครงการ Q4</div>
+          <div class="meet-actions">
+            <button class="btn-meet start">📹 เริ่มการประชุม</button>
+            <button class="btn-meet join">เข้าร่วม</button>
+            <button class="btn-meet optional">+ เพิ่มแขกรับเชิญ</button>
+          </div>
+        </div>
+        <div class="meeting-card">
+          <div class="meet-top">
+            <div class="meet-time">วันพฤหัสที่ 15 ตุลาคม · 14:00–16:00</div>
+            <div class="meet-date">📅</div>
+          </div>
+          <h4>การอบรม Salesforce</h4>
+          <div class="meet-desc">อบรมเทคนิคการใช้ Salesforce สำหรับทีมขาย</div>
+          <div class="meet-actions">
+            <button class="btn-meet start">📹 เริ่มการประชุม</button>
+            <button class="btn-meet join">เข้าร่วม</button>
+            <button class="btn-meet optional">+ เพิ่มแขกรับเชิญ</button>
+          </div>
+        </div>
+        <div class="meeting-card">
+          <div class="meet-top">
+            <div class="meet-time">วันศุกร์ที่ 16 ตุลาคม · 09:00–18:00</div>
+            <div class="meet-date">📅</div>
+          </div>
+          <h4>เช่าพื้นที่ทำงานร่วม</h4>
+          <div class="meet-desc">พื้นที่สำนักงานสำหรับทีมที่มาทำงานจากระยะไกล</div>
+          <div class="meet-actions">
+            <button class="btn-meet start">📹 เริ่มการประชุม</button>
+            <button class="btn-meet join">เช่าห้อง</button>
+            <button class="btn-meet optional">+ จองเพิ่ม</button>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:20px;text-align:center;">
+        <button class="btn-outline" style="padding:12px 24px;border-radius:var(--radius);">📅 ดูปฏิทินทั้งหมด →</button>
+      </div>
+    </div>
+
+    <!-- Carbooking -->
+    <div class="page" id="page-carbooking">
+      <h2 style="font-family:var(--font-heading);font-size:20px;font-weight:700;margin-bottom:16px;">รถเช่า</h2>
+      <div class="carbooking-wrap">
+        <div class="car-list">
+          <div class="car-card">
+            <div class="car-logo">🚗</div>
+            <div class="car-info">
+              <div class="car-name">Volvo XC60</div>
+              <div class="car-specs">
+                <span>4 คน</span>
+                <span>AA</span>
+                <span>AC</span>
+                <span>150km/ชั่วโมง</span>
+              </div>
+              <div class="car-price">1,200 บาท/ชั่วโมง</div>
+            </div>
+            <span class="car-badge new">ใหม่</span>
+          </div>
+          <div class="car-card">
+            <div class="car-logo">🚙</div>
+            <div class="car-info">
+              <div class="car-name">Toyota Hilux</div>
+              <div class="car-specs">
+                <span>5 คน</span>
+                <span>4WD</span>
+                <span>Folding</span>
+              </div>
+              <div class="car-price">1,500 บาท/ชั่วโมง</div>
+            </div>
+            <span class="car-badge new">ใหม่</span>
+          </div>
+          <div class="car-card">
+            <div class="car-logo">🚙</div>
+            <div class="car-info">
+              <div class="car-name">Honda CR-V</div>
+              <div class="car-specs">
+                <span>5 คน</span>
+                <span>Auto</span>
+                <span>200km/ชั่วโมง</span>
+              </div>
+              <div class="car-price">1,000 บาท/ชั่วโมง</div>
+            </div>
+            <span class="car-badge new">ใหม่</span>
+          </div>
+          <div class="car-card">
+            <div class="car-logo">🚕</div>
+            <div class="car-info">
+              <div class="car-name">Mitsubishi L200</div>
+              <div class="car-specs">
+                <span>2 คน</span>
+                <span>เกียร์</span>
+                <span>4WD</span>
+              </div>
+              <div class="car-price">800 บาทต่อวัน</div>
+            </div>
+            <span class="car-badge new">เก่า</span>
+          </div>
+        </div>
+        <div class="booking-form">
+          <div class="form-group">
+            <label>เลือกรถ</label>
+            <select style="width:100%;">
+              <option>Volvo XC60 (1,200 บาท/ชั่วโมง)</option>
+              <option>Toyota Hilux (1,500 บาท/ชั่วโมง)</option>
+              <option>Honda CR-V (1,000 บาท/ชั่วโมง)</option>
+              <option>Nissan Navara (900 บาท/ชั่วโมง)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>วัน-เวลาเช่า</label>
+            <input type="datetime-local">
+          </div>
+          <div class="form-group">
+            <label>พนักงานที่จะใช้ (ตัวเลือก)</label>
+            <input type="text" placeholder="ชื่อ-นามสกุล (ถ้ามี)">
+          </div>
+          <div class="form-group">
+            <label>วัตถุประสงค์การใช้งาน (ตัวเลือก)</label>
+            <input type="text" placeholder="เช่น นัดหมายลูกค้า, การทำงานจากที่อื่น...">
+          </div>
+          <div class="actions">
+            <button class="btn-book">✅ ยืนยันการเช่า</button>
+            <button class="btn-cancel">ยกเลิก</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- User -->
+    <div class="page" id="page-user">
+      <div class="user-settings">
+        <div class="profile-header">
+          <div class="profile-avatar">AW</div>
+          <div class="profile-name">นาย วรกร วิเชียรเกษม</div>
+          <div class="profile-email">warawong@company.co.th</div>
+          <div style="font-size:13px;color:var(--text-secondary);margin-top:8px;">Software Engineer · กลุ่มพัฒนาซอฟต์แวร์</div>
+        </div>
+        <div class="section-title">ข้อมูลส่วนตัว</div>
+        <div class="setting-row">
+          <span class="label">ชื่อแสดง</span>
+          <span class="value">นาย วรกร วิเชียรเกษม</span>
+        </div>
+        <div class="setting-row">
+          <span class="label">อีเมล</span>
+          <span class="value">warawong@company.co.th</span>
+        </div>
+        <div class="setting-row">
+          <span class="label">แผนก</span>
+          <span class="value">Software Engineering</span>
+        </div>
+        <div class="setting-row">
+          <span class="label">ตำแหน่ง</span>
+          <span class="value">Software Engineer</span>
+        </div>
+        <div class="section-title">การตั้งค่า</div>
+        <div class="setting-row">
+          <span class="label">การแจ้งเตือน</span>
+          <span class="value" style="display:flex;align-items:center;gap:8px;">
+            🔔 เปิดใช้งาน
+            <input type="checkbox" checked style="width:18px;height:18px;accent-color:var(--primary);">
+          </span>
+        </div>
+        <div class="setting-row">
+          <span class="label">สีธีม</span>
+          <span class="value">🌙 ทึบแสง</span>
+        </div>
+        <div class="setting-row">
+          <span class="label">ภาษา</span>
+          <span class="value">🇹🇭 ไทย</span>
+        </div>
+        <div class="section-title">ความปลอดภัย</div>
+        <div class="setting-row">
+          <span class="label">การเปลี่ยนรหัสผ่าน</span>
+          <span class="value" style="text-align:right;">
+            <button class="btn-sm" style="padding:6px 14px;border-radius:var(--radius-sm);">เปลี่ยนรหัสผ่าน</button>
+          </span>
+        </div>
+        <button class="btn-danger">ออกจากระบบ</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="assets/js/app.js"></script>

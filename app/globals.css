@@ -1,0 +1,64 @@
+@import "tailwindcss";
+@config "../tailwind.config.js";
+
+@theme {
+  --color-primary: #4F46E5;
+  --color-primary-hover: #4338CA;
+  --color-primary-light: #EEF2FF;
+  --color-secondary: #0D9488;
+  --color-secondary-light: #CCFBF1;
+  --color-accent: #F59E0B;
+  --color-bg: #F1F5F9;
+  --color-surface: #FFFFFF;
+  --color-text: #0F172A;
+  --color-text-secondary: #64748B;
+  --color-border: #E2E8F0;
+  --color-sidebar: #0F172A;
+  --color-sidebar-text: #94A3B8;
+  --font-heading: var(--font-heading), 'Kanit', sans-serif;
+  --font-body: var(--font-body), 'Sarabun', sans-serif;
+}
+
+@layer base {
+  :root {
+    --primary: #4F46E5;
+    --primary-hover: #4338CA;
+    --primary-light: #EEF2FF;
+    --secondary: #0D9488;
+    --secondary-light: #CCFBF1;
+    --accent: #F59E0B;
+    --bg: #F1F5F9;
+    --surface: #FFFFFF;
+    --text: #0F172A;
+    --text-secondary: #64748B;
+    --border: #E2E8F0;
+    --sidebar: #0F172A;
+    --sidebar-text: #94A3B8;
+  }
+
+  html, body {
+    font-family: var(--font-body), 'Sarabun', sans-serif;
+    background-color: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6, .font-heading {
+    font-family: var(--font-heading), 'Kanit', sans-serif;
+  }
+
+  button {
+    font-family: inherit;
+  }
+
+  input, textarea, select {
+    font-family: inherit;
+  }
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
