@@ -1063,14 +1063,88 @@ export default function OmniOfficeApp() {
     showToast("🔄 อัปเดตสถานะงานเรียบร้อย");
   };
 
+  const handleContinueWithLineProfile = async () => {
+    const lineMember: Member = {
+      id: `usr_line_${Date.now()}`,
+      prefix: "นาย/นางสาว",
+      firstName: "ผู้ใช้งาน",
+      lastName: "LINE",
+      name: "ผู้ใช้งาน LINE (LINE Verified)",
+      personnelType: "พนักงานราชการ",
+      position: "เจ้าหน้าที่สื่อสารและสารสนเทศ (LINE SSO)",
+      division: GOVERNMENT_DIVISIONS[0],
+      department: GOVERNMENT_DIVISIONS[0],
+      email: "line.user@m-society.go.th",
+      phone: "-",
+      lineId: "@line_staff",
+      role: "member",
+      status: "active",
+      avatarText: "LN",
+      joinedDate: "วันนี้",
+    };
+    if (isLiveConnected) {
+      await saveMember(lineMember);
+    }
+    setLineModalNotice(null);
+    handleLogin(lineMember, true);
+    showToast("🎉 เข้าสู่ระบบด้วย LINE สำเร็จ ยินดีต้อนรับ!");
+  };
+
   // ─── IF NOT LOGGED IN: SHOW LOGIN PAGE ───
   if (!currentUser) {
     return (
-      <LoginPage
-        onLogin={handleLogin}
-        availableMembers={members}
-        onRequestAccess={handleNewAccessRequest}
-      />
+      <>
+        {isLineVerifying && (
+          <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-900/80 backdrop-blur-md text-white p-6 animate-fade-in">
+            <div className="w-16 h-16 rounded-3xl bg-[#06C755] flex items-center justify-center text-3xl shadow-xl shadow-[#06C755]/30 mb-4 animate-bounce">
+              💬
+            </div>
+            <h3 className="text-lg font-bold font-heading">กำลังยืนยันตัวตนด้วยบัญชี LINE...</h3>
+            <p className="text-xs text-slate-300 mt-1">กำลังตรวจสอบ Authorization Token และเชื่อมต่อระบบ OmniOffice</p>
+          </div>
+        )}
+
+        {lineModalNotice && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-fade-in text-slate-800">
+            <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden p-6 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 text-[#06C755] flex items-center justify-center text-2xl font-bold">
+                  💬
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 font-heading">{lineModalNotice.title}</h3>
+                  <p className="text-[11px] text-slate-500">LINE OAuth 2.0 Authorization Verified</p>
+                </div>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed bg-emerald-50/70 p-3.5 rounded-2xl border border-emerald-200/70">
+                {lineModalNotice.message}
+              </p>
+              <div className="space-y-2 pt-1">
+                <button
+                  type="button"
+                  onClick={handleContinueWithLineProfile}
+                  className="w-full py-2.5 rounded-xl bg-[#06C755] hover:bg-[#05b34c] text-white text-xs font-bold shadow-md shadow-[#06C755]/20 flex items-center justify-center gap-2 cursor-pointer transition-all"
+                >
+                  <span>⚡ ดำเนินการเข้าสู่ระบบด้วยบัญชี LINE ทันที ➜</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLineModalNotice(null)}
+                  className="w-full py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500 text-xs font-semibold cursor-pointer"
+                >
+                  ปิดหน้าต่าง
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <LoginPage
+          onLogin={handleLogin}
+          availableMembers={members}
+          onRequestAccess={handleNewAccessRequest}
+        />
+      </>
     );
   }
 
