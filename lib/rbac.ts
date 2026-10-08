@@ -1,4 +1,4 @@
-import { Role, ModuleId, RoleInfo, Member, AuditLog, SystemModule, PersonnelType } from "./types";
+import { Role, ModuleId, RoleInfo, Member, AuditLog, SystemModule, PersonnelType, AccessRequest } from "./types";
 
 export const ROLE_CONFIG: Record<Role, RoleInfo> = {
   admin: {
@@ -465,5 +465,44 @@ export const INITIAL_AUDIT_LOGS: AuditLog[] = [
     action: "เปิดใช้งานตารางกำหนดสิทธิ์ RBAC Module Matrix ประจำปีงบประมาณ",
     target: "System Configuration",
     status: "success",
+  },
+];
+
+export const INITIAL_ACCESS_REQUESTS: AccessRequest[] = [
+  {
+    id: "req_1",
+    prefix: "นาย",
+    firstName: "พงษ์ศักดิ์",
+    lastName: "รัตนวิมล",
+    nickname: "บอล",
+    name: "นายพงษ์ศักดิ์ รัตนวิมล",
+    personnelType: "ข้าราชการ",
+    position: "นักพัฒนาสังคมปฏิบัติการ",
+    division: "กลุ่มนโยบายและวิชาการ",
+    email: "pongsak.r@m-society.go.th",
+    phone: "055-705031 ต่อ 112",
+    lineId: "ball_kpp",
+    requestedRole: "member",
+    reason: "ขอสิทธิ์เพื่อติดตามโครงการและประสานงานข้อมูลสารสนเทศร่วมกับทีมงาน พมจ. กำแพงเพชร",
+    status: "pending",
+    createdAt: "วันนี้ 10:15 น.",
+  },
+  {
+    id: "req_2",
+    prefix: "นางสาว",
+    firstName: "กานดา",
+    lastName: "ธนโชติ",
+    nickname: "กาน",
+    name: "นางสาวกานดา ธนโชติ",
+    personnelType: "พนักงานราชการ",
+    position: "เจ้าหน้าที่ธุรการและสารบรรณ",
+    division: "ฝ่ายบริหารทั่วไป",
+    email: "kanda.t@m-society.go.th",
+    phone: "055-705031 ต่อ 115",
+    lineId: "kanda_admin",
+    requestedRole: "member",
+    reason: "ขอสิทธิ์เข้าใช้งานระบบจองรถยนต์สำนักงาน จองห้องประชุม และส่งเอกสารในระบบแชท",
+    status: "pending",
+    createdAt: "เมื่อวาน 15:30 น.",
   },
 ];

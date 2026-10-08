@@ -58,6 +58,31 @@ export interface Member {
   avatarUrl?: string;
 }
 
+export type AccessRequestStatus = "pending" | "approved" | "rejected";
+
+export interface AccessRequest {
+  id: string;
+  prefix: string; // คำนำหน้า เช่น นาย, นาง, นางสาว
+  firstName: string; // ชื่อ
+  lastName: string; // นามสกุล
+  nickname?: string; // ชื่อเล่น
+  name: string; // ชื่อเต็ม
+  personnelType: PersonnelType; // ประเภทบุคลากร เช่น ข้าราชการ, พนักงานราชการ
+  position: string; // ตำแหน่ง
+  division: string; // กลุ่ม/ฝ่าย
+  email: string; // อีเมลราชการ
+  phone: string; // หมายเลขโทรศัพท์
+  lineId: string; // Line ID
+  requestedRole: Role; // บทบาทที่ยื่นขอ เช่น member, manager
+  approvedRole?: Role; // บทบาทที่อนุมัติจริง
+  reason: string; // เหตุผลความจำเป็นในการขอสิทธิ์
+  status: AccessRequestStatus; // สถานะคำขอ: pending | approved | rejected
+  createdAt: string; // วันที่เวลาที่ยื่นคำขอ
+  reviewedAt?: string; // วันที่เวลาที่ดำเนินการ
+  reviewedBy?: string; // ผู้ดำเนินการ (เช่น มะลิวัน สิทธิโยธี)
+  reviewNotes?: string; // หมายเหตุ/เหตุผลการอนุมัติหรือปฏิเสธ
+}
+
 export interface AuditLog {
   id: string;
   timestamp: string;

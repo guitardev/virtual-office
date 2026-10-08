@@ -9,6 +9,7 @@ drop table if exists messages cascade;
 drop table if exists chat_channels cascade;
 drop table if exists meetings cascade;
 drop table if exists organization_members cascade;
+drop table if exists access_requests cascade;
 drop table if exists users cascade;
 drop table if exists organizations cascade;
 
@@ -155,7 +156,37 @@ create policy "Allow all read files" on files for select using (true);
 create policy "Allow all write files" on files for all using (true);
 
 -- ===============================
--- 9. Enable Realtime Publications
+-- 9. Access Requests (คำขอสิทธิ์เข้าใช้งานใหม่)
+-- ===============================
+create table access_requests (
+  id text primary key,
+  prefix text default 'นาย',
+  first_name text not null,
+  last_name text not null,
+  nickname text,
+  name text not null,
+  personnel_type text default 'ข้าราชการ',
+  position text not null,
+  division text not null,
+  email text not null,
+  phone text,
+  line_id text,
+  requested_role text default 'member' check (requested_role in ('admin', 'manager', 'member', 'guest')),
+  approved_role text check (approved_role in ('admin', 'manager', 'member', 'guest')),
+  reason text not null,
+  status text default 'pending' check (status in ('pending', 'approved', 'rejected')),
+  reviewed_by text,
+  review_notes text,
+  reviewed_at timestamptz,
+  created_at timestamptz default now()
+);
+
+alter table access_requests enable row level security;
+create policy "Allow all read access_requests" on access_requests for select using (true);
+create policy "Allow all write access_requests" on access_requests for all using (true);
+
+-- ===============================
+-- 10. Enable Realtime Publications
 -- ===============================
 do $$
 begin
@@ -202,3 +233,12 @@ on conflict (id) do update set
   line_id = excluded.line_id,
   role = excluded.role,
   avatar_url = excluded.avatar_url;
+
+-- ===============================
+-- 12. Seed Initial Access Requests (คำขอสิทธิ์ทดสอบ)
+-- ===============================
+insert into access_requests (id, prefix, first_name, last_name, nickname, name, personnel_type, position, division, email, phone, line_id, requested_role, reason, status)
+values
+  ('req_1', 'นาย', 'พงษ์ศักดิ์', 'รัตนวิมล', 'บอล', 'นายพงษ์ศักดิ์ รัตนวิมล', 'ข้าราชการ', 'นักพัฒนาสังคมปฏิบัติการ', 'กลุ่มนโยบายและวิชาการ', 'pongsak.r@m-society.go.th', '055-705031 ต่อ 112', 'ball_kpp', 'member', 'ขอสิทธิ์เพื่อติดตามโครงการและประสานงานข้อมูลสารสนเทศร่วมกับทีมงาน พมจ. กำแพงเพชร', 'pending'),
+  ('req_2', 'นางสาว', 'กานดา', 'ธนโชติ', 'กาน', 'นางสาวกานดา ธนโชติ', 'พนักงานราชการ', 'เจ้าหน้าที่ธุรการและสารบรรณ', 'ฝ่ายบริหารทั่วไป', 'kanda.t@m-society.go.th', '055-705031 ต่อ 115', 'kanda_admin', 'member', 'ขอสิทธิ์เข้าใช้งานระบบจองรถยนต์สำนักงาน จองห้องประชุม และส่งเอกสารในระบบแชท', 'pending')
+on conflict (id) do nothing;

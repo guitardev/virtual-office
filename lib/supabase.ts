@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
-import { Member, ModuleId, Role, Task, AuditLog, PersonnelType } from "./types";
-import { INITIAL_MEMBERS, INITIAL_SYSTEM_MODULES } from "./rbac";
+import { Member, ModuleId, Role, Task, AuditLog, PersonnelType, AccessRequest, AccessRequestStatus } from "./types";
+import { INITIAL_MEMBERS, INITIAL_SYSTEM_MODULES, INITIAL_ACCESS_REQUESTS } from "./rbac";
 
 // Environment variables from Vercel Marketplace Supabase Integration
 const supabaseUrl =
@@ -176,3 +176,110 @@ export function subscribeToMembers(callback: (members: Member[]) => void) {
     supabase.removeChannel(channel);
   };
 }
+
+/**
+ * Map Supabase row to AccessRequest object
+ */
+export function mapRowToAccessRequest(row: any): AccessRequest {
+  return {
+    id: row.id,
+    prefix: row.prefix || "นาย",
+    firstName: row.first_name || "",
+    lastName: row.last_name || "",
+    nickname: row.nickname || undefined,
+    name: row.name || `${row.prefix || ""}${row.first_name || ""} ${row.last_name || ""}`.trim(),
+    personnelType: (row.personnel_type as PersonnelType) || "ข้าราชการ",
+    position: row.position || "เจ้าหน้าที่",
+    division: row.division || "ฝ่ายบริหารทั่วไป",
+    email: row.email,
+    phone: row.phone || "-",
+    lineId: row.line_id || "-",
+    requestedRole: (row.requested_role as Role) || "member",
+    approvedRole: (row.approved_role as Role) || undefined,
+    reason: row.reason || "",
+    status: (row.status as AccessRequestStatus) || "pending",
+    createdAt: row.created_at
+      ? new Date(row.created_at).toLocaleDateString("th-TH", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : "วันนี้",
+    reviewedAt: row.reviewed_at
+      ? new Date(row.reviewed_at).toLocaleDateString("th-TH", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : undefined,
+    reviewedBy: row.reviewed_by || undefined,
+    reviewNotes: row.review_notes || undefined,
+  };
+}
+
+/**
+ * Fetch access requests from Supabase, or fallback to INITIAL_ACCESS_REQUESTS
+ */
+export async function fetchAccessRequests(): Promise<AccessRequest[]> {
+  if (!supabase) return INITIAL_ACCESS_REQUESTS;
+
+  try {
+    const { data, error } = await supabase
+      .from("access_requests")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error || !data || data.length === 0) {
+      return INITIAL_ACCESS_REQUESTS;
+    }
+
+    return data.map(mapRowToAccessRequest);
+  } catch (err) {
+    console.error("Error fetching access requests from Supabase:", err);
+    return INITIAL_ACCESS_REQUESTS;
+  }
+}
+
+/**
+ * Save access request to Supabase
+ */
+export async function saveAccessRequest(req: AccessRequest): Promise<boolean> {
+  if (!supabase) return true;
+
+  try {
+    const { error } = await supabase.from("access_requests").upsert({
+      id: req.id,
+      prefix: req.prefix,
+      first_name: req.firstName,
+      last_name: req.lastName,
+      nickname: req.nickname || null,
+      name: req.name,
+      personnel_type: req.personnelType,
+      position: req.position,
+      division: req.division,
+      email: req.email,
+      phone: req.phone || null,
+      line_id: req.lineId || null,
+      requested_role: req.requestedRole,
+      approved_role: req.approvedRole || null,
+      reason: req.reason,
+      status: req.status,
+      reviewed_by: req.reviewedBy || null,
+      review_notes: req.reviewNotes || null,
+    });
+
+    if (error) {
+      console.warn("Could not save access request to Supabase, local state used:", error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn("Error saving access request:", err);
+    return false;
+  }
+}
+

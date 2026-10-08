@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Role, ModuleId, Member, AuditLog, SystemModule, PersonnelType } from "@/lib/types";
+import { Role, ModuleId, Member, AuditLog, SystemModule, PersonnelType, AccessRequest, AccessRequestStatus } from "@/lib/types";
 import {
   ROLE_CONFIG,
   MODULE_NAMES,
@@ -9,6 +9,7 @@ import {
   INITIAL_MEMBERS,
   INITIAL_AUDIT_LOGS,
   INITIAL_SYSTEM_MODULES,
+  INITIAL_ACCESS_REQUESTS,
   GOVERNMENT_DIVISIONS,
   GOVERNMENT_PERSONNEL_TYPES,
   PERSONNEL_TYPE_CONFIG,
@@ -21,6 +22,8 @@ import {
   saveMember,
   deleteMember,
   subscribeToMembers,
+  fetchAccessRequests,
+  saveAccessRequest,
 } from "@/lib/supabase";
 
 interface NavItem {
@@ -83,10 +86,49 @@ export default function OmniOfficeApp() {
   const [systemModules, setSystemModules] = useState<Record<ModuleId, SystemModule>>(INITIAL_SYSTEM_MODULES);
   const [members, setMembers] = useState<Member[]>(INITIAL_MEMBERS);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(INITIAL_AUDIT_LOGS);
-  const [adminTab, setAdminTab] = useState<"members" | "matrix" | "audit">("members");
+  const [adminTab, setAdminTab] = useState<"members" | "requests" | "matrix" | "audit">("members");
   const [memberSearch, setMemberSearch] = useState("");
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+
+  // ─── ACCESS REQUESTS MANAGEMENT STATE ───
+  const [accessRequests, setAccessRequests] = useState<AccessRequest[]>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("omnioffice_access_requests");
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {
+          console.error("Failed to parse cached access requests:", e);
+        }
+      }
+    }
+    return INITIAL_ACCESS_REQUESTS;
+  });
+  const [requestSearch, setRequestSearch] = useState("");
+  const [requestStatusFilter, setRequestStatusFilter] = useState<"all" | "pending" | "approved" | "rejected">("all");
+  const [selectedRequest, setSelectedRequest] = useState<AccessRequest | null>(null);
+  const [showRequestDetailModal, setShowRequestDetailModal] = useState(false);
+  const [showEditRequestModal, setShowEditRequestModal] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
+
+  const [editRequestForm, setEditRequestForm] = useState({
+    prefix: "นาย",
+    firstName: "",
+    lastName: "",
+    nickname: "",
+    personnelType: "ข้าราชการ" as PersonnelType,
+    position: "",
+    division: GOVERNMENT_DIVISIONS[0] as string,
+    email: "",
+    phone: "",
+    lineId: "",
+    requestedRole: "member" as Role,
+    reason: "",
+    reviewNotes: "",
+  });
 
   // Admin Member Management Modals State
   const [viewingMember, setViewingMember] = useState<Member | null>(null);
@@ -164,12 +206,18 @@ export default function OmniOfficeApp() {
     }
   }, []);
 
-  // Fetch live members from Supabase & subscribe to realtime changes
+  // Fetch live members & access requests from Supabase & subscribe to realtime changes
   useEffect(() => {
     if (isLiveConnected) {
       fetchMembers().then((liveMembers) => {
         if (liveMembers && liveMembers.length > 0) {
           setMembers(liveMembers);
+        }
+      });
+
+      fetchAccessRequests().then((liveReqs) => {
+        if (liveReqs && liveReqs.length > 0) {
+          setAccessRequests(liveReqs);
         }
       });
 
@@ -561,6 +609,198 @@ export default function OmniOfficeApp() {
     showToast(`🎉 เพิ่มบุคลากร ${newM.name} (${newM.personnelType}) เรียบร้อยแล้ว`);
   };
 
+  // ─── ACCESS REQUEST HANDLERS ───
+  const handleNewAccessRequest = (req: AccessRequest) => {
+    setAccessRequests((prev) => [req, ...prev.filter((r) => r.id !== req.id)]);
+    showToast(`📬 ได้รับคำขอเข้าใช้งานใหม่จาก ${req.name} (${req.position}) ส่งไปยังผู้ดูแลระบบเรียบร้อย`);
+  };
+
+  const handleOpenEditRequest = (req: AccessRequest) => {
+    setSelectedRequest(req);
+    setEditRequestForm({
+      prefix: req.prefix,
+      firstName: req.firstName,
+      lastName: req.lastName,
+      nickname: req.nickname || "",
+      personnelType: req.personnelType,
+      position: req.position,
+      division: req.division,
+      email: req.email,
+      phone: req.phone || "",
+      lineId: req.lineId || "",
+      requestedRole: req.approvedRole || req.requestedRole,
+      reason: req.reason,
+      reviewNotes: req.reviewNotes || "",
+    });
+    setShowEditRequestModal(true);
+  };
+
+  const handleSaveEditRequest = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedRequest) return;
+
+    const fullName = `${editRequestForm.prefix}${editRequestForm.firstName.trim()} ${editRequestForm.lastName.trim()}`.trim();
+    const updatedReq: AccessRequest = {
+      ...selectedRequest,
+      prefix: editRequestForm.prefix,
+      firstName: editRequestForm.firstName.trim(),
+      lastName: editRequestForm.lastName.trim(),
+      nickname: editRequestForm.nickname.trim() || undefined,
+      name: fullName,
+      personnelType: editRequestForm.personnelType,
+      position: editRequestForm.position.trim(),
+      division: editRequestForm.division,
+      email: editRequestForm.email.trim(),
+      phone: editRequestForm.phone.trim() || "-",
+      lineId: editRequestForm.lineId.trim() || "-",
+      requestedRole: editRequestForm.requestedRole,
+      approvedRole: editRequestForm.requestedRole,
+      reason: editRequestForm.reason.trim(),
+      reviewNotes: editRequestForm.reviewNotes.trim() || undefined,
+    };
+
+    setAccessRequests((prev) =>
+      prev.map((r) => (r.id === selectedRequest.id ? updatedReq : r))
+    );
+
+    try {
+      const existingStr = localStorage.getItem("omnioffice_access_requests");
+      const existing: AccessRequest[] = existingStr ? JSON.parse(existingStr) : [];
+      const updated = existing.map((r) => (r.id === selectedRequest.id ? updatedReq : r));
+      localStorage.setItem("omnioffice_access_requests", JSON.stringify(updated));
+    } catch (err) {
+      console.warn("Could not save to localStorage:", err);
+    }
+
+    saveAccessRequest(updatedReq).catch(console.warn);
+
+    addAuditLog(
+      currentUser ? currentUser.name : "Admin",
+      `แก้ไขรายละเอียดคำขอสิทธิ์ของ ${updatedReq.name}`,
+      "Access Request Update",
+      "success"
+    );
+
+    showToast(`✏️ บันทึกการแก้ไขคำขอของ ${updatedReq.name} เรียบร้อย`);
+    setSelectedRequest(updatedReq);
+    setShowEditRequestModal(false);
+  };
+
+  const handleApproveRequest = (req: AccessRequest, roleOverride?: Role) => {
+    const finalRole = roleOverride || req.approvedRole || req.requestedRole;
+    const fullName = `${req.prefix}${req.firstName.trim()} ${req.lastName.trim()}`.trim();
+    const initials = req.firstName.trim().slice(0, 2).toUpperCase() || "MB";
+
+    // 1. Create new Member
+    const newM: Member = {
+      id: `usr_${Date.now()}`,
+      prefix: req.prefix,
+      firstName: req.firstName.trim(),
+      lastName: req.lastName.trim(),
+      nickname: req.nickname?.trim() || undefined,
+      name: fullName,
+      personnelType: req.personnelType,
+      position: req.position.trim() || "เจ้าหน้าที่",
+      division: req.division,
+      department: req.division,
+      email: req.email.trim(),
+      phone: req.phone.trim() || "-",
+      lineId: req.lineId.trim() || "-",
+      role: finalRole,
+      status: "active",
+      joinedDate: "วันนี้",
+      avatarText: initials,
+    };
+
+    setMembers((prev) => [newM, ...prev]);
+    saveMember(newM).catch(console.error);
+
+    // 2. Update Access Request status
+    const updatedReq: AccessRequest = {
+      ...req,
+      status: "approved",
+      approvedRole: finalRole,
+      reviewedAt: new Date().toLocaleDateString("th-TH", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      reviewedBy: currentUser ? currentUser.name : "Admin",
+    };
+
+    setAccessRequests((prev) =>
+      prev.map((r) => (r.id === req.id ? updatedReq : r))
+    );
+
+    try {
+      const existingStr = localStorage.getItem("omnioffice_access_requests");
+      const existing: AccessRequest[] = existingStr ? JSON.parse(existingStr) : [];
+      const updated = existing.map((r) => (r.id === req.id ? updatedReq : r));
+      localStorage.setItem("omnioffice_access_requests", JSON.stringify(updated));
+    } catch (err) {
+      console.warn("Could not save to localStorage:", err);
+    }
+
+    saveAccessRequest(updatedReq).catch(console.warn);
+
+    // 3. Add Audit Log
+    addAuditLog(
+      currentUser ? currentUser.name : "Admin",
+      `อนุมัติคำขอสิทธิ์ของ ${req.name} เป็น ${ROLE_CONFIG[finalRole]?.label || finalRole} (${req.division})`,
+      "Access Request Approval",
+      "success"
+    );
+
+    showToast(`✅ อนุมัติสิทธิ์ให้ ${req.name} สำเร็จ! สามารถเข้าสู่ระบบด้วยอีเมล ${req.email} ได้ทันที`);
+    setShowRequestDetailModal(false);
+    setShowEditRequestModal(false);
+  };
+
+  const handleRejectRequest = (req: AccessRequest, reason: string) => {
+    const updatedReq: AccessRequest = {
+      ...req,
+      status: "rejected",
+      reviewNotes: reason || "คำขอไม่ผ่านเกณฑ์การพิจารณา",
+      reviewedAt: new Date().toLocaleDateString("th-TH", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      reviewedBy: currentUser ? currentUser.name : "Admin",
+    };
+
+    setAccessRequests((prev) =>
+      prev.map((r) => (r.id === req.id ? updatedReq : r))
+    );
+
+    try {
+      const existingStr = localStorage.getItem("omnioffice_access_requests");
+      const existing: AccessRequest[] = existingStr ? JSON.parse(existingStr) : [];
+      const updated = existing.map((r) => (r.id === req.id ? updatedReq : r));
+      localStorage.setItem("omnioffice_access_requests", JSON.stringify(updated));
+    } catch (err) {
+      console.warn("Could not save to localStorage:", err);
+    }
+
+    saveAccessRequest(updatedReq).catch(console.warn);
+
+    addAuditLog(
+      currentUser ? currentUser.name : "Admin",
+      `ปฏิเสธคำขอสิทธิ์ของ ${req.name} (เหตุผล: ${reason || "ไม่ระบุ"})`,
+      "Access Request Rejection",
+      "denied"
+    );
+
+    showToast(`ℹ️ ปฏิเสธคำขอสิทธิ์ของ ${req.name} เรียบร้อยแล้ว`);
+    setShowRejectModal(false);
+    setShowRequestDetailModal(false);
+    setRejectReason("");
+  };
+
   // Profile Edit Handlers
   const handleOpenEditProfile = () => {
     if (!currentUser) return;
@@ -719,7 +959,13 @@ export default function OmniOfficeApp() {
 
   // ─── IF NOT LOGGED IN: SHOW LOGIN PAGE ───
   if (!currentUser) {
-    return <LoginPage onLogin={handleLogin} availableMembers={members} />;
+    return (
+      <LoginPage
+        onLogin={handleLogin}
+        availableMembers={members}
+        onRequestAccess={handleNewAccessRequest}
+      />
+    );
   }
 
   // Render navigation links with RBAC badge/lock and System status
@@ -788,6 +1034,13 @@ export default function OmniOfficeApp() {
               {!permitted ? (
                 <span className="text-xs text-amber-400" title="ไม่มีสิทธิ์เข้าถึงตามบทบาทปัจจุบัน">
                   🔒
+                </span>
+              ) : item.id === "admin" && currentUserRole === "admin" && accessRequests.filter((r) => r.status === "pending").length > 0 ? (
+                <span
+                  className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-500 text-white shadow-xs animate-pulse"
+                  title={`มี ${accessRequests.filter((r) => r.status === "pending").length} คำขอสิทธิ์เข้าใช้งานใหม่รอการอนุมัติ`}
+                >
+                  {accessRequests.filter((r) => r.status === "pending").length}
                 </span>
               ) : item.badge && !isActive && isModuleOpen ? (
                 <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
@@ -968,6 +1221,402 @@ export default function OmniOfficeApp() {
         <div className="fixed top-5 right-5 z-50 flex items-center gap-3 px-5 py-3.5 rounded-2xl bg-slate-900/95 text-white text-sm font-medium shadow-2xl border border-slate-700/60 backdrop-blur-md animate-fade-in">
           <span>{toastMessage}</span>
           <button type="button" onClick={() => setToastMessage(null)} className="text-slate-400 hover:text-white">✕</button>
+        </div>
+      )}
+
+      {/* ─── ACCESS REQUEST DETAILS MODAL ─── */}
+      {showRequestDetailModal && selectedRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-lg w-full shadow-2xl border border-slate-200 animate-fade-in max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center text-lg font-bold">
+                  📬
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold font-heading text-slate-900">รายละเอียดคำขอสิทธิ์เข้าใช้งาน</h3>
+                  <p className="text-xs text-slate-500">ยื่นคำขอเมื่อ {selectedRequest.createdAt}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRequestDetailModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-5 space-y-4 text-xs">
+              {/* Profile Card Header */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex items-center space-x-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-[#4F46E5] text-white font-bold text-base flex items-center justify-center shrink-0">
+                  {selectedRequest.firstName.slice(0, 2)}
+                </div>
+                <div>
+                  <div className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                    <span>{selectedRequest.name}</span>
+                    {selectedRequest.nickname && (
+                      <span className="text-xs font-normal text-slate-500">({selectedRequest.nickname})</span>
+                    )}
+                  </div>
+                  <div className="text-slate-600 mt-0.5">{selectedRequest.position}</div>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700 font-semibold text-[10px]">
+                      {PERSONNEL_TYPE_CONFIG[selectedRequest.personnelType]?.icon || "🏛️"} {selectedRequest.personnelType}
+                    </span>
+                    <span className="text-slate-400">·</span>
+                    <span className="text-slate-500 text-[11px]">{selectedRequest.division}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Contact Information */}
+              <div className="p-3.5 rounded-xl bg-white border border-slate-200/80 space-y-2">
+                <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                  <span>📱 ข้อมูลการติดต่อ</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-700">
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">อีเมลราชการ:</span>
+                    <span className="font-mono text-xs">{selectedRequest.email}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">หมายเลขโทรศัพท์:</span>
+                    <span>{selectedRequest.phone}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Line ID:</span>
+                    <span>{selectedRequest.lineId || "-"}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">สถานะคำขอ:</span>
+                    <span className="font-bold text-amber-600 capitalize">{selectedRequest.status}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Role & Reason */}
+              <div className="p-3.5 rounded-xl bg-indigo-50/50 border border-indigo-100 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-indigo-900">สิทธิ์ที่ยื่นขอ (Requested Role):</span>
+                  <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold border ${ROLE_CONFIG[selectedRequest.requestedRole]?.badgeColor || "bg-white text-slate-700"}`}>
+                    <span>{ROLE_CONFIG[selectedRequest.requestedRole]?.icon}</span>
+                    <span>{ROLE_CONFIG[selectedRequest.requestedRole]?.label}</span>
+                  </span>
+                </div>
+                {selectedRequest.approvedRole && selectedRequest.approvedRole !== selectedRequest.requestedRole && (
+                  <div className="text-[11px] text-emerald-700 font-semibold">
+                    ✓ อนุมัติจริงในระดับ: {ROLE_CONFIG[selectedRequest.approvedRole]?.label}
+                  </div>
+                )}
+                <div>
+                  <span className="text-slate-500 block text-[10px] mb-1">เหตุผลความจำเป็นในการขอสิทธิ์:</span>
+                  <div className="p-2.5 rounded-lg bg-white border border-indigo-100 text-slate-700 italic">
+                    "{selectedRequest.reason}"
+                  </div>
+                </div>
+              </div>
+
+              {/* Audit / Review Notes if available */}
+              {selectedRequest.reviewedAt && (
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-600">
+                  <div><strong>ตรวจสอบเมื่อ:</strong> {selectedRequest.reviewedAt} โดย {selectedRequest.reviewedBy || "Admin"}</div>
+                  {selectedRequest.reviewNotes && (
+                    <div className="mt-1"><strong>หมายเหตุ:</strong> {selectedRequest.reviewNotes}</div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end gap-2.5 pt-5 border-t border-slate-100 mt-5">
+              <button
+                type="button"
+                onClick={() => setShowRequestDetailModal(false)}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                ปิด
+              </button>
+
+              {selectedRequest.status === "pending" && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowRequestDetailModal(false);
+                      setRejectReason("");
+                      setShowRejectModal(true);
+                    }}
+                    className="px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-xl text-xs font-bold hover:bg-red-100 cursor-pointer"
+                  >
+                    ✕ ปฏิเสธคำขอ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowRequestDetailModal(false);
+                      handleOpenEditRequest(selectedRequest);
+                    }}
+                    className="px-4 py-2 bg-teal-50 text-teal-700 border border-teal-200 rounded-xl text-xs font-bold hover:bg-teal-100 cursor-pointer"
+                  >
+                    ✏️ แก้ไขก่อนอนุมัติ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleApproveRequest(selectedRequest)}
+                    className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 shadow-md shadow-emerald-600/25 cursor-pointer"
+                  >
+                    ✓ อนุมัติสิทธิ์ทันที
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── EDIT ACCESS REQUEST MODAL ─── */}
+      {showEditRequestModal && selectedRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-lg w-full shadow-2xl border border-slate-200 animate-fade-in max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div>
+                <h3 className="text-lg font-bold font-heading text-slate-900">✏️ แก้ไขข้อมูลคำขอสิทธิ์</h3>
+                <p className="text-xs text-slate-500 mt-0.5">ปรับระดับสิทธิ์ หรือแก้ไขข้อมูลบุคลากรก่อนทำการอนุมัติ</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEditRequestModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditRequest} className="space-y-3.5 mt-4 text-xs">
+              {/* คำนำหน้า, ชื่อ, นามสกุล, ชื่อเล่น */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">คำนำหน้า</label>
+                  <select
+                    value={editRequestForm.prefix}
+                    onChange={(e) => setEditRequestForm({ ...editRequestForm, prefix: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800"
+                  >
+                    <option value="นาย">นาย</option>
+                    <option value="นาง">นาง</option>
+                    <option value="นางสาว">นางสาว</option>
+                    <option value="ดร.">ดร.</option>
+                    <option value="ว่าที่ ร.ต.">ว่าที่ ร.ต.</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">ชื่อ</label>
+                  <input
+                    type="text"
+                    required
+                    value={editRequestForm.firstName}
+                    onChange={(e) => setEditRequestForm({ ...editRequestForm, firstName: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:border-[#4F46E5]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">นามสกุล</label>
+                  <input
+                    type="text"
+                    required
+                    value={editRequestForm.lastName}
+                    onChange={(e) => setEditRequestForm({ ...editRequestForm, lastName: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:border-[#4F46E5]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">ชื่อเล่น</label>
+                  <input
+                    type="text"
+                    value={editRequestForm.nickname}
+                    onChange={(e) => setEditRequestForm({ ...editRequestForm, nickname: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:border-[#4F46E5]"
+                  />
+                </div>
+              </div>
+
+              {/* ประเภทบุคลากร & ตำแหน่ง & กลุ่ม/ฝ่าย */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">ประเภทบุคลากร</label>
+                  <select
+                    value={editRequestForm.personnelType}
+                    onChange={(e) => setEditRequestForm({ ...editRequestForm, personnelType: e.target.value as PersonnelType })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800"
+                  >
+                    {GOVERNMENT_PERSONNEL_TYPES.map((pt) => (
+                      <option key={pt} value={pt}>
+                        {PERSONNEL_TYPE_CONFIG[pt]?.icon} {pt}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">ตำแหน่ง (Position)</label>
+                  <input
+                    type="text"
+                    required
+                    value={editRequestForm.position}
+                    onChange={(e) => setEditRequestForm({ ...editRequestForm, position: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:border-[#4F46E5]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">กลุ่ม/ฝ่าย</label>
+                  <select
+                    value={editRequestForm.division}
+                    onChange={(e) => setEditRequestForm({ ...editRequestForm, division: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800"
+                  >
+                    {GOVERNMENT_DIVISIONS.map((div) => (
+                      <option key={div} value={div}>
+                        {div}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* ช่องทางติดต่อ */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">อีเมลราชการ</label>
+                  <input
+                    type="email"
+                    required
+                    value={editRequestForm.email}
+                    onChange={(e) => setEditRequestForm({ ...editRequestForm, email: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:border-[#4F46E5]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">หมายเลขโทรศัพท์</label>
+                  <input
+                    type="tel"
+                    value={editRequestForm.phone}
+                    onChange={(e) => setEditRequestForm({ ...editRequestForm, phone: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:border-[#4F46E5]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Line ID</label>
+                  <input
+                    type="text"
+                    value={editRequestForm.lineId}
+                    onChange={(e) => setEditRequestForm({ ...editRequestForm, lineId: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:border-[#4F46E5]"
+                  />
+                </div>
+              </div>
+
+              {/* ปรับสิทธิ์ที่จะมอบให้ */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  กำหนดระดับสิทธิ์ที่จะอนุมัติ (Role Assignment)
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {(["member", "manager", "admin", "guest"] as Role[]).map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => setEditRequestForm({ ...editRequestForm, requestedRole: r })}
+                      className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
+                        editRequestForm.requestedRole === r
+                          ? "border-[#4F46E5] bg-indigo-50/70 text-[#4F46E5] font-bold"
+                          : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="text-base mb-0.5">{ROLE_CONFIG[r].icon}</div>
+                      <div className="text-xs">{ROLE_CONFIG[r].label.split(" ")[0]}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* หมายเหตุผู้ดูแลระบบ */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">หมายเหตุการพิจารณา (Admin Review Notes)</label>
+                <textarea
+                  rows={2}
+                  placeholder="ระบุข้อความบันทึกของแอดมิน..."
+                  value={editRequestForm.reviewNotes}
+                  onChange={(e) => setEditRequestForm({ ...editRequestForm, reviewNotes: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:border-[#4F46E5]"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowEditRequestModal(false)}
+                  className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-600/20 cursor-pointer"
+                >
+                  บันทึกการแก้ไข
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── REJECT ACCESS REQUEST MODAL ─── */}
+      {showRejectModal && selectedRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-200 animate-fade-in">
+            <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+              <div className="w-10 h-10 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center text-lg font-bold">
+                ⚠️
+              </div>
+              <div>
+                <h3 className="text-base font-bold font-heading text-slate-900">ยืนยันปฏิเสธคำขอสิทธิ์</h3>
+                <p className="text-xs text-slate-500">คำขอของ {selectedRequest.name}</p>
+              </div>
+            </div>
+
+            <div className="py-4 space-y-3">
+              <p className="text-xs text-slate-600">
+                กรุณาระบุเหตุผลในการปฏิเสธคำขอสิทธิ์เข้าใช้งาน เพื่อบันทึกใน Audit Log และระบบ:
+              </p>
+              <textarea
+                rows={3}
+                required
+                placeholder="เช่น ข้อมูลตำแหน่งไม่ถูกต้อง, ไม่พบบุคลากรในสารบบ..."
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:border-red-500 focus:ring-1 focus:ring-red-500"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowRejectModal(false)}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={() => handleRejectRequest(selectedRequest, rejectReason)}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold shadow-md shadow-red-600/25 cursor-pointer"
+              >
+                ยืนยันปฏิเสธคำขอ
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1452,18 +2101,94 @@ export default function OmniOfficeApp() {
               })}
             </div>
 
-            {/* Notification Bell */}
-            <button
-              type="button"
-              onClick={() => showToast("🔔 คุณมี 3 การแจ้งเตือนใหม่ที่ยังไม่ได้อ่าน")}
-              className="relative p-2.5 rounded-xl hover:bg-slate-100 transition-colors text-slate-600"
-              title="การแจ้งเตือน"
-            >
-              🔔
-              <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-[#F59E0B] text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-xs">
-                3
-              </span>
-            </button>
+            {/* Notification Bell & Dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowNotificationDropdown(!showNotificationDropdown)}
+                className="relative p-2.5 rounded-xl hover:bg-slate-100 transition-colors text-slate-600 cursor-pointer"
+                title="การแจ้งเตือน"
+              >
+                🔔
+                {accessRequests.filter((r) => r.status === "pending").length > 0 && (
+                  <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-[#F59E0B] text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-xs animate-pulse">
+                    {accessRequests.filter((r) => r.status === "pending").length}
+                  </span>
+                )}
+              </button>
+
+              {showNotificationDropdown && (
+                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden animate-fade-in text-slate-800">
+                  <div className="p-3.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">🔔</span>
+                      <span className="font-bold text-xs text-slate-800">ศูนย์การแจ้งเตือน (Notifications)</span>
+                    </div>
+                    {accessRequests.filter((r) => r.status === "pending").length > 0 && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                        {accessRequests.filter((r) => r.status === "pending").length} คำขอรออนุมัติ
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                    {accessRequests.filter((r) => r.status === "pending").length === 0 ? (
+                      <div className="p-6 text-center text-xs text-slate-400">
+                        ✨ ไม่มีคำขอสิทธิ์ใหม่ที่รอดำเนินการ
+                      </div>
+                    ) : (
+                      accessRequests
+                        .filter((r) => r.status === "pending")
+                        .map((req) => (
+                          <div key={req.id} className="p-3 hover:bg-slate-50 transition-colors flex items-start gap-3">
+                            <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                              📬
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="text-xs font-bold text-slate-900 truncate">{req.name}</span>
+                                <span className="text-[10px] text-slate-400 shrink-0">{req.createdAt}</span>
+                              </div>
+                              <div className="text-[11px] text-slate-600 truncate mt-0.5">
+                                {req.position} · {req.division}
+                              </div>
+                              <div className="text-[10px] text-indigo-600 font-semibold mt-0.5">
+                                ขอสิทธิ์: {ROLE_CONFIG[req.requestedRole]?.label || req.requestedRole}
+                              </div>
+                              <div className="mt-2 flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCurrentPage("admin");
+                                    setAdminTab("requests");
+                                    setSelectedRequest(req);
+                                    setShowNotificationDropdown(false);
+                                  }}
+                                  className="px-2.5 py-1 bg-[#4F46E5] text-white rounded-lg text-[10px] font-bold hover:bg-indigo-700 transition-colors cursor-pointer"
+                                >
+                                  ตรวจสอบ & จัดการ
+                                </button>
+                                {currentUserRole === "admin" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      handleApproveRequest(req);
+                                      setShowNotificationDropdown(false);
+                                    }}
+                                    className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg text-[10px] font-bold hover:bg-emerald-700 transition-colors cursor-pointer"
+                                  >
+                                    ✓ อนุมัติทันที
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div className="w-px h-6 bg-slate-200 mx-1 hidden sm:block" />
 
@@ -2353,24 +3078,44 @@ export default function OmniOfficeApp() {
                   </div>
 
                   {/* Summary Metric Cards */}
-                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                    <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3.5">
+                    <div className="bg-white p-4.5 rounded-2xl border border-slate-200/80 shadow-xs">
                       <div className="text-xs text-slate-500 font-medium">สมาชิกทั้งหมด</div>
                       <div className="text-2xl font-bold font-heading text-slate-900 mt-1">{members.length} คน</div>
                     </div>
-                    <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
+                    <div className="bg-white p-4.5 rounded-2xl border border-slate-200/80 shadow-xs">
                       <div className="text-xs text-slate-500 font-medium">ผู้ดูแล (Admins)</div>
                       <div className="text-2xl font-bold font-heading text-indigo-600 mt-1">
                         {members.filter((m) => m.role === "admin").length} คน
                       </div>
                     </div>
-                    <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
+                    <div className="bg-white p-4.5 rounded-2xl border border-slate-200/80 shadow-xs">
                       <div className="text-xs text-slate-500 font-medium">ผู้จัดการ (Managers)</div>
                       <div className="text-2xl font-bold font-heading text-teal-600 mt-1">
                         {members.filter((m) => m.role === "manager").length} คน
                       </div>
                     </div>
-                    <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
+                    <div
+                      onClick={() => setAdminTab("requests")}
+                      className={`p-4.5 rounded-2xl border transition-all cursor-pointer ${
+                        accessRequests.filter((r) => r.status === "pending").length > 0
+                          ? "bg-amber-50/80 border-amber-200 shadow-xs hover:border-amber-400"
+                          : "bg-white border-slate-200/80 shadow-xs hover:border-slate-300"
+                      }`}
+                      title="คลิกเพื่อไปที่หน้ารายการคำขอสิทธิ์เข้าใช้งาน"
+                    >
+                      <div className="flex items-center justify-between text-xs font-medium text-slate-500">
+                        <span>คำขอรออนุมัติ</span>
+                        {accessRequests.filter((r) => r.status === "pending").length > 0 && (
+                          <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                        )}
+                      </div>
+                      <div className="text-2xl font-bold font-heading text-amber-600 mt-1 flex items-baseline gap-1">
+                        <span>{accessRequests.filter((r) => r.status === "pending").length}</span>
+                        <span className="text-xs font-normal text-slate-500">คำขอ</span>
+                      </div>
+                    </div>
+                    <div className="bg-white p-4.5 rounded-2xl border border-slate-200/80 shadow-xs">
                       <div className="text-xs text-slate-500 font-medium">โมดูลในระบบ</div>
                       <div className="text-2xl font-bold font-heading text-slate-900 mt-1">8 โมดูล</div>
                     </div>
@@ -2378,9 +3123,15 @@ export default function OmniOfficeApp() {
 
                   {/* Navigation Tabs for Admin */}
                   <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
-                    <div className="flex border-b border-slate-200 px-6 pt-3 gap-2 bg-slate-50/50">
+                    <div className="flex border-b border-slate-200 px-6 pt-3 gap-2 bg-slate-50/50 overflow-x-auto">
                       {[
                         { id: "members", label: "👥 รายชื่อสมาชิก & จัดการสิทธิ์", count: members.length },
+                        {
+                          id: "requests",
+                          label: "📬 คำขอสิทธิ์เข้าใช้งานใหม่ (Access Requests)",
+                          count: accessRequests.filter((r) => r.status === "pending").length,
+                          highlight: accessRequests.filter((r) => r.status === "pending").length > 0,
+                        },
                         { id: "matrix", label: "🔒 ตารางกำหนดสิทธิ์รายโมดูล (RBAC Matrix)" },
                         { id: "audit", label: "📜 ประวัติการเข้าถึง (Audit Logs)", count: auditLogs.length },
                       ].map((tab) => (
@@ -2388,7 +3139,7 @@ export default function OmniOfficeApp() {
                           key={tab.id}
                           type="button"
                           onClick={() => setAdminTab(tab.id as any)}
-                          className={`px-4 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
+                          className={`px-4 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
                             adminTab === tab.id
                               ? "border-[#4F46E5] text-[#4F46E5] bg-white rounded-t-xl"
                               : "border-transparent text-slate-500 hover:text-slate-800"
@@ -2396,7 +3147,13 @@ export default function OmniOfficeApp() {
                         >
                           <span>{tab.label}</span>
                           {tab.count !== undefined && (
-                            <span className="px-2 py-0.2 rounded-full text-xs bg-slate-200/70 text-slate-700">
+                            <span
+                              className={`px-2 py-0.2 rounded-full text-xs font-bold ${
+                                tab.highlight
+                                  ? "bg-amber-500 text-white animate-pulse"
+                                  : "bg-slate-200/70 text-slate-700"
+                              }`}
+                            >
                               {tab.count}
                             </span>
                           )}
@@ -2582,6 +3339,268 @@ export default function OmniOfficeApp() {
                                       </td>
                                     </tr>
                                   ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* TAB: ACCESS REQUESTS MANAGEMENT */}
+                      {adminTab === "requests" && (
+                        <div className="space-y-4">
+                          {/* Banner */}
+                          <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div className="flex items-start gap-3">
+                              <span className="text-2xl shrink-0">📬</span>
+                              <div className="text-xs leading-relaxed text-amber-900">
+                                <span className="font-bold block text-sm mb-0.5">
+                                  ศูนย์จัดการคำขอสิทธิ์เข้าใช้งานใหม่ (Access Requests Management)
+                                </span>
+                                ตรวจสอบคำขอที่ยื่นผ่านหน้าเข้าสู่ระบบ อนุมัติเพื่อสร้างบุคลากรใหม่ในระบบอัตโนมัติ หรือแก้ไขสิทธิ์/ปฏิเสธคำขอ
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="px-3 py-1 rounded-xl bg-white border border-amber-200 text-amber-800 text-xs font-bold shadow-2xs">
+                                🟡 รออนุมัติ: {accessRequests.filter((r) => r.status === "pending").length}
+                              </span>
+                              <span className="px-3 py-1 rounded-xl bg-white border border-emerald-200 text-emerald-800 text-xs font-bold shadow-2xs">
+                                🟢 อนุมัติแล้ว: {accessRequests.filter((r) => r.status === "approved").length}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Search & Filter Toolbar */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="relative flex-1 max-w-md">
+                              <input
+                                type="text"
+                                placeholder="ค้นหาคำขอตามชื่อ ตำแหน่ง อีเมล หรือฝ่าย..."
+                                value={requestSearch}
+                                onChange={(e) => setRequestSearch(e.target.value)}
+                                className="w-full pl-9 pr-4 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-[#4F46E5] text-slate-800"
+                              />
+                              <span className="absolute left-3 top-3 text-slate-400 text-xs">🔍</span>
+                            </div>
+
+                            {/* Status Filter Tabs */}
+                            <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl">
+                              {[
+                                { id: "all", label: "ทั้งหมด", count: accessRequests.length },
+                                { id: "pending", label: "รอตรวจสอบ", count: accessRequests.filter((r) => r.status === "pending").length },
+                                { id: "approved", label: "อนุมัติแล้ว", count: accessRequests.filter((r) => r.status === "approved").length },
+                                { id: "rejected", label: "ปฏิเสธ", count: accessRequests.filter((r) => r.status === "rejected").length },
+                              ].map((f) => (
+                                <button
+                                  key={f.id}
+                                  type="button"
+                                  onClick={() => setRequestStatusFilter(f.id as any)}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                                    requestStatusFilter === f.id
+                                      ? "bg-white text-slate-900 shadow-2xs"
+                                      : "text-slate-600 hover:text-slate-900"
+                                  }`}
+                                >
+                                  {f.label} ({f.count})
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Table of Requests */}
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm">
+                              <thead>
+                                <tr className="border-b border-slate-200 text-xs text-slate-500 uppercase tracking-wider bg-slate-50/60">
+                                  <th className="py-3 px-4">ผู้ยื่นคำขอ</th>
+                                  <th className="py-3 px-4">ตำแหน่ง & กลุ่ม/ฝ่าย</th>
+                                  <th className="py-3 px-4">ช่องทางติดต่อ</th>
+                                  <th className="py-3 px-4">สิทธิ์ที่ขอ</th>
+                                  <th className="py-3 px-4">เหตุผลความจำเป็น</th>
+                                  <th className="py-3 px-4">สถานะ</th>
+                                  <th className="py-3 px-4 text-center">การดำเนินการ</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {accessRequests
+                                  .filter((req) => {
+                                    if (requestStatusFilter !== "all" && req.status !== requestStatusFilter) {
+                                      return false;
+                                    }
+                                    if (!requestSearch.trim()) return true;
+                                    const q = requestSearch.toLowerCase();
+                                    return (
+                                      req.name.toLowerCase().includes(q) ||
+                                      req.position.toLowerCase().includes(q) ||
+                                      req.division.toLowerCase().includes(q) ||
+                                      req.email.toLowerCase().includes(q)
+                                    );
+                                  })
+                                  .map((req) => (
+                                    <tr key={req.id} className="hover:bg-slate-50/80 transition-colors">
+                                      {/* ผู้ยื่นคำขอ */}
+                                      <td className="py-3 px-4">
+                                        <div className="flex items-center space-x-3">
+                                          <div className="w-9 h-9 rounded-xl bg-indigo-100 text-[#4F46E5] font-bold text-xs flex items-center justify-center shrink-0">
+                                            {req.firstName.slice(0, 2)}
+                                          </div>
+                                          <div>
+                                            <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                                              <span>{req.name}</span>
+                                              {req.nickname && (
+                                                <span className="text-[11px] text-slate-500 font-normal">
+                                                  ({req.nickname})
+                                                </span>
+                                              )}
+                                            </div>
+                                            <div className="flex items-center gap-1 mt-0.5">
+                                              <span className="px-1.5 py-0.2 rounded-md bg-slate-100 text-slate-600 font-medium text-[10px]">
+                                                {PERSONNEL_TYPE_CONFIG[req.personnelType]?.icon || "🏛️"} {req.personnelType}
+                                              </span>
+                                              <span className="text-[10px] text-slate-400">· {req.createdAt}</span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </td>
+
+                                      {/* ตำแหน่ง & กลุ่ม/ฝ่าย */}
+                                      <td className="py-3 px-4 text-xs">
+                                        <div className="font-semibold text-slate-800">{req.position}</div>
+                                        <div className="text-[11px] text-slate-500 mt-0.5">{req.division}</div>
+                                      </td>
+
+                                      {/* ช่องทางติดต่อ */}
+                                      <td className="py-3 px-4 text-xs">
+                                        <div className="text-slate-700 font-mono text-[11px]">{req.email}</div>
+                                        <div className="text-slate-500 text-[11px] mt-0.5">
+                                          📞 {req.phone} {req.lineId && req.lineId !== "-" ? `· Line: ${req.lineId}` : ""}
+                                        </div>
+                                      </td>
+
+                                      {/* สิทธิ์ที่ขอ */}
+                                      <td className="py-3 px-4 text-xs">
+                                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold border ${ROLE_CONFIG[req.requestedRole]?.badgeColor || "bg-slate-100 text-slate-700"}`}>
+                                          <span>{ROLE_CONFIG[req.requestedRole]?.icon}</span>
+                                          <span>{ROLE_CONFIG[req.requestedRole]?.label.split(" ")[0]}</span>
+                                        </span>
+                                        {req.approvedRole && req.approvedRole !== req.requestedRole && (
+                                          <div className="text-[10px] text-emerald-600 font-semibold mt-1">
+                                            อนุมัติเป็น: {ROLE_CONFIG[req.approvedRole]?.label.split(" ")[0]}
+                                          </div>
+                                        )}
+                                      </td>
+
+                                      {/* เหตุผลความจำเป็น */}
+                                      <td className="py-3 px-4 text-xs max-w-xs">
+                                        <div className="line-clamp-2 text-slate-600 italic bg-slate-50 p-1.5 rounded-lg border border-slate-100 text-[11px]">
+                                          "{req.reason}"
+                                        </div>
+                                      </td>
+
+                                      {/* สถานะ */}
+                                      <td className="py-3 px-4 text-xs">
+                                        {req.status === "pending" && (
+                                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                            รอการตรวจสอบ
+                                          </span>
+                                        )}
+                                        {req.status === "approved" && (
+                                          <div>
+                                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                              <span>✓</span>
+                                              อนุมัติแล้ว
+                                            </span>
+                                            {req.reviewedBy && (
+                                              <div className="text-[10px] text-slate-400 mt-0.5">
+                                                โดย {req.reviewedBy}
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                        {req.status === "rejected" && (
+                                          <div>
+                                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-red-100 text-red-800 border border-red-200">
+                                              <span>✕</span>
+                                              ปฏิเสธ
+                                            </span>
+                                            {req.reviewNotes && (
+                                              <div className="text-[10px] text-red-600 truncate max-w-[120px] mt-0.5" title={req.reviewNotes}>
+                                                {req.reviewNotes}
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </td>
+
+                                      {/* การดำเนินการ */}
+                                      <td className="py-3 px-4 text-center">
+                                        <div className="flex items-center justify-center gap-1.5">
+                                          {/* ดูรายละเอียด */}
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setSelectedRequest(req);
+                                              setShowRequestDetailModal(true);
+                                            }}
+                                            className="px-2.5 py-1.5 rounded-lg bg-indigo-50 border border-indigo-200 text-[#4F46E5] hover:bg-indigo-100 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+                                            title="ดูรายละเอียดคำขอฉบับเต็ม"
+                                          >
+                                            <span>👁️</span>
+                                            <span className="hidden sm:inline">ดู</span>
+                                          </button>
+
+                                          {/* แก้ไข */}
+                                          <button
+                                            type="button"
+                                            onClick={() => handleOpenEditRequest(req)}
+                                            className="px-2.5 py-1.5 rounded-lg bg-teal-50 border border-teal-200 text-teal-700 hover:bg-teal-100 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+                                            title="แก้ไขข้อมูลคำขอและสิทธิ์ที่จะอนุมัติ"
+                                          >
+                                            <span>✏️</span>
+                                            <span className="hidden sm:inline">แก้ไข</span>
+                                          </button>
+
+                                          {/* อนุมัติ (เฉพาะ pending) */}
+                                          {req.status === "pending" && (
+                                            <button
+                                              type="button"
+                                              onClick={() => handleApproveRequest(req)}
+                                              className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+                                              title="อนุมัติคำขอและเพิ่มเป็นบุคลากรในระบบทันที"
+                                            >
+                                              <span>✓</span>
+                                              <span className="hidden sm:inline">อนุมัติ</span>
+                                            </button>
+                                          )}
+
+                                          {/* ปฏิเสธ (เฉพาะ pending) */}
+                                          {req.status === "pending" && (
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setSelectedRequest(req);
+                                                setRejectReason("");
+                                                setShowRejectModal(true);
+                                              }}
+                                              className="px-2.5 py-1.5 rounded-lg bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+                                              title="ปฏิเสธคำขอเข้าใช้งาน"
+                                            >
+                                              <span>✕</span>
+                                              <span className="hidden sm:inline">ปฏิเสธ</span>
+                                            </button>
+                                          )}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  ))}
+
+                                {accessRequests.length === 0 && (
+                                  <tr>
+                                    <td colSpan={7} className="text-center py-12 text-slate-400 text-xs">
+                                      ไม่มีรายการคำขอเข้าใช้งานในขณะนี้
+                                    </td>
+                                  </tr>
+                                )}
                               </tbody>
                             </table>
                           </div>

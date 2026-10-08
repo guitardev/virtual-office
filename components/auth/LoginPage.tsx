@@ -1,15 +1,17 @@
 "use client";
 
 import React, { useState } from "react";
-import { Member, Role } from "@/lib/types";
+import { Member, Role, AccessRequest, PersonnelType } from "@/lib/types";
 import { ROLE_CONFIG, GOVERNMENT_DIVISIONS } from "@/lib/rbac";
+import { saveAccessRequest } from "@/lib/supabase";
 
 interface LoginPageProps {
   onLogin: (member: Member, rememberMe: boolean) => void;
   availableMembers: Member[];
+  onRequestAccess?: (request: AccessRequest) => void;
 }
 
-export function LoginPage({ onLogin, availableMembers }: LoginPageProps) {
+export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginPageProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("••••••••");
   const [showPassword, setShowPassword] = useState(false);
@@ -28,6 +30,7 @@ export function LoginPage({ onLogin, availableMembers }: LoginPageProps) {
     firstName: "",
     lastName: "",
     nickname: "",
+    personnelType: "ข้าราชการ" as PersonnelType,
     position: "",
     division: GOVERNMENT_DIVISIONS[1] as string,
     email: "",
@@ -91,6 +94,50 @@ export function LoginPage({ onLogin, availableMembers }: LoginPageProps) {
 
   const handleRequestAccessSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    const fullName = `${requestForm.prefix}${requestForm.firstName.trim()} ${requestForm.lastName.trim()}`.trim();
+    const newReq: AccessRequest = {
+      id: `req_${Date.now()}`,
+      prefix: requestForm.prefix,
+      firstName: requestForm.firstName.trim(),
+      lastName: requestForm.lastName.trim(),
+      nickname: requestForm.nickname.trim() || undefined,
+      name: fullName,
+      personnelType: requestForm.personnelType,
+      position: requestForm.position.trim(),
+      division: requestForm.division,
+      email: requestForm.email.trim(),
+      phone: requestForm.phone.trim() || "-",
+      lineId: requestForm.lineId.trim() || "-",
+      requestedRole: requestForm.requestedRole,
+      reason: requestForm.reason.trim() || "ขอสิทธิ์เข้าใช้งานระบบสำนักงานเสมือน",
+      status: "pending",
+      createdAt: new Date().toLocaleDateString("th-TH", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    };
+
+    // Save to local storage for persistence
+    try {
+      const existingStr = localStorage.getItem("omnioffice_access_requests");
+      const existing: AccessRequest[] = existingStr ? JSON.parse(existingStr) : [];
+      localStorage.setItem("omnioffice_access_requests", JSON.stringify([newReq, ...existing]));
+    } catch (e) {
+      console.warn("Could not save to localStorage:", e);
+    }
+
+    // Save to Supabase
+    saveAccessRequest(newReq).catch(console.warn);
+
+    // Trigger parent callback
+    if (onRequestAccess) {
+      onRequestAccess(newReq);
+    }
+
     setRequestSuccess(true);
     setTimeout(() => {
       setRequestSuccess(false);
@@ -100,6 +147,7 @@ export function LoginPage({ onLogin, availableMembers }: LoginPageProps) {
         firstName: "",
         lastName: "",
         nickname: "",
+        personnelType: "ข้าราชการ",
         position: "",
         division: GOVERNMENT_DIVISIONS[1] as string,
         email: "",
@@ -553,8 +601,27 @@ export function LoginPage({ onLogin, availableMembers }: LoginPageProps) {
                     </div>
                   </div>
 
-                  {/* ตำแหน่ง & กลุ่ม/ฝ่าย */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {/* ประเภทบุคลากร & ตำแหน่ง & กลุ่ม/ฝ่าย */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        ประเภทบุคลากร
+                      </label>
+                      <select
+                        value={requestForm.personnelType}
+                        onChange={(e) =>
+                          setRequestForm({ ...requestForm, personnelType: e.target.value as PersonnelType })
+                        }
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:border-indigo-600"
+                      >
+                        <option value="ข้าราชการ">🏛️ ข้าราชการ</option>
+                        <option value="ลูกจ้างประจำ">🛠️ ลูกจ้างประจำ</option>
+                        <option value="พนักงานราชการ">💼 พนักงานราชการ</option>
+                        <option value="พนักงานกองทุน">💰 พนักงานกองทุน</option>
+                        <option value="พนักงานจ้างเหมาบริการ">🤝 พนักงานจ้างเหมาบริการ</option>
+                        <option value="ที่ปรึกษา/ผู้ทรงคุณวุฒิ">🎓 ที่ปรึกษา/ผู้ทรงคุณวุฒิ</option>
+                      </select>
+                    </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
                         ตำแหน่ง (Position)

@@ -47,3 +47,6 @@ nul
 *.sw?
 .vscode/
 .idea/
+
+.vercel
+.env*
