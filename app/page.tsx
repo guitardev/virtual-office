@@ -92,19 +92,7 @@ export default function OmniOfficeApp() {
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
 
   // ─── ACCESS REQUESTS MANAGEMENT STATE ───
-  const [accessRequests, setAccessRequests] = useState<AccessRequest[]>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("omnioffice_access_requests");
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch (e) {
-          console.error("Failed to parse cached access requests:", e);
-        }
-      }
-    }
-    return INITIAL_ACCESS_REQUESTS;
-  });
+  const [accessRequests, setAccessRequests] = useState<AccessRequest[]>(INITIAL_ACCESS_REQUESTS);
   const [requestSearch, setRequestSearch] = useState("");
   const [requestStatusFilter, setRequestStatusFilter] = useState<"all" | "pending" | "approved" | "rejected">("all");
   const [selectedRequest, setSelectedRequest] = useState<AccessRequest | null>(null);
@@ -199,6 +187,15 @@ export default function OmniOfficeApp() {
           setCurrentUser(parsed.user);
           setCurrentUserRole(parsed.user.role);
           if (parsed.loginTime) setLoginTime(parsed.loginTime);
+        }
+      }
+      const savedRequests = localStorage.getItem("omnioffice_access_requests");
+      if (savedRequests) {
+        try {
+          const parsedReqs = JSON.parse(savedRequests);
+          if (Array.isArray(parsedReqs)) setAccessRequests(parsedReqs);
+        } catch (e) {
+          console.error("Failed to parse cached access requests:", e);
         }
       }
     } catch (e) {
@@ -1035,7 +1032,7 @@ export default function OmniOfficeApp() {
                 <span className="text-xs text-amber-400" title="ไม่มีสิทธิ์เข้าถึงตามบทบาทปัจจุบัน">
                   🔒
                 </span>
-              ) : item.id === "admin" && currentUserRole === "admin" && accessRequests.filter((r) => r.status === "pending").length > 0 ? (
+              ) : item.id === "admin" && isHydrated && currentUserRole === "admin" && accessRequests.filter((r) => r.status === "pending").length > 0 ? (
                 <span
                   className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-500 text-white shadow-xs animate-pulse"
                   title={`มี ${accessRequests.filter((r) => r.status === "pending").length} คำขอสิทธิ์เข้าใช้งานใหม่รอการอนุมัติ`}
@@ -2110,7 +2107,7 @@ export default function OmniOfficeApp() {
                 title="การแจ้งเตือน"
               >
                 🔔
-                {accessRequests.filter((r) => r.status === "pending").length > 0 && (
+                {isHydrated && accessRequests.filter((r) => r.status === "pending").length > 0 && (
                   <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-[#F59E0B] text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-xs animate-pulse">
                     {accessRequests.filter((r) => r.status === "pending").length}
                   </span>
