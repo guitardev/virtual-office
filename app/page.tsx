@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Role, ModuleId, Member, AuditLog, SystemModule } from "@/lib/types";
+import { Role, ModuleId, Member, AuditLog, SystemModule, PersonnelType } from "@/lib/types";
 import {
   ROLE_CONFIG,
   MODULE_NAMES,
@@ -10,6 +10,8 @@ import {
   INITIAL_AUDIT_LOGS,
   INITIAL_SYSTEM_MODULES,
   GOVERNMENT_DIVISIONS,
+  GOVERNMENT_PERSONNEL_TYPES,
+  PERSONNEL_TYPE_CONFIG,
 } from "@/lib/rbac";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { LogoutConfirmModal } from "@/components/auth/LogoutConfirmModal";
@@ -87,6 +89,7 @@ export default function OmniOfficeApp() {
     firstName: "",
     lastName: "",
     nickname: "",
+    personnelType: "ข้าราชการ" as PersonnelType,
     position: "",
     division: GOVERNMENT_DIVISIONS[0] as string,
     email: "",
@@ -112,6 +115,7 @@ export default function OmniOfficeApp() {
     firstName: "",
     lastName: "",
     nickname: "",
+    personnelType: "ข้าราชการ" as PersonnelType,
     position: "",
     division: GOVERNMENT_DIVISIONS[0] as string,
     email: "",
@@ -124,6 +128,7 @@ export default function OmniOfficeApp() {
     firstName: "",
     lastName: "",
     nickname: "",
+    personnelType: "ข้าราชการ" as PersonnelType,
     position: "",
     division: GOVERNMENT_DIVISIONS[1] as string,
     email: "",
@@ -376,6 +381,7 @@ export default function OmniOfficeApp() {
       firstName: member.firstName || member.name.split(" ")[0] || "",
       lastName: member.lastName || member.name.split(" ").slice(1).join(" ") || "",
       nickname: member.nickname || "",
+      personnelType: member.personnelType || "ข้าราชการ",
       position: member.position || "",
       division: member.division || (GOVERNMENT_DIVISIONS[0] as string),
       email: member.email || "",
@@ -398,6 +404,7 @@ export default function OmniOfficeApp() {
       lastName: adminEditForm.lastName.trim(),
       nickname: adminEditForm.nickname.trim() || undefined,
       name: fullName,
+      personnelType: adminEditForm.personnelType,
       position: adminEditForm.position.trim(),
       division: adminEditForm.division,
       department: adminEditForm.division,
@@ -486,6 +493,7 @@ export default function OmniOfficeApp() {
       lastName: newMemberForm.lastName.trim(),
       nickname: newMemberForm.nickname.trim() || undefined,
       name: fullName,
+      personnelType: newMemberForm.personnelType,
       position: newMemberForm.position.trim() || "เจ้าหน้าที่",
       division: newMemberForm.division,
       department: newMemberForm.division,
@@ -501,7 +509,7 @@ export default function OmniOfficeApp() {
     setMembers((prev) => [newM, ...prev]);
     addAuditLog(
       currentUser ? currentUser.name : "Admin",
-      `เพิ่มบุคลากรใหม่ ${newM.name} (${ROLE_CONFIG[newM.role].label})`,
+      `เพิ่มบุคลากรใหม่ ${newM.name} (${ROLE_CONFIG[newM.role].label} - ${newM.personnelType || "ข้าราชการ"})`,
       "Personnel Registration",
       "success"
     );
@@ -511,6 +519,7 @@ export default function OmniOfficeApp() {
       firstName: "",
       lastName: "",
       nickname: "",
+      personnelType: "ข้าราชการ",
       position: "",
       division: GOVERNMENT_DIVISIONS[1] as string,
       email: "",
@@ -518,7 +527,7 @@ export default function OmniOfficeApp() {
       lineId: "",
       role: "member",
     });
-    showToast(`🎉 เพิ่มบุคลากร ${newM.name} เรียบร้อยแล้ว`);
+    showToast(`🎉 เพิ่มบุคลากร ${newM.name} (${newM.personnelType}) เรียบร้อยแล้ว`);
   };
 
   // Profile Edit Handlers
@@ -529,6 +538,7 @@ export default function OmniOfficeApp() {
       firstName: currentUser.firstName || currentUser.name.split(" ")[0] || "",
       lastName: currentUser.lastName || currentUser.name.split(" ").slice(1).join(" ") || "",
       nickname: currentUser.nickname || "",
+      personnelType: currentUser.personnelType || "ข้าราชการ",
       position: currentUser.position || "",
       division: currentUser.division || (GOVERNMENT_DIVISIONS[0] as string),
       email: currentUser.email || "",
@@ -550,6 +560,7 @@ export default function OmniOfficeApp() {
       lastName: editProfileForm.lastName.trim(),
       nickname: editProfileForm.nickname.trim() || undefined,
       name: fullName,
+      personnelType: editProfileForm.personnelType,
       position: editProfileForm.position.trim(),
       division: editProfileForm.division,
       department: editProfileForm.division,
@@ -998,8 +1009,24 @@ export default function OmniOfficeApp() {
                 </div>
               </div>
 
-              {/* ตำแหน่ง & กลุ่ม/ฝ่าย */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {/* ประเภทบุคลากร, ตำแหน่ง & กลุ่ม/ฝ่าย */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">ประเภทบุคลากร</label>
+                  <select
+                    value={newMemberForm.personnelType}
+                    onChange={(e) =>
+                      setNewMemberForm({ ...newMemberForm, personnelType: e.target.value as PersonnelType })
+                    }
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 font-semibold"
+                  >
+                    {GOVERNMENT_PERSONNEL_TYPES.map((pt) => (
+                      <option key={pt} value={pt}>
+                        {PERSONNEL_TYPE_CONFIG[pt]?.icon} {pt}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">ตำแหน่ง (Position)</label>
                   <input
@@ -1165,8 +1192,24 @@ export default function OmniOfficeApp() {
                 </div>
               </div>
 
-              {/* ตำแหน่ง & กลุ่ม/ฝ่าย */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {/* ประเภทบุคลากร, ตำแหน่ง & กลุ่ม/ฝ่าย */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">ประเภทบุคลากร</label>
+                  <select
+                    value={editProfileForm.personnelType}
+                    onChange={(e) =>
+                      setEditProfileForm({ ...editProfileForm, personnelType: e.target.value as PersonnelType })
+                    }
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 font-semibold"
+                  >
+                    {GOVERNMENT_PERSONNEL_TYPES.map((pt) => (
+                      <option key={pt} value={pt}>
+                        {PERSONNEL_TYPE_CONFIG[pt]?.icon} {pt}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">ตำแหน่ง (Position)</label>
                   <input
@@ -2391,7 +2434,19 @@ export default function OmniOfficeApp() {
                                         </div>
                                       </td>
                                       <td className="py-3.5 px-4">
-                                        <div className="text-xs font-semibold text-slate-800">{m.position}</div>
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <span className="text-xs font-semibold text-slate-800">{m.position}</span>
+                                          {m.personnelType && (
+                                            <span
+                                              className={`px-1.5 py-0.2 rounded text-[10px] font-bold border ${
+                                                PERSONNEL_TYPE_CONFIG[m.personnelType]?.badgeColor ||
+                                                "bg-slate-100 text-slate-600 border-slate-200"
+                                              }`}
+                                            >
+                                              {PERSONNEL_TYPE_CONFIG[m.personnelType]?.icon} {m.personnelType}
+                                            </span>
+                                          )}
+                                        </div>
                                         <div className="text-[11px] text-indigo-600 font-medium">{m.division}</div>
                                       </td>
                                       <td className="py-3.5 px-4 text-xs">
@@ -2748,8 +2803,17 @@ export default function OmniOfficeApp() {
                                 ({currentUser.nickname})
                               </span>
                             )}
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                              ข้าราชการ/เจ้าหน้าที่
+                            <span
+                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                                (currentUser.personnelType &&
+                                  PERSONNEL_TYPE_CONFIG[currentUser.personnelType]?.badgeColor) ||
+                                "bg-indigo-50 text-indigo-700 border-indigo-200"
+                              }`}
+                            >
+                              {(currentUser.personnelType &&
+                                PERSONNEL_TYPE_CONFIG[currentUser.personnelType]?.icon) ||
+                                "🏛️"}{" "}
+                              {currentUser.personnelType || "ข้าราชการ"}
                             </span>
                           </div>
                           <p className="text-xs text-indigo-600 font-semibold mt-0.5">{currentUser.position}</p>
@@ -2776,7 +2840,7 @@ export default function OmniOfficeApp() {
                         <span className="text-[11px] text-slate-400">OmniOffice Government Profile v1.0</span>
                       </div>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                         <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100">
                           <div className="text-[11px] text-slate-400">คำนำหน้า</div>
                           <div className="text-sm font-bold text-slate-800 mt-0.5">{currentUser.prefix || "นาย"}</div>
@@ -2797,6 +2861,17 @@ export default function OmniOfficeApp() {
                           <div className="text-[11px] text-slate-400">ชื่อเล่น (Nickname)</div>
                           <div className="text-sm font-bold text-indigo-700 mt-0.5">
                             {currentUser.nickname ? `คุณ${currentUser.nickname}` : "-"}
+                          </div>
+                        </div>
+                        <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100">
+                          <div className="text-[11px] text-slate-400">ประเภทบุคลากร</div>
+                          <div className="text-sm font-bold text-slate-800 mt-0.5 flex items-center gap-1">
+                            <span>
+                              {(currentUser.personnelType &&
+                                PERSONNEL_TYPE_CONFIG[currentUser.personnelType]?.icon) ||
+                                "🏛️"}
+                            </span>
+                            <span className="truncate">{currentUser.personnelType || "ข้าราชการ"}</span>
                           </div>
                         </div>
                         <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100">
@@ -2999,6 +3074,18 @@ export default function OmniOfficeApp() {
                     </span>
                   )}
                   <span
+                    className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                      (viewingMember.personnelType &&
+                        PERSONNEL_TYPE_CONFIG[viewingMember.personnelType]?.badgeColor) ||
+                      "bg-indigo-50 text-indigo-700 border-indigo-200"
+                    }`}
+                  >
+                    {(viewingMember.personnelType &&
+                      PERSONNEL_TYPE_CONFIG[viewingMember.personnelType]?.icon) ||
+                      "🏛️"}{" "}
+                    {viewingMember.personnelType || "ข้าราชการ"}
+                  </span>
+                  <span
                     className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${ROLE_CONFIG[viewingMember.role].badgeColor}`}
                   >
                     {ROLE_CONFIG[viewingMember.role].label}
@@ -3011,7 +3098,7 @@ export default function OmniOfficeApp() {
 
             {/* Personnel Dossier Grid */}
             <div className="py-4 space-y-4">
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                 <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
                   <span className="text-slate-400 block text-[11px]">คำนำหน้า</span>
                   <span className="font-bold text-slate-800">{viewingMember.prefix || "-"}</span>
@@ -3025,6 +3112,17 @@ export default function OmniOfficeApp() {
                 <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
                   <span className="text-slate-400 block text-[11px]">ชื่อเล่น (Nickname)</span>
                   <span className="font-bold text-indigo-700">{viewingMember.nickname || "-"}</span>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
+                  <span className="text-slate-400 block text-[11px]">ประเภทบุคลากร</span>
+                  <span className="font-bold text-slate-800 flex items-center gap-1 mt-0.5">
+                    <span>
+                      {(viewingMember.personnelType &&
+                        PERSONNEL_TYPE_CONFIG[viewingMember.personnelType]?.icon) ||
+                        "🏛️"}
+                    </span>
+                    <span className="truncate">{viewingMember.personnelType || "ข้าราชการ"}</span>
+                  </span>
                 </div>
               </div>
 
@@ -3200,8 +3298,24 @@ export default function OmniOfficeApp() {
                 </div>
               </div>
 
-              {/* Row 2: ตำแหน่ง & กลุ่ม/ฝ่าย */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {/* Row 2: ประเภทบุคลากร, ตำแหน่ง & กลุ่ม/ฝ่าย */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">ประเภทบุคลากร</label>
+                  <select
+                    value={adminEditForm.personnelType}
+                    onChange={(e) =>
+                      setAdminEditForm({ ...adminEditForm, personnelType: e.target.value as PersonnelType })
+                    }
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 font-semibold"
+                  >
+                    {GOVERNMENT_PERSONNEL_TYPES.map((type) => (
+                      <option key={type} value={type}>
+                        {PERSONNEL_TYPE_CONFIG[type].icon} {type}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">ตำแหน่ง (Position)</label>
                   <input

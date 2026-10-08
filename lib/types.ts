@@ -2,6 +2,14 @@ export type Priority = "low" | "medium" | "high";
 export type Status = "todo" | "in_progress" | "review" | "done";
 export type Role = "admin" | "manager" | "member" | "guest";
 
+export type PersonnelType =
+  | "ข้าราชการ"
+  | "ลูกจ้างประจำ"
+  | "พนักงานราชการ"
+  | "พนักงานกองทุน"
+  | "พนักงานจ้างเหมาบริการ"
+  | "ที่ปรึกษา/ผู้ทรงคุณวุฒิ";
+
 export type ModuleId =
   | "dashboard"
   | "chat"
@@ -36,6 +44,7 @@ export interface Member {
   lastName: string; // นามสกุล
   nickname?: string; // ชื่อเล่น เช่น เสก, บอย, เจมส์, ขวัญ
   name: string; // ชื่อเต็มรวมคำนำหน้า (เช่น นายเสกพล ดิษฐโชติ)
+  personnelType?: PersonnelType; // ประเภทบุคลากร เช่น ข้าราชการ, ลูกจ้างประจำ, พนักงานราชการ, พนักงานกองทุน, พนักงานจ้างเหมาบริการ
   position: string; // ตำแหน่งงานราชการ เช่น นักวิชาการคอมพิวเตอร์ชำนาญการพิเศษ
   division: string; // กลุ่ม/ฝ่าย (เดิมคือ แผนกงาน)
   department?: string; // fallback alias to division

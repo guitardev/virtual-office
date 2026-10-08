@@ -22,6 +22,7 @@ create table users (
   last_name text not null,
   nickname text, -- ชื่อเล่น (เช่น เสก, บอย, เจมส์, ขวัญ)
   name text not null,
+  personnel_type text default 'ข้าราชการ' check (personnel_type in ('ข้าราชการ', 'ลูกจ้างประจำ', 'พนักงานราชการ', 'พนักงานกองทุน', 'พนักงานจ้างเหมาบริการ', 'ที่ปรึกษา / ผู้ทรงคุณวุฒิ')),
   position text not null,
   division text not null, -- กลุ่ม/ฝ่าย (เช่น กลุ่มเทคโนโลยีดิจิทัลและสารสนเทศ)
   email text unique not null,
