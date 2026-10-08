@@ -77,27 +77,54 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Extract user email if ID token is present
+    // Verify user ID token via official LINE Verification API
     let email = "";
     if (tokenData.id_token) {
       try {
-        const payloadBase64 = tokenData.id_token.split(".")[1];
-        if (payloadBase64) {
-          const payloadJson = Buffer.from(payloadBase64, "base64").toString("utf-8");
-          const payload = JSON.parse(payloadJson);
-          email = payload.email || "";
-          if (!profileData.displayName && payload.name) {
-            profileData.displayName = payload.name;
+        const verifyParams = new URLSearchParams();
+        verifyParams.append("id_token", tokenData.id_token);
+        verifyParams.append("client_id", channelId);
+
+        const verifyRes = await fetch("https://api.line.me/oauth2/v2.1/verify", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: verifyParams.toString(),
+        });
+
+        if (verifyRes.ok) {
+          const verifiedData = await verifyRes.json();
+          email = verifiedData.email || "";
+          if (verifiedData.name) {
+            profileData.displayName = verifiedData.name;
           }
-          if (!profileData.pictureUrl && payload.picture) {
-            profileData.pictureUrl = payload.picture;
+          if (verifiedData.picture) {
+            profileData.pictureUrl = verifiedData.picture;
           }
-          if (!profileData.userId && payload.sub) {
-            profileData.userId = payload.sub;
+          if (verifiedData.sub) {
+            profileData.userId = verifiedData.sub;
+          }
+        } else {
+          console.warn("LINE ID token verification failed, falling back to payload decode");
+          const payloadBase64 = tokenData.id_token.split(".")[1];
+          if (payloadBase64) {
+            const payloadJson = Buffer.from(payloadBase64, "base64").toString("utf-8");
+            const payload = JSON.parse(payloadJson);
+            email = payload.email || "";
+            if (!profileData.displayName && payload.name) {
+              profileData.displayName = payload.name;
+            }
+            if (!profileData.pictureUrl && payload.picture) {
+              profileData.pictureUrl = payload.picture;
+            }
+            if (!profileData.userId && payload.sub) {
+              profileData.userId = payload.sub;
+            }
           }
         }
       } catch (e) {
-        console.warn("Could not parse ID token:", e);
+        console.warn("Could not verify ID token:", e);
       }
     }
 

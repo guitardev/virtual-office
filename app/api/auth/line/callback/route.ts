@@ -18,8 +18,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${origin}/?line_error=Missing+authorization+code`);
   }
 
+  const state = searchParams.get("state");
+  const stateParam = state ? `&state=${encodeURIComponent(state)}` : "";
+
   // Redirect to home page with code parameter so client-side can exchange or display result
   return NextResponse.redirect(
-    `${origin}/?code=${encodeURIComponent(code)}&source=line_callback`
+    `${origin}/?code=${encodeURIComponent(code)}${stateParam}&source=line_callback`
   );
 }

@@ -158,3 +158,23 @@ export interface File {
   size_bytes: number;
   created_at: string;
 }
+
+export interface TaskItem {
+  id: number;
+  title: string;
+  dept: string;
+  due: string;
+  priority: "high" | "medium" | "low";
+  status: "todo" | "in_progress" | "done";
+  assignee: string;
+}
+
+export interface MeetingItem {
+  id: number;
+  title: string;
+  dateStr: string;
+  timeStr: string;
+  location: string;
+  type: "online" | "onsite";
+  attendees: string[];
+}
