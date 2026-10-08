@@ -178,9 +178,16 @@ export default function OmniOfficeApp() {
     role: "member" as Role,
   });
 
+  // LINE OAuth verification state
+  const [isLineVerifying, setIsLineVerifying] = useState(false);
+  const [lineModalNotice, setLineModalNotice] = useState<{
+    title: string;
+    message: string;
+  } | null>(null);
+
   const isLiveConnected = isSupabaseConfigured();
 
-  // Load session from localStorage on client mount
+  // Load session from localStorage on client mount & handle LINE OAuth callback
   useEffect(() => {
     setIsHydrated(true);
     try {
@@ -204,6 +211,76 @@ export default function OmniOfficeApp() {
       }
     } catch (e) {
       console.error("Failed to load saved session:", e);
+    }
+
+    // Check URL parameters for LINE OAuth redirect
+    if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get("code");
+      const lineError = urlParams.get("line_error") || urlParams.get("error");
+      const lineErrorDesc = urlParams.get("error_description");
+
+      if (lineError) {
+        showToast(`⚠️ LINE Login ไม่สำเร็จ: ${lineErrorDesc || lineError}`);
+        window.history.replaceState({}, "", window.location.pathname);
+      } else if (code) {
+        setIsLineVerifying(true);
+        const redirectUri =
+          sessionStorage.getItem("line_redirect_uri") || window.location.origin;
+
+        fetch("/api/auth/line/exchange", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code, redirectUri }),
+        })
+          .then((res) => res.json())
+          .then(async (data) => {
+            setIsLineVerifying(false);
+            window.history.replaceState({}, "", window.location.pathname);
+
+            if (data.success && data.profile) {
+              const p = data.profile;
+              const lineMember: Member = {
+                id: `usr_line_${p.userId.slice(0, 12)}`,
+                prefix: "นาย/นางสาว",
+                firstName: p.displayName.split(" ")[0] || "ผู้ใช้งาน",
+                lastName: p.displayName.split(" ").slice(1).join(" ") || "LINE",
+                name: p.displayName,
+                personnelType: "ข้าราชการ",
+                position: "เจ้าหน้าที่ปฏิบัติการ (LINE SSO)",
+                division: GOVERNMENT_DIVISIONS[0],
+                department: GOVERNMENT_DIVISIONS[0],
+                email: p.email || `${p.userId.slice(0, 8).toLowerCase()}@line.me`,
+                phone: "-",
+                lineId: `@${p.userId.slice(0, 8)}`,
+                role: "member",
+                status: "active",
+                avatarUrl: p.pictureUrl,
+                avatarText: (p.displayName || "LN").slice(0, 2),
+                joinedDate: "วันนี้",
+              };
+
+              if (isLiveConnected) {
+                await saveMember(lineMember);
+              }
+              handleLogin(lineMember, true);
+              showToast(`🎉 เข้าสู่ระบบด้วย LINE: ${lineMember.name} สำเร็จ!`);
+            } else if (data.missingSecret) {
+              setLineModalNotice({
+                title: "✅ ตรวจสอบสิทธิ์ LINE สำเร็จ (ได้รับ Authorization Code แล้ว)",
+                message:
+                  "ระบบเชื่อมต่อกับบัญชี LINE ของท่านเรียบร้อยแล้ว! เพื่อดึงรูปโปรไฟล์และชื่อจริงอัตโนมัติ ให้ระบุ LINE_CHANNEL_SECRET ใน .env.local หรือท่านสามารถกดเข้าสู่ระบบทันทีด้านล่าง",
+              });
+            } else {
+              showToast(`⚠️ LINE OAuth: ${data.error || "เกิดข้อผิดพลาดในการตรวจสอบสิทธิ์"}`);
+            }
+          })
+          .catch((err) => {
+            setIsLineVerifying(false);
+            window.history.replaceState({}, "", window.location.pathname);
+            console.error("Error exchanging LINE code:", err);
+          });
+      }
     }
   }, []);
 

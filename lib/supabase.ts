@@ -434,9 +434,15 @@ export async function signInWithOAuth(
 /**
  * Sign in with LINE Login (OAuth 2.0 / OpenID Connect)
  */
-export async function signInWithLine(): Promise<{ success: boolean; error?: string }> {
-  const lineChannelId = process.env.NEXT_PUBLIC_LINE_CHANNEL_ID;
-  const redirectUrl = typeof window !== "undefined" ? `${window.location.origin}` : "";
+export async function signInWithLine(customRedirectUri?: string): Promise<{ success: boolean; error?: string }> {
+  const lineChannelId = process.env.NEXT_PUBLIC_LINE_CHANNEL_ID || "1656002115";
+  const redirectUrl =
+    customRedirectUri ||
+    (process.env.NEXT_PUBLIC_LINE_REDIRECT_URI
+      ? process.env.NEXT_PUBLIC_LINE_REDIRECT_URI
+      : typeof window !== "undefined"
+      ? `${window.location.origin}`
+      : "http://localhost:3000");
 
   if (!lineChannelId) {
     return {
@@ -449,6 +455,7 @@ export async function signInWithLine(): Promise<{ success: boolean; error?: stri
     const state = Math.random().toString(36).substring(2, 15);
     if (typeof window !== "undefined") {
       sessionStorage.setItem("line_oauth_state", state);
+      sessionStorage.setItem("line_redirect_uri", redirectUrl);
       const lineAuthUrl = `https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id=${lineChannelId}&redirect_uri=${encodeURIComponent(
         redirectUrl
       )}&state=${state}&scope=profile%20openid%20email`;

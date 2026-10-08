@@ -544,8 +544,16 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
 
           {/* OAuth SSO Buttons */}
           <div className="space-y-2">
-            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-              เข้าสู่ระบบด่วนด้วย OAuth SSO (Google / LINE)
+            <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              <span>เข้าสู่ระบบด่วนด้วย OAuth SSO (Google / LINE)</span>
+              <button
+                type="button"
+                onClick={() => setShowLineModal(true)}
+                className="text-[#06C755] hover:text-[#05b34c] hover:underline font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
+                title="ดูคำแนะนำ Callback URL และ Channel ID"
+              >
+                <span>⚙️ ตั้งค่า LINE</span>
+              </button>
             </div>
             <div className="grid grid-cols-2 gap-2.5">
               <button
@@ -943,40 +951,61 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
                 </button>
               </div>
 
-              <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200/80 text-xs space-y-2 text-emerald-950">
-                <div className="font-bold flex items-center gap-1.5 text-emerald-800">
-                  <span>💡</span>
-                  <span>ขั้นตอนการเชื่อมต่อ LINE Login จริง:</span>
+              <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200/80 text-xs space-y-2.5 text-emerald-950">
+                <div className="font-bold flex items-center justify-between text-emerald-800">
+                  <div className="flex items-center gap-1.5">
+                    <span>💡</span>
+                    <span>สถานะการเชื่อมต่อ LINE Login:</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-bold">
+                    Channel ID: 1656002115
+                  </span>
                 </div>
-                <ol className="list-decimal pl-4 space-y-1.5 text-[11px] text-emerald-900 leading-relaxed">
-                  <li>
-                    เข้าสู่ <a href="https://developers.line.biz" target="_blank" rel="noreferrer" className="text-emerald-700 underline font-semibold">LINE Developers Console</a> แล้วสร้าง Provider & Channel ชนิด <strong>LINE Login</strong>
-                  </li>
-                  <li>
-                    ระบุ Callback URL:
-                    <div className="mt-0.5 font-mono bg-white px-2 py-1 rounded border border-emerald-200 text-[10px] select-all break-all text-emerald-800">
-                      https://xkeiuyhkokmecefzzynb.supabase.co/auth/v1/callback
-                    </div>
-                  </li>
-                  <li>
-                    นำ Channel ID มาระบุใน <code className="bg-emerald-100/80 px-1 py-0.5 rounded text-[10px]">NEXT_PUBLIC_LINE_CHANNEL_ID</code>
-                  </li>
-                </ol>
+                
+                <p className="text-[11px] text-emerald-900 leading-relaxed">
+                  ระบบตรวจพบ <strong>NEXT_PUBLIC_LINE_CHANNEL_ID</strong> ในระบบแล้ว! เพื่อให้ LINE อนุญาตการเชื่อมต่อ กรุณาตรวจสอบ <strong>Callback URL</strong> ใน <a href="https://developers.line.biz" target="_blank" rel="noreferrer" className="text-emerald-700 underline font-semibold">LINE Developers Console</a> ให้ตรงกับ:
+                </p>
+
+                <div className="space-y-1.5">
+                  <div className="text-[10px] font-bold text-slate-600">สำหรับทดสอบบนเครื่อง (Localhost):</div>
+                  <div className="font-mono bg-white px-2 py-1 rounded border border-emerald-200 text-[10px] select-all break-all text-emerald-800">
+                    http://localhost:3000
+                  </div>
+                  <div className="text-[10px] font-bold text-slate-600">สำหรับใช้งานบน Production (Vercel):</div>
+                  <div className="font-mono bg-white px-2 py-1 rounded border border-emerald-200 text-[10px] select-all break-all text-emerald-800">
+                    https://virtual-office-ten-chi.vercel.app
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-slate-600 pt-1 border-t border-emerald-200/50">
+                  <span className="font-bold text-slate-700">คำแนะนำ:</span> ใน LINE Developers Console &gt; Basic settings &gt; Channel secret หากนำมาระบุใน <code className="bg-emerald-100/80 px-1 py-0.5 rounded text-[10px]">LINE_CHANNEL_SECRET</code> ระบบจะดึงรูปโปรไฟล์และชื่อจริงอัตโนมัติ
+                </div>
               </div>
 
               <div className="space-y-2 pt-1">
                 <button
                   type="button"
-                  onClick={handleDemoLineLogin}
+                  onClick={() => {
+                    setShowLineModal(false);
+                    handleOAuthLogin("line");
+                  }}
                   className="w-full py-2.5 rounded-xl bg-[#06C755] hover:bg-[#05b34c] text-white text-xs font-bold shadow-md shadow-[#06C755]/20 flex items-center justify-center gap-2 cursor-pointer transition-all"
                 >
-                  <span>⚡ ทดสอบเข้าสู่ระบบด้วยบัญชี LINE (Demo Profile) ➜</span>
+                  <span>💬 ดำเนินการเข้าสู่ระบบผ่าน LINE OAuth ➜</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDemoLineLogin}
+                  className="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all"
+                >
+                  <span>⚡ หรือทดสอบด้วย LINE Demo Profile ทันที</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setShowLineModal(false)}
-                  className="w-full py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-semibold cursor-pointer"
+                  className="w-full py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500 text-xs font-medium cursor-pointer"
                 >
                   ปิดหน้าต่าง
                 </button>
