@@ -51,6 +51,11 @@ import {
   signOutUser,
   findOrMapAuthMember,
   getLocalMembers,
+  fetchAuditLogs,
+  saveAuditLog,
+  subscribeToAuditLogs,
+  fetchTasks,
+  fetchMeetings,
 } from "@/lib/supabase";
 
 interface NavItem {
@@ -369,7 +374,7 @@ export default function OmniOfficeApp() {
     }
   }, []);
 
-  // Fetch live members & access requests from Supabase & subscribe to realtime changes & Supabase Auth
+  // Fetch live members, access requests, audit logs, tasks from Supabase & subscribe to realtime changes & Supabase Auth
   useEffect(() => {
     if (isLiveConnected) {
       fetchMembers().then((liveMembers) => {
@@ -381,6 +386,24 @@ export default function OmniOfficeApp() {
       fetchAccessRequests().then((liveReqs) => {
         if (liveReqs && liveReqs.length > 0) {
           setAccessRequests(liveReqs);
+        }
+      });
+
+      fetchAuditLogs().then((logs) => {
+        if (logs && logs.length > 0) {
+          setAuditLogs(logs);
+        }
+      });
+
+      fetchTasks().then((liveTasks) => {
+        if (liveTasks && liveTasks.length > 0) {
+          setTasks(liveTasks);
+        }
+      });
+
+      fetchMeetings().then((liveMeetings) => {
+        if (liveMeetings && liveMeetings.length > 0) {
+          setMeetings(liveMeetings);
         }
       });
 
@@ -418,9 +441,18 @@ export default function OmniOfficeApp() {
         setAccessRequests(updatedRequests);
       });
 
+      const unsubscribeAudit = subscribeToAuditLogs(() => {
+        fetchAuditLogs().then((logs) => {
+          if (logs && logs.length > 0) {
+            setAuditLogs(logs);
+          }
+        });
+      });
+
       return () => {
         unsubscribeMembers();
         unsubscribeRequests();
+        unsubscribeAudit();
         authSub?.unsubscribe?.();
       };
     }
@@ -452,6 +484,7 @@ export default function OmniOfficeApp() {
       status,
     };
     setAuditLogs((prev) => [newLog, ...prev]);
+    saveAuditLog(newLog).catch(() => {});
   };
 
   // ─── AUTH ACTIONS ───
@@ -1062,47 +1095,11 @@ export default function OmniOfficeApp() {
     showToast("✅ บันทึกข้อมูลส่วนบุคคลเรียบร้อยแล้ว");
   };
 
-  // Tasks state
-  const [tasks, setTasks] = useState<TaskItem[]>([
-    { id: 1, title: "สร้างโปรโตไทป์หน้า Login & Auth", dept: "Frontend", due: "วันนี้ 18:00", priority: "high", status: "todo", assignee: "คุณ พนม" },
-    { id: 2, title: "จดบันทึกการประชุมสรุป Roadmap ครั้งที่ 4", dept: "Product", due: "พรุ่งนี้ 12:00", priority: "medium", status: "todo", assignee: "คุณ นพมาศ" },
-    { id: 3, title: "ตรวจสอบเอกสารเบิกจ่าย Q4", dept: "Finance", due: "15 ต.ค.", priority: "low", status: "todo", assignee: "ทีมการเงิน" },
-    { id: 4, title: "พัฒนา API ระบบรถยนต์สำนักงาน", dept: "Backend", due: "วันนี้ 16:30", priority: "high", status: "in_progress", assignee: "คุณ วรกร" },
-    { id: 5, title: "เชื่อมต่อ Realtime WebSocket", dept: "Core Dev", due: "ใน 2 วัน", priority: "medium", status: "in_progress", assignee: "คุณ ธนพล" },
-    { id: 6, title: "ตั้งค่าฐานข้อมูล Supabase Schema", dept: "DevOps", due: "เสร็จสิ้น", priority: "low", status: "done", assignee: "คุณ วิภา" },
-    { id: 7, title: "กำหนด Design System สีและฟอนต์", dept: "UI/UX", due: "เสร็จสิ้น", priority: "low", status: "done", assignee: "ทีมออกแบบ" },
-  ]);
+  // Tasks state (Zero Demo - live from Supabase)
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
 
-  // Meetings state
-  const [meetings] = useState<MeetingItem[]>([
-    {
-      id: 1,
-      title: "ประชุมวางแผนผลิตภัณฑ์ & UI/UX Sprint Review",
-      dateStr: "วันนี้ (8 ต.ค.)",
-      timeStr: "11:00 - 12:00 น.",
-      location: "Google Meet · Room A",
-      type: "online",
-      attendees: ["วรกร", "พนม", "ธนพล", "นพมาศ"],
-    },
-    {
-      id: 2,
-      title: "การอบรมระบบจัดการและการเชื่อมโยงข้อมูล CRM",
-      dateStr: "พรุ่งนี้ (9 ต.ค.)",
-      timeStr: "14:00 - 15:30 น.",
-      location: "ห้องประชุมใหญ่ ชั้น 4",
-      type: "onsite",
-      attendees: ["วรกร", "ทีมการตลาด", "นพมาศ"],
-    },
-    {
-      id: 3,
-      title: "สรุปงบประมาณยานพาหนะและรายงานประจำไตรมาส",
-      dateStr: "จันทร์ที่ 12 ต.ค.",
-      timeStr: "09:30 - 10:30 น.",
-      location: "Zoom · Room B",
-      type: "online",
-      attendees: ["ทีมการเงิน", "ผู้บริหาร"],
-    },
-  ]);
+  // Meetings state (Zero Demo - live from Supabase)
+  const [meetings, setMeetings] = useState<MeetingItem[]>([]);
 
   // Dynamic navigation badges calculated from real state (System Analysis Item 5.1)
   const navBadges: Record<ModuleId, number> = useMemo(() => {

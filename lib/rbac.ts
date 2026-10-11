@@ -433,76 +433,7 @@ export const INITIAL_MEMBERS: Member[] = [
   },
 ];
 
-export const INITIAL_AUDIT_LOGS: AuditLog[] = [
-  {
-    id: "log_1",
-    timestamp: "วันนี้ 09:15 น.",
-    actor: "มะลิวัน สิทธิโยธี (Admin)",
-    action: "อนุมัติแต่งตั้งบทบาท เสกพล ดิษฐโชติ เป็น Manager ฝ่ายบริหารทั่วไป",
-    target: "RBAC Permission",
-    status: "success",
-  },
-  {
-    id: "log_2",
-    timestamp: "เมื่อวาน 16:40 น.",
-    actor: "ศรัณย์ สิทธิโชค (Guest)",
-    action: "พยายามเข้าถึงโมดูล Admin Panel สิทธิ์ไม่เพียงพอ",
-    target: "Access Control",
-    status: "denied",
-  },
-  {
-    id: "log_3",
-    timestamp: "เมื่อวาน 14:20 น.",
-    actor: "ขวัญนภา ศิริสมบัติ (Member)",
-    action: "บันทึกคำขอจองห้องประชุมสุนทรภู่ผ่านระบบออนไลน์",
-    target: "Meeting Booking",
-    status: "success",
-  },
-  {
-    id: "log_4",
-    timestamp: "6 ต.ค. 11:00 น.",
-    actor: "มะลิวัน สิทธิโยธี (Admin)",
-    action: "เปิดใช้งานตารางกำหนดสิทธิ์ RBAC Module Matrix ประจำปีงบประมาณ",
-    target: "System Configuration",
-    status: "success",
-  },
-];
+export const INITIAL_AUDIT_LOGS: AuditLog[] = [];
 
-export const INITIAL_ACCESS_REQUESTS: AccessRequest[] = [
-  {
-    id: "req_1",
-    prefix: "นาย",
-    firstName: "พงษ์ศักดิ์",
-    lastName: "รัตนวิมล",
-    nickname: "บอล",
-    name: "นายพงษ์ศักดิ์ รัตนวิมล",
-    personnelType: "ข้าราชการ",
-    position: "นักพัฒนาสังคมปฏิบัติการ",
-    division: "กลุ่มนโยบายและวิชาการ",
-    email: "pongsak.r@m-society.go.th",
-    phone: "055-705031 ต่อ 112",
-    lineId: "ball_kpp",
-    requestedRole: "member",
-    reason: "ขอสิทธิ์เพื่อติดตามโครงการและประสานงานข้อมูลสารสนเทศร่วมกับทีมงาน พมจ. กำแพงเพชร",
-    status: "pending",
-    createdAt: "วันนี้ 10:15 น.",
-  },
-  {
-    id: "req_2",
-    prefix: "นางสาว",
-    firstName: "กานดา",
-    lastName: "ธนโชติ",
-    nickname: "กาน",
-    name: "นางสาวกานดา ธนโชติ",
-    personnelType: "พนักงานราชการ",
-    position: "เจ้าหน้าที่ธุรการและสารบรรณ",
-    division: "ฝ่ายบริหารทั่วไป",
-    email: "kanda.t@m-society.go.th",
-    phone: "055-705031 ต่อ 115",
-    lineId: "kanda_admin",
-    requestedRole: "member",
-    reason: "ขอสิทธิ์เข้าใช้งานระบบจองรถยนต์สำนักงาน จองห้องประชุม และส่งเอกสารในระบบแชท",
-    status: "pending",
-    createdAt: "เมื่อวาน 15:30 น.",
-  },
-];
+export const INITIAL_ACCESS_REQUESTS: AccessRequest[] = [];
+

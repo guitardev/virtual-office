@@ -27,7 +27,7 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
 
   // Sign In state
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("••••••••");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
@@ -229,52 +229,6 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
     }
   };
 
-  const handleDemoLineLogin = () => {
-    setShowLineModal(false);
-    setIsLoading(true);
-    const lineMember: Member = {
-      id: "usr_line_user",
-      prefix: "นาย",
-      firstName: "ไลน์",
-      lastName: "ผู้ใช้งาน",
-      name: "ผู้ใช้งาน LINE (LINE User)",
-      personnelType: "พนักงานราชการ",
-      position: "เจ้าหน้าที่สื่อสารและสารสนเทศ",
-      division: GOVERNMENT_DIVISIONS[0],
-      department: GOVERNMENT_DIVISIONS[0],
-      email: "line.user@m-society.go.th",
-      phone: "055-705031",
-      lineId: "@line_staff",
-      role: "member",
-      status: "active",
-      joinedDate: "วันนี้",
-      avatarText: "LN",
-    };
-    setTimeout(() => {
-      setIsLoading(false);
-      onLogin(lineMember, rememberMe);
-    }, 400);
-  };
-
-  // Quick 1-click login for demo / role evaluation
-  const handleQuickDemoLogin = (role: Role) => {
-    setIsLoading(true);
-    setErrorMessage(null);
-
-    const target = availableMembers.find((m) => m.role === role) || availableMembers[0];
-    setTimeout(() => {
-      setIsLoading(false);
-      onLogin(target, rememberMe);
-    }, 300);
-  };
-
-  const handleFillDemoCredentials = (role: Role) => {
-    const target = availableMembers.find((m) => m.role === role) || availableMembers[0];
-    setEmail(target.email);
-    setPassword("password123");
-    setErrorMessage(null);
-    setMatchedDirectoryUser(null);
-  };
 
   const handleBypassWithMatchedDirectoryUser = () => {
     if (matchedDirectoryUser) {
@@ -839,81 +793,18 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
               ขอสิทธิ์เข้าใช้งานใหม่ (Request Access) →
             </button>
           </div>
-
-          {/* Quick Demo Accounts Selection */}
-          <div className="pt-2 border-t border-slate-200 space-y-2">
-            <div className="flex items-center justify-between text-xs font-bold text-slate-600">
-              <span>⚡ บัญชีตัวอย่างข้าราชการ พมจ. กำแพงเพชร</span>
-              <span className="text-[10px] text-indigo-600 font-semibold">1-Click Test</span>
+          {/* Legal Links Footer */}
+          <div className="pt-3 border-t border-slate-200/80 flex items-center justify-between text-[11px] text-slate-400">
+            <div className="flex items-center gap-2">
+              <Link href="/policy" className="hover:text-indigo-600 transition-colors">
+                นโยบายความเป็นส่วนตัว (PDPA)
+              </Link>
+              <span>·</span>
+              <Link href="/term" className="hover:text-indigo-600 transition-colors">
+                ข้อกำหนดการใช้งาน
+              </Link>
             </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              {(["admin", "manager", "member", "guest"] as Role[]).map((r) => {
-                const conf = ROLE_CONFIG[r];
-                const demoUser = availableMembers.find((m) => m.role === r) || availableMembers[0];
-
-                return (
-                  <div
-                    key={r}
-                    className="p-2.5 rounded-xl bg-white border border-slate-200 hover:border-[#4F46E5] hover:shadow-xs transition-all text-left flex flex-col justify-between"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-sm">{conf.icon}</span>
-                        <span
-                          className={`px-1.5 py-0.2 rounded-md text-[9px] font-bold border ${conf.badgeColor}`}
-                        >
-                          {r.toUpperCase()}
-                        </span>
-                      </div>
-                      <div className="text-[11px] font-bold text-slate-800 truncate">
-                        {demoUser.name}
-                      </div>
-                      <div className="text-[9px] text-indigo-600 font-medium truncate">
-                        {demoUser.position}
-                      </div>
-                      <div className="text-[8px] text-slate-400 font-mono truncate">
-                        {demoUser.email}
-                      </div>
-                    </div>
-
-                    <div className="mt-2 pt-1.5 border-t border-slate-100 flex items-center gap-1">
-                      <button
-                        type="button"
-                        disabled={isLoading}
-                        onClick={() => handleQuickDemoLogin(r)}
-                        className="flex-1 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-600 text-[9px] font-bold transition-all text-center cursor-pointer disabled:opacity-50"
-                        title="เข้าสู่ระบบทันทีด้วยบทบาทนี้"
-                      >
-                        เข้าใช้งาน ➜
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleFillDemoCredentials(r)}
-                        className="p-0.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-700 text-[9px] cursor-pointer"
-                        title="เติมอีเมลลงในฟอร์ม"
-                      >
-                        ✍️
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Legal Links Footer */}
-            <div className="pt-3 border-t border-slate-200/80 flex items-center justify-between text-[11px] text-slate-400">
-              <div className="flex items-center gap-2">
-                <Link href="/policy" className="hover:text-indigo-600 transition-colors">
-                  นโยบายความเป็นส่วนตัว (PDPA)
-                </Link>
-                <span>·</span>
-                <Link href="/term" className="hover:text-indigo-600 transition-colors">
-                  ข้อกำหนดการใช้งาน
-                </Link>
-              </div>
-              <span>v2.4 Live</span>
-            </div>
+            <span>v2.4 Live</span>
           </div>
         </div>
       </div>
@@ -987,13 +878,6 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
                   <span>💬 ดำเนินการเข้าสู่ระบบผ่าน LINE OAuth ➜</span>
                 </button>
 
-                <button
-                  type="button"
-                  onClick={handleDemoLineLogin}
-                  className="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all"
-                >
-                  <span>⚡ หรือทดสอบด้วย LINE Demo Profile ทันที</span>
-                </button>
 
                 <button
                   type="button"

@@ -365,13 +365,6 @@ on conflict (id) do update set
   role = excluded.role,
   avatar_url = excluded.avatar_url;
 
--- 3. Initial Access Requests (คำขอสิทธิ์ทดสอบ)
-insert into access_requests (id, prefix, first_name, last_name, nickname, name, personnel_type, position, division, email, phone, line_id, requested_role, reason, status)
-values
-  ('req_1', 'นาย', 'พงษ์ศักดิ์', 'รัตนวิมล', 'บอล', 'นายพงษ์ศักดิ์ รัตนวิมล', 'ข้าราชการ', 'นักพัฒนาสังคมปฏิบัติการ', 'กลุ่มนโยบายและวิชาการ', 'pongsak.r@m-society.go.th', '055-705031 ต่อ 112', 'ball_kpp', 'member', 'ขอสิทธิ์เพื่อติดตามโครงการและประสานงานข้อมูลสารสนเทศร่วมกับทีมงาน พมจ. กำแพงเพชร', 'pending'),
-  ('req_2', 'นางสาว', 'กานดา', 'ธนโชติ', 'กาน', 'นางสาวกานดา ธนโชติ', 'พนักงานราชการ', 'เจ้าหน้าที่ธุรการและสารบรรณ', 'ฝ่ายบริหารทั่วไป', 'kanda.t@m-society.go.th', '055-705031 ต่อ 115', 'kanda_admin', 'member', 'ขอสิทธิ์เข้าใช้งานระบบจองรถยนต์สำนักงาน จองห้องประชุม และส่งเอกสารในระบบแชท', 'pending')
-on conflict (id) do nothing;
-
 -- 4. Initial Vehicles (ยานพาหนะส่วนกลาง 5 คัน)
 insert into vehicles (id, name, license_plate, category, capacity, driver_name, fuel_type, status, image, features, mileage, fuel_level, last_maintenance_date, insurance_expiry, assigned_division)
 values
@@ -382,60 +375,7 @@ values
   ('veh_5', 'Isuzu D-Max Spacecab 1.9 Ddi', 'บท 3456 กำแพงเพชร', 'รถกระบะบรรทุก', 2, 'นายประเสริฐ ยิ้มแย้ม', 'ดีเซล B7', 'in_use', 'https://images.unsplash.com/photo-1559416523-140ddc3d238c?auto=format&fit=crop&w=800&q=80', array['2 ที่นั่ง', 'คอกสแตนเลสบรรทุก', 'ขนย้ายถุงยังชีพ/สิ่งของพระราชทาน', 'รองรับงานหนัก'], 195420, '1/2 ถัง (50%)', '12 ก.ค. 2569', '28 ก.พ. 2570', 'ฝ่ายบริหารทั่วไป (งานส่งของ/พัสดุ)')
 on conflict (id) do nothing;
 
--- 5. Initial Car Booking Requests (คำขอจองรถทดสอบ 3 ขั้นตอน)
-insert into car_bookings (
-  id, request_no, vehicle_id, vehicle_name, license_plate,
-  requester_id, requester_name, requester_position, requester_division, requester_phone,
-  purpose, destination, origin, departure_time, return_time,
-  passenger_count, passengers_list, require_driver, assigned_driver,
-  fuel_budget_requested, fuel_budget_amount, fuel_budget_source,
-  status, created_at,
-  manager_id, manager_name, manager_notes, manager_action_at,
-  approver_id, approver_name, approver_notes, approver_action_at
-)
-values
-  (
-    'req_car_001', 'คข-69/008', 'veh_2', 'Toyota Hilux Revo Double Cab 4WD', 'กค 7812 กำแพงเพชร',
-    'usr_3', 'นายณัฐพล รัตนพงษ์', 'นักพัฒนาสังคมปฏิบัติการ', 'กลุ่มการพัฒนาสังคมและสวัสดิการ', '083-456-7890',
-    'ลงพื้นที่ตรวจเยี่ยมและประเมินสภาพที่อยู่อาศัยของคนพิการและผู้สูงอายุยากไร้ เพื่อขอรับงบประมาณปรับปรุงสภาพแวดล้อม',
-    'ตำบลคลองลานพัฒนา อำเภอคลองลาน จังหวัดกำแพงเพชร', 'สำนักงาน พมจ.กำแพงเพชร (ศาลากลางจังหวัด)',
-    '2026-10-12T08:30', '2026-10-12T16:30',
-    4, 'นายณัฐพล รัตนพงษ์, นายวรวุฒิ พึ่งพัก, นางสาวพิมพ์ใจ ชัยเจริญ, นางสมรักษ์ ธรรมวิมล',
-    true, null,
-    true, 1200.00, 'โครงการปรับสภาพแวดล้อมที่อยู่อาศัยคนพิการ',
-    'pending_review', '10 ต.ค. 2569 14:20 น.',
-    null, null, null, null,
-    null, null, null, null
-  ),
-  (
-    'req_car_002', 'คข-69/007', 'veh_1', 'Toyota Commuter 3.0 D4D', 'นข 4589 กำแพงเพชร',
-    'usr_4', 'นางปิยะดา สุขสมบูรณ์', 'เจ้าพนักงานธุรการชำนาญงาน', 'ฝ่ายบริหารทั่วไป', '084-567-8901',
-    'นำคณะข้าราชการและเจ้าหน้าที่เข้าร่วมประชุมสัมมนาเชิงปฏิบัติการการขับเคลื่อนยุทธศาสตร์การพัฒนาคุณภาพชีวิต',
-    'ห้องประชุมซุ้มกอ ชั้น 4 ศาลากลางจังหวัดกำแพงเพชร', 'สำนักงาน พมจ.กำแพงเพชร',
-    '2026-10-13T09:00', '2026-10-13T17:00',
-    8, 'นางปิยะดา สุขสมบูรณ์ และคณะเจ้าหน้าที่ฝ่ายบริหารทั่วไป รวม 8 คน',
-    true, 'นายสมชาย มั่นคง',
-    false, null, null,
-    'endorsed', '9 ต.ค. 2569 11:15 น.',
-    'usr_2', 'นายเสกพล ดิษฐโชติ (หัวหน้าฝ่ายบริหารทั่วไป)', 'ตรวจสอบความพร้อมแล้ว รถตู้ นข 4589 ว่าง และได้มอบหมายนายสมชาย มั่นคง เป็นพนักงานขับรถ เห็นควรเสนอ พมจ. เพื่อโปรดพิจารณาอนุมัติ', '9 ต.ค. 2569 15:30 น.',
-    null, null, null, null
-  ),
-  (
-    'req_car_003', 'คข-69/006', 'veh_3', 'Honda CR-V e:HEV RS', 'กข 9210 กำแพงเพชร',
-    'usr_1', 'นางสาวมะลิวัน สิทธิโยธี', 'พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร', 'สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร (ผู้บริหาร)', '055-705031 ต่อ 101',
-    'ร่วมประชุมติดตามการดำเนินงานศูนย์ช่วยเหลือสังคมตำบล และมอบถุงยังชีพแก่ราษฎรกลุ่มเปราะบาง',
-    'องค์การบริหารส่วนตำบลทรงธรรม อำเภอเมือง จังหวัดกำแพงเพชร', 'สำนักงาน พมจ.กำแพงเพชร',
-    '2026-10-11T09:00', '2026-10-11T15:00',
-    3, 'นางสาวมะลิวัน สิทธิโยธี, นายพนมศักย์ บริภัทรจิรากร, นางสาวขวัญนภา ศิริสมบัติ',
-    true, 'นายบุญส่ง ชื่นใจ',
-    false, null, null,
-    'approved', '8 ต.ค. 2569 09:30 น.',
-    'usr_2', 'นายเสกพล ดิษฐโชติ', 'ตรวจสอบแล้ว มีรถและพลขับพร้อมปฏิบัติหน้าที่', '8 ต.ค. 2569 10:00 น.',
-    'usr_1', 'นางสาวมะลิวัน สิทธิโยธี (พมจ.กำแพงเพชร)', 'อนุมัติให้ใช้รถยนต์ราชการปฏิบัติราชการตามวัตถุประสงค์', '8 ต.ค. 2569 10:30 น.'
-  )
-on conflict (id) do nothing;
-
--- 6. Initial Official Chat Channels (ห้องแชทตามกลุ่มงาน)
+-- 4. Initial Official Chat Channels (ห้องแชทตามกลุ่มงาน)
 insert into chat_channels (id, name, division, description, icon, type, is_official, member_ids, created_by)
 values
   ('ch_all_staff', 'ประกาศและประสานงานกลาง พมจ.', null, 'ห้องสื่อสารและประสานงานภารกิจส่วนกลาง รวมข้าราชการและเจ้าหน้าที่ทุกกลุ่มงาน', '🏢', 'announcement', true, array['usr_1','usr_2','usr_3','usr_4','usr_5','usr_6','usr_7','usr_8','usr_9','usr_10','usr_11'], 'usr_1'),

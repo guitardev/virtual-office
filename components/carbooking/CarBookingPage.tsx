@@ -17,6 +17,16 @@ import {
   loadStoredVehicles,
   saveStoredVehicles,
 } from "@/lib/carbooking-data";
+import {
+  fetchVehicles,
+  saveVehicle,
+  deleteVehicle,
+  fetchCarBookings,
+  saveCarBooking,
+  deleteCarBooking,
+  subscribeToVehicles,
+  subscribeToCarBookings,
+} from "@/lib/supabase";
 import { CarBookingDocumentModal } from "./CarBookingDocumentModal";
 import { ReviewBookingModal } from "./ReviewBookingModal";
 import { ReturnVehicleModal } from "./ReturnVehicleModal";
@@ -69,13 +79,42 @@ export function CarBookingPage({
   const [formFuelBudgetAmount, setFormFuelBudgetAmount] = useState<number>(1000);
   const [formFuelBudgetSource, setFormFuelBudgetSource] = useState<string>("งบดำเนินงานสำนักงาน");
 
-  // Load data from storage on mount
+  // Load data from storage & sync with Supabase on mount
   useEffect(() => {
     const loadedBookings = loadStoredBookings();
     setBookings(loadedBookings);
 
     const loadedVehicles = loadStoredVehicles();
     setVehicles(loadedVehicles);
+
+    let isMounted = true;
+    fetchCarBookings().then((remoteBookings) => {
+      if (isMounted && remoteBookings) {
+        setBookings(remoteBookings);
+        saveStoredBookings(remoteBookings);
+      }
+    });
+
+    fetchVehicles().then((remoteVehicles) => {
+      if (isMounted && remoteVehicles && remoteVehicles.length > 0) {
+        setVehicles(remoteVehicles);
+        saveStoredVehicles(remoteVehicles);
+      }
+    });
+
+    const unsubVehicles = subscribeToVehicles((updatedVehicles) => {
+      if (isMounted && updatedVehicles && updatedVehicles.length > 0) {
+        setVehicles(updatedVehicles);
+        saveStoredVehicles(updatedVehicles);
+      }
+    });
+
+    const unsubBookings = subscribeToCarBookings((updatedBookings) => {
+      if (isMounted && updatedBookings) {
+        setBookings(updatedBookings);
+        saveStoredBookings(updatedBookings);
+      }
+    });
 
     // Set default departure/return dates (tomorrow 08:30 to 16:30)
     const tomorrow = new Date();
@@ -86,16 +125,28 @@ export function CarBookingPage({
 
     setFormDepartureTime(`${yyyy}-${mm}-${dd}T08:30`);
     setFormReturnTime(`${yyyy}-${mm}-${dd}T16:30`);
+
+    return () => {
+      isMounted = false;
+      unsubVehicles();
+      unsubBookings();
+    };
   }, []);
 
   const updateAndSaveBookings = (newBookings: CarBookingRequest[]) => {
     setBookings(newBookings);
     saveStoredBookings(newBookings);
+    newBookings.forEach((b) => {
+      saveCarBooking(b).catch(() => {});
+    });
   };
 
   const updateAndSaveVehicles = (newVehicles: Vehicle[]) => {
     setVehicles(newVehicles);
     saveStoredVehicles(newVehicles);
+    newVehicles.forEach((v) => {
+      saveVehicle(v).catch(() => {});
+    });
   };
 
   // Stats calculation
@@ -431,6 +482,7 @@ export function CarBookingPage({
     if (!confirm(`คุณต้องการยกเลิกคำขอ ${booking.requestNo} หรือไม่?`)) return;
     const updated = bookings.filter((b) => b.id !== booking.id);
     updateAndSaveBookings(updated);
+    deleteCarBooking(booking.id).catch(() => {});
     showToast(`ยกเลิกคำขอ ${booking.requestNo} สำเร็จ`);
   };
 
@@ -527,6 +579,7 @@ export function CarBookingPage({
     }
     const updatedVehicles = vehicles.filter((v) => v.id !== vehicleId);
     updateAndSaveVehicles(updatedVehicles);
+    deleteVehicle(vehicleId).catch(() => {});
     showToast(`ลบข้อมูลรถยนต์ ${veh.licensePlate} เรียบร้อยแล้ว`);
     if (selectedDetailVehicle?.id === vehicleId) {
       setSelectedDetailVehicle(null);

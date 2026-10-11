@@ -9,6 +9,15 @@ import {
   loadStoredChatMessages,
   saveStoredChatMessages,
 } from "@/lib/chat-data";
+import {
+  fetchChatGroups,
+  saveChatGroup,
+  fetchChatMessages,
+  sendChatMessage,
+  updateChatMessagePin,
+  subscribeToChatMessages,
+  subscribeToChatGroups,
+} from "@/lib/supabase";
 import { CreateGroupModal } from "./CreateGroupModal";
 import { GroupMembersDrawer } from "./GroupMembersDrawer";
 
@@ -45,12 +54,46 @@ export function ChatPage({
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Load chat state from storage and sync with latest members
+  // Load chat state from storage and sync with Supabase and latest members
   useEffect(() => {
     const loadedGroups = loadStoredChatGroups(members);
     const loadedMessages = loadStoredChatMessages();
     setGroups(loadedGroups);
     setMessages(loadedMessages);
+
+    let isMounted = true;
+
+    fetchChatGroups().then((remoteGroups) => {
+      if (isMounted && remoteGroups && remoteGroups.length > 0) {
+        setGroups(remoteGroups);
+        saveStoredChatGroups(remoteGroups);
+      }
+    });
+
+    fetchChatMessages().then((remoteMsgs) => {
+      if (isMounted && remoteMsgs) {
+        setMessages(remoteMsgs);
+        saveStoredChatMessages(remoteMsgs);
+      }
+    });
+
+    const unsubMsgs = subscribeToChatMessages(() => {
+      fetchChatMessages().then((remoteMsgs) => {
+        if (isMounted && remoteMsgs) {
+          setMessages(remoteMsgs);
+          saveStoredChatMessages(remoteMsgs);
+        }
+      });
+    });
+
+    const unsubGroups = subscribeToChatGroups(() => {
+      fetchChatGroups().then((remoteGroups) => {
+        if (isMounted && remoteGroups && remoteGroups.length > 0) {
+          setGroups(remoteGroups);
+          saveStoredChatGroups(remoteGroups);
+        }
+      });
+    });
 
     // Auto-select user's own division group if available, or default to all staff
     if (currentUser?.division) {
@@ -59,6 +102,12 @@ export function ChatPage({
         setActiveGroupId(myDivGroup.id);
       }
     }
+
+    return () => {
+      isMounted = false;
+      unsubMsgs();
+      unsubGroups();
+    };
   }, [members, currentUser]);
 
   const activeGroup = useMemo(() => {
@@ -137,6 +186,7 @@ export function ChatPage({
     const updatedMessages = [...messages, newMsg];
     setMessages(updatedMessages);
     saveStoredChatMessages(updatedMessages);
+    sendChatMessage(newMsg).catch(() => {});
 
     setNewMessageText("");
     setSelectedTag(null);
@@ -149,6 +199,7 @@ export function ChatPage({
       if (m.id !== msgId) return m;
       const nextPin = !m.isPinned;
       showToast(nextPin ? "📌 ปักหมุดข้อความเรียบร้อย" : "ปลดหมุดข้อความเรียบร้อย");
+      updateChatMessagePin(msgId, nextPin).catch(() => {});
       return { ...m, isPinned: nextPin };
     });
     setMessages(updated);
@@ -160,6 +211,7 @@ export function ChatPage({
     const updatedGroups = [...groups, newGroup];
     setGroups(updatedGroups);
     saveStoredChatGroups(updatedGroups);
+    saveChatGroup(newGroup).catch(() => {});
     setActiveGroupId(newGroup.id);
     showToast(`🎉 สร้างกลุ่มแชท "${newGroup.name}" สำเร็จ!`);
   };
@@ -172,6 +224,10 @@ export function ChatPage({
     });
     setGroups(updatedGroups);
     saveStoredChatGroups(updatedGroups);
+    const targetGroup = groups.find((g) => g.id === groupId);
+    if (targetGroup) {
+      saveChatGroup({ ...targetGroup, memberIds: newMemberIds }).catch(() => {});
+    }
   };
 
   const QUICK_TAGS = ["ด่วนที่สุด", "หนังสือเวียน", "รายงานการประชุม", "ขอความอนุเคราะห์"];

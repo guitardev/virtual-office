@@ -10,9 +10,14 @@ import {
   AccessRequestStatus,
   Vehicle,
   CarBookingRequest,
+  ChatMessage,
+  ChatGroup,
+  TaskItem,
+  MeetingItem,
 } from "./types";
-import { INITIAL_MEMBERS, INITIAL_SYSTEM_MODULES, INITIAL_ACCESS_REQUESTS } from "./rbac";
+import { INITIAL_MEMBERS, INITIAL_SYSTEM_MODULES, INITIAL_ACCESS_REQUESTS, INITIAL_AUDIT_LOGS } from "./rbac";
 import { INITIAL_VEHICLES, INITIAL_BOOKING_REQUESTS } from "./carbooking-data";
+import { DEFAULT_CHAT_GROUPS, INITIAL_CHAT_MESSAGES } from "./chat-data";
 
 // Environment variables from Vercel Marketplace Supabase Integration
 const supabaseUrl =
@@ -631,6 +636,325 @@ export function subscribeToCarBookings(callback: (bookings: CarBookingRequest[])
   return () => {
     supabase.removeChannel(channel);
   };
+}
+
+export async function deleteVehicle(id: string): Promise<boolean> {
+  if (!supabase) return true;
+  try {
+    const { error } = await supabase.from("vehicles").delete().eq("id", id);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteCarBooking(id: string): Promise<boolean> {
+  if (!supabase) return true;
+  try {
+    const { error } = await supabase.from("car_bookings").delete().eq("id", id);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+// ==========================================
+// CHAT CHANNELS & MESSAGES (Government Chat Hub)
+// ==========================================
+
+export function mapRowToChatGroup(row: any): ChatGroup {
+  return {
+    id: row.id,
+    name: row.name,
+    division: row.division || undefined,
+    description: row.description || "",
+    icon: row.icon || "💬",
+    type: row.type || "division",
+    isOfficial: Boolean(row.is_official),
+    memberIds: Array.isArray(row.member_ids) ? row.member_ids : [],
+    pinnedMessageIds: Array.isArray(row.pinned_message_ids) ? row.pinned_message_ids : [],
+    createdAt: row.created_at ? new Date(row.created_at).toLocaleDateString("th-TH") : "วันนี้",
+    createdBy: row.created_by || undefined,
+  };
+}
+
+export function mapChatGroupToRow(g: ChatGroup): any {
+  return {
+    id: g.id,
+    name: g.name,
+    division: g.division || null,
+    description: g.description,
+    icon: g.icon,
+    type: g.type,
+    is_official: g.isOfficial,
+    member_ids: g.memberIds,
+    pinned_message_ids: g.pinnedMessageIds || [],
+    created_by: g.createdBy || null,
+  };
+}
+
+export function mapRowToChatMessage(row: any): ChatMessage {
+  const ts = row.created_at
+    ? new Date(row.created_at).toLocaleTimeString("th-TH", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }) + " น."
+    : "เมื่อสักครู่";
+
+  return {
+    id: row.id,
+    groupId: row.channel_id,
+    senderId: row.sender_id || "",
+    senderName: row.sender_name || "ผู้ใช้งาน",
+    senderAvatar: row.sender_avatar || undefined,
+    senderRole: (row.sender_role as Role) || "member",
+    senderPosition: row.sender_position || "เจ้าหน้าที่",
+    senderDivision: row.sender_division || "สำนักงาน พมจ.",
+    text: row.content || "",
+    timestamp: ts,
+    tag: row.tag || undefined,
+    attachmentName: row.attachment_name || undefined,
+    attachmentType: row.attachment_type || undefined,
+    attachmentSize: row.attachment_size || undefined,
+    isPinned: Boolean(row.is_pinned),
+  };
+}
+
+export function mapChatMessageToRow(m: ChatMessage): any {
+  return {
+    id: m.id,
+    channel_id: m.groupId,
+    sender_id: m.senderId || null,
+    sender_name: m.senderName,
+    sender_avatar: m.senderAvatar || null,
+    sender_role: m.senderRole || "member",
+    sender_position: m.senderPosition || null,
+    sender_division: m.senderDivision || null,
+    content: m.text,
+    tag: m.tag || null,
+    attachment_name: m.attachmentName || null,
+    attachment_type: m.attachmentType || null,
+    attachment_size: m.attachmentSize || null,
+    is_pinned: Boolean(m.isPinned),
+  };
+}
+
+export async function fetchChatGroups(): Promise<ChatGroup[]> {
+  if (!supabase) return DEFAULT_CHAT_GROUPS;
+  try {
+    const { data, error } = await supabase
+      .from("chat_channels")
+      .select("*")
+      .order("created_at", { ascending: true });
+    if (error || !data || data.length === 0) return DEFAULT_CHAT_GROUPS;
+    return data.map(mapRowToChatGroup);
+  } catch {
+    return DEFAULT_CHAT_GROUPS;
+  }
+}
+
+export async function saveChatGroup(group: ChatGroup): Promise<boolean> {
+  if (!supabase) return true;
+  try {
+    const row = mapChatGroupToRow(group);
+    const { error } = await supabase.from("chat_channels").upsert(row);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function fetchChatMessages(): Promise<ChatMessage[]> {
+  if (!supabase) return INITIAL_CHAT_MESSAGES;
+  try {
+    const { data, error } = await supabase
+      .from("messages")
+      .select("*")
+      .order("created_at", { ascending: true });
+    if (error || !data || data.length === 0) return INITIAL_CHAT_MESSAGES;
+    return data.map(mapRowToChatMessage);
+  } catch {
+    return INITIAL_CHAT_MESSAGES;
+  }
+}
+
+export async function sendChatMessage(msg: ChatMessage): Promise<boolean> {
+  if (!supabase) return true;
+  try {
+    const row = mapChatMessageToRow(msg);
+    const { error } = await supabase.from("messages").upsert(row);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function updateChatMessagePin(msgId: string, isPinned: boolean): Promise<boolean> {
+  if (!supabase) return true;
+  try {
+    const { error } = await supabase
+      .from("messages")
+      .update({ is_pinned: isPinned })
+      .eq("id", msgId);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export function subscribeToChatMessages(callback: () => void) {
+  if (!supabase) return () => {};
+  const channel = supabase
+    .channel("public:messages")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "messages" },
+      () => {
+        callback();
+      }
+    )
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+export function subscribeToChatGroups(callback: () => void) {
+  if (!supabase) return () => {};
+  const channel = supabase
+    .channel("public:chat_channels")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "chat_channels" },
+      () => {
+        callback();
+      }
+    )
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+// ==========================================
+// AUDIT LOGS (Activity & Governance Logs)
+// ==========================================
+
+export function mapRowToAuditLog(row: any): AuditLog {
+  const ts = row.timestamp
+    ? new Date(row.timestamp).toLocaleDateString("th-TH", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }) + " น."
+    : "เมื่อสักครู่";
+
+  return {
+    id: String(row.id),
+    timestamp: ts,
+    actor: row.actor_name || row.actor || "ผู้ใช้งาน",
+    action: row.action,
+    target: row.target,
+    status: row.status === "denied" ? "denied" : "success",
+  };
+}
+
+export async function fetchAuditLogs(): Promise<AuditLog[]> {
+  if (!supabase) return INITIAL_AUDIT_LOGS;
+  try {
+    const { data, error } = await supabase
+      .from("audit_logs")
+      .select("*")
+      .order("timestamp", { ascending: false })
+      .limit(100);
+    if (error || !data || data.length === 0) return INITIAL_AUDIT_LOGS;
+    return data.map(mapRowToAuditLog);
+  } catch {
+    return INITIAL_AUDIT_LOGS;
+  }
+}
+
+export async function saveAuditLog(log: AuditLog): Promise<boolean> {
+  if (!supabase) return true;
+  try {
+    const row = {
+      actor_name: log.actor,
+      action: log.action,
+      target: log.target,
+      status: log.status,
+    };
+    const { error } = await supabase.from("audit_logs").insert(row);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export function subscribeToAuditLogs(callback: () => void) {
+  if (!supabase) return () => {};
+  const channel = supabase
+    .channel("public:audit_logs")
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "audit_logs" },
+      () => {
+        callback();
+      }
+    )
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+// ==========================================
+// TASKS & MEETINGS (Clean Zero-Demo Defaults)
+// ==========================================
+
+export async function fetchTasks(): Promise<TaskItem[]> {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from("tasks")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (error || !data || data.length === 0) return [];
+    return data.map((row: any, idx: number) => ({
+      id: idx + 1,
+      title: row.title,
+      dept: row.description || "ทั่วไป",
+      due: row.due_date || "วันนี้",
+      priority: (row.priority as "high" | "medium" | "low") || "medium",
+      status: row.status === "done" ? "done" : row.status === "in_progress" ? "in_progress" : "todo",
+      assignee: row.assignee_id || "ผู้รับผิดชอบ",
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchMeetings(): Promise<MeetingItem[]> {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from("meetings")
+      .select("*")
+      .order("start_time", { ascending: true });
+    if (error || !data || data.length === 0) return [];
+    return data.map((row: any, idx: number) => ({
+      id: idx + 1,
+      title: row.title,
+      dateStr: row.start_time ? new Date(row.start_time).toLocaleDateString("th-TH") : "วันนี้",
+      timeStr: row.start_time && row.end_time ? `${new Date(row.start_time).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} - ${new Date(row.end_time).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.` : "10:00 - 11:00 น.",
+      location: row.location || "ห้องประชุมออนไลน์",
+      type: row.meeting_link ? "online" : "onsite",
+      attendees: [],
+    }));
+  } catch {
+    return [];
+  }
 }
 
 
