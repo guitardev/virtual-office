@@ -21,8 +21,10 @@ export default {
         "sidebar-text": "#9CA3AF",
       },
       fontFamily: {
-        heading: ["Kanit", "Sarabun", "sans-serif"],
-        body: ["Sarabun", "Kanit", "sans-serif"],
+        sans: ["var(--font-body)", "Sarabun", "Kanit", "sans-serif"],
+        body: ["var(--font-body)", "Sarabun", "Kanit", "sans-serif"],
+        heading: ["var(--font-heading)", "Kanit", "Sarabun", "sans-serif"],
+        serif: ["var(--font-body)", "Sarabun", "sans-serif"],
       },
     },
   },

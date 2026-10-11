@@ -271,10 +271,10 @@ export function VehicleFormModal({
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value as Vehicle["category"])}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-teal-500 bg-white"
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-teal-500 bg-white font-body"
               >
                 {CATEGORY_OPTIONS.map((cat) => (
-                  <option key={cat} value={cat}>
+                  <option key={cat} value={cat} className="font-body">
                     {cat}
                   </option>
                 ))}
@@ -291,7 +291,7 @@ export function VehicleFormModal({
                 max={50}
                 value={capacity}
                 onChange={(e) => setCapacity(Number(e.target.value))}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-body"
               />
             </div>
 
@@ -302,18 +302,18 @@ export function VehicleFormModal({
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value as VehicleStatus)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-teal-500 bg-white font-medium"
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-teal-500 bg-white font-medium font-body"
               >
-                <option value="available">🟢 พร้อมใช้งาน (Available)</option>
-                <option value="in_use">🔵 ติดภารกิจ (In Use)</option>
-                <option value="maintenance">🔴 ส่งซ่อมบำรุง (Maintenance)</option>
+                <option value="available" className="font-body">🟢 พร้อมใช้งาน (Available)</option>
+                <option value="in_use" className="font-body">🔵 ติดภารกิจ (In Use)</option>
+                <option value="maintenance" className="font-body">🔴 ส่งซ่อมบำรุง (Maintenance)</option>
               </select>
             </div>
           </div>
 
           {/* Odometer & Realistic Fuel Gauge Section */}
           <div className="p-4 bg-teal-50/50 border border-teal-100 rounded-2xl space-y-4">
-            <h3 className="text-xs font-bold text-teal-900 uppercase tracking-wide flex items-center gap-1.5">
+            <h3 className="text-xs font-bold text-teal-900 uppercase tracking-wide flex items-center gap-1.5 font-heading">
               <span>⛽</span>
               <span>เลขไมล์สะสม & เกจระดับน้ำมันเสมือนจริง (Instrument Cluster)</span>
             </h3>
@@ -343,10 +343,10 @@ export function VehicleFormModal({
                   <select
                     value={fuelLevel}
                     onChange={(e) => setFuelLevel(e.target.value as FuelLevel)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-teal-500 bg-white font-bold text-teal-800"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-teal-500 bg-white font-bold text-teal-800 font-body"
                   >
                     {FUEL_LEVEL_OPTIONS.map((lvl) => (
-                      <option key={lvl} value={lvl}>
+                      <option key={lvl} value={lvl} className="font-body">
                         {lvl}
                       </option>
                     ))}
@@ -378,10 +378,10 @@ export function VehicleFormModal({
               <select
                 value={fuelType}
                 onChange={(e) => setFuelType(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-teal-500 bg-white"
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-teal-500 bg-white font-body"
               >
                 {FUEL_TYPE_OPTIONS.map((ft) => (
-                  <option key={ft} value={ft}>
+                  <option key={ft} value={ft} className="font-body">
                     {ft}
                   </option>
                 ))}
@@ -395,12 +395,12 @@ export function VehicleFormModal({
               <select
                 value={driverName}
                 onChange={(e) => setDriverName(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-teal-500 bg-white"
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-teal-500 bg-white font-body"
               >
-                <option value="พนักงานขับรถเวรส่วนกลาง">พนักงานขับรถเวรส่วนกลาง</option>
-                <option value="ขับขี่เอง / พนักงานขับรถเวร">ขับขี่เอง / พนักงานขับรถเวร</option>
+                <option value="พนักงานขับรถเวรส่วนกลาง" className="font-body">พนักงานขับรถเวรส่วนกลาง</option>
+                <option value="ขับขี่เอง / พนักงานขับรถเวร" className="font-body">ขับขี่เอง / พนักงานขับรถเวร</option>
                 {GOVERNMENT_DRIVERS.map((d) => (
-                  <option key={d.id} value={d.name}>
+                  <option key={d.id} value={d.name} className="font-body">
                     {d.name} ({d.license})
                   </option>
                 ))}

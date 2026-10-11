@@ -99,7 +99,7 @@ export function NotificationLogsModal({
                     </div>
 
                     {/* Simulated Message Bubble */}
-                    <div className="p-3 bg-slate-50 rounded-xl text-xs text-slate-800 border border-slate-200/80 font-sans leading-relaxed">
+                    <div className="p-3 bg-slate-50 rounded-xl text-xs text-slate-800 border border-slate-200/80 font-body leading-relaxed">
                       {n.message}
                     </div>
 

@@ -209,10 +209,10 @@ export function ReturnVehicleModal({
                   <select
                     value={endFuelLevel}
                     onChange={(e) => setEndFuelLevel(e.target.value as FuelLevel)}
-                    className="w-full px-3 py-2 bg-white border border-amber-300 rounded-xl font-bold text-teal-900 focus:ring-2 focus:ring-amber-500/20"
+                    className="w-full px-3 py-2 bg-white border border-amber-300 rounded-xl font-bold text-teal-900 focus:ring-2 focus:ring-amber-500/20 font-body"
                   >
                     {FUEL_OPTIONS.map((opt) => (
-                      <option key={opt} value={opt}>
+                      <option key={opt} value={opt} className="font-body">
                         {opt}
                       </option>
                     ))}
@@ -286,11 +286,11 @@ export function ReturnVehicleModal({
                 <select
                   value={cleanliness}
                   onChange={(e) => setCleanliness(e.target.value as any)}
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-800"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-800 font-body"
                 >
-                  <option value="สะอาดเรียบร้อย">✨ สะอาดเรียบร้อย</option>
-                  <option value="ต้องล้างทำความสะอาด">🧼 ต้องล้างทำความสะอาด</option>
-                  <option value="สกปรกมาก">⚠️ สกปรกมาก (ลุยโคลน/ฝุ่นหนา)</option>
+                  <option value="สะอาดเรียบร้อย" className="font-body">✨ สะอาดเรียบร้อย</option>
+                  <option value="ต้องล้างทำความสะอาด" className="font-body">🧼 ต้องล้างทำความสะอาด</option>
+                  <option value="สกปรกมาก" className="font-body">⚠️ สกปรกมาก (ลุยโคลน/ฝุ่นหนา)</option>
                 </select>
               </div>
 
@@ -299,11 +299,11 @@ export function ReturnVehicleModal({
                 <select
                   value={bodyCondition}
                   onChange={(e) => setBodyCondition(e.target.value as any)}
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-800"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-800 font-body"
                 >
-                  <option value="ปกติสมบูรณ์ดี">✓ ปกติสมบูรณ์ดี ไม่มีรอยใหม่</option>
-                  <option value="มีรอยขูดขีดใหม่">⚠️ มีรอยขูดขีดใหม่เล็กน้อย</option>
-                  <option value="มีความเสียหาย">🛑 มีความเสียหาย/เฉี่ยวชน</option>
+                  <option value="ปกติสมบูรณ์ดี" className="font-body">✓ ปกติสมบูรณ์ดี ไม่มีรอยใหม่</option>
+                  <option value="มีรอยขูดขีดใหม่" className="font-body">⚠️ มีรอยขูดขีดใหม่เล็กน้อย</option>
+                  <option value="มีความเสียหาย" className="font-body">🛑 มีความเสียหาย/เฉี่ยวชน</option>
                 </select>
               </div>
 
@@ -312,10 +312,10 @@ export function ReturnVehicleModal({
                 <select
                   value={engineCondition}
                   onChange={(e) => setEngineCondition(e.target.value as any)}
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-800"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-800 font-body"
                 >
-                  <option value="ปกติสมบูรณ์">✓ เครื่องยนต์และการขับขี่ปกติ</option>
-                  <option value="พบอาการผิดปกติ">⚠️ พบเสียงดัง/ช่วงล่างผิดปกติ</option>
+                  <option value="ปกติสมบูรณ์" className="font-body">✓ เครื่องยนต์และการขับขี่ปกติ</option>
+                  <option value="พบอาการผิดปกติ" className="font-body">⚠️ พบเสียงดัง/ช่วงล่างผิดปกติ</option>
                 </select>
               </div>
 
@@ -324,10 +324,10 @@ export function ReturnVehicleModal({
                 <select
                   value={airConditioner}
                   onChange={(e) => setAirConditioner(e.target.value as any)}
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-800"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-800 font-body"
                 >
-                  <option value="แอร์เย็นปกติ">❄️ แอร์เย็นปกติ กลิ่นปกติ</option>
-                  <option value="แอร์ไม่ค่อยเย็น/มีกลิ่น">⚠️ แอร์ไม่ค่อยเย็น/มีกลิ่นอับ</option>
+                  <option value="แอร์เย็นปกติ" className="font-body">❄️ แอร์เย็นปกติ กลิ่นปกติ</option>
+                  <option value="แอร์ไม่ค่อยเย็น/มีกลิ่น" className="font-body">⚠️ แอร์ไม่ค่อยเย็น/มีกลิ่นอับ</option>
                 </select>
               </div>
             </div>
@@ -342,7 +342,7 @@ export function ReturnVehicleModal({
                 value={issuesFound}
                 onChange={(e) => setIssuesFound(e.target.value)}
                 placeholder="ระบุข้อบกพร่องที่พบ เช่น ยางลมหน้าซ้ายอ่อน หรือ ไม่มีข้อบกพร่อง..."
-                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 resize-none focus:ring-2 focus:ring-indigo-500/20"
+                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 resize-none focus:ring-2 focus:ring-indigo-500/20 font-body"
               />
             </div>
           </div>
@@ -355,7 +355,7 @@ export function ReturnVehicleModal({
                 type="text"
                 readOnly
                 value={`${currentUser.name} (${currentUser.position})`}
-                className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-slate-700 font-medium"
+                className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-slate-700 font-medium font-body"
               />
             </div>
 
@@ -366,10 +366,10 @@ export function ReturnVehicleModal({
               <select
                 value={inspectorId}
                 onChange={(e) => setInspectorId(e.target.value)}
-                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-800 font-semibold"
+                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-800 font-semibold font-body"
               >
                 {inspectors.map((ins) => (
-                  <option key={ins.id} value={ins.id}>
+                  <option key={ins.id} value={ins.id} className="font-body">
                     {ins.name} ({ins.position})
                   </option>
                 ))}

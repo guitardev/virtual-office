@@ -257,7 +257,7 @@ export function RealisticFuelGauge({
               }`}
             />
             <span className="text-xs font-black tracking-tight">{percent}%</span>
-            <span className="text-[10px] text-slate-400 font-sans font-medium">
+            <span className="text-[10px] text-slate-400 font-body font-medium">
               ({getLevelText()})
             </span>
           </div>

@@ -128,7 +128,7 @@ export function VehicleDetailModal({
                 </div>
                 <div className="text-2xl font-black font-mono text-teal-900 mt-2">
                   {(vehicle.mileage || 0).toLocaleString("th-TH")}
-                  <span className="text-xs font-normal text-slate-500 ml-1.5 font-sans">
+                  <span className="text-xs font-normal text-slate-500 ml-1.5 font-body">
                     กิโลเมตร
                   </span>
                 </div>

@@ -23,7 +23,7 @@ export const metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="th" className={`${kanit.variable} ${sarabun.variable}`}>
-      <body className="min-h-screen bg-bg text-text antialiased">{children}</body>
+      <body className={`${sarabun.className} min-h-screen bg-bg text-text antialiased font-body`}>{children}</body>
     </html>
   );
 }

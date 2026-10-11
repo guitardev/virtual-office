@@ -15,8 +15,10 @@
   --color-border: #E2E8F0;
   --color-sidebar: #0F172A;
   --color-sidebar-text: #94A3B8;
+  --font-sans: var(--font-body), 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif;
   --font-heading: var(--font-heading), 'Kanit', sans-serif;
-  --font-body: var(--font-body), 'Sarabun', sans-serif;
+  --font-body: var(--font-body), 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif;
+  --font-serif: var(--font-body), 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif;
 }
 
 @layer base {
@@ -37,7 +39,7 @@
   }
 
   html, body {
-    font-family: var(--font-body), 'Sarabun', sans-serif;
+    font-family: var(--font-body), 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif;
     background-color: var(--bg);
     color: var(--text);
     line-height: 1.6;
@@ -49,12 +51,29 @@
     font-family: var(--font-heading), 'Kanit', sans-serif;
   }
 
-  button {
-    font-family: inherit;
+  /* Universal font inheritance & enforcement for form controls, buttons & dropdown lists */
+  button, input, textarea, select, option, optgroup {
+    font-family: var(--font-body), 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif !important;
   }
 
-  input, textarea, select {
-    font-family: inherit;
+  /* Explicit dropdown list and popup options styling */
+  select {
+    font-family: var(--font-body), 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif !important;
+  }
+
+  select option, select optgroup {
+    font-family: var(--font-body), 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif !important;
+    background-color: #FFFFFF;
+    color: #0F172A;
+  }
+
+  @media print {
+    *, body, html {
+      font-family: 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif !important;
+    }
+    h1, h2, h3, h4, h5, h6, .font-heading {
+      font-family: 'Kanit', 'Sarabun', sans-serif !important;
+    }
   }
 }
 

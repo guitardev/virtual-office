@@ -35,8 +35,8 @@ html, body {
 
 a { text-decoration: none; color: inherit; }
 button { cursor: pointer; border: none; background: none; font-family: inherit; }
-input, textarea, select {
-  font-family: var(--font-body);
+input, textarea, select, option, optgroup {
+  font-family: var(--font-body) !important;
   font-size: 14px;
   outline: none;
 }

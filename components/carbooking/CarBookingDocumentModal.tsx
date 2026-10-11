@@ -66,7 +66,7 @@ export function CarBookingDocumentModal({
         </div>
 
         {/* Official Document Sheet - Scrollable */}
-        <div className="p-6 sm:p-10 text-slate-900 font-sans print:p-6 print:text-black leading-relaxed overflow-y-auto flex-1 min-h-0 print:overflow-visible print:h-auto">
+        <div className="p-6 sm:p-10 text-slate-900 font-body print:p-6 print:text-black leading-relaxed overflow-y-auto flex-1 min-h-0 print:overflow-visible print:h-auto">
           {/* Garuda / Header */}
           <div className="text-center space-y-1 mb-8">
             <div className="text-4xl select-none mb-1">🦅</div>
@@ -188,7 +188,7 @@ export function CarBookingDocumentModal({
                 <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
                   1. ผู้ขออนุญาต
                 </div>
-                <div className="h-12 flex items-center justify-center italic text-indigo-700 font-serif text-sm">
+                <div className="h-12 flex items-center justify-center italic text-indigo-700 font-body text-sm">
                   (ลงชื่ออิเล็กทรอนิกส์)
                 </div>
               </div>

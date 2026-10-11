@@ -54,7 +54,7 @@ export function VehicleReturnDocumentModal({
         </div>
 
         {/* Official Document Sheet - Scrollable */}
-        <div className="p-6 sm:p-10 text-slate-900 font-sans print:p-6 print:text-black leading-relaxed overflow-y-auto flex-1 min-h-0 print:overflow-visible print:h-auto">
+        <div className="p-6 sm:p-10 text-slate-900 font-body print:p-6 print:text-black leading-relaxed overflow-y-auto flex-1 min-h-0 print:overflow-visible print:h-auto">
           {/* Garuda / Header */}
           <div className="text-center space-y-1 mb-6">
             <div className="text-4xl select-none mb-1">🦅</div>
@@ -177,7 +177,7 @@ export function VehicleReturnDocumentModal({
                 <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
                   ผู้ส่งคืนรถยนต์ราชการ
                 </div>
-                <div className="h-10 flex items-center justify-center italic text-teal-800 font-serif text-sm">
+                <div className="h-10 flex items-center justify-center italic text-teal-800 font-body text-sm">
                   (ลงชื่ออิเล็กทรอนิกส์)
                 </div>
               </div>
@@ -196,7 +196,7 @@ export function VehicleReturnDocumentModal({
                 <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
                   เจ้าหน้าที่ผู้ตรวจรับรถยนต์
                 </div>
-                <div className="h-10 flex items-center justify-center italic text-teal-800 font-serif text-sm">
+                <div className="h-10 flex items-center justify-center italic text-teal-800 font-body text-sm">
                   (ลงชื่ออิเล็กทรอนิกส์)
                 </div>
               </div>

@@ -212,10 +212,10 @@ export function ReviewBookingModal({
                       <select
                         value={assignedDriver}
                         onChange={(e) => setAssignedDriver(e.target.value)}
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:bg-white focus:border-indigo-500 transition-colors"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:bg-white focus:border-indigo-500 transition-colors font-body"
                       >
                         {GOVERNMENT_DRIVERS.map((d) => (
-                          <option key={d.id} value={d.name}>
+                          <option key={d.id} value={d.name} className="font-body py-1">
                             {d.name} ({d.phone}) — {d.status}
                           </option>
                         ))}
