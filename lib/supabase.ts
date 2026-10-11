@@ -578,16 +578,16 @@ export async function saveVehicle(vehicle: Vehicle): Promise<boolean> {
 }
 
 export async function fetchCarBookings(): Promise<CarBookingRequest[]> {
-  if (!supabase) return INITIAL_BOOKING_REQUESTS;
+  if (!supabase) return [];
   try {
     const { data, error } = await supabase
       .from("car_bookings")
       .select("*")
       .order("created_at", { ascending: false });
-    if (error || !data) return INITIAL_BOOKING_REQUESTS;
+    if (error || !data) return [];
     return data.map(mapRowToCarBooking);
   } catch {
-    return INITIAL_BOOKING_REQUESTS;
+    return [];
   }
 }
 
@@ -921,8 +921,37 @@ export function subscribeToAuditLogs(callback: () => void) {
 }
 
 // ==========================================
-// TASKS & MEETINGS (Clean Zero-Demo Defaults)
+// TASKS & MEETINGS (Live Supabase Integration)
 // ==========================================
+
+export function mapRowToTask(row: any): TaskItem {
+  return {
+    id: row.id,
+    title: row.title,
+    dept: row.description || "ฝ่ายบริหารทั่วไป",
+    due: row.due_date ? new Date(row.due_date).toLocaleDateString("th-TH") : "วันนี้",
+    priority: (row.priority as "high" | "medium" | "low") || "medium",
+    status: row.status === "done" ? "done" : row.status === "in_progress" ? "in_progress" : "todo",
+    assignee: row.assignee_id || "ผู้รับผิดชอบ",
+  };
+}
+
+export function mapTaskToRow(task: TaskItem): any {
+  const isUuid =
+    typeof task.id === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(task.id);
+  const row: any = {
+    title: task.title,
+    description: task.dept,
+    status: task.status,
+    priority: task.priority,
+    assignee_id: task.assignee || null,
+  };
+  if (isUuid) {
+    row.id = task.id;
+  }
+  return row;
+}
 
 export async function fetchTasks(): Promise<TaskItem[]> {
   if (!supabase) return [];
@@ -931,19 +960,76 @@ export async function fetchTasks(): Promise<TaskItem[]> {
       .from("tasks")
       .select("*")
       .order("created_at", { ascending: false });
-    if (error || !data || data.length === 0) return [];
-    return data.map((row: any, idx: number) => ({
-      id: idx + 1,
-      title: row.title,
-      dept: row.description || "ทั่วไป",
-      due: row.due_date || "วันนี้",
-      priority: (row.priority as "high" | "medium" | "low") || "medium",
-      status: row.status === "done" ? "done" : row.status === "in_progress" ? "in_progress" : "todo",
-      assignee: row.assignee_id || "ผู้รับผิดชอบ",
-    }));
+    if (error || !data) return [];
+    return data.map(mapRowToTask);
   } catch {
     return [];
   }
+}
+
+export async function saveTask(task: TaskItem): Promise<boolean> {
+  if (!supabase) return true;
+  try {
+    const row = mapTaskToRow(task);
+    const { error } = await supabase.from("tasks").upsert(row);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteTask(id: string | number): Promise<boolean> {
+  if (!supabase) return true;
+  try {
+    const { error } = await supabase.from("tasks").delete().eq("id", id);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export function subscribeToTasks(callback: (tasks: TaskItem[]) => void) {
+  if (!supabase) return () => {};
+  const channel = supabase
+    .channel("public:tasks")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "tasks" },
+      async () => {
+        const updated = await fetchTasks();
+        callback(updated);
+      }
+    )
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+export function mapRowToMeeting(row: any): MeetingItem {
+  const start = row.start_time ? new Date(row.start_time) : new Date();
+  const end = row.end_time ? new Date(row.end_time) : new Date(Date.now() + 3600000);
+
+  const dateStr = start.toLocaleDateString("th-TH", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+  const timeStr = `${start.toLocaleTimeString("th-TH", {
+    hour: "2-digit",
+    minute: "2-digit",
+  })} - ${end.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.`;
+
+  return {
+    id: row.id,
+    title: row.title,
+    dateStr,
+    timeStr,
+    location: row.location || "ห้องประชุมออนไลน์",
+    type: row.meeting_link ? "online" : "onsite",
+    attendees: ["ข้าราชการและเจ้าหน้าที่ พมจ."],
+    meetingLink: row.meeting_link || undefined,
+  };
 }
 
 export async function fetchMeetings(): Promise<MeetingItem[]> {
@@ -953,19 +1039,64 @@ export async function fetchMeetings(): Promise<MeetingItem[]> {
       .from("meetings")
       .select("*")
       .order("start_time", { ascending: true });
-    if (error || !data || data.length === 0) return [];
-    return data.map((row: any, idx: number) => ({
-      id: idx + 1,
-      title: row.title,
-      dateStr: row.start_time ? new Date(row.start_time).toLocaleDateString("th-TH") : "วันนี้",
-      timeStr: row.start_time && row.end_time ? `${new Date(row.start_time).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} - ${new Date(row.end_time).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.` : "10:00 - 11:00 น.",
-      location: row.location || "ห้องประชุมออนไลน์",
-      type: row.meeting_link ? "online" : "onsite",
-      attendees: [],
-    }));
+    if (error || !data) return [];
+    return data.map(mapRowToMeeting);
   } catch {
     return [];
   }
+}
+
+export async function saveMeeting(meeting: MeetingItem): Promise<boolean> {
+  if (!supabase) return true;
+  try {
+    const isUuid =
+      typeof meeting.id === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(meeting.id);
+    const now = new Date();
+    const oneHourLater = new Date(Date.now() + 3600000);
+    const row: any = {
+      title: meeting.title,
+      start_time: now.toISOString(),
+      end_time: oneHourLater.toISOString(),
+      location: meeting.location || "ห้องประชุมสำนักงาน พมจ.",
+      meeting_link:
+        meeting.meetingLink ||
+        (meeting.type === "online" ? "https://meet.google.com/kpp-msoc" : null),
+    };
+    if (isUuid) row.id = meeting.id;
+    const { error } = await supabase.from("meetings").upsert(row);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteMeeting(id: string | number): Promise<boolean> {
+  if (!supabase) return true;
+  try {
+    const { error } = await supabase.from("meetings").delete().eq("id", id);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export function subscribeToMeetings(callback: (meetings: MeetingItem[]) => void) {
+  if (!supabase) return () => {};
+  const channel = supabase
+    .channel("public:meetings")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "meetings" },
+      async () => {
+        const updated = await fetchMeetings();
+        callback(updated);
+      }
+    )
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 

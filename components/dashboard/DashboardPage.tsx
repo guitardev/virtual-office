@@ -12,7 +12,7 @@ interface DashboardPageProps {
   tasks: TaskItem[];
   meetings: MeetingItem[];
   members: Member[];
-  toggleTaskStatus: (id: number) => void;
+  toggleTaskStatus: (id: string | number) => void;
   showToast: (msg: string) => void;
   rolePermissions: Record<Role, Record<ModuleId, boolean>>;
 }

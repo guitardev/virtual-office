@@ -160,7 +160,7 @@ export interface File {
 }
 
 export interface TaskItem {
-  id: number;
+  id: string | number;
   title: string;
   dept: string;
   due: string;
@@ -170,13 +170,14 @@ export interface TaskItem {
 }
 
 export interface MeetingItem {
-  id: number;
+  id: string | number;
   title: string;
   dateStr: string;
   timeStr: string;
   location: string;
   type: "online" | "onsite";
   attendees: string[];
+  meetingLink?: string;
 }
 
 export type VehicleStatus = "available" | "in_use" | "maintenance";

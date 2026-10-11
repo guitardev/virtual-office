@@ -11,6 +11,7 @@ import {
   AccessRequest,
   TaskItem,
   MeetingItem,
+  CarBookingRequest,
 } from "@/lib/types";
 import {
   ROLE_CONFIG,
@@ -55,7 +56,13 @@ import {
   saveAuditLog,
   subscribeToAuditLogs,
   fetchTasks,
+  saveTask,
+  subscribeToTasks,
   fetchMeetings,
+  saveMeeting,
+  subscribeToMeetings,
+  fetchCarBookings,
+  subscribeToCarBookings,
 } from "@/lib/supabase";
 
 interface NavItem {
@@ -99,6 +106,9 @@ export default function OmniOfficeApp() {
   const [systemModules, setSystemModules] = useState<Record<ModuleId, SystemModule>>(INITIAL_SYSTEM_MODULES);
   const [members, setMembers] = useState<Member[]>(INITIAL_MEMBERS);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(INITIAL_AUDIT_LOGS);
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [meetings, setMeetings] = useState<MeetingItem[]>([]);
+  const [carBookings, setCarBookings] = useState<CarBookingRequest[]>([]);
   const [adminTab, setAdminTab] = useState<"members" | "requests" | "matrix" | "audit">("members");
   const [memberSearch, setMemberSearch] = useState("");
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
@@ -396,14 +406,20 @@ export default function OmniOfficeApp() {
       });
 
       fetchTasks().then((liveTasks) => {
-        if (liveTasks && liveTasks.length > 0) {
+        if (liveTasks) {
           setTasks(liveTasks);
         }
       });
 
       fetchMeetings().then((liveMeetings) => {
-        if (liveMeetings && liveMeetings.length > 0) {
+        if (liveMeetings) {
           setMeetings(liveMeetings);
+        }
+      });
+
+      fetchCarBookings().then((liveBookings) => {
+        if (liveBookings) {
+          setCarBookings(liveBookings);
         }
       });
 
@@ -449,10 +465,25 @@ export default function OmniOfficeApp() {
         });
       });
 
+      const unsubscribeTasks = subscribeToTasks((updatedTasks) => {
+        setTasks(updatedTasks);
+      });
+
+      const unsubscribeMeetings = subscribeToMeetings((updatedMeetings) => {
+        setMeetings(updatedMeetings);
+      });
+
+      const unsubscribeCarBookings = subscribeToCarBookings((updatedBookings) => {
+        setCarBookings(updatedBookings);
+      });
+
       return () => {
         unsubscribeMembers();
         unsubscribeRequests();
         unsubscribeAudit();
+        unsubscribeTasks();
+        unsubscribeMeetings();
+        unsubscribeCarBookings();
         authSub?.unsubscribe?.();
       };
     }
@@ -1095,34 +1126,23 @@ export default function OmniOfficeApp() {
     showToast("✅ บันทึกข้อมูลส่วนบุคคลเรียบร้อยแล้ว");
   };
 
-  // Tasks state (Zero Demo - live from Supabase)
-  const [tasks, setTasks] = useState<TaskItem[]>([]);
-
-  // Meetings state (Zero Demo - live from Supabase)
-  const [meetings, setMeetings] = useState<MeetingItem[]>([]);
-
-  // Dynamic navigation badges calculated from real state (System Analysis Item 5.1)
+  // Dynamic navigation badges calculated from real live Supabase state
   const navBadges: Record<ModuleId, number> = useMemo(() => {
     const taskCount = tasks.filter((t) => t.status !== "done").length;
     const meetingCount = meetings.length;
     const pendingReqCount = accessRequests.filter((r) => r.status === "pending").length;
 
     let carCount = 0;
-    try {
-      const stored = loadStoredBookings();
-      if (currentUserRole === "admin") {
-        carCount = stored.filter((b) => b.status === "endorsed").length;
-      } else if (currentUserRole === "manager") {
-        carCount = stored.filter((b) => b.status === "pending_review").length;
-      } else {
-        carCount = stored.filter(
-          (b) =>
-            b.requesterId === currentUser?.id &&
-            (b.status === "pending_review" || b.status === "endorsed")
-        ).length;
-      }
-    } catch {
-      carCount = 0;
+    if (currentUserRole === "admin") {
+      carCount = carBookings.filter((b) => b.status === "endorsed").length;
+    } else if (currentUserRole === "manager") {
+      carCount = carBookings.filter((b) => b.status === "pending_review").length;
+    } else {
+      carCount = carBookings.filter(
+        (b) =>
+          b.requesterId === currentUser?.id &&
+          (b.status === "pending_review" || b.status === "endorsed")
+      ).length;
     }
 
     return {
@@ -1135,18 +1155,23 @@ export default function OmniOfficeApp() {
       admin: currentUserRole === "admin" ? pendingReqCount : 0,
       user: 0,
     };
-  }, [tasks, meetings, accessRequests, currentUserRole, currentUser?.id]);
+  }, [tasks, meetings, accessRequests, carBookings, currentUserRole, currentUser?.id]);
 
-  const toggleTaskStatus = (id: number) => {
+  const toggleTaskStatus = (id: string | number) => {
+    let updatedTask: TaskItem | null = null;
     setTasks((prev) =>
       prev.map((t) => {
         if (t.id === id) {
           const nextStatus = t.status === "done" ? "todo" : t.status === "todo" ? "in_progress" : "done";
-          return { ...t, status: nextStatus };
+          updatedTask = { ...t, status: nextStatus };
+          return updatedTask;
         }
         return t;
       })
     );
+    if (updatedTask) {
+      saveTask(updatedTask).catch(console.error);
+    }
     showToast("🔄 อัปเดตสถานะงานเรียบร้อย");
   };
 
@@ -1904,6 +1929,8 @@ export default function OmniOfficeApp() {
                 <MeetingsPage
                   meetings={meetings}
                   showToast={showToast}
+                  currentUser={currentUser}
+                  setMeetings={setMeetings}
                 />
               )}
 
@@ -1918,6 +1945,10 @@ export default function OmniOfficeApp() {
               {currentPage === "reports" && (
                 <ReportsPage
                   showToast={showToast}
+                  tasks={tasks}
+                  meetings={meetings}
+                  members={members}
+                  bookings={carBookings}
                 />
               )}
 
