@@ -71,21 +71,35 @@ graph TD
 | **Phase 8** | **Supabase Live Backend & Auth** | เชื่อมต่อ Live Supabase (`xkeiuyhkokmecefzzynb`), GoTrue Auth, Realtime WebSocket | ✅ สมบูรณ์ |
 | **Phase 9** | **Access Requests E-Workflow** | ระบบยื่นคำขอสิทธิ์ใช้งานใหม่, แผงพิจารณาอนุมัติ/ปฏิเสธ, Notification Badges | ✅ สมบูรณ์ |
 | **Phase 10** | **LINE & Google OAuth 2.0 SSO** | เข้าสู่ระบบด้วย LINE Account (`#06C755`), API Token Exchange, Auto-sync Profile | ✅ สมบูรณ์ |
-| **Phase 11** | **Digital Car Dispatch & E-Approval** | เวิร์กโฟลว์ขออนุมัติรถราชการ 3 ชั้น (ผู้ขอ -> หัวหน้าฝ่าย -> พมจ.), ออกใบขอใช้รถ PDF | ✅ สมบูรณ์ |
-| **Phase 12** | LINE Official Account & Notify Webhook | ส่งแจ้งเตือนคำขออนุมัติรถราชการ, นัดหมายด่วน และผลอนุมัติผ่าน LINE Messaging API | 🔜 **ระยะถัดไป (Next Sprint)** |
-| **Phase 13** | E-Document Management (EDMS) | จัดเก็บหนังสือเวียนและคำสั่งจังหวัดผ่าน Supabase Storage Bucket ที่เข้ารหัส | 📅 แผนระยะยาว |
-| **Phase 14** | PWA & Mobile App Companion | Service Worker รองรับออฟไลน์, ติดตั้งลงหน้าจอมือถือ (A2HS), รองรับ Push Notification | 📅 แผนระยะยาว |
+| **Phase 11** | **Live DB Migration & Zero Demo** | ลบข้อมูล Demo ออกทั้งหมด, เชื่อมต่อ Supabase ครบทุกโมดูล (Fleet, Chat, Audit, Tasks) | ✅ สมบูรณ์ |
+| **Phase 12** | **Fleet Smart Scheduling & Conflict Guard** | ป้องกันการจองรถเวลาซ้อนทับอัตโนมัติ, มุมมองปฏิทินไทม์ไลน์ (Gantt View), QR Code ตรวจรับรถ | 🔜 **ระยะถัดไป (Next Sprint)** |
+| **Phase 13** | **Live Staff Presence & Telepresence** | แถบสถานะบุคลากรเรียลไทม์ (🟢 ในสำนักงาน, 🚗 ลงพื้นที่, 📹 ติดประชุม, ⚪ นอกเวลา), Room Monitor | 🔜 **ระยะถัดไป (Next Sprint)** |
+| **Phase 14** | **Executive Analytics & Audit Export Suite** | ส่งออกประวัติการใช้รถและงบค่าน้ำมันเป็น Excel/CSV ตามเกณฑ์ สตง., แดชบอร์ดสรุปภารกิจรายกลุ่มงาน | 📅 แผนระยะกลาง |
+| **Phase 15** | **LINE Official Account & Webhook Bot** | ส่งแจ้งเตือนคำขออนุมัติรถราชการ, นัดหมายด่วน และผลอนุมัติผ่าน LINE Messaging API Push | 📅 แผนระยะกลาง |
+| **Phase 16** | **E-Document Management (EDMS)** | จัดเก็บหนังสือเวียนและคำสั่งจังหวัดผ่าน Supabase Storage Bucket ที่เข้ารหัส | 📅 แผนระยะยาว |
+| **Phase 17** | **PWA & Mobile App Companion** | Service Worker รองรับออฟไลน์, ติดตั้งลงหน้าจอมือถือ (A2HS), รองรับ Web Push Notifications | 📅 แผนระยะยาว |
 
 ---
 
-## 🎯 แผนงานสปรินต์ถัดไป (Next Sprint Priorities)
+## 🎯 แผนงานในอนาคตจากการวิเคราะห์โครงการสากล (Future Roadmap & GitHub Benchmark)
 
-1. **ระบบขออนุมัติการใช้รถยนต์ราชการแบบ 3 ขั้นตอน (Car Booking E-Approval):**
-   - ผู้ใช้งาน (Member) ยื่นคำขอจองรถยนต์ระบุรายละเอียดภารกิจ
-   - หัวหน้าฝ่ายบริหารทั่วไป (Manager: นายเสกพล ดิษฐโชติ) ตรวจสอบความพร้อมของรถและพนักงานขับรถ พร้อมลงความเห็นชอบ
-   - พมจ.กำแพงเพชร (Admin: นางสาวมะลิวัน สิทธิโยธี) ลงนามอนุมัติขั้นสุดท้าย พร้อมออกเอกสารขอใช้รถยนต์ราชการอิเล็กทรอนิกส์ (PDF Export)
-2. **ระบบส่งการแจ้งเตือนผลอนุมัติเข้า LINE Messaging API:**
-   - เชื่อมต่อ `LINE_CHANNEL_ACCESS_TOKEN` เพื่อ Push ข้อความแจ้งเตือนผลการอนุมัติรถยนต์และนัดหมายตรงเข้า LINE ของผู้ขอใช้งาน
+จากการวิเคราะห์สถาปัตยกรรมโครงการชั้นนำบน GitHub (อาทิ *Plane, Cal.com, Effective-Office, WorkAdventure, TinyFloor*) ได้กำหนดทิศทางการยกระดับโครงการ OmniOffice ดังนี้:
+
+### 1. ระบบตรวจจับเวลาจองซ้อนทับและปฏิทินตารางการใช้รถ (Fleet Smart Scheduling & Conflict Guard)
+- **Automatic Overlap Conflict Guard:** ตรวจสอบช่วงเวลา (`departureTime` ถึง `returnTime`) ของรถยนต์แต่ละคัน หากมีคำขอที่ได้รับอนุมัติหรืออยู่ระหว่างตรวจสอบทับซ้อนกัน ระบบจะบล็อกหรือแจ้งเตือนทันทีก่อนส่งคำขอ
+- **Fleet Timeline & Gantt Schedule View:** มุมมองปฏิทิน/ไทม์ไลน์รายสัปดาห์และรายเดือน แสดงแถบสีสถานะภารกิจของรถทั้ง 5 คัน ให้เจ้าหน้าที่และหัวหน้าฝ่ายเห็นความพร้อมแบบองค์รวม
+- **Paperless Dispatch QR Code:** สร้าง QR Code ประจำคำขอบนแบบขอใช้รถที่อนุมัติแล้ว เพื่อให้พลขับหรือเจ้าหน้าที่พัสดุใช้โทรศัพท์สแกนตรวจรับกุญแจและลงเวลาออก/กลับเสมือนจริง
+
+### 2. ระบบสถานะการปฏิบัติงานของบุคลากรเสมือนจริง (Live Staff Presence & Telepresence)
+- **Live Presence Status Bar:** แถบสถานะการปฏิบัติงานของข้าราชการและเจ้าหน้าที่ 11 ท่านแบบเรียลไทม์ (🟢 ปฏิบัติงานในสำนักงาน, 🚗 ลงพื้นที่ตรวจเยี่ยม/ปฏิบัติภารกิจภายนอก, 📹 กำลังประชุม, ⚪ นอกเวลาทำการ/ลา)
+- **Room & Resource Occupancy Indicator:** หน้าปัดแสดงสถานะห้องประชุมและยานพาหนะแบบเรียลไทม์ พร้อมลิงก์ด่วนสำหรับกดเข้าร่วมประชุมออนไลน์หรือขอประสานงานเร่งด่วน
+
+### 3. ระบบส่งออกรายงานสถิติสำหรับหน่วยงานตรวจสอบ (Executive Analytics & Audit Export Suite)
+- **Audit & Compliance Data Export:** ปุ่มส่งออกประวัติการใช้รถยนต์ราชการ เลขไมล์สะสม และงบประมาณค่าน้ำมันเชื้อเพลิงเป็นไฟล์ Excel (`.xlsx`) และ CSV เพื่อจัดทำรายงานส่งสำนักงานการตรวจเงินแผ่นดิน (สตง.) และผู้บริหารจังหวัด
+- **KPI & Workload Heatmap:** แดชบอร์ดสรุปสถิติภารกิจแยกตามกลุ่มงาน (กลุ่มนโยบายฯ, กลุ่มพัฒนาสังคมฯ, ฝ่ายบริหารทั่วไป, ศูนย์บริการคนพิการฯ)
+
+### 4. ระบบแจ้งเตือนอัตโนมัติผ่าน LINE Official Account (LINE Messaging Webhook)
+- ส่งข้อความ Push Message แจ้งเตือนตรงเข้าแอปพลิเคชัน LINE ส่วนบุคคลของข้าราชการทันทีเมื่อมีคำขอใหม่ การเห็นชอบ หรือการอนุมัติขั้นสุดท้าย
 
 ---
 

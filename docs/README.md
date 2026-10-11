@@ -15,11 +15,13 @@
 8. [ระบบยืนยันตัวตนและเซสชัน (Authentication & Sessions)](#-ระบบยืนยันตัวตนและเซสชัน-authentication--sessions)
 9. [โครงสร้างข้อมูลบุคลากรภาครัฐ & ทำเนียบจริง (พมจ.กำแพงเพชร)](#-โครงสร้างข้อมูลบุคลากรภาครัฐ--ทำเนียบจริง-พมจกำแพงเพชร)
 10. [ฐานข้อมูลและสกีมา (Database & Supabase Integration)](#-ฐานข้อมูลและสกีมา-database--supabase-integration)
-11. [แผนผังการพัฒนาต่อเนื่อง (Comprehensive Roadmap - 13 Phases)](#-แผนผังการพัฒนาต่อเนื่อง-comprehensive-roadmap---13-phases)
-12. [แผนงานสปรินต์ถัดไป (Next Sprint Action Items)](#-แผนงานสปรินต์ถัดไป-next-sprint-action-items)
-13. [การติดตั้งและเริ่มใช้งาน (Getting Started)](#-การติดตั้งและเริ่มใช้งาน-getting-started)
-14. [การทดสอบและการตรวจสอบคุณภาพ (Testing & QA Guide)](#-การทดสอบและการตรวจสอบคุณภาพ-testing--qa-guide)
-15. [ประวัติการปรับปรุง (Changelog & Version History)](#-ประวัติการปรับปรุง-changelog--version-history)
+11. [แผนผังการพัฒนาต่อเนื่อง (Comprehensive Roadmap - 17 Phases)](#-แผนผังการพัฒนาต่อเนื่อง-comprehensive-roadmap---17-phases)
+12. [แผนงานในอนาคตจากการวิเคราะห์โครงการสากล (Future Roadmap & GitHub Benchmark)](#-แผนงานในอนาคตจากการวิเคราะห์โครงการสากล-future-roadmap--github-benchmark)
+13. [แผนงานสปรินต์ถัดไป (Next Sprint Action Items)](#-แผนงานสปรินต์ถัดไป-next-sprint-action-items)
+14. [การติดตั้งและเริ่มใช้งาน (Getting Started)](#-การติดตั้งและเริ่มใช้งาน-getting-started)
+15. [การทดสอบและการตรวจสอบคุณภาพ (Testing & QA Guide)](#-การทดสอบและการตรวจสอบคุณภาพ-testing--qa-guide)
+16. [ระบบจองรถยนต์ราชการและรายงานส่งคืนรถ (Government Vehicle Dispatch & Return System)](#-ระบบจองรถยนต์ราชการและรายงานส่งคืนรถ-government-vehicle-dispatch--return-system)
+17. [ประวัติการปรับปรุง (Changelog & Version History)](#-ประวัติการปรับปรุง-changelog--version-history)
 
 ---
 
@@ -298,9 +300,9 @@ interface Member {
 
 ---
 
-## 🗺️ แผนผังการพัฒนาต่อเนื่อง (Comprehensive Roadmap - 13 Phases)
+## 🗺️ แผนผังการพัฒนาต่อเนื่อง (Comprehensive Roadmap - 17 Phases)
 
-แผนการพัฒนาระบบ OmniOffice ถูกออกแบบไว้เป็น 13 ช่วงการทำงาน (Phases) เพื่อยกระดับสู่ระบบปฏิบัติการภาครัฐเสมือนจริงระดับกระทรวง:
+แผนการพัฒนาระบบ OmniOffice ถูกออกแบบไว้เป็น 17 ช่วงการทำงาน (Phases) เพื่อยกระดับสู่ระบบปฏิบัติการภาครัฐเสมือนจริงระดับกระทรวง:
 
 | เฟส (Phase) | ชื่อเฟสและขอบเขตงาน | รายละเอียดทางเทคนิค & คุณสมบัติสำคัญ | สถานะปัจจุบัน |
 |:---:|---|---|:---:|
@@ -311,33 +313,90 @@ interface Member {
 | **Phase 5** | **Government Schema & Real Directory** | คำนำหน้า, ชื่อ, นามสกุล, ชื่อเล่น (`nickname`), ตำแหน่ง, ฝ่าย, ข้อมูลจริง พมจ.กำแพงเพชร | ✅ สมบูรณ์ (100%) |
 | **Phase 6** | **Admin Personnel CRUD Suite** | 👁️ แฟ้มประวัติ (Dossier), ✏️ แก้ไขข้อมูล/สิทธิ์, 🗑️ ลบสมาชิก, Protected Root & Self-Delete Safeguards | ✅ สมบูรณ์ (100%) |
 | **Phase 7** | **System Module Controls & Maintenance Engine** | 🎛️ เปิด/ปิด โมดูลเรียลไทม์, ✏️ แก้ไขข้อมูลโมดูล, Maintenance Screen, Admin Bypass Override | ✅ สมบูรณ์ (100%) |
-| **Phase 8** | **Supabase Production Backend & Auth** | ย้ายจาก In-Memory สู่ Supabase PostgreSQL, Authentication, RLS Security Policies | 🔜 **ระยะถัดไป (Next Sprint)** |
-| **Phase 9** | **Realtime Chat & Kanban Synchronization** | Supabase Realtime Channels (WebSocket), ย้ายการ์ด Kanban สดหลายหน้าจอ, ตัวบอกสถานะออนไลน์ | 📅 แผนระยะกลาง |
-| **Phase 10** | **Digital Car Dispatch & E-Approval Workflow** | เวิร์กโฟลว์ขออนุมัติรถราชการ 3 ชั้น (ผู้ขอ -> หัวหน้าฝ่าย -> พมจ.), ส่งออกใบขอใช้รถ PDF ดิจิทัล | 📅 แผนระยะกลาง |
-| **Phase 11** | **LINE Official Account & Notification Webhook** | เชื่อมต่อฟิลด์ `lineId` กับ LINE Messaging API ส่งแจ้งเตือนคำขออนุมัติรถ นัดหมาย และงานด่วน | 📅 แผนระยะกลาง |
-| **Phase 12** | **E-Document & EDMS Cloud Storage** | สารบรรณอิเล็กทรอนิกส์ จัดเก็บหนังสือเวียนและคำสั่งจังหวัดผ่าน Supabase Storage Bucket | 📅 แผนระยะยาว |
-| **Phase 13** | **Progressive Web App (PWA) & Mobile Suite** | Service Worker, ติดตั้งบนหน้าจอมือถือ (A2HS), รองรับการแจ้งเตือน Push Notification | 📅 แผนระยะยาว |
+| **Phase 8** | **Supabase Live Backend & Auth** | เชื่อมต่อ Live Supabase (`xkeiuyhkokmecefzzynb`), GoTrue Auth, Realtime WebSocket Channels | ✅ สมบูรณ์ (100%) |
+| **Phase 9** | **Access Requests E-Workflow** | ระบบยื่นคำขอสิทธิ์ใช้งานใหม่, แผงพิจารณาอนุมัติ/ปฏิเสธ, Realtime Notifications | ✅ สมบูรณ์ (100%) |
+| **Phase 10** | **LINE & Google OAuth 2.0 SSO** | เข้าสู่ระบบด้วย LINE Account (`#06C755`), API Token Exchange, รักษาโปรไฟล์และข้อมูลราชการเดิม | ✅ สมบูรณ์ (100%) |
+| **Phase 11** | **Live DB Migration & Zero Demo** | ย้ายข้อมูลระบบทั้งหมด (Fleet, Bookings, Chat, Users, Requests) สู่ Live Supabase Database พร้อม Dual-Sync Cache | ✅ สมบูรณ์ (100%) |
+| **Phase 12** | **Fleet Smart Scheduling & Conflict Guard** | ตรวจสอบช่วงเวลาจองซ้อนทับอัตโนมัติ (Anti-collision), ปฏิทินไทม์ไลน์มุมมอง Gantt รายสัปดาห์/เดือน, ตรวจรับรถผ่าน QR Code | 🔜 **ระยะถัดไป (Next Sprint)** |
+| **Phase 13** | **Live Staff Presence & Telepresence** | ตัวบอกสถานะปฏิบัติงานสด 11 ข้าราชการ/เจ้าหน้าที่ (ใน สนง. / ลงพื้นที่ / ประชุม / นอกเวลาทำการ), ระบบตรวจสถานะห้องประชุม | 🔜 **ระยะถัดไป (Next Sprint)** |
+| **Phase 14** | **Executive Analytics & Audit Export Suite** | รายงานสถิติและงบประมาณค่าน้ำมันเชื้อเพลิง ส่งออก Excel (.xlsx) และ CSV สำหรับ สตง. และผู้บริหารจังหวัด | 📅 แผนระยะกลาง |
+| **Phase 15** | **LINE Official Account & Webhook Bot** | ส่งแจ้งเตือน Push Notification เข้า LINE แอปพลิเคชันตรงเมื่อมีคำขอจองรถ นัดหมายด่วน หรือการอนุมัติ | 📅 แผนระยะกลาง |
+| **Phase 16** | **E-Document & EDMS Cloud Storage** | สารบรรณอิเล็กทรอนิกส์ จัดเก็บหนังสือเวียนและคำสั่งจังหวัดผ่าน Supabase Storage Bucket ที่เข้ารหัส | 📅 แผนระยะยาว |
+| **Phase 17** | **Progressive Web App (PWA) & Mobile Suite** | Service Worker, ติดตั้งบนหน้าจอมือถือ (A2HS), ออฟไลน์แคช และ Web Push Notifications | 📅 แผนระยะยาว |
+
+---
+
+## 🎯 แผนงานในอนาคตจากการวิเคราะห์โครงการสากล (Future Roadmap & GitHub Benchmark)
+
+จากการวิเคราะห์เปรียบเทียบสถาปัตยกรรมของโครงการระบบสำนักงานเสมือนและการจัดสรรทรัพยากรชั้นนำบน GitHub (*makeplane/plane, calcom/cal.com, effective-dev-opensource/Effective-Office, workadventure/workadventure, JittoJoseph/TinyFloor, twentyhq/twenty*) ได้กำหนดแนวทางการยกระดับโครงการ OmniOffice 5 มิติหลัก:
+
+```mermaid
+graph TD
+    subgraph Benchmark ["การวิเคราะห์โครงการสากลบน GitHub (Benchmark Repositories)"]
+        B1["Cal.com & Plane<br/>Scheduling & Conflict Engine"]
+        B2["Effective-Office<br/>Enterprise QR Key Custody"]
+        B3["TinyFloor & WorkAdventure<br/>Realtime Telepresence"]
+        B4["Twenty CRM<br/>Advanced Filtering & Audit Export"]
+    end
+
+    subgraph OmniOfficeFuture ["แผนงานยกระดับ OmniOffice (Phases 12-17)"]
+        F1["Phase 12: Fleet Smart Scheduling<br/>& Conflict Guard + Gantt View"]
+        F2["Phase 13: Live Staff Presence<br/>& Telepresence Status Bar"]
+        F3["Phase 14: Executive Analytics<br/>& Audit Export Suite (สตง. Excel)"]
+        F4["Phase 15: LINE OA Push Bot<br/>& Webhook Realtime Notification"]
+        F5["Phase 16-17: EDMS Storage & PWA Companion"]
+    end
+
+    B1 --> F1
+    B2 --> F1
+    B3 --> F2
+    B4 --> F3
+```
+
+### 1. 🛡️ ระบบตรวจจับเวลาจองซ้อนทับและตารางเดินรถอัจฉริยะ (Fleet Smart Scheduling & Conflict Guard - Phase 12)
+* **แรงบันดาลใจจากสากล:** รูปแบบ Conflict Resolution ของ `calcom/cal.com` และ Timeline Scheduling ของ `makeplane/plane`
+* **ฟีเจอร์ที่จะพัฒนา:**
+  1. **Automatic Overlap Conflict Guard:** ระบบตรวจสอบช่วงวันและเวลาเดินทาง (`departureTime` ถึง `returnTime`) ของยานพาหนะแต่ละคัน หากมีการจองที่ได้รับการอนุมัติแล้วหรืออยู่ระหว่างรอตรวจสอบในคาบเวลาเดียวกัน ระบบจะขึ้นเตือนสีส้ม/แดงทันที พร้อมแนะนำคันอื่นที่ว่าง
+  2. **Fleet Timeline & Gantt Schedule View:** เพิ่มมุมมองปฏิทินแบบไทม์ไลน์ (Horizontal Timeline / Gantt) แสดงแถบสีสถานะภารกิจของรถยนต์ทั้ง 5 คันในแต่ละวัน/สัปดาห์ ช่วยให้หัวหน้าฝ่ายบริหารทั่วไปมองเห็นภาพรวมการใช้รถได้อย่างรวดเร็ว
+  3. **Paperless Dispatch QR Code:** สร้าง Dynamic QR Code ประจำคำขอบน "แบบขออนุญาตใช้รถยนต์ส่วนกลาง" ที่อนุมัติแล้ว เพื่อให้พนักงานขับรถหรือเจ้าหน้าที่พัสดุใช้สมาร์ตโฟนสแกนตรวจรับกุญแจรถ และลงเวลาออกเดินทาง/กลับถึงสำนักงาน
+
+### 2. 👥 ระบบสถานะการปฏิบัติงานของบุคลากรเสมือนจริง (Live Staff Presence & Telepresence - Phase 13)
+* **แรงบันดาลใจจากสากล:** รูปแบบ Presence Indicator และ Virtual Proximity ของ `JittoJoseph/TinyFloor` และ `workadventure/workadventure`
+* **ฟีเจอร์ที่จะพัฒนา:**
+  1. **Live Presence Status Bar:** แถบแสดงสถานะการปฏิบัติราชการของข้าราชการและเจ้าหน้าที่ พมจ.กำแพงเพชร ทั้ง 11 ท่านแบบเรียลไทม์:
+     - 🟢 **ปฏิบัติงาน ณ สำนักงาน** (In Office / Active at Desk)
+     - 🚗 **ลงพื้นที่ตรวจเยี่ยม / ปฏิบัติราชการภายนอก** (Field Work / On Duty)
+     - 📹 **กำลังประชุม / สัมมนา** (In Meeting / Video Call)
+     - ⚪ **ลาพักผ่อน / นอกเวลาทำการ** (Away / On Leave)
+  2. **Meeting & Vehicle Room Occupancy Indicator:** หน้าปัดแสดงสถานะห้องประชุม (ห้องประชุมใหญ่, ห้องประชุมกลุ่มย่อย) และรถยนต์ราชการแบบเรียลไทม์ พร้อมปุ่มกดติดต่อด่วน
+
+### 3. 📊 ระบบส่งออกสถิติและรายงานสำหรับหน่วยงานตรวจสอบ (Executive Analytics & Audit Export Suite - Phase 14)
+* **แรงบันดาลใจจากสากล:** รูปแบบ Data Table Export & Filtering ของ `twentyhq/twenty`
+* **ฟีเจอร์ที่จะพัฒนา:**
+  1. **Audit & Compliance Data Export:** ส่งออกข้อมูลประวัติการขอใช้รถยนต์ราชการ, บันทึกการส่งคืนรถ, ระยะทางสะสม (กม.), และงบประมาณค่าน้ำมันเชื้อเพลิงเป็นไฟล์ Excel (`.xlsx`) และ CSV ตามรูปแบบรายงานที่สำนักงานการตรวจเงินแผ่นดิน (สตง.) และผู้บริหารจังหวัดกำหนด
+  2. **Workload & Divisional KPI Dashboard:** กราฟสรุปสถิติภารกิจแยกตาม 5 กลุ่มงาน (กลุ่มนโยบายฯ, กลุ่มพัฒนาสังคมฯ, ฝ่ายบริหารทั่วไป, ศูนย์บริการคนพิการฯ) วิเคราะห์ความถี่และประสิทธิภาพการลงพื้นที่
+
+### 4. 📲 ระบบแจ้งเตือนอัตโนมัติผ่าน LINE Official Account (LINE Webhook & Push API - Phase 15)
+* **ฟีเจอร์ที่จะพัฒนา:** ส่งข้อความ Push Notification พร้อม Flex Message ตราครุฑ แจ้งเตือนเข้าแอปพลิเคชัน LINE ส่วนบุคคลของข้าราชการทันทีเมื่อมีคำขอยื่นใหม่ มีการเห็นชอบ หรือมีคำสั่งอนุมัติ
 
 ---
 
 ## 🎯 แผนงานสปรินต์ถัดไป (Next Sprint Action Items)
 
-ในรอบการพัฒนาถัดไป (Sprint Focus) จะมุ่งเน้นการเปลี่ยนผ่านจาก Client-Side State สู่ Production Database และระบบอนุมัติงานราชการ:
+ในรอบการพัฒนาสปรินต์ถัดไป ทีมพัฒนาจะมุ่งเน้นงานตามลำดับความสำคัญ:
 
-### 1. 🗄️ การเชื่อมต่อ Supabase Backend สมบูรณ์ (Phase 8 Implementation)
-- ติดตั้ง Client Environment Variables (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`) ใน `.env.local`
-- ใช้งาน [lib/supabase.ts](file:///c:/Users/GuitarDev/virtual-office/lib/supabase.ts) เพื่อดึงข้อมูลบุคลากรจากตาราง `public.members`
-- ทำ Data Seeding บุคลากรทั้ง 8 รายชื่อของ พมจ.กำแพงเพชร เข้าสู่ตารางจริง
-- ทดสอบความปลอดภัยของ Row Level Security (RLS) policies
+### 1. 🛡️ พัฒนาระบบ Fleet Conflict Guard & Gantt Timeline (Phase 12)
+- [ ] เขียนฟังก์ชันตรวจสอบความขัดแย้งของช่วงเวลาการจอง (`hasCarBookingOverlap`) ใน `lib/carbooking-data.ts`
+- [ ] เพิ่ม Component มุมมองปฏิทิน/ไทม์ไลน์การเดินรถรายสัปดาห์ (Gantt Chart View) ในหน้าระบบจองรถ
+- [ ] ทดสอบการป้องกันการจองซ้อนทับในหน้า Modal ขอใช้รถยนต์
 
-### 2. 🚗 ระบบขออนุมัติการใช้รถยนต์ราชการแบบ 3 ขั้นตอน (Phase 10 Foundation)
-- **ขั้นตอนที่ 1 (ยื่นคำขอ):** สมาชิก (Member) กรอกแบบฟอร์มขอใช้รถยนต์ (วันที่, เวลา, วัตถุประสงค์, สถานที่ไปราชการ, รายชื่อคณะเดินทาง)
-- **ขั้นตอนที่ 2 (ตรวจสอบ):** หัวหน้าฝ่ายบริหารทั่วไป (Manager: นายเสกพล ดิษฐโชติ) ตรวจสอบความพร้อมของรถและพนักงานขับรถ พร้อมลงความเห็นชอบ
-- **ขั้นตอนที่ 3 (อนุมัติ):** พมจ.กำแพงเพชร (Admin: นางสาวมะลิวัน สิทธิโยธี) ลงนามอนุมัติขั้นสุดท้าย และออกใบขอใช้รถยนต์ราชการอิเล็กทรอนิกส์ (PDF Export)
+### 2. 🟢 พัฒนาระบบสถานะ Live Presence Indicator (Phase 13)
+- [ ] เพิ่มฟิลด์ `presence_status` (`in_office`, `field_work`, `meeting`, `off_duty`) ในตาราง `users`
+- [ ] สร้างคอมโพเนนต์แสดงสถานะบุคลากร 11 ท่านแบบเรียลไทม์บน Dashboard และ Sidebar
 
-### 3. 💬 ระบบแจ้งเตือนผ่าน Line Official Account (Phase 11 Foundation)
-- นำ `lineId` ของบุคลากรแต่ละคนไปผูกกับ Line User ID / Line Notify Token
-- สร้างฟังก์ชันแจ้งเตือนผลการอนุมัติการจองรถยนต์ราชการอัตโนมัติเมื่อหัวหน้าฝ่ายหรือผู้ว่าฯ/พมจ. อนุมัติ
+### 3. 📈 จัดทำปุ่มส่งออกรายงาน Excel/CSV สำหรับ สตง. (Phase 14)
+- [ ] เพิ่มฟังก์ชัน Export ตารางประวัติการใช้รถและค่าน้ำมันเป็นไฟล์ `.xlsx` และ `.csv`
+- [ ] เพิ่มหัวตารางมาตรฐานระเบียบพัสดุและยานพาหนะภาครัฐ
 
 ---
 

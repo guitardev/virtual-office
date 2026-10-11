@@ -226,22 +226,34 @@ on conflict (id) do update set
 
 ---
 
-## 7. แผนงานพัฒนาระยะถัดไป
+## 7. แผนงานพัฒนาระยะถัดไป (Future Phases 11–17)
 
-### 7.1 Phase 11: ระบบจองรถราชการแบบ 3 ชั้น (Car Booking E-Approval)
-* **สถาปัตยกรรม:**
-  * ลำดับที่ 1: บุคลากร (Member) ยื่นขอใช้รถ
-  * ลำดับที่ 2: หัวหน้าฝ่าย/ผู้จัดการ (Manager) ตรวจสอบและเห็นชอบ
-  * ลำดับที่ 3: ผู้มีอำนาจอนุมัติ/พมจ. (Admin) ลงนามอนุมัติขั้นสุดท้าย
-* **การแจ้งเตือน:** เชื่อมต่อ LINE Notify / LINE Messaging API แจ้งเตือนคนขับรถและผู้ขอใช้รถทันทีเมื่อสถานะเปลี่ยน
+### 7.1 Phase 11: Live DB Migration & Zero Demo (ดำเนินการเสร็จสิ้น 100%)
+* ย้ายข้อมูลระบบทั้งหมด (Fleet, Bookings, Chat Channels, Personnel Users, Access Requests) สู่ Live Supabase PostgreSQL Database
+* ปรับปรุง Dual-Sync Cache ป้องกันข้อมูล Demo ปะปน และรักษา Data Integrity แม้ในโหมด Offline
 
-### 7.2 Phase 12: ระบบจัดการงานและประชุมแบบเชื่อมโยง Supabase
-* ย้ายการจัดเก็บ Tasks และ Meetings จาก Local State ไปเชื่อมต่อกับตารางใน Supabase
-* เพิ่มระบบ Realtime Notifications เมื่อมีงานมอบหมายใหม่หรือมีนัดหมายด่วน
+### 7.2 Phase 12: Fleet Smart Scheduling & Conflict Guard (Next Sprint)
+* **Automatic Overlap Conflict Guard:** ตรวจสอบช่วงวันและเวลาเดินทาง (`departureTime` ถึง `returnTime`) ของยานพาหนะแต่ละคัน หากมีการจองที่ได้รับการอนุมัติแล้วหรืออยู่ระหว่างรอตรวจสอบในคาบเวลาเดียวกัน ระบบจะขึ้นเตือนสีส้ม/แดงทันที พร้อมแนะนำคันอื่นที่ว่าง
+* **Fleet Timeline & Gantt Schedule View:** เพิ่มมุมมองปฏิทินแบบไทม์ไลน์ (Horizontal Timeline / Gantt) แสดงแถบสีสถานะภารกิจของรถยนต์ทั้ง 5 คันในแต่ละวัน/สัปดาห์
+* **Paperless Dispatch QR Code:** สร้าง Dynamic QR Code ประจำคำขอบนแบบขอใช้รถที่อนุมัติแล้ว เพื่อให้พนักงานขับรถหรือเจ้าหน้าที่พัสดุใช้สมาร์ตโฟนสแกนตรวจรับกุญแจรถ
 
-### 7.3 Phase 13: E-Document Management (EDMS)
-* ใช้ Supabase Storage สำหรับจัดเก็บไฟล์เอกสารราชการและหนังสือเวียน
+### 7.3 Phase 13: Live Staff Presence & Telepresence (Next Sprint)
+* **Live Presence Status Bar:** แถบแสดงสถานะการปฏิบัติราชการของข้าราชการและเจ้าหน้าที่ 11 ท่านแบบเรียลไทม์ (🟢 ในสำนักงาน, 🚗 ลงพื้นที่ตรวจเยี่ยม, 📹 กำลังประชุม, ⚪ นอกเวลาทำการ/ลา)
+* **Meeting & Vehicle Room Occupancy Indicator:** หน้าปัดแสดงสถานะห้องประชุมและรถยนต์ราชการแบบเรียลไทม์
+
+### 7.4 Phase 14: Executive Analytics & Audit Export Suite (Mid-term)
+* ส่งออกข้อมูลประวัติการขอใช้รถยนต์ราชการ, บันทึกการส่งคืนรถ, ระยะทางสะสม (กม.), และงบประมาณค่าน้ำมันเชื้อเพลิงเป็นไฟล์ Excel (`.xlsx`) และ CSV ตามเกณฑ์ของ สตง.
+* แดชบอร์ดสรุปสถิติภารกิจแยกตาม 5 กลุ่มงาน (กลุ่มนโยบายฯ, กลุ่มพัฒนาสังคมฯ, ฝ่ายบริหารทั่วไป, ศูนย์บริการคนพิการฯ)
+
+### 7.5 Phase 15: LINE Official Account & Webhook Bot (Mid-term)
+* ส่งแจ้งเตือน Flex Message ตราครุฑ แจ้งเตือนเข้า LINE แอปพลิเคชันตรงเมื่อมีคำขอยื่นใหม่ มีการเห็นชอบ หรือมีคำสั่งอนุมัติ
+
+### 7.6 Phase 16: E-Document Management (EDMS) (Long-term)
+* ใช้ Supabase Storage สำหรับจัดเก็บไฟล์เอกสารราชการ คำสั่งจังหวัด และหนังสือเวียนที่เข้ารหัส
 * กำหนดสิทธิ์การดาวน์โหลดเอกสารตาม Role Matrix
+
+### 7.7 Phase 17: Progressive Web App (PWA) & Mobile Suite (Long-term)
+* พัฒนา Service Worker รองรับการทำงานแบบออฟไลน์ ติดตั้งลงหน้าจอมือถือ (A2HS) และรองรับ Web Push Notifications
 
 ---
 
@@ -253,18 +265,21 @@ on conflict (id) do update set
 - [x] แก้ไขการสะกดชื่อ `usr_8` ใน `lib/rbac.ts` และ `supabase/schema.sql` *(แก้ไขเป็น "นางสาวอารีวรรณ ประเสริฐอุดมศักดิ์")*
 - [x] เพิ่ม CSRF State Verification ใน LINE OAuth Flow *(เพิ่มการตรวจสอบ State ใน app/page.tsx และ forward state ใน callback route)*
 - [x] เพิ่ม Server-Side LINE ID Token Verification API *(เพิ่มการเรียก LINE oauth2/v2.1/verify ใน app/api/auth/line/exchange/route.ts)*
+- [x] ลบข้อมูล Demo ออกจากระบบและเชื่อมต่อ Supabase Live Database ครบทุกโมดูล *(ดำเนินการแล้ว 100%)*
 
-### 🟠 ความสำคัญสูง (Next Sprint)
-- [ ] รันคำสั่ง SQL สร้างตาราง `audit_logs` และบันทึกกิจกรรมจริง
-- [ ] ปรับปรุง RLS Policy บน Supabase เพื่อป้องกันการแก้ไขข้อมูลโดยไม่ได้รับอนุญาต
-- [x] แตกไฟล์ `app/page.tsx` ขนาด 4,800+ บรรทัด ออกเป็นโมดูลย่อย *(ดำเนินการเสร็จสิ้น 100% — แยกเป็น 14 คอมโพเนนต์ตามโมดูล)*
-- [x] ปรับปรุงป้ายแจ้งเตือน (Dynamic Navigation Badges) ให้คำนวณจาก State จริง *(งานที่ค้าง, การประชุม, คำขอสิทธิ์รออนุมัติ, และการจองรถรอพิจารณา)*
+### 🟠 ความสำคัญสูง (Next Sprint - Phases 12 & 13)
+- [ ] พัฒนาฟังก์ชัน `hasCarBookingOverlap` ตรวจจับเวลาจองซ้อนทับใน [lib/carbooking-data.ts](file:///c:/Users/GuitarDev/virtual-office/lib/carbooking-data.ts)
+- [ ] สร้างคอมโพเนนต์ Fleet Timeline & Gantt Schedule View แสดงสถานะภารกิจรถ 5 คัน
+- [ ] เพิ่ม Dynamic QR Code สำหรับตรวจรับกุญแจและลงเวลาเดินทาง
+- [ ] เพิ่มฟิลด์ `presence_status` ในตาราง `users` และแสดง Live Presence Status Bar บน Header/Sidebar
+- [ ] รันคำสั่ง SQL สร้างตาราง `audit_logs` และบันทึกกิจกรรมลงระบบจริง
 
-### 🟡 แผนพัฒนาระยะยาว (Future Phases)
-- [x] พัฒนาระบบจองรถราชการ 3 ชั้น (Phase 11: Car Booking E-Approval) *(ดำเนินการเสร็จสิ้น 100% — ครบทั้ง 3 ขั้นตอน: Member ยื่นขอ -> Manager เห็นชอบ/จัดสรรคนขับ -> Admin อนุมัติขั้นสุดท้าย พร้อมพรีวิวและพิมพ์ใบขอใช้รถราชการ)*
-- [ ] เชื่อมโยง Tasks และ Meetings กับ Supabase แบบ Live
-- [ ] พัฒนาระบบส่งหนังสือราชการและคลังเอกสาร (Phase 13)
-- [ ] จัดทำ PWA และ Offline Sync (Phase 14)
+### 🟡 แผนพัฒนาระยะยาว (Future Phases 14–17)
+- [ ] พัฒนาปุ่มส่งออกรายงาน Excel/CSV สำหรับ สตง. และผู้บริหาร (Phase 14)
+- [ ] เชื่อมต่อ LINE Official Account Messaging API Webhook Bot (Phase 15)
+- [ ] เชื่อมโยง Tasks และ Meetings กับ Supabase แบบ Live (Phase 15)
+- [ ] พัฒนาระบบส่งหนังสือราชการและคลังเอกสาร EDMS (Phase 16)
+- [ ] จัดทำ PWA และ Offline Sync Companion (Phase 17)
 
 ---
 
@@ -365,4 +380,59 @@ on conflict (id) do update set
 
 ---
 *บันทึกรายงานนี้จัดทำขึ้นเพื่อใช้เป็นแนวทางมาตรฐานในการพัฒนาและปรับปรุงระบบ OmniOffice Virtual Office*
+
+---
+
+## 10. การวิเคราะห์โครงการสากลบน GitHub และการกำหนดยุทธศาสตร์การพัฒนา (GitHub Benchmark & Strategic Roadmap Analysis)
+
+> **วันที่ทำการวิเคราะห์:** 12 ตุลาคม 2569  
+> **เครื่องมือ:** GitHub MCP Server (Search Repositories & Code Search)  
+> **เป้าหมาย:** สังเคราะห์จุดแข็งของ Open-Source Projects ชั้นนำระดับโลก เพื่อนำมาประยุกต์และปิดช่องว่าง (Gap Analysis) ในการพัฒนาระบบ OmniOffice Virtual Office ให้มีประสิทธิภาพสูงสุด
+
+---
+
+### 10.1 โครงการอ้างอิงสากลที่นำมาวิเคราะห์เปรียบเทียบ (Benchmark Projects)
+
+1. **[makeplane/plane](https://github.com/makeplane/plane)** (Stars: 30k+)
+   * **สถาปัตยกรรม:** Next.js, TypeScript, PostgreSQL, Pragmatic UI
+   * **จุดเด่น:** ระบบจัดการโครงการที่มี Timeline/Gantt Views ที่ยืดหยุ่นสูง การจัดการ State ผ่าน SWR/React Query และ Workspace Permission Isolation
+2. **[calcom/cal.com](https://github.com/calcom/cal.com)** (Stars: 35k+)
+   * **สถาปัตยกรรม:** Next.js App Router, Prisma/PostgreSQL, Granular Availability Engine
+   * **จุดเด่น:** ระบบคำนวณและป้องกันการจองเวลาทับซ้อน (Overlap & Conflict Resolution) ที่แม่นยำสูง พร้อม Timezone conversion และ Webhook notification
+3. **[effective-dev-opensource/Effective-Office](https://github.com/effective-dev-opensource/Effective-Office)**
+   * **สถาปัตยกรรม:** TypeScript, Enterprise Workplace Suite
+   * **จุดเด่น:** ระบบบริหารจัดการทรัพยากรสำนักงาน ห้องประชุม และยานพาหนะ โดยใช้ QR Code สำหรับตรวจรับสิทธิ์และคืนทรัพย์สิน
+4. **[JittoJoseph/TinyFloor](https://github.com/JittoJoseph/TinyFloor) & [workadventure/workadventure](https://github.com/workadventure/workadventure)**
+   * **สถาปัตยกรรม:** WebRTC, Realtime Presence, Map/Spatial Interaction
+   * **จุดเด่น:** การแสดงสถานะบุคลากรแบบ Telepresence รู้ว่าเพื่อนร่วมงานอยู่ที่ไหน (โต๊ะทำงาน, ห้องประชุม, ออกไปข้างนอก)
+5. **[twentyhq/twenty](https://github.com/twentyhq/twenty)** (Stars: 22k+)
+   * **สถาปัตยกรรม:** Modern Next.js/React, Custom Metadata Engine, GraphQL/PostgreSQL
+   * **จุดเด่น:** Advanced Table Filtering, ค้นหาข้อมูลแบบ Elastic, และระบบ Export ข้อมูลขนาดใหญ่ (Excel/CSV) สำหรับการตรวจสอบ (Audit Compliance)
+
+---
+
+### 10.2 ตารางเปรียบเทียบความสามารถของระบบ (Comparative Capability Matrix)
+
+| มิติการทำงาน / คุณสมบัติ | OmniOffice (ปัจจุบัน) | โครงการสากลทั่วไป (Benchmark) | ทิศทางการปรับปรุงของ OmniOffice |
+| :--- | :---: | :---: | :--- |
+| **ความสอดคล้องกับระเบียบราชการไทย (Gov Compliance)** | ⭐️⭐️⭐️⭐️⭐️ (100%) | ⭐️ (0%) | **คงไว้เป็นจุดเด่นหลัก:** รูปแบบตราครุฑ, ลำดับการอนุมัติ 3 ระดับ, ทำเนียบบุคลากรจริง พมจ. |
+| **ระบบสิทธิ์และความปลอดภัย (RBAC & Safeguards)** | ⭐️⭐️⭐️⭐️⭐️ (4 Roles) | ⭐️⭐️⭐️⭐️ (Standard) | มี Root Admin Safeguard และ Session Persistence ครบถ้วน |
+| **การตรวจจับเวลาจองซ้อนทับ (Conflict Guard)** | ⭐️⭐️ (Manual Check) | ⭐️⭐️⭐️⭐️⭐️ (Auto Block) | **ยกระดับใน Phase 12:** สร้างระบบ Anti-Collision เช็คช่วงเวลาจองรถยนต์อัตโนมัติ |
+| **มุมมองตารางเวลา (Timeline / Gantt View)** | ⭐️⭐️ (Card/Table List) | ⭐️⭐️⭐️⭐️⭐️ (Interactive Gantt) | **ยกระดับใน Phase 12:** เพิ่ม Weekly/Monthly Fleet Timeline Bar ให้เห็นคิวรถชัดเจน |
+| **การตรวจรับผ่าน QR Code (Paperless Dispatch)** | ⭐️ (ยังไม่มี) | ⭐️⭐️⭐️⭐️ (QR Check-in) | **ยกระดับใน Phase 12:** สแกน Dynamic QR Code รับกุญแจรถและลงเวลาออก/กลับ |
+| **สถานะบุคลากรเสมือนจริง (Telepresence)** | ⭐️⭐️ (Online / Offline) | ⭐️⭐️⭐️⭐️⭐️ (Spatial/Status) | **ยกระดับใน Phase 13:** เพิ่มแถบสถานะการปฏิบัติงาน (ใน สนง. / ลงพื้นที่ / ประชุม / ลา) |
+| **การส่งออกรายงานตรวจสอบ (Audit Compliance Export)** | ⭐️ (Print PDF) | ⭐️⭐️⭐️⭐️⭐️ (Excel/CSV Pipeline) | **ยกระดับใน Phase 14:** ปุ่มส่งออกสถิติและงบค่าน้ำมันสำหรับ สตง. |
+| **การแจ้งเตือนแบบเรียลไทม์ (Notifications)** | ⭐️⭐️⭐️ (In-app + Browser) | ⭐️⭐️⭐️⭐️ (Push/Webhook) | **ยกระดับใน Phase 15:** LINE Official Account Push Message ตรงถึงมือถือ |
+
+---
+
+### 10.3 ข้อสรุปเชิงยุทธศาสตร์ (Strategic Positioning)
+
+1. **ไม่เปลี่ยน OmniOffice เป็นเกม RPG 2D:**
+   * การเลียนแบบ WorkAdventure ในลักษณะเกมเดิน 2D ไม่ตอบโจทย์ระเบียบราชการไทยและผู้บริหารระดับจังหวัดที่ต้องการความรวดเร็วและเป็นทางการ
+   * OmniOffice จะเน้น **Operational Ergonomics** คือ หน้าจอที่สะอาด ชัดเจน โหลดเร็ว พร้อมแถบ **Live Presence Status Bar** ที่บอกสถานะจริงของข้าราชการ 11 ท่าน
+2. **ชูจุดเด่นด้าน 3-Tier Government Workflow & Audit Readiness:**
+   * โมเดลการอนุมัติ 3 ชั้น (ผู้ขอ ➔ หน.ฝ่าย ➔ พมจ.) และแบบฟอร์มตราครุฑ (พมจ.กพ 02/1) เป็นคุณค่าที่ไม่สามารถหาได้จากซอฟต์แวร์สากลตัวใดในโลก
+   * การเพิ่มระบบ Fleet Conflict Guard และการส่งออกข้อมูล Excel สำหรับ สตง. จะทำให้ OmniOffice เป็นแพลตฟอร์มสำนักงานเสมือนภาครัฐที่สมบูรณ์แบบที่สุด
+
 
