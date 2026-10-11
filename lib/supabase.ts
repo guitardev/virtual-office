@@ -1,6 +1,18 @@
 import { createClient } from "@supabase/supabase-js";
-import { Member, ModuleId, Role, Task, AuditLog, PersonnelType, AccessRequest, AccessRequestStatus } from "./types";
+import {
+  Member,
+  ModuleId,
+  Role,
+  Task,
+  AuditLog,
+  PersonnelType,
+  AccessRequest,
+  AccessRequestStatus,
+  Vehicle,
+  CarBookingRequest,
+} from "./types";
 import { INITIAL_MEMBERS, INITIAL_SYSTEM_MODULES, INITIAL_ACCESS_REQUESTS } from "./rbac";
+import { INITIAL_VEHICLES, INITIAL_BOOKING_REQUESTS } from "./carbooking-data";
 
 // Environment variables from Vercel Marketplace Supabase Integration
 const supabaseUrl =
@@ -139,9 +151,14 @@ export async function fetchMembers(): Promise<Member[]> {
     }
 
     const liveMembers = data.map(mapRowToMember);
-    // Keep local cache up-to-date with latest Supabase records
-    saveLocalMembers(liveMembers);
-    return liveMembers;
+    const liveIds = new Set(liveMembers.map((m) => m.id));
+    // Preserve local-only members (e.g. offline created users or local LINE profiles not yet synced)
+    const localOnly = localMembers.filter((m) => !liveIds.has(m.id));
+    const mergedMembers = [...liveMembers, ...localOnly];
+
+    // Keep local cache up-to-date with latest records
+    saveLocalMembers(mergedMembers);
+    return mergedMembers;
   } catch (err) {
     console.error("Error fetching members from Supabase, using local cache:", err);
     return localMembers;
@@ -274,12 +291,15 @@ export function mapRowToAccessRequest(row: any): AccessRequest {
   };
 }
 
-const ACCESS_REQUESTS_STORAGE_KEY = "omnioffice_access_requests_cache_v1";
+export const ACCESS_REQUESTS_STORAGE_KEY = "omnioffice_access_requests_cache_v1";
+export const LEGACY_ACCESS_REQUESTS_STORAGE_KEY = "omnioffice_access_requests";
 
-function getLocalAccessRequests(): AccessRequest[] {
+export function getLocalAccessRequests(): AccessRequest[] {
   if (typeof window === "undefined") return INITIAL_ACCESS_REQUESTS;
   try {
-    const raw = localStorage.getItem(ACCESS_REQUESTS_STORAGE_KEY);
+    const raw =
+      localStorage.getItem(ACCESS_REQUESTS_STORAGE_KEY) ||
+      localStorage.getItem(LEGACY_ACCESS_REQUESTS_STORAGE_KEY);
     if (!raw) return INITIAL_ACCESS_REQUESTS;
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_ACCESS_REQUESTS;
@@ -288,11 +308,16 @@ function getLocalAccessRequests(): AccessRequest[] {
   }
 }
 
-function saveLocalAccessRequests(requests: AccessRequest[]) {
+export function saveLocalAccessRequests(requests: AccessRequest[]) {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(ACCESS_REQUESTS_STORAGE_KEY, JSON.stringify(requests));
-  } catch {}
+    const serialized = JSON.stringify(requests);
+    // Persist to both standard key and legacy key for backward compatibility
+    localStorage.setItem(ACCESS_REQUESTS_STORAGE_KEY, serialized);
+    localStorage.setItem(LEGACY_ACCESS_REQUESTS_STORAGE_KEY, serialized);
+  } catch (e) {
+    console.warn("Could not save access requests to localStorage:", e);
+  }
 }
 
 /**
@@ -313,8 +338,13 @@ export async function fetchAccessRequests(): Promise<AccessRequest[]> {
     }
 
     const liveList = data.map(mapRowToAccessRequest);
-    saveLocalAccessRequests(liveList);
-    return liveList;
+    const liveIds = new Set(liveList.map((r) => r.id));
+    // Preserve any local-only requests that were created offline
+    const localOnly = localList.filter((r) => !liveIds.has(r.id));
+    const mergedList = [...liveList, ...localOnly];
+
+    saveLocalAccessRequests(mergedList);
+    return mergedList;
   } catch {
     return localList;
   }
@@ -366,6 +396,241 @@ export async function saveAccessRequest(req: AccessRequest): Promise<boolean> {
     console.warn("Error saving access request:", err);
     return false;
   }
+}
+
+/**
+ * Setup Realtime Subscription for access requests
+ */
+export function subscribeToAccessRequests(callback: (requests: AccessRequest[]) => void) {
+  if (!supabase) return () => {};
+
+  const channel = supabase
+    .channel("public:access_requests")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "access_requests" },
+      async () => {
+        const updated = await fetchAccessRequests();
+        callback(updated);
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+// ==========================================
+// VEHICLES & CAR BOOKINGS (Government Fleet & Dispatch)
+// ==========================================
+
+export function mapRowToVehicle(row: any): Vehicle {
+  return {
+    id: row.id,
+    name: row.name,
+    licensePlate: row.license_plate,
+    category: row.category,
+    capacity: Number(row.capacity) || 4,
+    driverName: row.driver_name || undefined,
+    fuelType: row.fuel_type || "ดีเซล B7",
+    status: row.status || "available",
+    image: row.image || undefined,
+    features: Array.isArray(row.features) ? row.features : [],
+    mileage: Number(row.mileage) || 0,
+    fuelLevel: row.fuel_level || "เต็มถัง (100%)",
+    lastMaintenanceDate: row.last_maintenance_date || undefined,
+    insuranceExpiry: row.insurance_expiry || undefined,
+    assignedDivision: row.assigned_division || undefined,
+  };
+}
+
+export function mapVehicleToRow(v: Vehicle): any {
+  return {
+    id: v.id,
+    name: v.name,
+    license_plate: v.licensePlate,
+    category: v.category,
+    capacity: v.capacity,
+    driver_name: v.driverName || null,
+    fuel_type: v.fuelType,
+    status: v.status,
+    image: v.image || null,
+    features: v.features || [],
+    mileage: v.mileage,
+    fuel_level: v.fuelLevel,
+    last_maintenance_date: v.lastMaintenanceDate || null,
+    insurance_expiry: v.insuranceExpiry || null,
+    assigned_division: v.assignedDivision || null,
+  };
+}
+
+export function mapRowToCarBooking(row: any): CarBookingRequest {
+  return {
+    id: row.id,
+    requestNo: row.request_no,
+    vehicleId: row.vehicle_id,
+    vehicleName: row.vehicle_name,
+    licensePlate: row.license_plate,
+    requesterId: row.requester_id,
+    requesterName: row.requester_name,
+    requesterPosition: row.requester_position || "",
+    requesterDivision: row.requester_division || "",
+    requesterPhone: row.requester_phone || "",
+    purpose: row.purpose,
+    destination: row.destination,
+    origin: row.origin || "สำนักงาน พมจ.กำแพงเพชร",
+    departureTime: row.departure_time,
+    returnTime: row.return_time,
+    passengerCount: Number(row.passenger_count) || 1,
+    passengersList: row.passengers_list || "",
+    requireDriver: Boolean(row.require_driver),
+    assignedDriver: row.assigned_driver || undefined,
+    fuelBudgetRequested: Boolean(row.fuel_budget_requested),
+    fuelBudgetAmount: row.fuel_budget_amount ? Number(row.fuel_budget_amount) : undefined,
+    fuelBudgetSource: row.fuel_budget_source || undefined,
+    status: row.status,
+    createdAt: row.created_at,
+    managerId: row.manager_id || undefined,
+    managerName: row.manager_name || undefined,
+    managerNotes: row.manager_notes || undefined,
+    managerActionAt: row.manager_action_at || undefined,
+    approverId: row.approver_id || undefined,
+    approverName: row.approver_name || undefined,
+    approverNotes: row.approver_notes || undefined,
+    approverActionAt: row.approver_action_at || undefined,
+    rejectReason: row.reject_reason || undefined,
+    rejectedBy: row.rejected_by || undefined,
+    returnReport: row.return_report || undefined,
+    notifications: Array.isArray(row.notifications) ? row.notifications : undefined,
+  };
+}
+
+export function mapCarBookingToRow(b: CarBookingRequest): any {
+  return {
+    id: b.id,
+    request_no: b.requestNo,
+    vehicle_id: b.vehicleId,
+    vehicle_name: b.vehicleName,
+    license_plate: b.licensePlate,
+    requester_id: b.requesterId,
+    requester_name: b.requesterName,
+    requester_position: b.requesterPosition || null,
+    requester_division: b.requesterDivision || null,
+    requester_phone: b.requesterPhone || null,
+    purpose: b.purpose,
+    destination: b.destination,
+    origin: b.origin,
+    departure_time: b.departureTime,
+    return_time: b.returnTime,
+    passenger_count: b.passengerCount,
+    passengers_list: b.passengersList || null,
+    require_driver: b.requireDriver,
+    assigned_driver: b.assignedDriver || null,
+    fuel_budget_requested: b.fuelBudgetRequested || false,
+    fuel_budget_amount: b.fuelBudgetAmount || null,
+    fuel_budget_source: b.fuelBudgetSource || null,
+    status: b.status,
+    created_at: b.createdAt,
+    manager_id: b.managerId || null,
+    manager_name: b.managerName || null,
+    manager_notes: b.managerNotes || null,
+    manager_action_at: b.managerActionAt || null,
+    approver_id: b.approverId || null,
+    approver_name: b.approverName || null,
+    approver_notes: b.approverNotes || null,
+    approver_action_at: b.approverActionAt || null,
+    reject_reason: b.rejectReason || null,
+    rejected_by: b.rejectedBy || null,
+    return_report: b.returnReport || null,
+    notifications: b.notifications || [],
+  };
+}
+
+export async function fetchVehicles(): Promise<Vehicle[]> {
+  if (!supabase) return INITIAL_VEHICLES;
+  try {
+    const { data, error } = await supabase
+      .from("vehicles")
+      .select("*")
+      .order("id", { ascending: true });
+    if (error || !data || data.length === 0) return INITIAL_VEHICLES;
+    return data.map(mapRowToVehicle);
+  } catch {
+    return INITIAL_VEHICLES;
+  }
+}
+
+export async function saveVehicle(vehicle: Vehicle): Promise<boolean> {
+  if (!supabase) return true;
+  try {
+    const row = mapVehicleToRow(vehicle);
+    const { error } = await supabase.from("vehicles").upsert(row);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function fetchCarBookings(): Promise<CarBookingRequest[]> {
+  if (!supabase) return INITIAL_BOOKING_REQUESTS;
+  try {
+    const { data, error } = await supabase
+      .from("car_bookings")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (error || !data || data.length === 0) return INITIAL_BOOKING_REQUESTS;
+    return data.map(mapRowToCarBooking);
+  } catch {
+    return INITIAL_BOOKING_REQUESTS;
+  }
+}
+
+export async function saveCarBooking(booking: CarBookingRequest): Promise<boolean> {
+  if (!supabase) return true;
+  try {
+    const row = mapCarBookingToRow(booking);
+    const { error } = await supabase.from("car_bookings").upsert(row);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export function subscribeToVehicles(callback: (vehicles: Vehicle[]) => void) {
+  if (!supabase) return () => {};
+  const channel = supabase
+    .channel("public:vehicles")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "vehicles" },
+      async () => {
+        const updated = await fetchVehicles();
+        callback(updated);
+      }
+    )
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+export function subscribeToCarBookings(callback: (bookings: CarBookingRequest[]) => void) {
+  if (!supabase) return () => {};
+  const channel = supabase
+    .channel("public:car_bookings")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "car_bookings" },
+      async () => {
+        const updated = await fetchCarBookings();
+        callback(updated);
+      }
+    )
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 

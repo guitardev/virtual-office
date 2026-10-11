@@ -270,9 +270,23 @@ on conflict (id) do update set
 
 ## 9. บันทึกประวัติการปรับปรุงและอัปเดตระบบ (Execution Log & Changelog)
 
-> **บันทึกเมื่อ:** 11 ตุลาคม 2569  
-> **เวอร์ชัน:** Phase 11 Complete  
+> **บันทึกเมื่อ:** 12 ตุลาคม 2569  
+> **เวอร์ชัน:** v1.4.5 (Database Schema Alignment & LocalStorage Synchronization)  
 > **สถานะการ Build:** `next build` ผ่านสำเร็จ 100% (Turbopack, TypeScript Strict Mode, Static Page Generation 7/7)
+
+### 9.5 สรุปการปรับปรุงความสอดคล้องของ Schema และการจัดการ LocalStorage (v1.4.5)
+* **อัปเดต [supabase/schema.sql](file:///c:/Users/GuitarDev/virtual-office/supabase/schema.sql) ให้เป็นเวอร์ชันปัจจุบันสมบูรณ์ 100%:**
+  * เพิ่มตาราง `vehicles` และ `car_bookings` พร้อม RLS Policies และ Seed Data เริ่มต้น (รถส่วนกลาง 5 คัน และคำขอจองทดสอบ 3 รายการ)
+  * เพิ่มฟิลด์ `division`, `icon`, `is_official`, `pinned_message_ids`, `created_by` ใน `chat_channels` และ Seed ห้องแชท 8 กลุ่มงานตามโครงสร้างจริง
+  * เพิ่มฟิลด์ `tag` และ `attachment_metadata` ในตาราง `messages`
+  * อัปเดต `supabase_realtime` Publication ให้ครอบคลุม `access_requests`, `vehicles`, และ `car_bookings`
+* **แก้ไขปัญหา Storage Key Mismatch และ Data Fragmentation (Access Requests):**
+  * ผสานการทำงานระหว่าง `omnioffice_access_requests_cache_v1` และ `omnioffice_access_requests` ให้บันทึกและอ่านแบบ Dual-key Sync
+  * รวมศูนย์ฟังก์ชัน `getLocalAccessRequests()` และ `saveLocalAccessRequests()` ใน `lib/supabase.ts` เพื่อป้องกันความคลาดเคลื่อนของข้อมูล
+* **ปรับปรุง Data Resilience & Cache Merge ใน `fetchMembers` และ `fetchAccessRequests`:**
+  * เพิ่ม Merge Strategy เพื่อรักษาข้อมูล Local-only หรือรายการที่สร้างขึ้นในโหมดออฟไลน์ ไม่ให้ถูกเขียนทับหายไปเมื่อดึงข้อมูลสดจาก Supabase
+* **เพิ่ม Realtime WebSocket Subscription สำหรับ `access_requests`:**
+  * สร้างฟังก์ชัน `subscribeToAccessRequests` ใน `lib/supabase.ts` และเชื่อมต่อใน `app/page.tsx` ทำให้คำขอสิทธิ์ใหม่แสดงขึ้นหน้า Admin แบบทันที
 
 ### 9.3 สรุปการพัฒนาระบบจองรถราชการ 3 ชั้น (Phase 11: Car Booking E-Approval)
 * **โครงสร้างข้อมูลและประเภท (Types & Interfaces):**

@@ -43,6 +43,9 @@ import {
   subscribeToMembers,
   fetchAccessRequests,
   saveAccessRequest,
+  subscribeToAccessRequests,
+  getLocalAccessRequests,
+  saveLocalAccessRequests,
   getSupabaseSession,
   subscribeToAuthChanges,
   signOutUser,
@@ -209,14 +212,10 @@ export default function OmniOfficeApp() {
           if (parsed.loginTime) setLoginTime(parsed.loginTime);
         }
       }
-      const savedRequests = localStorage.getItem("omnioffice_access_requests");
-      if (savedRequests) {
-        try {
-          const parsedReqs = JSON.parse(savedRequests);
-          if (Array.isArray(parsedReqs)) setAccessRequests(parsedReqs);
-        } catch (e) {
-          console.error("Failed to parse cached access requests:", e);
-        }
+
+      const cachedRequests = getLocalAccessRequests();
+      if (cachedRequests && cachedRequests.length > 0) {
+        setAccessRequests(cachedRequests);
       }
     } catch (e) {
       console.error("Failed to load saved session:", e);
@@ -411,12 +410,17 @@ export default function OmniOfficeApp() {
         }
       });
 
-      const unsubscribe = subscribeToMembers((updatedMembers) => {
+      const unsubscribeMembers = subscribeToMembers((updatedMembers) => {
         setMembers(updatedMembers);
       });
 
+      const unsubscribeRequests = subscribeToAccessRequests((updatedRequests) => {
+        setAccessRequests(updatedRequests);
+      });
+
       return () => {
-        unsubscribe();
+        unsubscribeMembers();
+        unsubscribeRequests();
         authSub?.unsubscribe?.();
       };
     }
@@ -860,14 +864,9 @@ export default function OmniOfficeApp() {
       prev.map((r) => (r.id === selectedRequest.id ? updatedReq : r))
     );
 
-    try {
-      const existingStr = localStorage.getItem("omnioffice_access_requests");
-      const existing: AccessRequest[] = existingStr ? JSON.parse(existingStr) : [];
-      const updated = existing.map((r) => (r.id === selectedRequest.id ? updatedReq : r));
-      localStorage.setItem("omnioffice_access_requests", JSON.stringify(updated));
-    } catch (err) {
-      console.warn("Could not save to localStorage:", err);
-    }
+    const existing = getLocalAccessRequests();
+    const updated = existing.map((r) => (r.id === selectedRequest.id ? updatedReq : r));
+    saveLocalAccessRequests(updated);
 
     saveAccessRequest(updatedReq).catch(console.warn);
 
@@ -931,14 +930,9 @@ export default function OmniOfficeApp() {
       prev.map((r) => (r.id === req.id ? updatedReq : r))
     );
 
-    try {
-      const existingStr = localStorage.getItem("omnioffice_access_requests");
-      const existing: AccessRequest[] = existingStr ? JSON.parse(existingStr) : [];
-      const updated = existing.map((r) => (r.id === req.id ? updatedReq : r));
-      localStorage.setItem("omnioffice_access_requests", JSON.stringify(updated));
-    } catch (err) {
-      console.warn("Could not save to localStorage:", err);
-    }
+    const existing = getLocalAccessRequests();
+    const updated = existing.map((r) => (r.id === req.id ? updatedReq : r));
+    saveLocalAccessRequests(updated);
 
     saveAccessRequest(updatedReq).catch(console.warn);
 
@@ -974,14 +968,9 @@ export default function OmniOfficeApp() {
       prev.map((r) => (r.id === req.id ? updatedReq : r))
     );
 
-    try {
-      const existingStr = localStorage.getItem("omnioffice_access_requests");
-      const existing: AccessRequest[] = existingStr ? JSON.parse(existingStr) : [];
-      const updated = existing.map((r) => (r.id === req.id ? updatedReq : r));
-      localStorage.setItem("omnioffice_access_requests", JSON.stringify(updated));
-    } catch (err) {
-      console.warn("Could not save to localStorage:", err);
-    }
+    const existing = getLocalAccessRequests();
+    const updated = existing.map((r) => (r.id === req.id ? updatedReq : r));
+    saveLocalAccessRequests(updated);
 
     saveAccessRequest(updatedReq).catch(console.warn);
 

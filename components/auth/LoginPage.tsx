@@ -333,14 +333,7 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
       }),
     };
 
-    try {
-      const existingStr = localStorage.getItem("omnioffice_access_requests");
-      const existing: AccessRequest[] = existingStr ? JSON.parse(existingStr) : [];
-      localStorage.setItem("omnioffice_access_requests", JSON.stringify([newReq, ...existing]));
-    } catch (e) {
-      console.warn("Could not save to localStorage:", e);
-    }
-
+    // Save to local cache & Supabase via centralized service
     saveAccessRequest(newReq).catch(console.warn);
 
     if (onRequestAccess) {
