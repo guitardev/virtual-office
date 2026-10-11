@@ -24,8 +24,8 @@ export function LogoutConfirmModal({
   const roleInfo = ROLE_CONFIG[role];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200/80 overflow-hidden transform transition-all animate-scale-up">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
+      <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200/80 overflow-hidden transform transition-all animate-scale-up my-auto max-h-[calc(100vh-2rem)] md:max-h-[90vh] overflow-y-auto">
         {/* Top Accent Strip */}
         <div className="h-2 w-full bg-gradient-to-r from-red-500 via-rose-500 to-amber-500" />
 

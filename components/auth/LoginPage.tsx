@@ -927,9 +927,9 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
 
       {/* ─── LINE LOGIN MODAL / SETUP & DEMO ─── */}
       {showLineModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in text-slate-800">
-          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
-            <div className="p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in text-slate-800 overflow-y-auto">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[calc(100vh-2rem)] md:max-h-[90vh] flex flex-col">
+            <div className="p-6 space-y-4 overflow-y-auto flex-1 min-h-0">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-[#06C755]/15 text-[#06C755] flex items-center justify-center text-xl font-bold">
@@ -1017,9 +1017,9 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
 
       {/* ─── FORGOT PASSWORD MODAL ─── */}
       {showForgotPasswordModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden text-slate-800">
-            <div className="p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden text-slate-800 my-auto max-h-[calc(100vh-2rem)] md:max-h-[90vh] flex flex-col">
+            <div className="p-6 space-y-4 overflow-y-auto flex-1 min-h-0">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center text-xl">
@@ -1095,28 +1095,29 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
 
       {/* ─── REQUEST ACCESS MODAL ─── */}
       {showRequestAccessModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden text-slate-800">
-            <div className="p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-teal-50 border border-teal-100 text-teal-600 flex items-center justify-center text-xl">
-                    📝
-                  </div>
-                  <h3 className="text-lg font-bold font-heading text-slate-900">
-                    ขอสิทธิ์เข้าใช้งานใหม่
-                  </h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden text-slate-800 my-auto max-h-[calc(100vh-2rem)] md:max-h-[90vh] flex flex-col">
+            {/* Header - Fixed */}
+            <div className="p-5 md:px-6 md:pt-6 md:pb-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-teal-50 border border-teal-100 text-teal-600 flex items-center justify-center text-xl">
+                  📝
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setShowRequestAccessModal(false)}
-                  className="text-slate-400 hover:text-slate-600 text-sm font-bold cursor-pointer"
-                >
-                  ✕
-                </button>
+                <h3 className="text-lg font-bold font-heading text-slate-900">
+                  ขอสิทธิ์เข้าใช้งานใหม่
+                </h3>
               </div>
+              <button
+                type="button"
+                onClick={() => setShowRequestAccessModal(false)}
+                className="text-slate-400 hover:text-slate-600 text-sm font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
 
-              {requestSuccess ? (
+            {requestSuccess ? (
+              <div className="p-6 overflow-y-auto flex-1">
                 <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold space-y-1">
                   <div className="flex items-center gap-2 text-sm font-bold text-emerald-700">
                     <span>✓</span>
@@ -1124,8 +1125,11 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
                   </div>
                   <div>ผู้ดูแลระบบ (Admin) จะตรวจสอบและอนุมัติสิทธิ์ พร้อมแจ้งผลทางอีเมล</div>
                 </div>
-              ) : (
-                <form onSubmit={handleRequestAccessSubmit} className="space-y-3 max-h-[75vh] overflow-y-auto pr-1">
+              </div>
+            ) : (
+              <form onSubmit={handleRequestAccessSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                {/* Scrollable Form Fields */}
+                <div className="overflow-y-auto flex-1 p-5 md:p-6 space-y-3">
                   {/* คำนำหน้า, ชื่อ, นามสกุล, ชื่อเล่น */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <div>
@@ -1314,24 +1318,26 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
                       className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:border-indigo-600"
                     />
                   </div>
-                  <div className="flex items-center gap-3 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowRequestAccessModal(false)}
-                      className="flex-1 py-2.5 border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
-                    >
-                      ยกเลิก
-                    </button>
-                    <button
-                      type="submit"
-                      className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-600/20 cursor-pointer"
-                    >
-                      ส่งคำขอใช้งาน
-                    </button>
-                  </div>
-                </form>
-              )}
-            </div>
+                </div>
+
+                {/* Footer - Fixed */}
+                <div className="flex items-center gap-3 p-4 md:px-6 border-t border-slate-100 bg-slate-50/80 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowRequestAccessModal(false)}
+                    className="flex-1 py-2.5 border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                  >
+                    ยกเลิก
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-600/20 cursor-pointer"
+                  >
+                    ส่งคำขอใช้งาน
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

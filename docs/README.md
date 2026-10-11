@@ -389,7 +389,106 @@ npx tsc --noEmit
 
 ---
 
+---
+
+## 🚗 ระบบจองรถยนต์ราชการและรายงานส่งคืนรถ (Government Vehicle Dispatch & Return System)
+
+ระบบบริหารจัดการรถยนต์ราชการส่วนกลาง สำนักงาน พมจ.กำแพงเพชร แบบครบวงจร 4 ขั้นตอน:
+1. **ยื่นคำขอใช้รถยนต์ราชการ (Tier 1):** ข้าราชการ/เจ้าหน้าที่เลือกยานพาหนะ ระบุวัตถุประสงค์ สถานที่ปลายทาง วัน-เวลา จำนวนผู้โดยสาร พร้อมระบุ **งบประมาณค่าน้ำมันเชื้อเพลิง (ถ้ามี)** (จำนวนเงินบาท และโครงการ/แหล่งงบประมาณ) ➔ ระบบส่ง Line Notify แจ้งเตือนหัวหน้าฝ่ายบริหารทั่วไปทันที
+2. **ความเห็นชอบของหัวหน้าฝ่ายบริหารทั่วไป (Tier 2):** ตรวจสอบความจำเป็น จัดสรรพนักงานขับรถราชการ บันทึกข้อเสนอแนะ ➔ ส่ง Line Notify เสนอ พมจ.กำแพงเพชร เพื่อโปรดพิจารณาอนุมัติ
+3. **การอนุมัติของ พมจ.กำแพงเพชร (Tier 3) & ระบบ Notify อัตโนมัติ:**
+   - พมจ. พิจารณาอนุมัติขั้นสุดท้าย ตรวจสอบงบค่าน้ำมันและความเห็นชอบ
+   - **ระบบส่ง Notification อัตโนมัติไปยังผู้มีส่วนเกี่ยวข้อง 3 ฝ่ายทันที:**
+     1. **ผู้ขอใช้รถ:** แจ้งผลอนุมัติ พร้อมออกใบขอใช้รถราชการทางการ (ตราครุฑ)
+     2. **พนักงานขับรถ:** แจ้งมอบหมายภารกิจ วัน-เวลา ปลายทาง และคณะเดินทาง
+     3. **เจ้าหน้าที่ยานพาหนะ/ส่วนกลาง:** แจ้งเตรียมความพร้อมรถยนต์และงบค่าน้ำมัน
+4. **ระบบคืนรถและการแจ้งเตือน (Return Monitor, Inspection & Status Revert):**
+   - **แบนเนอร์แจ้งเตือนคืนรถ (Active Return Due Monitor):** ตรวจจับรถที่ได้รับอนุมัติ/ถึงกำหนดส่งคืน พร้อมปุ่มกดส่ง Line Notify เตือนผู้ใช้ และปุ่มรายงานคืนรถด่วน
+   - **บันทึกเลขไมล์:** เลขไมล์ก่อนเดินทางและหลังส่งคืน คำนวณระยะทางที่วิ่งจริง (กม.) อัตโนมัติ
+   - **เกจระดับน้ำมันเสมือนจริง (Realistic Automotive Fuel Gauge):** หน้าปัดคลัสเตอร์รถยนต์พร้อมเข็มวัดเรืองแสง สเกล E-1/4-1/2-3/4-F ไฟเตือน Low Fuel LED สีส้ม (⚠️) แสง Backlight และหน้าปัดดำเมทัลลิก หมุนตอบสนองแบบ Interactive
+   - **ตรวจสภาพรถยนต์ 4 มิติ:** ความสะอาดเรียบร้อย, สภาพตัวถัง/รอยขูดขีด, ระบบเครื่องยนต์/การขับขี่, และระบบปรับอากาศ/ภายใน
+   - **คืนสถานะรถยนต์ (Status Revert):** สลับสถานะรถยนต์กลับเป็น "พร้อมใช้งาน" (Available) อัตโนมัติ พร้อมอัปเดตเลขไมล์สะสมและเกจน้ำมันคงเหลือลงแฟ้มประวัติรถทันที
+   - **ออกเอกสารทางการ:** "ใบรายงานผลการใช้และส่งคืนรถยนต์ราชการ" (แบบ พมจ.กพ 02/1) รองรับการพิมพ์/PDF
+
+### 🚘 การบริหารจัดการข้อมูลรถยนต์ราชการ (Fleet Management CRUD)
+- **ระบบรูปภาพรถยนต์สมบูรณ์แบบ (Vehicle Image System):**
+  - อัปโหลดรูปภาพรถจริงจากเครื่องคอมพิวเตอร์ (Local File Upload ➔ Base64 DataURL Preview)
+  - แกลเลอรีภาพพรีเซ็ตสำเร็จรูป (Preset Gallery) ครอบคลุม 6 หมวดหมู่ (รถตู้สำนักงาน, รถกระบะ 4WD, รถตรวจการ SUV, รถตู้ VIP, รถบรรทุก 6 ล้อ, รถยนต์นั่ง Sedan)
+  - กำหนดรูปภาพผ่าน Direct URL
+  - แสดงผลภาพรถจริงแบบ Hero Banner 16:9 ในการ์ด Fleet, แฟ้มประวัติรถ, และ Thumbnail ในแบบฟอร์มเลือกขอใช้รถ
+- **หน้าปัดเกจน้ำมันเสมือนจริง (Realistic Fuel Gauge Cluster UI):**
+  - คอมโพเนนต์ `RealisticFuelGauge` สไตล์แผงหน้าปัดรถยนต์จริง แสดงผลได้ 3 ขนาด (`sm`, `md`, `lg`)
+  - เข็มชี้องศาจริงตามปริมาณน้ำมัน (-65° ถึง +65°) พร้อม Pivot Cap ชุบโครเมียมและเงา Drop Shadow
+  - สเกลขีดสีขาวและโซนขีดแดงเตือนระดับน้ำมันสำรอง (Critical Reserve Band)
+  - ไฟเตือนน้ำมันใกล้หมด (Low Fuel Amber LED) สว่างอัตโนมัติเมื่อระดับน้ำมันต่ำกว่า 20%
+  - โหมด Interactive สำหรับตั้งค่าระดับน้ำมันในแบบฟอร์มและบันทึกตรวจรับส่งคืน
+- **แฟ้มประวัติรถยนต์ราชการ (Vehicle Detail Dossier):** แสดงภาพถ่ายรถจริง แผงหน้าปัดดิจิทัลและเกจน้ำมันเสมือนจริง เลขไมล์สะสม ความจุที่นั่ง วันตรวจสภาพล่าสุด วันหมดอายุ พ.ร.บ./ประกันภัย อุปกรณ์ส่วนควบ และประวัติการออกปฏิบัติภารกิจย้อนหลัง
+- **เพิ่ม/แก้ไขข้อมูลรถ (Vehicle CRUD):** ผู้ดูแลระบบและหัวหน้าฝ่ายสามารถเพิ่มรถยนต์คันใหม่ แก้ไขข้อมูลทางเทคนิค อัปโหลดรูปภาพ ปรับระดับน้ำมัน หรือสลับสถานะความพร้อม (พร้อมใช้งาน / ปฏิบัติภารกิจ / ส่งซ่อมบำรุง)
+
+---
+
 ## 📜 ประวัติการปรับปรุง (Changelog & Version History)
+
+### **v1.4.3 (2026-10-11) — Global Modal Viewport Overflow & PC Scroll Ergonomics Fix**
+- 🖥️ **แก้ไขปัญหาหน้าต่าง Modal ล้นขอบจอและถูกตัดส่วนหัว/ท้ายบนหน้าจอ PC (Complete Modal Viewport Fix):**
+  - **สาเหตุที่พบ:** เกิดจากปัญหา Flexbox centering truncation (`align-items: center` ร่วมกับ `overflow-y-auto`) ทำให้เมื่อความสูงของ Modal เกินขนาดหน้าจอ (โดยเฉพาะบนจอคอมพิวเตอร์ PC/Laptop 1366×768 หรือจอที่มี Windows Display Scaling 125%-150%) ส่วนบนของ Modal (หัวข้อ, ปุ่มปิด ✕) จะถูกดันขึ้นไปอยู่เหนือพิกัด `Y = 0` ทำให้อ่านหรือเลื่อนกลับขึ้นไปไม่ได้ และปุ่มบันทึก/ส่งคำขอด้านล่างหลุดขอบหน้าจอ
+  - **การปรับปรุงสถาปัตยกรรม Modal แบบครบวงจรทุกโมดูล (Total 14 Modals):**
+    1. **Outer Overlay Backdrop:** กำหนด `p-3 sm:p-4 md:p-6 overflow-y-auto` รองรับการเลื่อนดูเมื่อหน้าจอมีขนาดเล็กผิดปกติ
+    2. **Modal Card Container:** ใช้ `my-auto max-h-[calc(100vh-2rem)] md:max-h-[90vh] flex flex-col overflow-hidden` การันตีว่าตัวกล่อง Modal จะไม่เกิน 90% ของความสูงหน้าจอเสมอ
+    3. **Fixed Header (`shrink-0`):** ตรึงหัวข้อ, ไอคอน, และปุ่มปิด [✕] ไว้ด้านบนสุดเสมอ ไม่เลื่อนหายไปไหน
+    4. **Scrollable Body (`overflow-y-auto flex-1 min-h-0`):** ให้พื้นที่กรอกข้อมูล/เนื้อหาเอกสารเลื่อนอย่างราบรื่นอยู่ภายในพื้นที่ตรงกลาง
+    5. **Fixed Action Footer (`shrink-0 border-t`):** ตรึงปุ่มสำคัญ ("ยกเลิก", "บันทึกข้อมูล", "พิมพ์เอกสาร", "อนุมัติ") ไว้ที่ส่วนท้ายด้านล่าง ไม่ต้องเสียเวลาเลื่อนลงไปล่างสุดของฟอร์มยาวๆ เพื่อกดบันทึก
+  - **ครอบคลุม Modal ทั้งหมดในระบบ:**
+    - ✏️ [EditProfileModal.tsx](file:///c:/Users/GuitarDev/virtual-office/components/user/EditProfileModal.tsx) (แก้ไขข้อมูลส่วนบุคคล & รูปโปรไฟล์)
+    - 👑 [AdminModals.tsx](file:///c:/Users/GuitarDev/virtual-office/components/admin/AdminModals.tsx) (ครบทั้ง 8 Modals: แฟ้มประวัติ, แก้ไขสิทธิ์, ลบสมาชิก, เพิ่มบุคลากร, ตั้งค่าโมดูล, รายละเอียดคำขอ, แก้ไขคำขอ, ปฏิเสธคำขอ)
+    - 🚗 [ReturnVehicleModal.tsx](file:///c:/Users/GuitarDev/virtual-office/components/carbooking/ReturnVehicleModal.tsx) (รายงานส่งคืนรถ & เกจน้ำมัน & ตรวจสภาพ)
+    - 👔 [ReviewBookingModal.tsx](file:///c:/Users/GuitarDev/virtual-office/components/carbooking/ReviewBookingModal.tsx) (พิจารณาเห็นชอบ & อนุมัติการใช้รถ)
+    - 🚘 [VehicleFormModal.tsx](file:///c:/Users/GuitarDev/virtual-office/components/carbooking/VehicleFormModal.tsx) (เพิ่ม/แก้ไขข้อมูลรถ & อัปโหลดภาพรถยนต์)
+    - 🔍 [VehicleDetailModal.tsx](file:///c:/Users/GuitarDev/virtual-office/components/carbooking/VehicleDetailModal.tsx) (แฟ้มประวัติรถยนต์ & คลัสเตอร์เกจน้ำมัน)
+    - 📄 [CarBookingDocumentModal.tsx](file:///c:/Users/GuitarDev/virtual-office/components/carbooking/CarBookingDocumentModal.tsx) (แบบขออนุญาตใช้รถส่วนกลางตราครุฑ)
+    - 📋 [VehicleReturnDocumentModal.tsx](file:///c:/Users/GuitarDev/virtual-office/components/carbooking/VehicleReturnDocumentModal.tsx) (ใบรายงานผลการใช้และส่งคืนรถตราครุฑ)
+    - 🔔 [NotificationLogsModal.tsx](file:///c:/Users/GuitarDev/virtual-office/components/carbooking/NotificationLogsModal.tsx) (บันทึกประวัติการแจ้งเตือน)
+    - 💬 [CreateGroupModal.tsx](file:///c:/Users/GuitarDev/virtual-office/components/chat/CreateGroupModal.tsx) (สร้างกลุ่มแชทโครงการใหม่)
+    - 🔐 [LoginPage.tsx](file:///c:/Users/GuitarDev/virtual-office/components/auth/LoginPage.tsx) (LINE Login modal, รีเซ็ตรหัสผ่าน, ขอสิทธิ์เข้าใช้งานใหม่)
+    - 🚪 [LogoutConfirmModal.tsx](file:///c:/Users/GuitarDev/virtual-office/components/auth/LogoutConfirmModal.tsx) (ยืนยันออกจากระบบ)
+    - ⚡ [app/page.tsx](file:///c:/Users/GuitarDev/virtual-office/app/page.tsx) (กล่องแจ้งเตือน LINE Profile Notice)
+
+### **v1.4.2 (2026-10-11) — Comprehensive Profile Photo Management System**
+- 🖼️ **ระบบจัดการรูปภาพโปรไฟล์ผู้ใช้งานและเจ้าหน้าที่ (Profile Photo Management):**
+  - เพิ่มส่วนบริหารจัดการรูปถ่ายประจำตัวใน Modal แก้ไขข้อมูลส่วนตัว (`EditProfileModal.tsx`) และ Modal แก้ไขข้อมูลบุคลากรของ Admin (`AdminModals.tsx`)
+  - **3 ช่องทางการกำหนดรูปภาพโปรไฟล์:**
+    1. 📁 **อัปโหลดไฟล์จากเครื่อง (Local File Upload):** พร้อมระบบ Client-side Image Compression อัตโนมัติด้วย HTML5 Canvas (ปรับขนาดสูงสุด 400x400 px, JPEG 85%) ไม่เปลืองหน่วยความจำ และเซฟเป็น DataURL ความเร็วสูง
+    2. 👤 **แกลเลอรีรูปถ่ายทางการ (Official Presets Gallery):** รวมรูปถ่ายประจำตำแหน่งข้าราชการและเจ้าหน้าที่ พมจ.กำแพงเพชร พร้อมชื่อและตำแหน่ง สามารถคลิกเลือกใช้งานได้ทันที 1-Click
+    3. 🔗 **ระบุลิงก์รูปภาพโดยตรง (Direct URL):** รองรับการวาง URL รูปถ่ายจากภายนอก พร้อมปุ่ม "นำไปใช้" และตรวจสอบ Preview แบบ Realtime
+    4. 🗑️ **ลบรูปภาพ / คืนค่าชื่อย่อ (Remove/Reset):** ปุ่มลบรูปภาพเพื่อกลับไปใช้วงกลมตัวอักษรย่อชื่อ-นามสกุล 2 ตัวอักษรอย่างเป็นระเบียบ
+  - ซิงก์รูปภาพโปรไฟล์แบบ Real-time ไปยัง Header, Sidebar, Dashboard, การ์ดบุคลากร, LocalStorage Session, แคชสมาชิก และ Supabase
+
+### **v1.4.1 (2026-10-11) — LINE SSO Profile Preservation & Member Cache Resilience**
+- 🛡️ **แก้ไขปัญหาข้อมูลสมาชิกถูกรีเซ็ตเมื่อเข้าสู่ระบบด้วย LINE ซ้ำ (LINE Profile Preservation):**
+  - เมื่อสมาชิกที่เคยปรับปรุงข้อมูลส่วนบุคคล (ตำแหน่ง, กลุ่ม/ฝ่าย, เบอร์โทร, ชื่อเล่น, สิทธิ์บทบาท ฯลฯ) เข้าสู่ระบบด้วย LINE อีกครั้ง ระบบจะค้นหาประวัติเดิมและรักษาข้อมูลที่แก้ไขไว้ครบ 100% ไม่ถูกแทนที่ด้วยค่าเริ่มต้นอีกต่อไป
+  - ซิงก์เฉพาะรูปโปรไฟล์ (`avatarUrl`) และการผูกบัญชี LINE ID โดยไม่แตะต้องข้อมูลงานราชการ
+### **v1.4.4 (2026-10-11) — Fullscreen Modal Experience & Prominent Close Controls**
+- ⛶ **โหมด Modal เต็มหน้าจอ (Fullscreen Modal Design):** ปรับโฉมหน้าต่าง Modal ให้สามารถขยายเต็มหน้าจอ (`isFullscreen`) เพื่อใช้พื้นที่หน้าจอคอมพิวเตอร์ (PC / Ultrawide) ได้อย่างเต็มประสิทธิภาพ ไม่ถูกจำกัดในกรอบแคบ พร้อมปุ่มสลับ `⛶ เต็มหน้าจอ` / `🗗 ย่อหน้าต่าง`
+- 🖥️ **เลย์เอาต์ 2 คอลัมน์สำหรับเดสก์ท็อป (Responsive 2-Column Desktop Grid):** ในหน้าต่างแก้ไขข้อมูลส่วนตัว (`EditProfileModal`) จัดสรรพื้นที่ฝั่งซ้ายเป็นระบบจัดการรูปถ่ายโปรไฟล์ (พรีวิวขนาดใหญ่, อัปโหลด, แกลเลอรีทำเนียบ 8 ท่าน, URL) และฝั่งขวาเป็นแบบฟอร์มข้อมูลข้าราชการ/การติดต่ออย่างเป็นสัดส่วน
+- ✕ **ปุ่มปิด Modal ชัดเจน โดดเด่น (Prominent Close Modal Buttons):** ปรับปรุงปุ่มปิดหน้าต่างทุก Modal จากกากบาทสีเทาขนาดเล็ก ให้เป็นปุ่ม Badge ชัดเจน มีไอคอนและข้อความ `✕ ปิดหน้าต่าง` พร้อมปุ่มยกเลิก/ปิดที่ Footer
+- ⌨️ **รองรับปุ่ม Escape (Esc) บนแป้นพิมพ์:** เพิ่ม Event Listener ดักจับการกดปุ่ม `Esc` เพื่อปิด Modal ได้ทันทีอย่างสะดวกรวดเร็ว
+- 🛡️ **ยกระดับหน้าต่าง Modal สำคัญทั่วทั้งระบบ:** ปรับปรุงความกว้างและปุ่มปิดใน `AdminModals` (แฟ้มบุคลากร, แก้ไขสิทธิ์, เพิ่มเจ้าหน้าที่, ตั้งค่าโมดูล, คำขอสิทธิ์), `VehicleFormModal`, `VehicleDetailModal`, `ReturnVehicleModal`, `ReviewBookingModal`, และ `CreateGroupModal`
+
+### **v1.4.3 (2026-10-11) — Responsive Viewport & Flex-Centering Optimization**
+- 🛡️ **แก้ไขปัญหา Modal ล้นหน้าจอบน PC (Fix Flex-Centering Viewport Overflow):** ปรับปรุงโครงสร้าง CSS ของหน้าต่าง Modal ทั้ง 14 ตัวทั่วระบบ
+- 📜 **แยกส่วนการเลื่อนเนื้อหาอย่างอิสระ:** ล็อกแถบ Header และ Footer ของทุก Modal ให้คงที่ และกำหนด `overflow-y-auto` ที่ตัวเนื้อหาฟอร์ม
+- 💾 **ระบบแคชข้อมูลบุคลากรแบบ Persistent Local Cache (`omnioffice_members_cache_v1`):** บันทึกการแก้ไขข้อมูลสมาชิกลง LocalStorage อัตโนมัติ ป้องกันข้อมูลสูญหายแม้ทำงานในโหมด Offline / In-Memory
+
+### **v1.4.0 (2026-10-11) — Realistic Automotive Fuel Gauge & Vehicle Image System**
+- ⛽ **หน้าปัดเกจน้ำมันเสมือนจริง (Realistic Fuel Gauge UI):** หน้าปัดคลัสเตอร์รถยนต์ มีเข็มวัดองศาจริง, สเกล E-F, โซนแดงเตือน, และไฟเตือนน้ำมันใกล้หมด (Low Fuel Amber LED ⚠️) ตอบสนองแบบ Interactive
+- 📸 **ระบบรูปภาพรถยนต์ราชการ (Vehicle Image Management):** รองรับการอัปโหลดไฟล์รูปจากเครื่อง, แกลเลอรี Preset สำเร็จรูป 6 หมวดหมู่, แสดงภาพจริงในการ์ดรถ, หน้าต่างเลือกจอง, และแฟ้มประวัติรถ
+- 🚘 **ยกระดับ UI หน้ารายการรถยนต์ราชการ:** แสดงรูปถ่าย Hero Banner บนการ์ดรถแต่ละคัน พร้อมแผง Odometer ดิจิทัลคู่กับเกจน้ำมันเสมือนจริง
+
+### **v1.3.0 (2026-10-11) — Vehicle Return Workflow, Fleet CRUD & Division Chat**
+- 🔄 **ระบบรายงานคืนรถยนต์ราชการ (Return & Inspection Workflow):** บันทึกเลขไมล์ต้น-ปลาย คำนวณระยะทางจริง เกจระดับน้ำมัน ตรวจสภาพรถ 4 ด้าน พร้อมออกใบรายงานส่งคืนทางการ (ตราครุฑ)
+- 🚘 **ระบบจัดการข้อมูลรถยนต์ราชการ (Fleet Management CRUD):** เพิ่ม/แก้ไข/ลบรถยนต์, แฟ้มประวัติรถยนต์ราชการ (Vehicle Dossier), และซิงก์เลขไมล์/น้ำมันอัตโนมัติ
+- 💬 **ระบบกลุ่มสนทนาตามกลุ่มงาน (Official Division Chat Groups):** สร้างห้องแชททางการอัตโนมัติตาม 5 กลุ่มงานในสำนักงาน พมจ.กำแพงเพชร พร้อมสิทธิ์สมาชิกตามสังกัด
+- 🗄️ **Supabase Integration & Self-Healing Cache:** รองรับการซิงก์ข้อมูลกับ Supabase พร้อมระบบ Fallback และ In-Memory resilience
 
 ### **v1.2.0 (2026-10-08) — Admin Suite, Module Lifecycle & Gov Schema**
 - ✨ **เพิ่มระบบจัดการบุคลากรแบบสมบูรณ์ (Full Member CRUD):** ดูแฟ้มประวัติข้าราชการ, แก้ไขข้อมูลส่วนบุคคล, เพิ่มบุคลากรใหม่, ลบบุคลากร

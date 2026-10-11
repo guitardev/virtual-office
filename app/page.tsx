@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Role,
   ModuleId,
@@ -22,6 +22,7 @@ import {
   INITIAL_ACCESS_REQUESTS,
   GOVERNMENT_DIVISIONS,
 } from "@/lib/rbac";
+import { loadStoredBookings } from "@/lib/carbooking-data";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { LogoutConfirmModal } from "@/components/auth/LogoutConfirmModal";
 import { DashboardPage } from "@/components/dashboard/DashboardPage";
@@ -46,6 +47,7 @@ import {
   subscribeToAuthChanges,
   signOutUser,
   findOrMapAuthMember,
+  getLocalMembers,
 } from "@/lib/supabase";
 
 interface NavItem {
@@ -57,14 +59,15 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { id: "dashboard", label: "หน้าแรก", icon: "📊" },
-  { id: "chat", label: "แชททีม", icon: "💬", badge: 3 },
-  { id: "task", label: "งานและโปรเจกต์", icon: "📋", badge: 5 },
-  { id: "meetings", label: "การประชุม", icon: "📹", badge: 2 },
+  { id: "chat", label: "แชททีม", icon: "💬" },
+  { id: "task", label: "งานและโปรเจกต์", icon: "📋" },
+  { id: "meetings", label: "การประชุม", icon: "📹" },
   { id: "carbooking", label: "รถยนต์สำนักงาน", icon: "🚗" },
   { id: "reports", label: "รายงานและสถิติ", icon: "📈" },
   { id: "admin", label: "ระบบจัดการ & RBAC", icon: "⚙️" },
   { id: "user", label: "ข้อมูลส่วนตัว", icon: "👤" },
 ];
+
 
 export default function OmniOfficeApp() {
   // ─── AUTH & SESSION STATE ───
@@ -136,6 +139,7 @@ export default function OmniOfficeApp() {
     lineId: "",
     role: "member" as Role,
     status: "active" as "active" | "inactive",
+    avatarUrl: "",
   });
   const [memberToDelete, setMemberToDelete] = useState<Member | null>(null);
 
@@ -160,6 +164,7 @@ export default function OmniOfficeApp() {
     email: "",
     phone: "",
     lineId: "",
+    avatarUrl: "",
   });
 
   const [newMemberForm, setNewMemberForm] = useState({
@@ -189,6 +194,12 @@ export default function OmniOfficeApp() {
   useEffect(() => {
     setIsHydrated(true);
     try {
+      // Load cached members so edited profiles are immediately active
+      const cachedMembers = getLocalMembers();
+      if (cachedMembers && cachedMembers.length > 0) {
+        setMembers(cachedMembers);
+      }
+
       const savedSession = localStorage.getItem("omnioffice_auth_session");
       if (savedSession) {
         const parsed = JSON.parse(savedSession);
@@ -250,6 +261,9 @@ export default function OmniOfficeApp() {
             if (data.success && data.profile) {
               const p = data.profile;
               const displayName = (p.displayName || "ผู้ใช้งาน LINE").trim();
+              const lineShortId = p.userId.slice(0, 12);
+              const lineIdTag = `@${p.userId.slice(0, 8)}`;
+              const expectedId = `usr_line_${lineShortId}`;
 
               // Check if display name explicitly starts with a standard Thai title
               const KNOWN_PREFIXES = ["ว่าที่ ร.ต.", "ว่าที่ร้อยตรี", "นางสาว", "น.ส.", "นาย", "นาง", "ดร.", "ผศ.", "รศ."];
@@ -265,31 +279,78 @@ export default function OmniOfficeApp() {
                 }
               }
 
-              const lineMember: Member = {
-                id: `usr_line_${p.userId.slice(0, 12)}`,
-                prefix: detectedPrefix,
-                firstName: cleanFirstName,
-                lastName: cleanLastName,
-                name: displayName,
-                personnelType: "ข้าราชการ",
-                position: "เจ้าหน้าที่ปฏิบัติการ (LINE SSO)",
-                division: GOVERNMENT_DIVISIONS[0],
-                department: GOVERNMENT_DIVISIONS[0],
-                email: p.email || `${p.userId.slice(0, 8).toLowerCase()}@line.me`,
-                phone: "-",
-                lineId: `@${p.userId.slice(0, 8)}`,
-                role: "member",
-                status: "active",
-                avatarUrl: p.pictureUrl,
-                avatarText: (cleanFirstName || "LN").slice(0, 2),
-                joinedDate: "วันนี้",
-              };
+              // Fetch freshest pool of members to check for existing record
+              const allCurrentMembers = await fetchMembers();
+              const savedLineUserId = typeof window !== "undefined" ? localStorage.getItem("omnioffice_last_line_user_id") : null;
 
-              if (isLiveConnected) {
-                await saveMember(lineMember);
+              // Match existing member by:
+              // 1. Expected LINE ID (usr_line_...) or exact LINE userId
+              // 2. Previously remembered LINE user id in session/localStorage
+              // 3. Registered lineId in profile
+              // 4. Matching email (if non-empty)
+              const existingMember = allCurrentMembers.find((m) => {
+                if (m.id === expectedId || m.id === `usr_line_${p.userId}` || m.id === p.userId) return true;
+                if (savedLineUserId && m.id === savedLineUserId) return true;
+                if (m.lineId && (m.lineId === lineIdTag || m.lineId === p.userId || m.lineId === `@${p.userId}`)) return true;
+                if (p.email && m.email && m.email.toLowerCase().trim() === p.email.toLowerCase().trim()) return true;
+                return false;
+              });
+
+              let memberToLogin: Member;
+
+              if (existingMember) {
+                // 🛡️ CRITICAL: PRESERVE all previously updated personal data!
+                // Never overwrite customized position, division, phone, role, nickname, name, or personnelType
+                memberToLogin = {
+                  ...existingMember,
+                  // Refresh avatar from LINE if available, keeping custom avatar if already set
+                  avatarUrl: p.pictureUrl || existingMember.avatarUrl,
+                  // Ensure lineId is populated if previously unset
+                  lineId: existingMember.lineId && existingMember.lineId !== "-" ? existingMember.lineId : lineIdTag,
+                  // If existing email was empty or placeholder, update with verified email
+                  email: existingMember.email && !existingMember.email.includes("@line.me") ? existingMember.email : (p.email || existingMember.email),
+                };
+              } else {
+                // First-time LINE registration: create a new member record
+                memberToLogin = {
+                  id: expectedId,
+                  prefix: detectedPrefix,
+                  firstName: cleanFirstName,
+                  lastName: cleanLastName,
+                  name: displayName,
+                  personnelType: "ข้าราชการ",
+                  position: "เจ้าหน้าที่ปฏิบัติการ (LINE SSO)",
+                  division: GOVERNMENT_DIVISIONS[0],
+                  department: GOVERNMENT_DIVISIONS[0],
+                  email: p.email || `${p.userId.slice(0, 8).toLowerCase()}@line.me`,
+                  phone: "-",
+                  lineId: lineIdTag,
+                  role: "member",
+                  status: "active",
+                  avatarUrl: p.pictureUrl,
+                  avatarText: (cleanFirstName || "LN").slice(0, 2),
+                  joinedDate: "วันนี้",
+                };
               }
-              handleLogin(lineMember, true);
-              showToast(`🎉 เข้าสู่ระบบด้วย LINE: ${lineMember.name} สำเร็จ!`);
+
+              // Save to persistent storage and update members in memory
+              await saveMember(memberToLogin);
+              setMembers((prev) => {
+                const exists = prev.some((m) => m.id === memberToLogin.id);
+                return exists
+                  ? prev.map((m) => (m.id === memberToLogin.id ? memberToLogin : m))
+                  : [memberToLogin, ...prev];
+              });
+              if (typeof window !== "undefined") {
+                localStorage.setItem("omnioffice_last_line_user_id", memberToLogin.id);
+              }
+
+              handleLogin(memberToLogin, true);
+              if (existingMember) {
+                showToast(`🎉 ยินดีต้อนรับกลับ คุณ${memberToLogin.name} (เข้าสู่ระบบด้วย LINE สำเร็จ)`);
+              } else {
+                showToast(`🎉 สมัครและเข้าสู่ระบบด้วย LINE: ${memberToLogin.name} สำเร็จ!`);
+              }
             } else if (data.missingSecret) {
               setLineModalNotice({
                 title: "✅ ตรวจสอบสิทธิ์ LINE สำเร็จ (ได้รับ Authorization Code แล้ว)",
@@ -596,6 +657,7 @@ export default function OmniOfficeApp() {
       lineId: member.lineId || "",
       role: member.role,
       status: member.status || "active",
+      avatarUrl: member.avatarUrl || "",
     });
   };
 
@@ -604,6 +666,8 @@ export default function OmniOfficeApp() {
     if (!adminEditingMember) return;
 
     const fullName = `${adminEditForm.prefix}${adminEditForm.firstName} ${adminEditForm.lastName}`.trim();
+    const initials = (adminEditForm.firstName.trim() || adminEditingMember.name).slice(0, 2);
+
     const updatedMember: Member = {
       ...adminEditingMember,
       prefix: adminEditForm.prefix,
@@ -620,6 +684,8 @@ export default function OmniOfficeApp() {
       lineId: adminEditForm.lineId.trim(),
       role: adminEditForm.role,
       status: adminEditForm.status,
+      avatarUrl: adminEditForm.avatarUrl ? adminEditForm.avatarUrl.trim() : undefined,
+      avatarText: initials,
     };
 
     setMembers((prev) => prev.map((m) => (m.id === updatedMember.id ? updatedMember : m)));
@@ -946,6 +1012,7 @@ export default function OmniOfficeApp() {
       email: currentUser.email || "",
       phone: currentUser.phone || "",
       lineId: currentUser.lineId || "",
+      avatarUrl: currentUser.avatarUrl || "",
     });
     setShowEditProfileModal(true);
   };
@@ -958,6 +1025,8 @@ export default function OmniOfficeApp() {
     const fullName = editProfileForm.prefix
       ? `${editProfileForm.prefix}${namesCombined}`
       : namesCombined;
+
+    const initials = (editProfileForm.firstName.trim() || currentUser.name).slice(0, 2);
 
     const updatedUser: Member = {
       ...currentUser,
@@ -973,6 +1042,8 @@ export default function OmniOfficeApp() {
       email: editProfileForm.email.trim(),
       phone: editProfileForm.phone.trim(),
       lineId: editProfileForm.lineId.trim(),
+      avatarUrl: editProfileForm.avatarUrl ? editProfileForm.avatarUrl.trim() : undefined,
+      avatarText: initials,
     };
 
     setCurrentUser(updatedUser);
@@ -1044,6 +1115,42 @@ export default function OmniOfficeApp() {
     },
   ]);
 
+  // Dynamic navigation badges calculated from real state (System Analysis Item 5.1)
+  const navBadges: Record<ModuleId, number> = useMemo(() => {
+    const taskCount = tasks.filter((t) => t.status !== "done").length;
+    const meetingCount = meetings.length;
+    const pendingReqCount = accessRequests.filter((r) => r.status === "pending").length;
+
+    let carCount = 0;
+    try {
+      const stored = loadStoredBookings();
+      if (currentUserRole === "admin") {
+        carCount = stored.filter((b) => b.status === "endorsed").length;
+      } else if (currentUserRole === "manager") {
+        carCount = stored.filter((b) => b.status === "pending_review").length;
+      } else {
+        carCount = stored.filter(
+          (b) =>
+            b.requesterId === currentUser?.id &&
+            (b.status === "pending_review" || b.status === "endorsed")
+        ).length;
+      }
+    } catch {
+      carCount = 0;
+    }
+
+    return {
+      dashboard: 0,
+      chat: 2,
+      task: taskCount,
+      meetings: meetingCount,
+      carbooking: carCount,
+      reports: 0,
+      admin: currentUserRole === "admin" ? pendingReqCount : 0,
+      user: 0,
+    };
+  }, [tasks, meetings, accessRequests, currentUserRole, currentUser?.id]);
+
   const toggleTaskStatus = (id: number) => {
     setTasks((prev) =>
       prev.map((t) => {
@@ -1058,30 +1165,50 @@ export default function OmniOfficeApp() {
   };
 
   const handleContinueWithLineProfile = async () => {
-    const lineMember: Member = {
-      id: `usr_line_${Date.now()}`,
-      prefix: "",
-      firstName: "ผู้ใช้งาน LINE",
-      lastName: "",
-      name: "ผู้ใช้งาน LINE (LINE Verified)",
-      personnelType: "พนักงานราชการ",
-      position: "เจ้าหน้าที่สื่อสารและสารสนเทศ (LINE SSO)",
-      division: GOVERNMENT_DIVISIONS[0],
-      department: GOVERNMENT_DIVISIONS[0],
-      email: "line.user@m-society.go.th",
-      phone: "-",
-      lineId: "@line_staff",
-      role: "member",
-      status: "active",
-      avatarText: "LN",
-      joinedDate: "วันนี้",
-    };
-    if (isLiveConnected) {
-      await saveMember(lineMember);
+    const allCurrentMembers = await fetchMembers();
+    const savedLineUserId = typeof window !== "undefined" ? localStorage.getItem("omnioffice_last_line_user_id") : null;
+
+    const existingMember = allCurrentMembers.find((m) => {
+      if (savedLineUserId && m.id === savedLineUserId) return true;
+      if (m.id.startsWith("usr_line_")) return true;
+      if (m.lineId === "@line_staff") return true;
+      return false;
+    });
+
+    let memberToLogin: Member;
+
+    if (existingMember) {
+      // 🛡️ CRITICAL: PRESERVE all previously updated personal data!
+      memberToLogin = existingMember;
+    } else {
+      memberToLogin = {
+        id: `usr_line_${Date.now()}`,
+        prefix: "",
+        firstName: "ผู้ใช้งาน LINE",
+        lastName: "",
+        name: "ผู้ใช้งาน LINE (LINE Verified)",
+        personnelType: "พนักงานราชการ",
+        position: "เจ้าหน้าที่สื่อสารและสารสนเทศ (LINE SSO)",
+        division: GOVERNMENT_DIVISIONS[0],
+        department: GOVERNMENT_DIVISIONS[0],
+        email: "line.user@m-society.go.th",
+        phone: "-",
+        lineId: "@line_staff",
+        role: "member",
+        status: "active",
+        avatarText: "LN",
+        joinedDate: "วันนี้",
+      };
+      await saveMember(memberToLogin);
+      setMembers((prev) => [memberToLogin, ...prev]);
+    }
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem("omnioffice_last_line_user_id", memberToLogin.id);
     }
     setLineModalNotice(null);
-    handleLogin(lineMember, true);
-    showToast("🎉 เข้าสู่ระบบด้วย LINE สำเร็จ ยินดีต้อนรับ!");
+    handleLogin(memberToLogin, true);
+    showToast(`🎉 เข้าสู่ระบบด้วย LINE: ${memberToLogin.name} สำเร็จ!`);
   };
 
   // ─── IF NOT LOGGED IN: SHOW LOGIN PAGE ───
@@ -1099,8 +1226,8 @@ export default function OmniOfficeApp() {
         )}
 
         {lineModalNotice && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-fade-in text-slate-800">
-            <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden p-6 space-y-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-900/70 backdrop-blur-sm animate-fade-in text-slate-800 overflow-y-auto">
+            <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden p-6 space-y-4 my-auto max-h-[calc(100vh-2rem)] md:max-h-[90vh] overflow-y-auto">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 text-[#06C755] flex items-center justify-center text-2xl font-bold">
                   💬
@@ -1209,16 +1336,16 @@ export default function OmniOfficeApp() {
                 <span className="text-xs text-amber-400" title="ไม่มีสิทธิ์เข้าถึงตามบทบาทปัจจุบัน">
                   🔒
                 </span>
-              ) : item.id === "admin" && isHydrated && currentUserRole === "admin" && accessRequests.filter((r) => r.status === "pending").length > 0 ? (
+              ) : isHydrated && navBadges[item.id] > 0 && !isActive && isModuleOpen ? (
                 <span
-                  className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-500 text-white shadow-xs animate-pulse"
-                  title={`มี ${accessRequests.filter((r) => r.status === "pending").length} คำขอสิทธิ์เข้าใช้งานใหม่รอการอนุมัติ`}
+                  className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${
+                    item.id === "admin" || item.id === "carbooking"
+                      ? "bg-amber-500 text-white shadow-xs animate-pulse"
+                      : "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
+                  }`}
+                  title={`${item.label}: ${navBadges[item.id]} รายการ`}
                 >
-                  {accessRequests.filter((r) => r.status === "pending").length}
-                </span>
-              ) : item.badge && !isActive && isModuleOpen ? (
-                <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                  {item.badge}
+                  {navBadges[item.id]}
                 </span>
               ) : null}
             </div>
@@ -1773,6 +1900,7 @@ export default function OmniOfficeApp() {
                 <ChatPage
                   currentUser={currentUser}
                   showToast={showToast}
+                  members={members}
                 />
               )}
 
@@ -1797,6 +1925,7 @@ export default function OmniOfficeApp() {
                 <CarBookingPage
                   currentUser={currentUser}
                   showToast={showToast}
+                  members={members}
                 />
               )}
 

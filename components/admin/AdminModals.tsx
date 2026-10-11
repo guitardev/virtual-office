@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useRef } from "react";
 import {
   Member,
   Role,
@@ -15,6 +15,7 @@ import {
   GOVERNMENT_PERSONNEL_TYPES,
   PERSONNEL_TYPE_CONFIG,
 } from "@/lib/rbac";
+import { OFFICIAL_AVATAR_PRESETS } from "@/components/user/EditProfileModal";
 
 export interface AdminEditFormState {
   prefix: string;
@@ -29,6 +30,7 @@ export interface AdminEditFormState {
   lineId: string;
   role: Role;
   status: "active" | "inactive";
+  avatarUrl?: string;
 }
 
 export interface NewMemberFormState {
@@ -169,13 +171,60 @@ export function AdminModals({
   setRejectReason,
   handleRejectRequest,
 }: AdminModalsProps) {
+  const adminFileInputRef = useRef<HTMLInputElement>(null);
+  const [showAdminPresetGallery, setShowAdminPresetGallery] = useState(false);
+  const [showAdminUrlInput, setShowAdminUrlInput] = useState(false);
+  const [adminCustomUrlInput, setAdminCustomUrlInput] = useState("");
+
+  const handleAdminAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      if (!dataUrl) return;
+
+      const img = new Image();
+      img.onload = () => {
+        const maxDim = 400;
+        let width = img.width;
+        let height = img.height;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressed = canvas.toDataURL("image/jpeg", 0.85);
+          setAdminEditForm((prev) => ({ ...prev, avatarUrl: compressed }));
+        } else {
+          setAdminEditForm((prev) => ({ ...prev, avatarUrl: dataUrl }));
+        }
+      };
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
   return (
     <>
       {/* ─── MODAL 1: VIEW MEMBER DOSSIER ─── */}
       {viewingMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-xl w-full shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-black/60 backdrop-blur-xs overflow-y-auto animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-3xl w-full shadow-2xl border border-slate-200 my-auto max-h-[calc(100vh-2rem)] md:max-h-[90vh] flex flex-col overflow-hidden">
+            {/* Header - Fixed */}
+            <div className="flex items-center justify-between p-5 md:px-6 md:pt-6 md:pb-4 border-b border-slate-100 shrink-0">
               <div className="flex items-center gap-2">
                 <span className="text-xl">📋</span>
                 <div>
@@ -186,13 +235,17 @@ export function AdminModals({
               <button
                 type="button"
                 onClick={() => setViewingMember(null)}
-                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 hover:text-rose-800 font-bold text-xs border border-rose-200/90 shadow-xs transition-all cursor-pointer"
+                title="ปิดหน้าต่าง"
               >
-                ✕
+                <span className="text-sm font-black">✕</span>
+                <span>ปิดหน้าต่าง</span>
               </button>
             </div>
 
-            {/* Profile Header */}
+            {/* Scrollable Dossier Body */}
+            <div className="overflow-y-auto flex-1 p-5 md:p-6 space-y-4">
+              {/* Profile Header */}
             <div className="flex flex-col sm:flex-row items-center gap-4 py-5 border-b border-slate-100 text-center sm:text-left">
               {viewingMember.avatarUrl ? (
                 <img
@@ -362,15 +415,28 @@ export function AdminModals({
                 ปิดหน้าต่าง
               </button>
             </div>
+            </div>
+
+            {/* Footer - Fixed */}
+            <div className="p-4 md:px-6 bg-slate-50/80 border-t border-slate-100 flex items-center justify-end shrink-0">
+              <button
+                type="button"
+                onClick={() => setViewingMember(null)}
+                className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                ปิดหน้าต่าง
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {/* ─── MODAL 2: ADMIN EDIT MEMBER ─── */}
       {adminEditingMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-xl w-full shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-black/60 backdrop-blur-xs overflow-y-auto animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-3xl w-full shadow-2xl border border-slate-200 my-auto max-h-[calc(100vh-2rem)] md:max-h-[90vh] flex flex-col overflow-hidden">
+            {/* Header - Fixed */}
+            <div className="flex items-center justify-between p-5 md:px-6 md:pt-6 md:pb-4 border-b border-slate-100 shrink-0">
               <div>
                 <h3 className="text-lg font-bold font-heading text-slate-900">
                   ✏️ แก้ไขข้อมูลบุคลากร & กำหนดสิทธิ์
@@ -382,13 +448,191 @@ export function AdminModals({
               <button
                 type="button"
                 onClick={() => setAdminEditingMember(null)}
-                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 hover:text-rose-800 font-bold text-xs border border-rose-200/90 shadow-xs transition-all cursor-pointer"
+                title="ปิดหน้าต่าง"
               >
-                ✕
+                <span className="text-sm font-black">✕</span>
+                <span>ปิดหน้าต่าง</span>
               </button>
             </div>
 
-            <form onSubmit={handleAdminSaveMember} className="space-y-3.5 mt-4">
+            <form onSubmit={handleAdminSaveMember} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              {/* Scrollable Form Body */}
+              <div className="overflow-y-auto flex-1 p-5 md:p-6 space-y-3.5">
+              {/* Profile Avatar Management Block */}
+              <div className="p-3.5 rounded-2xl bg-gradient-to-r from-slate-50 via-indigo-50/40 to-slate-50 border border-slate-200/80 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">📸</span>
+                    <label className="text-xs font-bold text-slate-800">
+                      รูปถ่ายโปรไฟล์บุคลากร (Profile Photo)
+                    </label>
+                  </div>
+                  {adminEditForm.avatarUrl ? (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      ✓ มีรูปโปรไฟล์แล้ว
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-600">
+                      ใช้ชื่อย่ออัตโนมัติ
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                  <div className="relative shrink-0">
+                    {adminEditForm.avatarUrl ? (
+                      <img
+                        src={adminEditForm.avatarUrl}
+                        alt={adminEditForm.firstName}
+                        className="w-16 h-16 rounded-2xl object-cover border-2 border-indigo-400 shadow-md ring-2 ring-white"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#4F46E5] to-[#818CF8] text-white text-xl font-black flex items-center justify-center border-2 border-white shadow-md">
+                        {(adminEditForm.firstName || "MB").slice(0, 2)}
+                      </div>
+                    )}
+                    {adminEditForm.avatarUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminEditForm((prev) => ({ ...prev, avatarUrl: "" }))}
+                        title="ลบรูปภาพ / กลับไปใช้ชื่อย่อ"
+                        className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-rose-500 hover:bg-rose-600 text-white rounded-full flex items-center justify-center text-xs shadow-md cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex-1 space-y-1.5 w-full text-center sm:text-left">
+                    <div className="flex flex-wrap items-center gap-2 justify-center sm:justify-start">
+                      <input
+                        ref={adminFileInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleAdminAvatarFileChange}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => adminFileInputRef.current?.click()}
+                        className="px-2.5 py-1.5 bg-[#4F46E5] hover:bg-[#4338CA] text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>📁</span>
+                        <span>อัปโหลดรูป</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAdminPresetGallery(!showAdminPresetGallery);
+                          setShowAdminUrlInput(false);
+                        }}
+                        className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1 cursor-pointer ${
+                          showAdminPresetGallery
+                            ? "bg-indigo-100 border-indigo-300 text-indigo-900"
+                            : "bg-white hover:bg-slate-50 border-slate-200 text-slate-700"
+                        }`}
+                      >
+                        <span>👤</span>
+                        <span>เลือกจากทำเนียบ</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAdminUrlInput(!showAdminUrlInput);
+                          setShowAdminPresetGallery(false);
+                        }}
+                        className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1 cursor-pointer ${
+                          showAdminUrlInput
+                            ? "bg-indigo-100 border-indigo-300 text-indigo-900"
+                            : "bg-white hover:bg-slate-50 border-slate-200 text-slate-700"
+                        }`}
+                      >
+                        <span>🔗</span>
+                        <span>ระบุ URL</span>
+                      </button>
+
+                      {adminEditForm.avatarUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setAdminEditForm((prev) => ({ ...prev, avatarUrl: "" }))}
+                          className="px-2 py-1.5 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 border border-rose-200 transition-colors cursor-pointer"
+                        >
+                          ลบรูป
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Direct URL input bar */}
+                {showAdminUrlInput && (
+                  <div className="pt-1.5 flex items-center gap-2 animate-fade-in border-t border-slate-200/60">
+                    <input
+                      type="url"
+                      placeholder="วางลิงก์รูปภาพ https://..."
+                      value={adminCustomUrlInput}
+                      onChange={(e) => setAdminCustomUrlInput(e.target.value)}
+                      className="flex-1 px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (adminCustomUrlInput.trim()) {
+                          setAdminEditForm((prev) => ({ ...prev, avatarUrl: adminCustomUrlInput.trim() }));
+                          setShowAdminUrlInput(false);
+                          setAdminCustomUrlInput("");
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 cursor-pointer"
+                    >
+                      นำไปใช้
+                    </button>
+                  </div>
+                )}
+
+                {/* Official Preset Gallery Grid */}
+                {showAdminPresetGallery && (
+                  <div className="pt-2 border-t border-slate-200/80 animate-fade-in space-y-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {OFFICIAL_AVATAR_PRESETS.map((p) => {
+                        const isSelected = adminEditForm.avatarUrl === p.url;
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => {
+                              setAdminEditForm((prev) => ({ ...prev, avatarUrl: p.url }));
+                              setShowAdminPresetGallery(false);
+                            }}
+                            className={`p-1.5 rounded-xl border text-left transition-all flex items-center gap-2 cursor-pointer ${
+                              isSelected
+                                ? "border-indigo-600 bg-indigo-50/80 ring-2 ring-indigo-600/30 shadow-xs"
+                                : "border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50/80"
+                            }`}
+                          >
+                            <img
+                              src={p.url}
+                              alt={p.name}
+                              className="w-9 h-9 rounded-lg object-cover shrink-0 border border-slate-200"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[11px] font-bold text-slate-800 truncate">
+                                {p.name.split(" ")[0]}
+                              </div>
+                              <div className="text-[10px] text-slate-500 truncate">
+                                {p.position}
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">คำนำหน้า</label>
@@ -539,8 +783,10 @@ export function AdminModals({
                   </select>
                 </div>
               </div>
+              </div>
 
-              <div className="pt-4 flex gap-3">
+              {/* Fixed Footer Buttons */}
+              <div className="p-4 md:px-6 bg-slate-50/80 border-t border-slate-100 flex gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => setAdminEditingMember(null)}
@@ -562,8 +808,8 @@ export function AdminModals({
 
       {/* ─── MODAL 3: DELETE MEMBER CONFIRMATION ─── */}
       {memberToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl border border-red-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-black/60 backdrop-blur-xs overflow-y-auto animate-fade-in">
+          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl border border-red-100 my-auto max-h-[calc(100vh-2rem)] md:max-h-[90vh] overflow-y-auto">
             <div className="w-14 h-14 mx-auto rounded-2xl bg-red-100 text-red-600 flex items-center justify-center text-2xl mb-4">
               🗑️
             </div>
@@ -615,9 +861,10 @@ export function AdminModals({
 
       {/* ─── MODAL 4: ADD MEMBER (GOVERNMENT PERSONNEL) ─── */}
       {showAddMemberModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-lg w-full shadow-2xl border border-slate-200 animate-fade-in max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-black/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-3xl w-full shadow-2xl border border-slate-200 animate-fade-in my-auto max-h-[calc(100vh-2rem)] md:max-h-[90vh] flex flex-col overflow-hidden">
+            {/* Header - Fixed */}
+            <div className="flex items-center justify-between p-5 md:px-6 md:pt-6 md:pb-4 border-b border-slate-100 shrink-0">
               <div>
                 <h3 className="text-lg font-bold font-heading text-slate-900">+ เพิ่มบุคลากร/เจ้าหน้าที่ใหม่</h3>
                 <p className="text-xs text-slate-500 mt-0.5">ระบุข้อมูลส่วนตัวบุคลากรภาครัฐและกำหนดสิทธิ์ RBAC</p>
@@ -625,13 +872,17 @@ export function AdminModals({
               <button
                 type="button"
                 onClick={() => setShowAddMemberModal(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 hover:text-rose-800 font-bold text-xs border border-rose-200/90 shadow-xs transition-all cursor-pointer"
+                title="ปิดหน้าต่าง"
               >
-                ✕
+                <span className="text-sm font-black">✕</span>
+                <span>ปิดหน้าต่าง</span>
               </button>
             </div>
 
-            <form onSubmit={handleAddMember} className="space-y-3.5 mt-4">
+            <form onSubmit={handleAddMember} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              {/* Scrollable Form Body */}
+              <div className="overflow-y-auto flex-1 p-5 md:p-6 space-y-3.5">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">คำนำหน้า</label>
@@ -773,8 +1024,10 @@ export function AdminModals({
                   <option value="guest">🎟️ ผู้เยี่ยมชม/ที่ปรึกษา (Guest) - เฉพาะแชทและประชุมที่เชิญ</option>
                 </select>
               </div>
+              </div>
 
-              <div className="pt-4 flex gap-3">
+              {/* Fixed Footer Buttons */}
+              <div className="p-4 md:px-6 bg-slate-50/80 border-t border-slate-100 flex gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowAddMemberModal(false)}
@@ -796,9 +1049,10 @@ export function AdminModals({
 
       {/* ─── MODAL 5: EDIT MODULE SETTINGS ─── */}
       {editingModuleId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-lg w-full shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-black/60 backdrop-blur-xs overflow-y-auto animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-200 my-auto max-h-[calc(100vh-2rem)] md:max-h-[90vh] flex flex-col overflow-hidden">
+            {/* Header - Fixed */}
+            <div className="flex items-center justify-between p-5 md:px-6 md:pt-6 md:pb-4 border-b border-slate-100 shrink-0">
               <div className="flex items-center gap-2">
                 <span className="text-2xl">{editModuleForm.icon}</span>
                 <div>
@@ -813,13 +1067,17 @@ export function AdminModals({
               <button
                 type="button"
                 onClick={() => setEditingModuleId(null)}
-                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 hover:text-rose-800 font-bold text-xs border border-rose-200/90 shadow-xs transition-all cursor-pointer"
+                title="ปิดหน้าต่าง"
               >
-                ✕
+                <span className="text-sm font-black">✕</span>
+                <span>ปิดหน้าต่าง</span>
               </button>
             </div>
 
-            <form onSubmit={handleSaveModuleInfo} className="space-y-4 mt-4">
+            <form onSubmit={handleSaveModuleInfo} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              {/* Scrollable Form Body */}
+              <div className="overflow-y-auto flex-1 p-5 md:p-6 space-y-4">
               <div className="grid grid-cols-4 gap-2.5">
                 <div className="col-span-1">
                   <label className="block text-xs font-semibold text-slate-600 mb-1">ไอคอน (Emoji)</label>
@@ -898,8 +1156,10 @@ export function AdminModals({
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:border-[#4F46E5] resize-none"
                 />
               </div>
+              </div>
 
-              <div className="pt-4 flex gap-3">
+              {/* Fixed Footer Buttons */}
+              <div className="p-4 md:px-6 bg-slate-50/80 border-t border-slate-100 flex gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => setEditingModuleId(null)}
@@ -921,9 +1181,10 @@ export function AdminModals({
 
       {/* ─── MODAL 6: ACCESS REQUEST DETAILS ─── */}
       {showRequestDetailModal && selectedRequest && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-lg w-full shadow-2xl border border-slate-200 animate-fade-in max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-black/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-200 animate-fade-in my-auto max-h-[calc(100vh-2rem)] md:max-h-[90vh] flex flex-col overflow-hidden">
+            {/* Header - Fixed */}
+            <div className="flex items-center justify-between p-5 md:px-6 md:pt-6 md:pb-4 border-b border-slate-100 shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center text-lg font-bold">
                   📬
@@ -936,13 +1197,16 @@ export function AdminModals({
               <button
                 type="button"
                 onClick={() => setShowRequestDetailModal(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 hover:text-rose-800 font-bold text-xs border border-rose-200/90 shadow-xs transition-all cursor-pointer"
+                title="ปิดหน้าต่าง"
               >
-                ✕
+                <span className="text-sm font-black">✕</span>
+                <span>ปิดหน้าต่าง</span>
               </button>
             </div>
 
-            <div className="mt-5 space-y-4 text-xs">
+            {/* Scrollable Request Details Body */}
+            <div className="overflow-y-auto flex-1 p-5 md:p-6 space-y-4 text-xs">
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex items-center space-x-3.5">
                 <div className="w-12 h-12 rounded-2xl bg-[#4F46E5] text-white font-bold text-base flex items-center justify-center shrink-0">
                   {selectedRequest.firstName.slice(0, 2)}
@@ -1020,7 +1284,8 @@ export function AdminModals({
               )}
             </div>
 
-            <div className="flex items-center justify-end gap-2.5 pt-5 border-t border-slate-100 mt-5">
+            {/* Footer - Fixed */}
+            <div className="flex items-center justify-end gap-2.5 p-4 md:px-6 border-t border-slate-100 bg-slate-50/80 shrink-0">
               <button
                 type="button"
                 onClick={() => setShowRequestDetailModal(false)}
@@ -1068,9 +1333,10 @@ export function AdminModals({
 
       {/* ─── MODAL 7: EDIT ACCESS REQUEST ─── */}
       {showEditRequestModal && selectedRequest && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-lg w-full shadow-2xl border border-slate-200 animate-fade-in max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-black/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-200 animate-fade-in my-auto max-h-[calc(100vh-2rem)] md:max-h-[90vh] flex flex-col overflow-hidden">
+            {/* Header - Fixed */}
+            <div className="flex items-center justify-between p-5 md:px-6 md:pt-6 md:pb-4 border-b border-slate-100 shrink-0">
               <div>
                 <h3 className="text-lg font-bold font-heading text-slate-900">✏️ แก้ไขข้อมูลคำขอสิทธิ์</h3>
                 <p className="text-xs text-slate-500 mt-0.5">ปรับระดับสิทธิ์ หรือแก้ไขข้อมูลบุคลากรก่อนทำการอนุมัติ</p>
@@ -1078,13 +1344,17 @@ export function AdminModals({
               <button
                 type="button"
                 onClick={() => setShowEditRequestModal(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 hover:text-rose-800 font-bold text-xs border border-rose-200/90 shadow-xs transition-all cursor-pointer"
+                title="ปิดหน้าต่าง"
               >
-                ✕
+                <span className="text-sm font-black">✕</span>
+                <span>ปิดหน้าต่าง</span>
               </button>
             </div>
 
-            <form onSubmit={handleSaveEditRequest} className="space-y-3.5 mt-4 text-xs">
+            <form onSubmit={handleSaveEditRequest} className="flex flex-col flex-1 min-h-0 overflow-hidden text-xs">
+              {/* Scrollable Form Body */}
+              <div className="overflow-y-auto flex-1 p-5 md:p-6 space-y-3.5">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">คำนำหน้า</label>
@@ -1236,8 +1506,10 @@ export function AdminModals({
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:border-[#4F46E5]"
                 />
               </div>
+              </div>
 
-              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
+              {/* Fixed Footer Buttons */}
+              <div className="flex items-center justify-end gap-2.5 p-4 md:px-6 border-t border-slate-100 bg-slate-50/80 shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowEditRequestModal(false)}
@@ -1259,8 +1531,8 @@ export function AdminModals({
 
       {/* ─── MODAL 8: REJECT ACCESS REQUEST ─── */}
       {showRejectModal && selectedRequest && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-200 animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-black/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-200 animate-fade-in my-auto max-h-[calc(100vh-2rem)] md:max-h-[90vh] overflow-y-auto">
             <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
               <div className="w-10 h-10 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center text-lg font-bold">
                 ⚠️

@@ -91,11 +91,41 @@ export function mapMemberToRow(member: Member): any {
   };
 }
 
+const MEMBERS_STORAGE_KEY = "omnioffice_members_cache_v1";
+
 /**
- * Fetch members from Supabase, or fallback to INITIAL_MEMBERS
+ * Get members from local cache or fallback to INITIAL_MEMBERS
+ */
+export function getLocalMembers(): Member[] {
+  if (typeof window === "undefined") return INITIAL_MEMBERS;
+  try {
+    const raw = localStorage.getItem(MEMBERS_STORAGE_KEY);
+    if (!raw) return INITIAL_MEMBERS;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_MEMBERS;
+  } catch {
+    return INITIAL_MEMBERS;
+  }
+}
+
+/**
+ * Save members to local cache
+ */
+export function saveLocalMembers(members: Member[]) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(MEMBERS_STORAGE_KEY, JSON.stringify(members));
+  } catch (e) {
+    console.warn("Could not save members to localStorage:", e);
+  }
+}
+
+/**
+ * Fetch members from Supabase, with automatic local cache synchronization and fallback
  */
 export async function fetchMembers(): Promise<Member[]> {
-  if (!supabase) return INITIAL_MEMBERS;
+  const localMembers = getLocalMembers();
+  if (!supabase) return localMembers;
 
   try {
     const { data, error } = await supabase
@@ -104,21 +134,36 @@ export async function fetchMembers(): Promise<Member[]> {
       .order("created_at", { ascending: true });
 
     if (error || !data || data.length === 0) {
-      console.warn("Supabase fetch members returned empty or error, using initial members:", error);
-      return INITIAL_MEMBERS;
+      console.warn("Supabase fetch members returned empty or error, using cached/initial members:", error);
+      return localMembers;
     }
 
-    return data.map(mapRowToMember);
+    const liveMembers = data.map(mapRowToMember);
+    // Keep local cache up-to-date with latest Supabase records
+    saveLocalMembers(liveMembers);
+    return liveMembers;
   } catch (err) {
-    console.error("Error fetching members from Supabase:", err);
-    return INITIAL_MEMBERS;
+    console.error("Error fetching members from Supabase, using local cache:", err);
+    return localMembers;
   }
 }
 
 /**
- * Upsert member in Supabase
+ * Upsert member in Supabase and local cache
  */
 export async function saveMember(member: Member): Promise<boolean> {
+  // Always persist to local cache first so offline/SSO state is never lost
+  try {
+    const current = getLocalMembers();
+    const exists = current.some((m) => m.id === member.id);
+    const updated = exists
+      ? current.map((m) => (m.id === member.id ? member : m))
+      : [member, ...current];
+    saveLocalMembers(updated);
+  } catch (err) {
+    console.warn("Could not save member to local cache:", err);
+  }
+
   if (!supabase) return true;
 
   try {
@@ -130,15 +175,23 @@ export async function saveMember(member: Member): Promise<boolean> {
     }
     return true;
   } catch (err) {
-    console.error("Error saving member:", err);
+    console.error("Error saving member to Supabase:", err);
     return false;
   }
 }
 
 /**
- * Delete member in Supabase
+ * Delete member in Supabase and local cache
  */
 export async function deleteMember(id: string): Promise<boolean> {
+  // Always update local cache
+  try {
+    const current = getLocalMembers();
+    saveLocalMembers(current.filter((m) => m.id !== id));
+  } catch (err) {
+    console.warn("Could not delete member from local cache:", err);
+  }
+
   if (!supabase) return true;
 
   try {
@@ -149,7 +202,7 @@ export async function deleteMember(id: string): Promise<boolean> {
     }
     return true;
   } catch (err) {
-    console.error("Error deleting member:", err);
+    console.error("Error deleting member from Supabase:", err);
     return false;
   }
 }
@@ -221,11 +274,33 @@ export function mapRowToAccessRequest(row: any): AccessRequest {
   };
 }
 
+const ACCESS_REQUESTS_STORAGE_KEY = "omnioffice_access_requests_cache_v1";
+
+function getLocalAccessRequests(): AccessRequest[] {
+  if (typeof window === "undefined") return INITIAL_ACCESS_REQUESTS;
+  try {
+    const raw = localStorage.getItem(ACCESS_REQUESTS_STORAGE_KEY);
+    if (!raw) return INITIAL_ACCESS_REQUESTS;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_ACCESS_REQUESTS;
+  } catch {
+    return INITIAL_ACCESS_REQUESTS;
+  }
+}
+
+function saveLocalAccessRequests(requests: AccessRequest[]) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(ACCESS_REQUESTS_STORAGE_KEY, JSON.stringify(requests));
+  } catch {}
+}
+
 /**
- * Fetch access requests from Supabase, or fallback to INITIAL_ACCESS_REQUESTS
+ * Fetch access requests from Supabase, or fallback to LocalStorage/INITIAL_ACCESS_REQUESTS
  */
 export async function fetchAccessRequests(): Promise<AccessRequest[]> {
-  if (!supabase) return INITIAL_ACCESS_REQUESTS;
+  const localList = getLocalAccessRequests();
+  if (!supabase) return localList;
 
   try {
     const { data, error } = await supabase
@@ -234,20 +309,30 @@ export async function fetchAccessRequests(): Promise<AccessRequest[]> {
       .order("created_at", { ascending: false });
 
     if (error || !data || data.length === 0) {
-      return INITIAL_ACCESS_REQUESTS;
+      return localList;
     }
 
-    return data.map(mapRowToAccessRequest);
-  } catch (err) {
-    console.error("Error fetching access requests from Supabase:", err);
-    return INITIAL_ACCESS_REQUESTS;
+    const liveList = data.map(mapRowToAccessRequest);
+    saveLocalAccessRequests(liveList);
+    return liveList;
+  } catch {
+    return localList;
   }
 }
 
 /**
- * Save access request to Supabase
+ * Save access request to Supabase (with automatic LocalStorage persistence fallback)
  */
 export async function saveAccessRequest(req: AccessRequest): Promise<boolean> {
+  // Always update local cache so the request is NEVER lost even if Supabase table is not yet created
+  const currentLocal = getLocalAccessRequests();
+  const existingIdx = currentLocal.findIndex((r) => r.id === req.id);
+  const updatedLocal =
+    existingIdx >= 0
+      ? currentLocal.map((r) => (r.id === req.id ? req : r))
+      : [req, ...currentLocal];
+  saveLocalAccessRequests(updatedLocal);
+
   if (!supabase) return true;
 
   try {
@@ -282,6 +367,7 @@ export async function saveAccessRequest(req: AccessRequest): Promise<boolean> {
     return false;
   }
 }
+
 
 // ==========================================
 // SUPABASE AUTHENTICATION (Real Supabase Auth)

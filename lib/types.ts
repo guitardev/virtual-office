@@ -178,3 +178,162 @@ export interface MeetingItem {
   type: "online" | "onsite";
   attendees: string[];
 }
+
+export type VehicleStatus = "available" | "in_use" | "maintenance";
+
+export type FuelLevel =
+  | "เต็มถัง (100%)"
+  | "3/4 ถัง (75%)"
+  | "1/2 ถัง (50%)"
+  | "1/4 ถัง (25%)"
+  | "ใกล้หมด (ต่ำกว่า 15%)";
+
+export interface VehicleReturnReport {
+  returnedAt: string;
+  returneeId: string;
+  returneeName: string;
+  inspectorId: string;
+  inspectorName: string;
+  startMileage: number;
+  endMileage: number;
+  totalDistance: number;
+  startFuelLevel: string;
+  endFuelLevel: string;
+  fuelRefilledLiters?: number;
+  fuelRefilledCost?: number;
+  fuelReceiptNo?: string;
+  vehicleCleanliness: "สะอาดเรียบร้อย" | "ต้องล้างทำความสะอาด" | "สกปรกมาก";
+  bodyCondition: "ปกติสมบูรณ์ดี" | "มีรอยขูดขีดใหม่" | "มีความเสียหาย";
+  engineCondition: "ปกติสมบูรณ์" | "พบอาการผิดปกติ";
+  airConditioner: "แอร์เย็นปกติ" | "แอร์ไม่ค่อยเย็น/มีกลิ่น";
+  issuesFound?: string;
+  notes?: string;
+}
+
+export interface Vehicle {
+  id: string;
+  name: string;
+  licensePlate: string;
+  category: "รถตู้ส่วนกลาง" | "รถกระบะตรวจการณ์" | "รถยนต์นั่งส่วนบุคคล" | "รถกระบะบรรทุก" | "รถตู้ VIP ผู้บริหาร";
+  capacity: number;
+  driverName?: string;
+  fuelType: string;
+  status: VehicleStatus;
+  image?: string;
+  features: string[];
+  mileage: number; // เลขไมล์สะสมปัจจุบัน (กม.)
+  fuelLevel: FuelLevel; // ระดับน้ำมันคงเหลือปัจจุบัน
+  lastMaintenanceDate?: string; // วันที่เข้าตรวจสภาพล่าสุด
+  insuranceExpiry?: string; // วันหมดอายุ พ.ร.บ./ประกันภัย
+  assignedDivision?: string; // ฝ่ายผู้ดูแล
+}
+
+export type BookingStatus =
+  | "pending_review"   // ขั้นที่ 1: รอหัวหน้าฝ่ายบริหารทั่วไป (Manager) ตรวจสอบและมอบหมายคนขับ
+  | "endorsed"         // ขั้นที่ 2: หัวหน้าฝ่ายเห็นชอบแล้ว: รอ พมจ. (Admin) อนุมัติ
+  | "approved"         // ขั้นที่ 3: พมจ. (Admin) อนุมัติเรียบร้อย ออกใบขอใช้รถได้
+  | "rejected"         // ไม่อนุมัติ / ส่งกลับ
+  | "completed";       // สิ้นสุดภารกิจ และบันทึกรายงานส่งคืนรถแล้ว
+
+export interface CarBookingRequest {
+  id: string;
+  requestNo: string;
+  vehicleId: string;
+  vehicleName: string;
+  licensePlate: string;
+  
+  // ผู้ขอใช้รถ (Tier 1: Requestor)
+  requesterId: string;
+  requesterName: string;
+  requesterPosition: string;
+  requesterDivision: string;
+  requesterPhone: string;
+  
+  // รายละเอียดภารกิจ
+  purpose: string;
+  destination: string;
+  origin: string;
+  departureTime: string;
+  returnTime: string;
+  passengerCount: number;
+  passengersList: string;
+  requireDriver: boolean;
+  assignedDriver?: string;
+  
+  // งบประมาณค่าน้ำมันเชื้อเพลิง (ถ้ามี)
+  fuelBudgetRequested?: boolean;
+  fuelBudgetAmount?: number;
+  fuelBudgetSource?: string;
+  
+  // สถานะและกระบวนการอนุมัติ 3 ขั้น
+  status: BookingStatus;
+  createdAt: string;
+  
+  // ขั้นที่ 2: ความเห็นชอบของหัวหน้าฝ่าย (Manager)
+  managerId?: string;
+  managerName?: string;
+  managerNotes?: string;
+  managerActionAt?: string;
+  
+  // ขั้นที่ 3: การอนุมัติของ พมจ. (Admin)
+  approverId?: string;
+  approverName?: string;
+  approverNotes?: string;
+  approverActionAt?: string;
+  
+  // บันทึกการปฏิเสธ
+  rejectReason?: string;
+  rejectedBy?: string;
+
+  // รายงานการส่งคืนและตรวจสภาพรถ
+  returnReport?: VehicleReturnReport;
+
+  // ประวัติการแจ้งเตือนและการส่งข้อมูล (Notify Logs)
+  notifications?: BookingNotificationLog[];
+}
+
+export interface BookingNotificationLog {
+  id: string;
+  timestamp: string;
+  type: "request_submitted" | "endorsed" | "approved" | "rejected" | "return_reminder" | "return_completed";
+  title: string;
+  message: string;
+  recipientRole: string; // เช่น "ผู้ขอใช้รถ", "หัวหน้าฝ่ายบริหารทั่วไป", "พมจ.กำแพงเพชร", "พนักงานขับรถ", "เจ้าหน้าที่ยานพาหนะ"
+  recipientName: string;
+  channel: "line_notify" | "system_alert";
+  status: "sent" | "delivered";
+}
+
+
+
+export interface ChatGroup {
+  id: string;
+  name: string;
+  division?: string;
+  description: string;
+  icon: string;
+  type: "announcement" | "division" | "custom";
+  isOfficial: boolean;
+  memberIds: string[];
+  pinnedMessageIds?: string[];
+  createdAt: string;
+  createdBy?: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  groupId: string;
+  senderId: string;
+  senderName: string;
+  senderAvatar?: string;
+  senderRole: Role;
+  senderPosition: string;
+  senderDivision: string;
+  text: string;
+  timestamp: string;
+  isPinned?: boolean;
+  attachmentName?: string;
+  attachmentType?: "pdf" | "image" | "doc";
+  attachmentSize?: string;
+  tag?: string;
+}
