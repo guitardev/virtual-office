@@ -584,7 +584,7 @@ export async function fetchCarBookings(): Promise<CarBookingRequest[]> {
       .from("car_bookings")
       .select("*")
       .order("created_at", { ascending: false });
-    if (error || !data || data.length === 0) return INITIAL_BOOKING_REQUESTS;
+    if (error || !data) return INITIAL_BOOKING_REQUESTS;
     return data.map(mapRowToCarBooking);
   } catch {
     return INITIAL_BOOKING_REQUESTS;
