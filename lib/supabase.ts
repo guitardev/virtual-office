@@ -701,22 +701,24 @@ export function mapRowToChatMessage(row: any): ChatMessage {
       }) + " น."
     : "เมื่อสักครู่";
 
+  const meta = row.attachment_metadata || {};
+
   return {
     id: row.id,
     groupId: row.channel_id,
-    senderId: row.sender_id || "",
+    senderId: row.user_id || row.sender_id || "",
     senderName: row.sender_name || "ผู้ใช้งาน",
     senderAvatar: row.sender_avatar || undefined,
     senderRole: (row.sender_role as Role) || "member",
     senderPosition: row.sender_position || "เจ้าหน้าที่",
-    senderDivision: row.sender_division || "สำนักงาน พมจ.",
+    senderDivision: meta.sender_division || row.sender_division || "สำนักงาน พมจ.",
     text: row.content || "",
     timestamp: ts,
     tag: row.tag || undefined,
-    attachmentName: row.attachment_name || undefined,
-    attachmentType: row.attachment_type || undefined,
-    attachmentSize: row.attachment_size || undefined,
-    isPinned: Boolean(row.is_pinned),
+    attachmentName: meta.attachment_name || row.attachment_name || undefined,
+    attachmentType: meta.attachment_type || row.attachment_type || undefined,
+    attachmentSize: meta.attachment_size || row.attachment_size || undefined,
+    isPinned: Boolean(meta.is_pinned ?? row.is_pinned),
   };
 }
 
@@ -724,18 +726,21 @@ export function mapChatMessageToRow(m: ChatMessage): any {
   return {
     id: m.id,
     channel_id: m.groupId,
-    sender_id: m.senderId || null,
+    user_id: m.senderId || null,
     sender_name: m.senderName,
     sender_avatar: m.senderAvatar || null,
     sender_role: m.senderRole || "member",
     sender_position: m.senderPosition || null,
-    sender_division: m.senderDivision || null,
     content: m.text,
     tag: m.tag || null,
-    attachment_name: m.attachmentName || null,
-    attachment_type: m.attachmentType || null,
-    attachment_size: m.attachmentSize || null,
-    is_pinned: Boolean(m.isPinned),
+    attachment_url: null,
+    attachment_metadata: {
+      attachment_name: m.attachmentName || null,
+      attachment_type: m.attachmentType || null,
+      attachment_size: m.attachmentSize || null,
+      sender_division: m.senderDivision || null,
+      is_pinned: Boolean(m.isPinned),
+    },
   };
 }
 
@@ -792,9 +797,15 @@ export async function sendChatMessage(msg: ChatMessage): Promise<boolean> {
 export async function updateChatMessagePin(msgId: string, isPinned: boolean): Promise<boolean> {
   if (!supabase) return true;
   try {
+    const { data: existing } = await supabase
+      .from("messages")
+      .select("attachment_metadata")
+      .eq("id", msgId)
+      .single();
+    const updatedMeta = { ...(existing?.attachment_metadata || {}), is_pinned: isPinned };
     const { error } = await supabase
       .from("messages")
-      .update({ is_pinned: isPinned })
+      .update({ attachment_metadata: updatedMeta })
       .eq("id", msgId);
     return !error;
   } catch {

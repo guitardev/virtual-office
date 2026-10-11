@@ -40,6 +40,9 @@ export function ChatPage({
   const [newMessageText, setNewMessageText] = useState<string>("");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
+  // โหมดแสดงทุกกลุ่มสำหรับแอดมินเพื่อการตรวจสอบ (ค่าเริ่มต้น: false = เห็นเฉพาะกลุ่มที่ตนเป็นสมาชิก)
+  const [adminShowAll, setAdminShowAll] = useState<boolean>(false);
+
   // Modals
   const [showCreateGroupModal, setShowCreateGroupModal] = useState<boolean>(false);
   const [showMembersDrawer, setShowMembersDrawer] = useState<boolean>(false);
@@ -95,14 +98,6 @@ export function ChatPage({
       });
     });
 
-    // Auto-select user's own division group if available, or default to all staff
-    if (currentUser?.division) {
-      const myDivGroup = loadedGroups.find((g) => g.division === currentUser.division);
-      if (myDivGroup) {
-        setActiveGroupId(myDivGroup.id);
-      }
-    }
-
     return () => {
       isMounted = false;
       unsubMsgs();
@@ -110,9 +105,37 @@ export function ChatPage({
     };
   }, [members, currentUser]);
 
+  // ─── PERMISSION & MEMBERSHIP FILTERING ───
+  // กรองเฉพาะกลุ่มที่ผู้ใช้เป็นสมาชิกเท่านั้น (หรือแอดมินเปิดโหมดตรวจการ)
+  const accessibleGroups = useMemo(() => {
+    if (!currentUser) return [];
+    if (adminShowAll && currentUser.role === "admin") {
+      return groups;
+    }
+    return groups.filter(
+      (g) => Array.isArray(g.memberIds) && g.memberIds.includes(currentUser.id)
+    );
+  }, [groups, currentUser, adminShowAll]);
+
+  // สลับไปยังกลุ่มที่ตนเองมีสิทธิ์เข้าถึงโดยอัตโนมัติ
+  useEffect(() => {
+    if (accessibleGroups.length === 0) return;
+    const isCurrentActiveValid = accessibleGroups.some((g) => g.id === activeGroupId);
+    if (!isCurrentActiveValid) {
+      const myDivGroup = accessibleGroups.find((g) => g.division === currentUser?.division);
+      setActiveGroupId(myDivGroup ? myDivGroup.id : accessibleGroups[0].id);
+    }
+  }, [accessibleGroups, activeGroupId, currentUser]);
+
   const activeGroup = useMemo(() => {
-    return groups.find((g) => g.id === activeGroupId) || groups[0];
-  }, [groups, activeGroupId]);
+    return accessibleGroups.find((g) => g.id === activeGroupId) || accessibleGroups[0] || null;
+  }, [accessibleGroups, activeGroupId]);
+
+  // ตรวจสอบว่าผู้ใช้ปัจจุบันเป็นสมาชิกของกลุ่มที่เลือกอยู่หรือไม่
+  const isMemberOfActiveGroup = useMemo(() => {
+    if (!currentUser || !activeGroup) return false;
+    return Array.isArray(activeGroup.memberIds) && activeGroup.memberIds.includes(currentUser.id);
+  }, [currentUser, activeGroup]);
 
   // Group members
   const activeGroupMembers = useMemo(() => {
@@ -122,6 +145,7 @@ export function ChatPage({
 
   // Messages of the active group
   const activeMessages = useMemo(() => {
+    if (!activeGroup) return [];
     return messages
       .filter((m) => m.groupId === activeGroupId)
       .filter((m) => {
@@ -134,30 +158,35 @@ export function ChatPage({
           m.attachmentName?.toLowerCase().includes(q)
         );
       });
-  }, [messages, activeGroupId, messageSearch]);
+  }, [messages, activeGroupId, messageSearch, activeGroup]);
 
   // Pinned messages of active group
   const pinnedMessages = useMemo(() => {
+    if (!activeGroup) return [];
     return messages.filter((m) => m.groupId === activeGroupId && m.isPinned);
-  }, [messages, activeGroupId]);
+  }, [messages, activeGroupId, activeGroup]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [activeMessages.length, activeGroupId]);
 
-  // Filtered groups by search
+  // Filtered groups by search (เฉพาะกลุ่มที่ผู้ใช้มีสิทธิ์เห็น)
   const filteredGroups = useMemo(() => {
-    return groups.filter((g) => {
+    return accessibleGroups.filter((g) => {
       if (!channelSearch.trim()) return true;
       const q = channelSearch.toLowerCase();
       return g.name.toLowerCase().includes(q) || g.description.toLowerCase().includes(q);
     });
-  }, [groups, channelSearch]);
+  }, [accessibleGroups, channelSearch]);
 
   // Send message
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isMemberOfActiveGroup) {
+      showToast("🔒 คุณไม่ได้เป็นสมาชิกในกลุ่มนี้ ไม่สามารถส่งข้อความได้");
+      return;
+    }
     if (!newMessageText.trim() && !attachedFile) return;
 
     const sender: Member = currentUser || members[0];
@@ -245,26 +274,51 @@ export function ChatPage({
                 <h2 className="font-bold font-heading text-sm text-slate-900 leading-tight">
                   ระบบแชทกลุ่มราชการ
                 </h2>
-                <span className="text-[10px] text-slate-400">พมจ.กำแพงเพชร</span>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="text-[10px] text-slate-400">พมจ.กำแพงเพชร</span>
+                  <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200">
+                    {accessibleGroups.length} กลุ่มที่คุณสังกัด
+                  </span>
+                </div>
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setShowCreateGroupModal(true)}
-              className="p-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-[#4F46E5] text-xs font-bold transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
-              title="สร้างกลุ่มแชทโครงการใหม่"
-            >
-              <span>➕</span>
-              <span className="text-[11px] hidden sm:inline">สร้างกลุ่ม</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              {currentUser?.role === "admin" && (
+                <button
+                  type="button"
+                  onClick={() => setAdminShowAll(!adminShowAll)}
+                  className={`px-2 py-1 rounded-xl text-[10px] font-bold border transition-colors cursor-pointer ${
+                    adminShowAll
+                      ? "bg-amber-100 text-amber-800 border-amber-300"
+                      : "bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200"
+                  }`}
+                  title={
+                    adminShowAll
+                      ? "คลิกเพื่อสลับกลับมาแสดงเฉพาะกลุ่มที่ตนเป็นสมาชิก"
+                      : "โหมด Admin: ดูรายชื่อทุกกลุ่มในสำนักงาน"
+                  }
+                >
+                  {adminShowAll ? "👑 ทุกกลุ่ม" : "👤 กลุ่มฉัน"}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowCreateGroupModal(true)}
+                className="p-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-[#4F46E5] text-xs font-bold transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+                title="สร้างกลุ่มแชทโครงการใหม่"
+              >
+                <span>➕</span>
+                <span className="text-[11px] hidden sm:inline">สร้างกลุ่ม</span>
+              </button>
+            </div>
           </div>
 
           {/* Search channel */}
           <div className="relative">
             <input
               type="text"
-              placeholder="ค้นหากลุ่มงานหรือโครงการ..."
+              placeholder="ค้นหากลุ่มงานหรือโครงการที่คุณสังกัด..."
               value={channelSearch}
               onChange={(e) => setChannelSearch(e.target.value)}
               className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-indigo-500 transition-colors"
@@ -275,259 +329,359 @@ export function ChatPage({
 
         {/* Channels List by Category */}
         <div className="flex-1 overflow-y-auto p-2 space-y-3">
-          {/* Section: Official Division Groups */}
-          <div>
-            <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
-              <span>กลุ่มงานประจำสำนักงาน</span>
-              <span className="text-indigo-600 font-mono">
-                {groups.filter((g) => g.type === "division" || g.type === "announcement").length}
-              </span>
+          {accessibleGroups.length === 0 ? (
+            <div className="p-6 text-center space-y-2">
+              <span className="text-3xl">🔒</span>
+              <p className="text-xs font-bold text-slate-700">ไม่มีห้องแชทที่คุณเป็นสมาชิก</p>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                ระบบจำกัดสิทธิ์ให้เห็นเฉพาะห้องที่ตนเองเป็นสมาชิกเท่านั้น กรุณาติดต่อหัวหน้ากลุ่มงานหรือผู้ดูแลระบบเพื่อเพิ่มชื่อเข้ากลุ่ม
+              </p>
             </div>
+          ) : (
+            <>
+              {/* Section: Official Division Groups */}
+              <div>
+                <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                  <span>กลุ่มงานประจำสำนักงาน</span>
+                  <span className="text-indigo-600 font-mono font-bold">
+                    {filteredGroups.filter((g) => g.type === "division" || g.type === "announcement").length}
+                  </span>
+                </div>
 
-            <div className="space-y-0.5 mt-1">
-              {filteredGroups
-                .filter((g) => g.type === "division" || g.type === "announcement")
-                .map((g) => {
-                  const isActive = activeGroupId === g.id;
-                  const memberCount = g.memberIds.length;
-                  const isUserInGroup = currentUser ? g.memberIds.includes(currentUser.id) : false;
+                <div className="space-y-0.5 mt-1">
+                  {filteredGroups.filter((g) => g.type === "division" || g.type === "announcement").length === 0 ? (
+                    <div className="p-3 text-center text-xs text-slate-400 bg-slate-50 rounded-2xl border border-slate-100/80">
+                      <span className="text-xs block mb-0.5">🔒</span>
+                      <span>ไม่มีกลุ่มงานที่คุณเป็นสมาชิก</span>
+                    </div>
+                  ) : (
+                    filteredGroups
+                      .filter((g) => g.type === "division" || g.type === "announcement")
+                      .map((g) => {
+                        const isActive = activeGroupId === g.id;
+                        const memberCount = g.memberIds.length;
+                        const isUserInGroup = currentUser ? g.memberIds.includes(currentUser.id) : false;
 
-                  return (
-                    <button
-                      key={g.id}
-                      type="button"
-                      onClick={() => setActiveGroupId(g.id)}
-                      className={`w-full flex items-center justify-between p-2.5 rounded-2xl text-left transition-all cursor-pointer ${
-                        isActive
-                          ? "bg-gradient-to-r from-indigo-50 to-teal-50/40 border border-indigo-200 text-slate-900 shadow-2xs"
-                          : "hover:bg-slate-50 text-slate-700 border border-transparent"
-                      }`}
-                    >
-                      <div className="flex items-center space-x-2.5 min-w-0">
-                        <span className="text-lg shrink-0">{g.icon}</span>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span
-                              className={`text-xs truncate ${
-                                isActive ? "font-bold text-indigo-950" : "font-medium text-slate-800"
-                              }`}
-                            >
-                              {g.name}
-                            </span>
-                            {isUserInGroup && (
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" title="คุณเป็นสมาชิกในกลุ่มนี้" />
-                            )}
-                          </div>
-                          <div className="text-[10px] text-slate-400 truncate mt-0.5">
-                            {g.description}
-                          </div>
-                        </div>
-                      </div>
-
-                      <span className="text-[10px] px-2 py-0.5 rounded-full font-mono bg-slate-100 text-slate-600 shrink-0 font-semibold">
-                        {memberCount} คน
-                      </span>
-                    </button>
-                  );
-                })}
-            </div>
-          </div>
-
-          {/* Section: Custom Project Groups */}
-          <div>
-            <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
-              <span>กลุ่มโครงการ & เฉพาะกิจ</span>
-              <span className="text-teal-600 font-mono">
-                {groups.filter((g) => g.type === "custom").length}
-              </span>
-            </div>
-
-            <div className="space-y-0.5 mt-1">
-              {filteredGroups
-                .filter((g) => g.type === "custom")
-                .map((g) => {
-                  const isActive = activeGroupId === g.id;
-                  const memberCount = g.memberIds.length;
-
-                  return (
-                    <button
-                      key={g.id}
-                      type="button"
-                      onClick={() => setActiveGroupId(g.id)}
-                      className={`w-full flex items-center justify-between p-2.5 rounded-2xl text-left transition-all cursor-pointer ${
-                        isActive
-                          ? "bg-gradient-to-r from-teal-50 to-indigo-50/40 border border-teal-200 text-slate-900 shadow-2xs"
-                          : "hover:bg-slate-50 text-slate-700 border border-transparent"
-                      }`}
-                    >
-                      <div className="flex items-center space-x-2.5 min-w-0">
-                        <span className="text-lg shrink-0">{g.icon}</span>
-                        <div className="min-w-0">
-                          <span
-                            className={`text-xs truncate block ${
-                              isActive ? "font-bold text-teal-950" : "font-medium text-slate-800"
+                        return (
+                          <button
+                            key={g.id}
+                            type="button"
+                            onClick={() => setActiveGroupId(g.id)}
+                            className={`w-full flex items-center justify-between p-2.5 rounded-2xl text-left transition-all cursor-pointer ${
+                              isActive
+                                ? "bg-gradient-to-r from-indigo-50 to-teal-50/40 border border-indigo-200 text-slate-900 shadow-2xs"
+                                : "hover:bg-slate-50 text-slate-700 border border-transparent"
                             }`}
                           >
-                            {g.name}
-                          </span>
-                          <span className="text-[10px] text-slate-400 truncate block mt-0.5">
-                            {g.description}
-                          </span>
-                        </div>
-                      </div>
+                            <div className="flex items-center space-x-2.5 min-w-0">
+                              <span className="text-lg shrink-0">{g.icon}</span>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span
+                                    className={`text-xs truncate ${
+                                      isActive ? "font-bold text-indigo-950" : "font-medium text-slate-800"
+                                    }`}
+                                  >
+                                    {g.name}
+                                  </span>
+                                  {isUserInGroup && (
+                                    <span
+                                      className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"
+                                      title="คุณเป็นสมาชิกในกลุ่มนี้"
+                                    />
+                                  )}
+                                </div>
+                                <div className="text-[10px] text-slate-400 truncate mt-0.5">
+                                  {g.description}
+                                </div>
+                              </div>
+                            </div>
 
-                      <span className="text-[10px] px-2 py-0.5 rounded-full font-mono bg-slate-100 text-slate-600 shrink-0 font-semibold">
-                        {memberCount} คน
-                      </span>
-                    </button>
-                  );
-                })}
-            </div>
-          </div>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full font-mono bg-slate-100 text-slate-600 shrink-0 font-semibold">
+                              {memberCount} คน
+                            </span>
+                          </button>
+                        );
+                      })
+                  )}
+                </div>
+              </div>
+
+              {/* Section: Custom Project Groups */}
+              <div>
+                <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                  <span>กลุ่มโครงการ & เฉพาะกิจ</span>
+                  <span className="text-teal-600 font-mono font-bold">
+                    {filteredGroups.filter((g) => g.type === "custom").length}
+                  </span>
+                </div>
+
+                <div className="space-y-0.5 mt-1">
+                  {filteredGroups.filter((g) => g.type === "custom").length === 0 ? (
+                    <div className="p-3 text-center text-xs text-slate-400 bg-slate-50 rounded-2xl border border-slate-100/80">
+                      <span>ไม่มีกลุ่มโครงการที่คุณเป็นสมาชิก</span>
+                    </div>
+                  ) : (
+                    filteredGroups
+                      .filter((g) => g.type === "custom")
+                      .map((g) => {
+                        const isActive = activeGroupId === g.id;
+                        const memberCount = g.memberIds.length;
+                        const isUserInGroup = currentUser ? g.memberIds.includes(currentUser.id) : false;
+
+                        return (
+                          <button
+                            key={g.id}
+                            type="button"
+                            onClick={() => setActiveGroupId(g.id)}
+                            className={`w-full flex items-center justify-between p-2.5 rounded-2xl text-left transition-all cursor-pointer ${
+                              isActive
+                                ? "bg-gradient-to-r from-teal-50 to-indigo-50/40 border border-teal-200 text-slate-900 shadow-2xs"
+                                : "hover:bg-slate-50 text-slate-700 border border-transparent"
+                            }`}
+                          >
+                            <div className="flex items-center space-x-2.5 min-w-0">
+                              <span className="text-lg shrink-0">{g.icon}</span>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span
+                                    className={`text-xs truncate block ${
+                                      isActive ? "font-bold text-teal-950" : "font-medium text-slate-800"
+                                    }`}
+                                  >
+                                    {g.name}
+                                  </span>
+                                  {isUserInGroup && (
+                                    <span
+                                      className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"
+                                      title="คุณเป็นสมาชิกในกลุ่มนี้"
+                                    />
+                                  )}
+                                </div>
+                                <span className="text-[10px] text-slate-400 truncate block mt-0.5">
+                                  {g.description}
+                                </span>
+                              </div>
+                            </div>
+
+                            <span className="text-[10px] px-2 py-0.5 rounded-full font-mono bg-slate-100 text-slate-600 shrink-0 font-semibold">
+                              {memberCount} คน
+                            </span>
+                          </button>
+                        );
+                      })
+                  )}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
       {/* ─── RIGHT: CHAT VIEWPORT ─── */}
       <div className="flex-1 bg-white rounded-3xl border border-slate-200/80 shadow-xs flex flex-col overflow-hidden">
-        {/* Top Chat Header */}
-        <div className="p-4 border-b border-slate-100 bg-slate-50/70 flex flex-wrap items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center space-x-3 min-w-0">
-            <span className="text-2xl p-2 bg-white rounded-2xl shadow-2xs border border-slate-200/60 shrink-0">
-              {activeGroup?.icon || "💬"}
-            </span>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h2 className="font-bold font-heading text-sm text-slate-900 truncate">
-                  {activeGroup?.name}
-                </h2>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700 shrink-0">
-                  {activeGroup?.type === "division"
-                    ? "กลุ่มงานทางการ"
-                    : activeGroup?.type === "announcement"
-                    ? "ประกาศกลาง"
-                    : "กลุ่มโครงการ"}
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-500 truncate mt-0.5">
-                {activeGroup?.description}
-              </p>
-            </div>
+        {!activeGroup ? (
+          <div className="h-full flex flex-col items-center justify-center text-center p-8 text-slate-400">
+            <span className="text-5xl mb-3">💬</span>
+            <h3 className="font-bold text-slate-700 text-lg">
+              ยังไม่มีห้องสนทนาที่คุณสังกัด
+            </h3>
+            <p className="text-xs text-slate-400 max-w-sm mt-1">
+              ระบบจำกัดสิทธิ์ให้เห็นและสนทนาได้เฉพาะห้องที่ตนเองเป็นสมาชิกเท่านั้น กรุณาติดต่อหัวหน้ากลุ่มงานหรือผู้ดูแลระบบ
+            </p>
           </div>
+        ) : (
+          <>
+            {/* Top Chat Header */}
+            <div className="p-4 border-b border-slate-100 bg-slate-50/70 flex flex-wrap items-center justify-between gap-3 shrink-0">
+              <div className="flex items-center space-x-3 min-w-0">
+                <span className="text-2xl p-2 bg-white rounded-2xl shadow-2xs border border-slate-200/60 shrink-0">
+                  {activeGroup.icon || "💬"}
+                </span>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h2 className="font-bold font-heading text-sm text-slate-900 truncate">
+                      {activeGroup.name}
+                    </h2>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700 shrink-0">
+                      {activeGroup.type === "division"
+                        ? "กลุ่มงานทางการ"
+                        : activeGroup.type === "announcement"
+                        ? "ประกาศกลาง"
+                        : "กลุ่มโครงการ"}
+                    </span>
+                    {!isMemberOfActiveGroup && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 shrink-0">
+                        🔒 เฉพาะสมาชิก
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                    {activeGroup.description}
+                  </p>
+                </div>
+              </div>
 
-          {/* Action buttons */}
-          <div className="flex items-center gap-2">
-            {/* Search messages in group */}
-            <div className="relative hidden sm:block">
-              <input
-                type="text"
-                placeholder="ค้นหาในห้อง..."
-                value={messageSearch}
-                onChange={(e) => setMessageSearch(e.target.value)}
-                className="w-36 px-2.5 py-1 text-xs bg-white border border-slate-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:w-48 transition-all"
-              />
-            </div>
-
-            {/* Pinned Messages Button */}
-            {pinnedMessages.length > 0 && (
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setShowPinnedDropdown(!showPinnedDropdown)}
-                  className="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
-                  title="ดูข้อความที่ปักหมุด"
-                >
-                  <span>📌</span>
-                  <span>{pinnedMessages.length} ปักหมุด</span>
-                </button>
-
-                {showPinnedDropdown && (
-                  <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl shadow-xl border border-slate-200 p-3 z-30 space-y-2 animate-fade-in">
-                    <div className="flex items-center justify-between pb-1.5 border-b border-slate-100 text-xs font-bold text-slate-800">
-                      <span>📌 ข้อความปักหมุด ({pinnedMessages.length})</span>
-                      <button
-                        type="button"
-                        onClick={() => setShowPinnedDropdown(false)}
-                        className="text-slate-400 hover:text-slate-600"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                    <div className="max-h-48 overflow-y-auto space-y-2">
-                      {pinnedMessages.map((pin) => (
-                        <div
-                          key={pin.id}
-                          className="p-2 bg-amber-50/60 rounded-xl border border-amber-200/60 text-xs space-y-1"
-                        >
-                          <div className="flex items-center justify-between text-[10px] text-amber-900 font-semibold">
-                            <span>{pin.senderName}</span>
-                            <span>{pin.timestamp}</span>
-                          </div>
-                          <p className="text-slate-800 line-clamp-2">{pin.text}</p>
-                        </div>
-                      ))}
-                    </div>
+              {/* Action buttons */}
+              <div className="flex items-center gap-2">
+                {/* Search messages in group (เฉพาะสมาชิกที่มีสิทธิ์ดูข้อความ) */}
+                {isMemberOfActiveGroup && (
+                  <div className="relative hidden sm:block">
+                    <input
+                      type="text"
+                      placeholder="ค้นหาในห้อง..."
+                      value={messageSearch}
+                      onChange={(e) => setMessageSearch(e.target.value)}
+                      className="w-36 px-2.5 py-1 text-xs bg-white border border-slate-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:w-48 transition-all"
+                    />
                   </div>
                 )}
+
+                {/* Pinned Messages Button */}
+                {isMemberOfActiveGroup && pinnedMessages.length > 0 && (
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowPinnedDropdown(!showPinnedDropdown)}
+                      className="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                      title="ดูข้อความที่ปักหมุด"
+                    >
+                      <span>📌</span>
+                      <span>{pinnedMessages.length} ปักหมุด</span>
+                    </button>
+
+                    {showPinnedDropdown && (
+                      <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl shadow-xl border border-slate-200 p-3 z-30 space-y-2 animate-fade-in">
+                        <div className="flex items-center justify-between pb-1.5 border-b border-slate-100 text-xs font-bold text-slate-800">
+                          <span>📌 ข้อความปักหมุด ({pinnedMessages.length})</span>
+                          <button
+                            type="button"
+                            onClick={() => setShowPinnedDropdown(false)}
+                            className="text-slate-400 hover:text-slate-600"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        <div className="max-h-48 overflow-y-auto space-y-2">
+                          {pinnedMessages.map((pin) => (
+                            <div
+                              key={pin.id}
+                              className="p-2 bg-amber-50/60 rounded-xl border border-amber-200/60 text-xs space-y-1"
+                            >
+                              <div className="flex items-center justify-between text-[10px] text-amber-900 font-semibold">
+                                <span>{pin.senderName}</span>
+                                <span>{pin.timestamp}</span>
+                              </div>
+                              <p className="text-slate-800 line-clamp-2">{pin.text}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* View Members Drawer Button */}
+                <button
+                  type="button"
+                  onClick={() => setShowMembersDrawer(true)}
+                  className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                >
+                  <span>👥</span>
+                  <span>สมาชิก ({activeGroupMembers.length})</span>
+                </button>
+
+                {/* Quick Video Call */}
+                <button
+                  type="button"
+                  disabled={!isMemberOfActiveGroup}
+                  onClick={() => {
+                    if (!isMemberOfActiveGroup) {
+                      showToast("🔒 เฉพาะสมาชิกของกลุ่มเท่านั้นที่สามารถเริ่มการประชุมได้");
+                      return;
+                    }
+                    showToast(`📹 เริ่มห้องประชุมออนไลน์สำหรับกลุ่ม ${activeGroup.name} แล้ว`);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-[#4F46E5] hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold transition-colors cursor-pointer flex items-center gap-1 shadow-xs"
+                >
+                  <span>📹</span>
+                  <span className="hidden sm:inline">ประชุมกลุ่ม</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Pinned Message Sticky Banner */}
+            {isMemberOfActiveGroup && pinnedMessages.length > 0 && (
+              <div className="px-4 py-2 bg-amber-50/80 border-b border-amber-200/80 flex items-center justify-between text-xs text-amber-900 shrink-0">
+                <div className="flex items-center gap-2 truncate">
+                  <span className="text-sm">📌</span>
+                  <span className="font-bold truncate">
+                    {pinnedMessages[pinnedMessages.length - 1].senderName}:
+                  </span>
+                  <span className="truncate text-slate-700">
+                    {pinnedMessages[pinnedMessages.length - 1].text}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowPinnedDropdown(true)}
+                  className="text-[11px] text-indigo-600 hover:underline font-bold shrink-0 ml-2"
+                >
+                  ดูทั้งหมด ({pinnedMessages.length})
+                </button>
               </div>
             )}
 
-            {/* View Members Drawer Button */}
-            <button
-              type="button"
-              onClick={() => setShowMembersDrawer(true)}
-              className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
-            >
-              <span>👥</span>
-              <span>สมาชิก ({activeGroupMembers.length})</span>
-            </button>
-
-            {/* Quick Video Call */}
-            <button
-              type="button"
-              onClick={() => showToast(`📹 เริ่มห้องประชุมออนไลน์สำหรับกลุ่ม ${activeGroup.name} แล้ว`)}
-              className="px-3 py-1.5 rounded-xl bg-[#4F46E5] hover:bg-indigo-700 text-white text-xs font-bold transition-colors cursor-pointer flex items-center gap-1 shadow-xs"
-            >
-              <span>📹</span>
-              <span className="hidden sm:inline">ประชุมกลุ่ม</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Pinned Message Sticky Banner */}
-        {pinnedMessages.length > 0 && (
-          <div className="px-4 py-2 bg-amber-50/80 border-b border-amber-200/80 flex items-center justify-between text-xs text-amber-900 shrink-0">
-            <div className="flex items-center gap-2 truncate">
-              <span className="text-sm">📌</span>
-              <span className="font-bold truncate">
-                {pinnedMessages[pinnedMessages.length - 1].senderName}:
-              </span>
-              <span className="truncate text-slate-700">
-                {pinnedMessages[pinnedMessages.length - 1].text}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowPinnedDropdown(true)}
-              className="text-[11px] text-indigo-600 hover:underline font-bold shrink-0 ml-2"
-            >
-              ดูทั้งหมด ({pinnedMessages.length})
-            </button>
-          </div>
-        )}
-
-        {/* Chat Message Thread */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-slate-50/30">
-          {activeMessages.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-400">
-              <span className="text-4xl mb-2">{activeGroup?.icon || "💬"}</span>
-              <h3 className="font-bold text-slate-700 text-base">
-                ยินดีต้อนรับสู่ห้อง {activeGroup?.name}
-              </h3>
-              <p className="text-xs text-slate-400 max-w-sm mt-1">
-                ห้องสนทนาของ {activeGroup?.description} สามารถส่งข้อความ หนังสือเวียน หรือประสานงานได้ทันที
-              </p>
-            </div>
-          ) : (
+            {/* Chat Message Thread */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-slate-50/30">
+              {!isMemberOfActiveGroup ? (
+                <div className="h-full flex flex-col items-center justify-center text-center p-8 text-slate-500 my-auto">
+                  <div className="w-16 h-16 rounded-3xl bg-amber-50 border border-amber-200 flex items-center justify-center text-3xl shadow-xs mb-4">
+                    🔒
+                  </div>
+                  <h3 className="font-bold text-slate-800 text-base">
+                    เฉพาะสมาชิกกลุ่มเท่านั้นที่มีสิทธิ์ดูและสนทนา
+                  </h3>
+                  <p className="text-xs text-slate-500 max-w-md mt-1 leading-relaxed">
+                    คุณ (<strong>{currentUser?.name || "ผู้ใช้งาน"}</strong>) ไม่ได้เป็นสมาชิกของกลุ่ม &ldquo;{activeGroup.name}&rdquo; จึงไม่สามารถดูข้อความหรือร่วมสนทนาในห้องนี้ได้
+                  </p>
+                  <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowMembersDrawer(true)}
+                      className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                    >
+                      <span>👥</span>
+                      <span>ดูรายชื่อสมาชิกในกลุ่ม ({activeGroupMembers.length} คน)</span>
+                    </button>
+                    {currentUser?.role === "admin" && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleUpdateGroupMembers(activeGroup.id, [
+                            ...activeGroup.memberIds,
+                            currentUser.id,
+                          ]);
+                          showToast(`✅ เพิ่มตนเองเข้าร่วมกลุ่ม ${activeGroup.name} เรียบร้อย`);
+                        }}
+                        className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                      >
+                        + เพิ่มตนเองเข้ากลุ่ม (Admin)
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : activeMessages.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-400">
+                  <span className="text-4xl mb-2">{activeGroup.icon || "💬"}</span>
+                  <h3 className="font-bold text-slate-700 text-base">
+                    ยินดีต้อนรับสู่ห้อง {activeGroup.name}
+                  </h3>
+                  <p className="text-xs text-slate-400 max-w-sm mt-1">
+                    ห้องสนทนาของ {activeGroup.description} สามารถส่งข้อความ หนังสือเวียน หรือประสานงานได้ทันที
+                  </p>
+                </div>
+              ) : (
             activeMessages.map((msg) => {
               const isMe = currentUser ? msg.senderId === currentUser.id : false;
               const senderRoleInfo = ROLE_CONFIG[msg.senderRole];
@@ -645,94 +799,124 @@ export function ChatPage({
 
         {/* ─── BOTTOM: INPUT & ATTACHMENT BAR ─── */}
         <div className="p-3 sm:p-4 border-t border-slate-200/80 bg-white space-y-2 shrink-0">
-          {/* Quick Tags and Attachments Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[11px] font-bold text-slate-400 mr-1">แท็กด่วน:</span>
-              {QUICK_TAGS.map((tag) => (
-                <button
-                  key={tag}
-                  type="button"
-                  onClick={() => setSelectedTag(selectedTag === tag ? null : tag)}
-                  className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
-                    selectedTag === tag
-                      ? "bg-[#4F46E5] text-white shadow-2xs"
-                      : "bg-slate-100 hover:bg-slate-200 text-slate-600"
-                  }`}
-                >
-                  {tag}
-                </button>
-              ))}
-            </div>
-
-            {/* Simulated file attachments */}
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => {
-                  setAttachedFile({
-                    name: `เอกสารราชการ_บันทึกข้อความ_${Date.now().toString().slice(-4)}.pdf`,
-                    type: "pdf",
-                    size: "1.8 MB",
-                  });
-                  showToast("📎 แนบไฟล์เอกสารราชการเรียบร้อย");
-                }}
-                className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold transition-colors cursor-pointer flex items-center gap-1"
-                title="แนบเอกสาร PDF"
-              >
-                <span>📎</span>
-                <span>แนบไฟล์ PDF</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Attached file preview chip */}
-          {attachedFile && (
-            <div className="p-2 bg-indigo-50 border border-indigo-200 rounded-xl flex items-center justify-between text-xs">
+          {!isMemberOfActiveGroup ? (
+            <div className="p-3.5 bg-amber-50/90 border border-amber-200/80 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-amber-900">
               <div className="flex items-center gap-2">
-                <span>📕</span>
-                <span className="font-bold text-indigo-950">{attachedFile.name}</span>
-                <span className="text-slate-400 font-mono">({attachedFile.size})</span>
+                <span className="text-lg">🔒</span>
+                <span className="font-semibold text-slate-800">
+                  คุณไม่ได้เป็นสมาชิกในกลุ่มนี้ ระบบจำกัดสิทธิ์การแชทเฉพาะบุคลากรที่เป็นสมาชิกกลุ่มเท่านั้น
+                </span>
               </div>
-              <button
-                type="button"
-                onClick={() => setAttachedFile(null)}
-                className="text-slate-400 hover:text-rose-500 font-bold"
-              >
-                ✕
-              </button>
+              {currentUser?.role === "admin" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleUpdateGroupMembers(activeGroup.id, [
+                      ...activeGroup.memberIds,
+                      currentUser.id,
+                    ]);
+                    showToast(`✅ เพิ่มตนเองเข้าร่วมกลุ่ม ${activeGroup.name} เรียบร้อย`);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-colors cursor-pointer shrink-0 shadow-xs"
+                >
+                  + เพิ่มตนเองเข้ากลุ่ม (Admin)
+                </button>
+              )}
             </div>
+          ) : (
+            <>
+              {/* Quick Tags and Attachments Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-slate-400 mr-1">แท็กด่วน:</span>
+                  {QUICK_TAGS.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => setSelectedTag(selectedTag === tag ? null : tag)}
+                      className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                        selectedTag === tag
+                          ? "bg-[#4F46E5] text-white shadow-2xs"
+                          : "bg-slate-100 hover:bg-slate-200 text-slate-600"
+                      }`}
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Simulated file attachments */}
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAttachedFile({
+                        name: `เอกสารราชการ_บันทึกข้อความ_${Date.now().toString().slice(-4)}.pdf`,
+                        type: "pdf",
+                        size: "1.8 MB",
+                      });
+                      showToast("📎 แนบไฟล์เอกสารราชการเรียบร้อย");
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold transition-colors cursor-pointer flex items-center gap-1"
+                    title="แนบเอกสาร PDF"
+                  >
+                    <span>📎</span>
+                    <span>แนบไฟล์ PDF</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Attached file preview chip */}
+              {attachedFile && (
+                <div className="p-2 bg-indigo-50 border border-indigo-200 rounded-xl flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <span>📕</span>
+                    <span className="font-bold text-indigo-950">{attachedFile.name}</span>
+                    <span className="text-slate-400 font-mono">({attachedFile.size})</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAttachedFile(null)}
+                    className="text-slate-400 hover:text-rose-500 font-bold"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {/* Form Text Input */}
+              <form onSubmit={handleSendMessage} className="flex items-end gap-2">
+                <div className="flex-1 relative">
+                  <textarea
+                    rows={2}
+                    placeholder={`พิมพ์ข้อความสนทนาในห้อง ${activeGroup.name}...`}
+                    value={newMessageText}
+                    onChange={(e) => setNewMessageText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSendMessage(e);
+                      }
+                    }}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs sm:text-sm text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-indigo-500 transition-colors resize-none leading-relaxed"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={!newMessageText.trim() && !attachedFile}
+                  className="px-5 py-3 bg-[#4F46E5] hover:bg-indigo-700 disabled:opacity-40 disabled:hover:bg-[#4F46E5] text-white rounded-2xl text-xs font-bold shadow-md shadow-indigo-600/20 transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
+                >
+                  <span>ส่ง</span>
+                  <span>✈️</span>
+                </button>
+              </form>
+            </>
           )}
-
-          {/* Form Text Input */}
-          <form onSubmit={handleSendMessage} className="flex items-end gap-2">
-            <div className="flex-1 relative">
-              <textarea
-                rows={2}
-                placeholder={`พิมพ์ข้อความสนทนาในห้อง ${activeGroup?.name}...`}
-                value={newMessageText}
-                onChange={(e) => setNewMessageText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSendMessage(e);
-                  }
-                }}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs sm:text-sm text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-indigo-500 transition-colors resize-none leading-relaxed"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={!newMessageText.trim() && !attachedFile}
-              className="px-5 py-3 bg-[#4F46E5] hover:bg-indigo-700 disabled:opacity-40 disabled:hover:bg-[#4F46E5] text-white rounded-2xl text-xs font-bold shadow-md shadow-indigo-600/20 transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
-            >
-              <span>ส่ง</span>
-              <span>✈️</span>
-            </button>
-          </form>
         </div>
-      </div>
+      </>
+    )}
+  </div>
 
       {/* ─── MODAL: CREATE CUSTOM GROUP ─── */}
       {showCreateGroupModal && (
