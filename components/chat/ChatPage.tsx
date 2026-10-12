@@ -112,9 +112,18 @@ export function ChatPage({
     if (adminShowAll && currentUser.role === "admin") {
       return groups;
     }
-    return groups.filter(
-      (g) => Array.isArray(g.memberIds) && g.memberIds.includes(currentUser.id)
-    );
+    return groups.filter((g) => {
+      const isMember = Array.isArray(g.memberIds) && g.memberIds.includes(currentUser.id);
+      const isOfficialDivision = Boolean(
+        g.isOfficial &&
+        g.division &&
+        currentUser.division &&
+        (g.division === currentUser.division ||
+          currentUser.division.includes(g.division) ||
+          g.division.includes(currentUser.division))
+      );
+      return isMember || isOfficialDivision;
+    });
   }, [groups, currentUser, adminShowAll]);
 
   // สลับไปยังกลุ่มที่ตนเองมีสิทธิ์เข้าถึงโดยอัตโนมัติ
@@ -131,10 +140,20 @@ export function ChatPage({
     return accessibleGroups.find((g) => g.id === activeGroupId) || accessibleGroups[0] || null;
   }, [accessibleGroups, activeGroupId]);
 
-  // ตรวจสอบว่าผู้ใช้ปัจจุบันเป็นสมาชิกของกลุ่มที่เลือกอยู่หรือไม่
+  // ตรวจสอบว่าผู้ใช้ปัจจุบันเป็นสมาชิกของกลุ่มที่เลือกอยู่หรือไม่ (รวมสิทธิ์ฝ่ายทางการ และ Admin)
   const isMemberOfActiveGroup = useMemo(() => {
     if (!currentUser || !activeGroup) return false;
-    return Array.isArray(activeGroup.memberIds) && activeGroup.memberIds.includes(currentUser.id);
+    if (currentUser.role === "admin") return true;
+    const isMember = Array.isArray(activeGroup.memberIds) && activeGroup.memberIds.includes(currentUser.id);
+    const isOfficialDivision = Boolean(
+      activeGroup.isOfficial &&
+      activeGroup.division &&
+      currentUser.division &&
+      (activeGroup.division === currentUser.division ||
+        currentUser.division.includes(activeGroup.division) ||
+        activeGroup.division.includes(currentUser.division))
+    );
+    return isMember || isOfficialDivision;
   }, [currentUser, activeGroup]);
 
   // Group members
