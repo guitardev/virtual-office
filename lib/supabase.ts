@@ -13,6 +13,8 @@ import {
   ChatMessage,
   ChatGroup,
   TaskItem,
+  TaskVisibility,
+  TaskSubtask,
   MeetingItem,
 } from "./types";
 import { INITIAL_MEMBERS, INITIAL_SYSTEM_MODULES, INITIAL_ACCESS_REQUESTS, INITIAL_AUDIT_LOGS } from "./rbac";
@@ -925,14 +927,59 @@ export function subscribeToAuditLogs(callback: () => void) {
 // ==========================================
 
 export function mapRowToTask(row: any): TaskItem {
+  let richMeta: any = null;
+  const rawDesc = row.description || "";
+  if (typeof rawDesc === "string" && rawDesc.trim().startsWith("{") && rawDesc.trim().endsWith("}")) {
+    try {
+      richMeta = JSON.parse(rawDesc.trim());
+    } catch {
+      richMeta = null;
+    }
+  }
+
+  const dept = richMeta?.dept || (richMeta ? "ฝ่ายบริหารทั่วไป" : (rawDesc || "ฝ่ายบริหารทั่วไป"));
+  const description = richMeta ? (richMeta.details || "") : (rawDesc || "");
+  const visibility = (richMeta?.visibility as TaskVisibility) || "department";
+  const targetDivision = richMeta?.targetDivision || dept;
+  const createdBy = richMeta?.createdBy || undefined;
+  const createdByName = richMeta?.createdByName || undefined;
+  const assigneeName = richMeta?.assigneeName || row.assignee_id || "ผู้รับผิดชอบ";
+  const assigneeId = richMeta?.assigneeId || (typeof row.assignee_id === "string" && row.assignee_id.startsWith("usr_") ? row.assignee_id : undefined);
+  const subtasks: TaskSubtask[] = Array.isArray(richMeta?.subtasks) ? richMeta.subtasks : [];
+  const tags: string[] = Array.isArray(richMeta?.tags) ? richMeta.tags : [];
+  const reviewNotes = richMeta?.reviewNotes || undefined;
+
+  let dueStr = "วันนี้";
+  if (row.due_date) {
+    try {
+      dueStr = new Date(row.due_date).toLocaleDateString("th-TH", {
+        day: "numeric",
+        month: "short",
+        year: "numeric"
+      });
+    } catch {
+      dueStr = row.due_date;
+    }
+  }
+
   return {
     id: row.id,
     title: row.title,
-    dept: row.description || "ฝ่ายบริหารทั่วไป",
-    due: row.due_date ? new Date(row.due_date).toLocaleDateString("th-TH") : "วันนี้",
+    dept,
+    due: dueStr,
     priority: (row.priority as "high" | "medium" | "low") || "medium",
-    status: row.status === "done" ? "done" : row.status === "in_progress" ? "in_progress" : "todo",
-    assignee: row.assignee_id || "ผู้รับผิดชอบ",
+    status: (row.status as any) || "todo",
+    assignee: assigneeName,
+    assigneeId,
+    description,
+    visibility,
+    targetDivision,
+    createdBy,
+    createdByName,
+    subtasks,
+    tags,
+    reviewNotes,
+    createdAt: row.created_at,
   };
 }
 
@@ -940,13 +987,40 @@ export function mapTaskToRow(task: TaskItem): any {
   const isUuid =
     typeof task.id === "string" &&
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(task.id);
+
+  const richPayload = {
+    dept: task.dept || "ฝ่ายบริหารทั่วไป",
+    details: task.description || "",
+    visibility: task.visibility || "department",
+    targetDivision: task.targetDivision || task.dept || "ฝ่ายบริหารทั่วไป",
+    createdBy: task.createdBy || null,
+    createdByName: task.createdByName || null,
+    assigneeName: task.assignee || null,
+    assigneeId: task.assigneeId || null,
+    subtasks: task.subtasks || [],
+    tags: task.tags || [],
+    reviewNotes: task.reviewNotes || null,
+  };
+
   const row: any = {
     title: task.title,
-    description: task.dept,
+    description: JSON.stringify(richPayload),
     status: task.status,
     priority: task.priority,
-    assignee_id: task.assignee || null,
+    assignee_id: task.assigneeId || task.assignee || null,
   };
+
+  if (task.due) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(task.due)) {
+      row.due_date = task.due;
+    } else {
+      const parsed = Date.parse(task.due);
+      if (!isNaN(parsed)) {
+        row.due_date = new Date(parsed).toISOString().split("T")[0];
+      }
+    }
+  }
+
   if (isUuid) {
     row.id = task.id;
   }
@@ -967,14 +1041,34 @@ export async function fetchTasks(): Promise<TaskItem[]> {
   }
 }
 
-export async function saveTask(task: TaskItem): Promise<boolean> {
-  if (!supabase) return true;
+export async function saveTask(task: TaskItem): Promise<TaskItem | null> {
+  if (!supabase) return task;
   try {
+    const isUuid =
+      typeof task.id === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(task.id);
     const row = mapTaskToRow(task);
-    const { error } = await supabase.from("tasks").upsert(row);
-    return !error;
-  } catch {
-    return false;
+
+    if (isUuid) {
+      row.id = task.id;
+      const { data, error } = await supabase.from("tasks").upsert(row).select().single();
+      if (error) {
+        console.error("Error upserting task in Supabase:", error);
+        return null;
+      }
+      return data ? mapRowToTask(data) : task;
+    } else {
+      delete row.id;
+      const { data, error } = await supabase.from("tasks").insert(row).select().single();
+      if (error) {
+        console.error("Error inserting task into Supabase:", error);
+        return null;
+      }
+      return data ? mapRowToTask(data) : task;
+    }
+  } catch (err) {
+    console.error("Exception saving task to Supabase:", err);
+    return null;
   }
 }
 

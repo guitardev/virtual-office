@@ -159,14 +159,32 @@ export interface File {
   created_at: string;
 }
 
+export type TaskVisibility = "individual" | "department" | "public";
+
+export interface TaskSubtask {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
 export interface TaskItem {
   id: string | number;
   title: string;
   dept: string;
   due: string;
   priority: "high" | "medium" | "low";
-  status: "todo" | "in_progress" | "done";
+  status: "todo" | "in_progress" | "review" | "done";
   assignee: string;
+  assigneeId?: string;
+  description?: string;
+  visibility?: TaskVisibility;
+  targetDivision?: string;
+  createdBy?: string;
+  createdByName?: string;
+  subtasks?: TaskSubtask[];
+  tags?: string[];
+  reviewNotes?: string;
+  createdAt?: string;
 }
 
 export interface MeetingItem {

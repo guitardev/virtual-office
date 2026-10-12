@@ -23,6 +23,7 @@ export function ReportsPage({
     const totalTasks = tasks.length;
     const doneTasks = tasks.filter((t) => t.status === "done").length;
     const inProgressTasks = tasks.filter((t) => t.status === "in_progress").length;
+    const reviewTasks = tasks.filter((t) => t.status === "review").length;
     const todoTasks = tasks.filter((t) => t.status === "todo").length;
     const taskRate = totalTasks > 0 ? ((doneTasks / totalTasks) * 100).toFixed(1) : "0.0";
 

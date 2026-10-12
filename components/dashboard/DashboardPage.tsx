@@ -143,7 +143,7 @@ export function DashboardPage({
                 >
                   <div className="flex items-center space-x-3.5">
                     <span className="text-xl">
-                      {task.status === "done" ? "✅" : task.status === "in_progress" ? "🔄" : "📝"}
+                      {task.status === "done" ? "✅" : task.status === "review" ? "🔍" : task.status === "in_progress" ? "🔄" : "📝"}
                     </span>
                     <div>
                       <div className={`font-semibold text-sm ${task.status === "done" ? "line-through text-slate-400" : "text-slate-800"}`}>

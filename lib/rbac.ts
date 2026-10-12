@@ -1,4 +1,4 @@
-import { Role, ModuleId, RoleInfo, Member, AuditLog, SystemModule, PersonnelType, AccessRequest } from "./types";
+import { Role, ModuleId, RoleInfo, Member, AuditLog, SystemModule, PersonnelType, AccessRequest, TaskItem, TaskVisibility } from "./types";
 
 export const ROLE_CONFIG: Record<Role, RoleInfo> = {
   admin: {
@@ -436,4 +436,102 @@ export const INITIAL_MEMBERS: Member[] = [
 export const INITIAL_AUDIT_LOGS: AuditLog[] = [];
 
 export const INITIAL_ACCESS_REQUESTS: AccessRequest[] = [];
+
+/**
+ * ตรวจสอบสิทธิ์การเข้าถึงและการมองเห็นของงาน (Task Access & Visibility Control)
+ * - individual (เฉพาะบุคคล): ผู้สร้าง, ผู้รับผิดชอบตรง, และ Admin/Manager ฝ่ายนั้น
+ * - department (เฉพาะกลุ่มงาน): บุคลากรในกลุ่มงานนั้น, Manager ฝ่าย, ผู้สร้าง/ผู้รับผิดชอบ, และ Admin
+ * - public (ทั้งสำนักงาน): ข้าราชการ/เจ้าหน้าที่ทุกคน
+ */
+export function canUserViewTask(task: TaskItem, user: Member | null): boolean {
+  if (!user) return false;
+  // ผู้ดูแลระบบระดับจังหวัด (Admin/พมจ.) เข้าถึงและกำกับดูแลได้ทุกงาน
+  if (user.role === "admin") return true;
+
+  const visibility: TaskVisibility = task.visibility || "department";
+  const userDivision = (user.division || user.department || "").trim();
+  const taskDept = (task.targetDivision || task.dept || "").trim();
+
+  // ผู้สร้างงาน หรือ ผู้รับผิดชอบงาน ย่อมมีสิทธิ์เห็นงานของตนเสมอ
+  const isCreator = Boolean(task.createdBy && task.createdBy === user.id);
+  const isAssignee = Boolean(
+    (task.assigneeId && task.assigneeId === user.id) ||
+    (task.assignee && (task.assignee === user.name || (user.firstName && task.assignee.includes(user.firstName))))
+  );
+
+  if (isCreator || isAssignee) return true;
+
+  // 1. งานสาธารณะทั้งสำนักงาน
+  if (visibility === "public") return true;
+
+  // 2. งานเฉพาะกลุ่มงาน (Department / Manager Group)
+  if (visibility === "department") {
+    // ถ้าสังกัดกลุ่มงานเดียวกัน
+    if (userDivision && taskDept && (userDivision === taskDept || userDivision.includes(taskDept) || taskDept.includes(userDivision))) {
+      return true;
+    }
+    // หากเป็นหัวหน้าฝ่าย (Manager) ของกลุ่มงานเป้าหมาย
+    if (user.role === "manager" && (userDivision === taskDept || userDivision.includes(taskDept))) {
+      return true;
+    }
+  }
+
+  // 3. งานเฉพาะบุคคล (Individual / Private)
+  if (visibility === "individual") {
+    // หัวหน้ากลุ่มงาน (Manager) สามารถเห็นงานส่วนบุคคลของลูกทีมในฝ่ายตนได้เพื่อการกำกับติดตาม
+    if (user.role === "manager" && userDivision && taskDept && (userDivision === taskDept || userDivision.includes(taskDept))) {
+      return true;
+    }
+    return false;
+  }
+
+  return false;
+}
+
+/**
+ * ตรวจสอบสิทธิ์การแก้ไขงาน (Task Edit Control)
+ */
+export function canUserEditTask(task: TaskItem, user: Member | null): boolean {
+  if (!user) return false;
+  if (user.role === "admin") return true;
+
+  const isCreator = Boolean(task.createdBy && task.createdBy === user.id);
+  const isAssignee = Boolean(
+    (task.assigneeId && task.assigneeId === user.id) ||
+    (task.assignee && (task.assignee === user.name || (user.firstName && task.assignee.includes(user.firstName))))
+  );
+
+  if (isCreator || isAssignee) return true;
+
+  const userDivision = (user.division || user.department || "").trim();
+  const taskDept = (task.targetDivision || task.dept || "").trim();
+
+  // หัวหน้าฝ่าย (Manager) ในกลุ่มงานสามารถแก้ไข/มอบหมายงานในฝ่ายตนได้
+  if (user.role === "manager" && userDivision && taskDept && (userDivision === taskDept || userDivision.includes(taskDept))) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * ตรวจสอบสิทธิ์การลบงาน (Task Delete Control)
+ */
+export function canUserDeleteTask(task: TaskItem, user: Member | null): boolean {
+  if (!user) return false;
+  if (user.role === "admin") return true;
+
+  const isCreator = Boolean(task.createdBy && task.createdBy === user.id);
+  if (isCreator) return true;
+
+  const userDivision = (user.division || user.department || "").trim();
+  const taskDept = (task.targetDivision || task.dept || "").trim();
+
+  // หัวหน้าฝ่ายลบงานในฝ่ายตนได้
+  if (user.role === "manager" && userDivision && taskDept && (userDivision === taskDept || userDivision.includes(taskDept))) {
+    return true;
+  }
+
+  return false;
+}
 

@@ -1162,7 +1162,14 @@ export default function OmniOfficeApp() {
     setTasks((prev) =>
       prev.map((t) => {
         if (t.id === id) {
-          const nextStatus = t.status === "done" ? "todo" : t.status === "todo" ? "in_progress" : "done";
+          const nextStatus =
+            t.status === "todo"
+              ? "in_progress"
+              : t.status === "in_progress"
+              ? "review"
+              : t.status === "review"
+              ? "done"
+              : "todo";
           updatedTask = { ...t, status: nextStatus };
           return updatedTask;
         }
@@ -1919,6 +1926,7 @@ export default function OmniOfficeApp() {
                 <TasksPage
                   tasks={tasks}
                   currentUser={currentUser}
+                  members={members}
                   setTasks={setTasks}
                   toggleTaskStatus={toggleTaskStatus}
                   showToast={showToast}
