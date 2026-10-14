@@ -48,7 +48,23 @@ test.describe("ระบบคลังภาพและสื่อราช�
       const url = new URL(route.request().url());
       const action = url.searchParams.get("action");
 
-      if (action === "list_albums") {
+      if (action === "list_folders") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            folders: [
+              {
+                id: 1,
+                name: "โครงการ พมจ. 2569",
+                item_count: 8,
+                parent: 0,
+              },
+            ],
+          }),
+        });
+      } else if (action === "list_albums") {
         await route.fulfill({
           status: 200,
           contentType: "application/json",
@@ -135,6 +151,13 @@ test.describe("ระบบคลังภาพและสื่อราช�
     await expect(personalSpaceBtn).toBeVisible();
 
     // ตรวจสอบแท็บประเภทสื่อ
+    const foldersTab = page.locator("button:has-text('โฟลเดอร์กิจกรรม')").first();
+    await expect(foldersTab).toBeVisible();
+
+    const allTab = page.locator("button:has-text('ทั้งหมด')").first();
+    await expect(allTab).toBeVisible();
+    await allTab.click();
+
     const photosTab = page.locator("button:has-text('รูปภาพ')").first();
     await expect(photosTab).toBeVisible();
 
@@ -215,5 +238,93 @@ test.describe("ระบบคลังภาพและสื่อราช�
     const dsmGuideContent = page.locator("text=ขั้นตอนการเปิดใช้งาน Shared Space สำหรับผู้ดูแลระบบ Synology (DSM)").first();
     await expect(dsmGuideContent).toBeVisible();
   });
+
+  test("ระบบแยกอัลบั้มตามโฟลเดอร์กิจกรรม (Folder Albums): ควรแสดงการ์ดโฟลเดอร์ คลิกเปิดโฟลเดอร์ และนำทางด้วย Breadcrumbs ได้", async ({
+    page,
+  }) => {
+    await page.route("**/api/nas/photos?*", async (route) => {
+      const url = new URL(route.request().url());
+      const action = url.searchParams.get("action");
+
+      if (action === "list_folders") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            folders: [
+              {
+                id: 101,
+                name: "โครงการพัฒนาสตรี 2569",
+                item_count: 14,
+                parent: 0,
+              },
+            ],
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            items: [
+              {
+                id: 501,
+                filename: "women_dev_01.jpg",
+                filesize: 1024000,
+                time: Math.floor(Date.now() / 1000),
+                type: "photo",
+                space: "shared",
+              },
+            ],
+            total: 1,
+          }),
+        });
+      }
+    });
+
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    await page.evaluate(() => {
+      localStorage.setItem("omnioffice_nas_user_sid", "mock_photos_sid");
+      localStorage.setItem("omnioffice_nas_user_account", "itadmin");
+      sessionStorage.setItem("omnioffice_nas_user_sid", "mock_photos_sid");
+      sessionStorage.setItem("omnioffice_nas_user_account", "itadmin");
+    });
+
+    const galleryNav = page
+      .locator("aside button:has-text('คลังภาพและสื่อ'), nav button:has-text('คลังภาพและสื่อ')")
+      .first();
+    await galleryNav.click();
+
+    // ตรวจสอบว่าแสดงโฟลเดอร์กิจกรรม
+    const folderCard = page.locator("text=โครงการพัฒนาสตรี 2569").first();
+    await expect(folderCard).toBeVisible();
+
+    const itemCountBadge = page.locator("text=14 รายการ").first();
+    await expect(itemCountBadge).toBeVisible();
+
+    // คลิกเปิดโฟลเดอร์
+    await folderCard.click();
+
+    // ตรวจสอบ Breadcrumb ของโฟลเดอร์
+    const breadcrumbName = page.locator("button:has-text('โครงการพัฒนาสตรี 2569')").first();
+    await expect(breadcrumbName).toBeVisible();
+
+    // ตรวจสอบปุ่มย้อนกลับ
+    const backBtn = page.locator("button:has-text('ย้อนกลับ')").first();
+    await expect(backBtn).toBeVisible();
+
+    // ตรวจสอบรูปภาพในโฟลเดอร์
+    const innerPhoto = page.locator("text=women_dev_01.jpg").first();
+    await expect(innerPhoto).toBeVisible();
+
+    // กดย้อนกลับ
+    await backBtn.click();
+    await expect(folderCard).toBeVisible();
+  });
 });
+
 

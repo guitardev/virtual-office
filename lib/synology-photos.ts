@@ -39,6 +39,18 @@ export interface SynologyPhotoAlbum {
   };
 }
 
+export interface SynologyPhotoFolder {
+  id: number;
+  name: string;
+  parent: number;
+  item_count: number;
+  cover?: {
+    unit_id?: number;
+    cache_key?: string;
+    id?: number;
+  };
+}
+
 /**
  * Fetch photo & video items from Synology Photos
  */
@@ -219,6 +231,93 @@ export async function listSynologyAlbums(params: {
     return {
       success: false,
       error: err?.message || "Connection error to Synology Photos Album API",
+    };
+  }
+}
+
+/**
+ * Fetch folders (albums by folder/directory) from Synology Photos
+ */
+export async function listSynologyFolders(params: {
+  space?: PhotoSpace;
+  folderId?: number | string;
+  offset?: number;
+  limit?: number;
+  sid: string;
+  nasUrl?: string;
+}): Promise<{
+  success: boolean;
+  folders?: SynologyPhotoFolder[];
+  total?: number;
+  error?: string;
+  code?: number;
+}> {
+  try {
+    const space = params.space || "shared";
+    const nasUrl = params.nasUrl || "http://192.168.162.21:5000";
+
+    if (typeof window !== "undefined") {
+      const queryParams = new URLSearchParams({
+        action: "list_folders",
+        space,
+        offset: String(params.offset || 0),
+        limit: String(params.limit || 50),
+        sid: params.sid,
+        nasUrl,
+      });
+      if (params.folderId !== undefined && params.folderId !== null) {
+        queryParams.set("folder_id", String(params.folderId));
+      }
+
+      const res = await fetch(`/api/nas/photos?${queryParams.toString()}`);
+      return await res.json();
+    }
+
+    // Direct server-side call
+    const cleanUrl = nasUrl.replace(/\/+$/, "");
+    const apiName = space === "shared" ? "SYNO.FotoTeam.Browse.Folder" : "SYNO.Foto.Browse.Folder";
+    const folderIdParam =
+      params.folderId !== undefined && params.folderId !== null
+        ? `&id=${encodeURIComponent(String(params.folderId))}`
+        : `&id=0`;
+    const additionalParam = encodeURIComponent(JSON.stringify(["thumbnail"]));
+    const url = `${cleanUrl}/webapi/entry.cgi?api=${apiName}&version=1&method=list&offset=${
+      params.offset || 0
+    }&limit=${params.limit || 50}${folderIdParam}&additional=${additionalParam}&_sid=${encodeURIComponent(
+      params.sid
+    )}`;
+
+    const res = await fetch(url, {
+      method: "GET",
+      signal: AbortSignal.timeout(10000),
+    });
+
+    const data = await res.json();
+    if (data.success && data.data) {
+      const rawList = data.data.list || [];
+      const folders: SynologyPhotoFolder[] = rawList.map((f: any) => ({
+        id: f.id,
+        name: f.name,
+        parent: f.parent || 0,
+        item_count: f.item_count || 0,
+        cover: f.additional?.thumbnail || f.cover,
+      }));
+      return {
+        success: true,
+        folders,
+        total: data.data.total || folders.length,
+      };
+    }
+
+    return {
+      success: false,
+      error: data.error?.message || "ไม่สามารถเรียกโฟลเดอร์จาก Synology Photos ได้",
+      code: data.error?.code,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || "Connection error to Synology Photos Folder API",
     };
   }
 }

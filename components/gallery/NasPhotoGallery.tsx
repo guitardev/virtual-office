@@ -16,8 +16,10 @@ import {
   PhotoSpace,
   SynologyPhotoItem,
   SynologyPhotoAlbum,
+  SynologyPhotoFolder,
   listSynologyPhotos,
   listSynologyAlbums,
+  listSynologyFolders,
   getPhotoThumbnailUrl,
   formatBytes,
   formatPhotoTime,
@@ -42,8 +44,16 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
 
   // Gallery state
   const [currentSpace, setCurrentSpace] = useState<PhotoSpace>("shared");
-  const [activeTab, setActiveTab] = useState<"all" | "photos" | "videos" | "albums">("all");
+  const [activeTab, setActiveTab] = useState<"folders" | "all" | "photos" | "videos" | "albums">("folders");
   const [selectedAlbumId, setSelectedAlbumId] = useState<number | null>(null);
+
+  // Folder & Album-by-Folder state
+  const [folders, setFolders] = useState<SynologyPhotoFolder[]>([]);
+  const [selectedFolder, setSelectedFolder] = useState<{ id: number; name: string; parent?: number } | null>(null);
+  const [folderBreadcrumbs, setFolderBreadcrumbs] = useState<{ id: number; name: string }[]>([
+    { id: 0, name: "โฟลเดอร์หลัก" },
+  ]);
+
   const [items, setItems] = useState<SynologyPhotoItem[]>([]);
   const [albums, setAlbums] = useState<SynologyPhotoAlbum[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -68,23 +78,35 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
     checkNasHealth(config.nasUrl).then(setHealth).catch(console.error);
   }, [config.nasUrl]);
 
-  // Load photos or albums when userSid, space, or activeTab changes
+  // Load photos, folders, or albums when userSid, space, or activeTab changes
   useEffect(() => {
     if (!userSid) {
       setItems([]);
       setAlbums([]);
+      setFolders([]);
       return;
     }
 
     if (activeTab === "albums") {
       loadAlbums(userSid, currentSpace);
+    } else if (activeTab === "folders") {
+      loadFolders(userSid, currentSpace, selectedFolder?.id || 0);
+      if (selectedFolder) {
+        loadPhotos(userSid, currentSpace, undefined, selectedFolder.id);
+      }
     } else {
-      loadPhotos(userSid, currentSpace, selectedAlbumId || undefined);
+      loadPhotos(userSid, currentSpace, selectedAlbumId || undefined, selectedFolder?.id);
     }
-  }, [userSid, currentSpace, activeTab, selectedAlbumId]);
+  }, [userSid, currentSpace, activeTab, selectedAlbumId, selectedFolder]);
 
   // ─── LOAD DATA ───
-  const loadPhotos = async (sid: string, space: PhotoSpace, albumId?: number, isAutoFallback: boolean = false) => {
+  const loadPhotos = async (
+    sid: string,
+    space: PhotoSpace,
+    albumId?: number,
+    folderId?: number,
+    isAutoFallback: boolean = false
+  ) => {
     setIsLoading(true);
     setPermissionError(null);
     setErrorCode(null);
@@ -92,6 +114,7 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
       const res = await listSynologyPhotos({
         space,
         albumId,
+        folderId,
         offset: 0,
         limit: 100,
         sid,
@@ -106,6 +129,7 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
           const fallbackRes = await listSynologyPhotos({
             space: "personal",
             albumId,
+            folderId,
             offset: 0,
             limit: 100,
             sid,
@@ -133,6 +157,74 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const loadFolders = async (sid: string, space: PhotoSpace, parentFolderId: number = 0) => {
+    setIsLoading(true);
+    setPermissionError(null);
+    setErrorCode(null);
+    try {
+      const res = await listSynologyFolders({
+        space,
+        folderId: parentFolderId,
+        offset: 0,
+        limit: 100,
+        sid,
+        nasUrl: config.nasUrl,
+      });
+
+      if (res.success && res.folders) {
+        setFolders(res.folders);
+      } else {
+        setFolders([]);
+        if (res.code) setErrorCode(res.code);
+        if (res.error) setPermissionError(res.error);
+        if (res.code === 119) {
+          clearUserNasSid();
+          setUserSid(null);
+        }
+      }
+    } catch (err: any) {
+      setPermissionError(err?.message || "เกิดข้อผิดพลาดในการโหลดโฟลเดอร์");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSelectFolder = (folder: SynologyPhotoFolder) => {
+    setSelectedFolder({ id: folder.id, name: folder.name, parent: folder.parent });
+    setFolderBreadcrumbs((prev) => [...prev, { id: folder.id, name: folder.name }]);
+    if (userSid) {
+      loadPhotos(userSid, currentSpace, undefined, folder.id);
+      loadFolders(userSid, currentSpace, folder.id);
+    }
+  };
+
+  const handleNavigateBreadcrumb = (index: number) => {
+    if (index === 0) {
+      setSelectedFolder(null);
+      setFolderBreadcrumbs([{ id: 0, name: "โฟลเดอร์หลัก" }]);
+      if (userSid) {
+        loadFolders(userSid, currentSpace, 0);
+        setItems([]);
+      }
+    } else {
+      const target = folderBreadcrumbs[index];
+      setSelectedFolder({ id: target.id, name: target.name });
+      setFolderBreadcrumbs((prev) => prev.slice(0, index + 1));
+      if (userSid) {
+        loadPhotos(userSid, currentSpace, undefined, target.id);
+        loadFolders(userSid, currentSpace, target.id);
+      }
+    }
+  };
+
+  const handleGoBackFolder = () => {
+    if (folderBreadcrumbs.length <= 1) {
+      setSelectedFolder(null);
+      return;
+    }
+    handleNavigateBreadcrumb(folderBreadcrumbs.length - 2);
   };
 
   const loadAlbums = async (sid: string, space: PhotoSpace) => {
@@ -329,6 +421,8 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                 onClick={() => {
                   setCurrentSpace("shared");
                   setSelectedAlbumId(null);
+                  setSelectedFolder(null);
+                  setFolderBreadcrumbs([{ id: 0, name: "โฟลเดอร์หลัก" }]);
                 }}
                 className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   currentSpace === "shared"
@@ -345,6 +439,8 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                 onClick={() => {
                   setCurrentSpace("personal");
                   setSelectedAlbumId(null);
+                  setSelectedFolder(null);
+                  setFolderBreadcrumbs([{ id: 0, name: "โฟลเดอร์หลัก" }]);
                 }}
                 className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   currentSpace === "personal"
@@ -357,8 +453,23 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
               </button>
             </div>
 
-            {/* Media Type Tabs */}
+            {/* Media Type & Folder Tabs */}
             <div className="flex items-center gap-1.5 overflow-x-auto py-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab("folders");
+                  setSelectedAlbumId(null);
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === "folders"
+                    ? "bg-cyan-50 text-cyan-700 border border-cyan-200"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                📁 โฟลเดอร์กิจกรรม ({folders.length})
+              </button>
+
               <button
                 type="button"
                 onClick={() => {
@@ -413,16 +524,21 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                     : "text-slate-600 hover:bg-slate-100"
                 }`}
               >
-                📁 อัลบั้ม ({albums.length})
+                🏷️ อัลบั้ม ({albums.length})
               </button>
 
               <button
                 type="button"
-                onClick={() =>
-                  activeTab === "albums"
-                    ? loadAlbums(userSid, currentSpace)
-                    : loadPhotos(userSid, currentSpace, selectedAlbumId || undefined)
-                }
+                onClick={() => {
+                  if (activeTab === "albums") {
+                    loadAlbums(userSid, currentSpace);
+                  } else if (activeTab === "folders") {
+                    loadFolders(userSid, currentSpace, selectedFolder?.id || 0);
+                    if (selectedFolder) loadPhotos(userSid, currentSpace, undefined, selectedFolder.id);
+                  } else {
+                    loadPhotos(userSid, currentSpace, selectedAlbumId || undefined, selectedFolder?.id);
+                  }
+                }}
                 className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer"
                 title="รีเฟรชคลังภาพ"
               >
@@ -432,21 +548,59 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
           </div>
 
           {/* Search & Breadcrumb Bar */}
-          <div className="flex items-center justify-between gap-3 px-1">
-            <div className="flex items-center gap-2 text-xs text-slate-600">
-              <span className="font-semibold">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
+            <div className="flex items-center gap-1.5 text-xs text-slate-600 flex-wrap">
+              <span className="font-semibold text-slate-800">
                 {currentSpace === "shared" ? "🏛️ พื้นที่ส่วนกลาง พมจ." : "👤 พื้นที่ส่วนบุคคล"}
               </span>
+
+              {/* Folder Breadcrumbs */}
+              {selectedFolder && (
+                <>
+                  <span className="text-slate-400">/</span>
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {folderBreadcrumbs.map((bc, idx) => (
+                      <React.Fragment key={bc.id}>
+                        {idx > 0 && <span className="text-slate-300">/</span>}
+                        <button
+                          type="button"
+                          onClick={() => handleNavigateBreadcrumb(idx)}
+                          className={`text-xs px-2 py-0.5 rounded-md cursor-pointer transition-colors ${
+                            idx === folderBreadcrumbs.length - 1
+                              ? "bg-cyan-100 text-cyan-900 font-bold"
+                              : "hover:bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          {bc.name}
+                        </button>
+                      </React.Fragment>
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedFolder(null);
+                      setFolderBreadcrumbs([{ id: 0, name: "โฟลเดอร์หลัก" }]);
+                      if (userSid) loadFolders(userSid, currentSpace, 0);
+                    }}
+                    className="text-[11px] text-rose-600 hover:underline cursor-pointer ml-1"
+                  >
+                    ✕ ดูโฟลเดอร์ทั้งหมด
+                  </button>
+                </>
+              )}
+
               {selectedAlbumId && (
                 <>
-                  <span>/</span>
+                  <span className="text-slate-400">/</span>
                   <span className="px-2 py-0.5 rounded-md bg-cyan-100 text-cyan-800 font-bold">
                     อัลบั้ม #{selectedAlbumId}
                   </span>
                   <button
                     type="button"
                     onClick={() => setSelectedAlbumId(null)}
-                    className="text-[11px] text-rose-600 hover:underline cursor-pointer"
+                    className="text-[11px] text-rose-600 hover:underline cursor-pointer ml-1"
                   >
                     ✕ ยกเลิกฟิลเตอร์
                   </button>
@@ -552,6 +706,179 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
             <div className="py-24 text-center space-y-3 text-slate-400 text-xs">
               <div className="text-4xl animate-spin">⏳</div>
               <div className="font-medium">กำลังโหลดคลังภาพถ่ายและสื่อจาก Synology Photos...</div>
+            </div>
+          ) : activeTab === "folders" ? (
+            /* ─── FOLDERS (ALBUMS BY FOLDER) VIEW ─── */
+            <div className="space-y-6">
+              {/* Folder Header Banner if inside a folder */}
+              {selectedFolder && (
+                <div className="p-4 rounded-2xl bg-cyan-50 border border-cyan-100 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-cyan-600 text-white flex items-center justify-center text-xl shadow-xs">
+                      📁
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-cyan-950 font-heading">
+                        {selectedFolder.name}
+                      </h4>
+                      <p className="text-xs text-cyan-700">
+                        {filteredItems.length} ไฟล์ภาพและสื่อในโฟลเดอร์นี้
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleGoBackFolder}
+                    className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-cyan-900 font-bold text-xs border border-cyan-200 shadow-xs flex items-center gap-1.5 cursor-pointer transition-all"
+                  >
+                    <span>⬅️</span>
+                    <span>ย้อนกลับ</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Subfolders Grid if any */}
+              {folders.length > 0 && (
+                <div className="space-y-3">
+                  <div className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>📁</span>
+                    <span>โฟลเดอร์กิจกรรม ({folders.length})</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {folders.map((folder) => (
+                      <div
+                        key={folder.id}
+                        onClick={() => handleSelectFolder(folder)}
+                        className="group bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md hover:border-cyan-400 transition-all overflow-hidden cursor-pointer flex flex-col"
+                      >
+                        <div className="h-36 bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center relative overflow-hidden">
+                          {folder.cover ? (
+                            <img
+                              src={getPhotoThumbnailUrl(
+                                folder.cover.unit_id || folder.cover.id || 0,
+                                "m",
+                                folder.cover.cache_key,
+                                currentSpace,
+                                userSid
+                              )}
+                              alt={folder.name}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="text-5xl text-cyan-600/60 group-hover:scale-110 transition-transform">
+                              📁
+                            </div>
+                          )}
+                          <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-full bg-slate-900/70 text-white text-[10px] font-bold backdrop-blur-xs">
+                            {folder.item_count} รายการ
+                          </span>
+                        </div>
+                        <div className="p-3.5 flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="font-bold text-sm text-slate-800 truncate group-hover:text-cyan-700 transition-colors">
+                              {folder.name}
+                            </div>
+                            <div className="text-[11px] text-slate-400 mt-0.5">
+                              คลิกเพื่อเปิดโฟลเดอร์นี้ →
+                            </div>
+                          </div>
+                          <span className="text-slate-300 group-hover:text-cyan-600 text-sm transition-colors">
+                            ➔
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Photos inside the selected folder */}
+              {selectedFolder ? (
+                <div className="space-y-3 pt-2">
+                  <div className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>🖼️</span>
+                    <span>ไฟล์สื่อในโฟลเดอร์ "{selectedFolder.name}" ({filteredItems.length})</span>
+                  </div>
+
+                  {filteredItems.length === 0 ? (
+                    <div className="py-16 text-center space-y-2 p-8 rounded-3xl bg-white border border-slate-200">
+                      <div className="text-3xl text-slate-300">🖼️</div>
+                      <div className="text-sm font-bold text-slate-700">ยังไม่มีรูปภาพหรือวิดีโอในโฟลเดอร์นี้</div>
+                      <div className="text-xs text-slate-400">
+                        {searchQuery
+                          ? "ไม่พบไฟล์ที่ตรงกับคำค้นหา"
+                          : "สามารถอัปโหลดไฟล์ภาพเข้ามาไว้ในโฟลเดอร์นี้ผ่าน Synology Photos หรือ File Station"}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
+                      {filteredItems.map((item, idx) => (
+                        <div
+                          key={item.id}
+                          onClick={() => setLightboxIndex(idx)}
+                          className="group relative bg-slate-900 rounded-2xl overflow-hidden shadow-xs hover:shadow-xl transition-all cursor-pointer aspect-square"
+                        >
+                          <img
+                            src={getPhotoThumbnailUrl(
+                              item.id,
+                              "m",
+                              item.thumbnail?.cache_key,
+                              item.space,
+                              userSid
+                            )}
+                            alt={item.filename}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 opacity-90 group-hover:opacity-100"
+                            loading="lazy"
+                          />
+
+                          {item.type === "video" && (
+                            <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded-md bg-black/60 text-white text-[10px] font-bold flex items-center gap-1 backdrop-blur-xs">
+                              <span>🎥</span>
+                              <span>วิดีโอ</span>
+                            </div>
+                          )}
+
+                          <div className="absolute inset-x-0 bottom-0 p-2.5 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="text-xs font-medium text-white truncate drop-shadow-xs">
+                              {item.filename}
+                            </div>
+                            <div className="text-[10px] text-slate-300 flex items-center justify-between mt-0.5">
+                              <span>{formatBytes(item.filesize)}</span>
+                              <span>{formatPhotoTime(item.time)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : folders.length === 0 ? (
+                /* Empty state when at root and no folders found */
+                <div className="py-20 text-center space-y-3 p-8 rounded-3xl bg-white border border-slate-200">
+                  <div className="w-16 h-16 rounded-2xl bg-cyan-50 text-cyan-600 flex items-center justify-center text-3xl mx-auto">
+                    📁
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-800 font-heading">
+                      ไม่พบโฟลเดอร์กิจกรรมใน {currentSpace === "shared" ? "พื้นที่ส่วนกลาง (/photo)" : "พื้นที่ส่วนบุคคล (/home/Photos)"}
+                    </h4>
+                    <p className="text-xs text-slate-400 max-w-md mx-auto mt-1 leading-relaxed">
+                      ท่านสามารถสร้างโฟลเดอร์และจัดหมวดหมู่ภาพถ่ายตามโครงการ กิจกรรม หรือปีงบประมาณ เช่น <code className="bg-slate-100 px-1 py-0.5 rounded text-cyan-800">/photo/2569/โครงการฝึกอบรม</code> ผ่าน Synology Photos หรือ File Station เพื่อให้อัลบั้มแยกตามโฟลเดอร์แสดงผลที่นี่
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("all")}
+                    className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white font-bold text-xs transition-all shadow-xs cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <span>🖼️</span>
+                    <span>ดูภาพทั้งหมดแทน (All Photos)</span>
+                  </button>
+                </div>
+              ) : null}
             </div>
           ) : activeTab === "albums" ? (
             /* ─── ALBUMS VIEW ─── */

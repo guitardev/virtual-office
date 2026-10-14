@@ -121,6 +121,44 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    // ─── ACTION 3: LIST FOLDERS (ALBUMS BY DIRECTORY) ───
+    if (action === "list_folders") {
+      const apiName = space === "shared" ? "SYNO.FotoTeam.Browse.Folder" : "SYNO.Foto.Browse.Folder";
+      const folderIdParam = folderId !== null && folderId !== undefined ? `&id=${encodeURIComponent(folderId)}` : `&id=0`;
+      const additionalParam = encodeURIComponent(JSON.stringify(["thumbnail"]));
+      const queryUrl = `${cleanUrl}/webapi/entry.cgi?api=${apiName}&version=1&method=list&offset=${offset}&limit=${limit}${folderIdParam}&additional=${additionalParam}&_sid=${encodeURIComponent(
+        sid
+      )}`;
+
+      const res = await fetch(queryUrl, {
+        method: "GET",
+        signal: AbortSignal.timeout(10000),
+      });
+
+      const data = await res.json();
+      if (data.success && data.data) {
+        const rawList = data.data.list || [];
+        const folders = rawList.map((f: any) => ({
+          id: f.id,
+          name: f.name,
+          parent: f.parent || 0,
+          item_count: f.item_count || 0,
+          cover: f.additional?.thumbnail || f.cover,
+        }));
+        return NextResponse.json({
+          success: true,
+          folders,
+          total: data.data.total || folders.length,
+        });
+      }
+
+      return NextResponse.json({
+        success: false,
+        error: data.error?.message || "ไม่สามารถเรียกรายการโฟลเดอร์จาก Synology Photos ได้",
+        code: data.error?.code,
+      });
+    }
+
     return NextResponse.json({ success: false, error: `Invalid action: ${action}` }, { status: 400 });
   } catch (err: any) {
     return NextResponse.json(
