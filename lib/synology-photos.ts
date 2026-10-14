@@ -45,6 +45,7 @@ export interface SynologyPhotoAlbum {
 export async function listSynologyPhotos(params: {
   space?: PhotoSpace;
   albumId?: number;
+  folderId?: number | string;
   offset?: number;
   limit?: number;
   sid: string;
@@ -72,6 +73,9 @@ export async function listSynologyPhotos(params: {
       if (params.albumId) {
         queryParams.set("album_id", String(params.albumId));
       }
+      if (params.folderId) {
+        queryParams.set("folder_id", String(params.folderId));
+      }
 
       const res = await fetch(`/api/nas/photos?${queryParams.toString()}`);
       return await res.json();
@@ -83,11 +87,17 @@ export async function listSynologyPhotos(params: {
     const additionalParam = encodeURIComponent(
       JSON.stringify(["thumbnail", "resolution", "orientation", "video_meta"])
     );
-    const url = `${cleanUrl}/webapi/entry.cgi?api=${apiName}&version=1&method=list&offset=${
+    let url = `${cleanUrl}/webapi/entry.cgi?api=${apiName}&version=1&method=list&offset=${
       params.offset || 0
     }&limit=${params.limit || 50}&additional=${additionalParam}&_sid=${encodeURIComponent(
       params.sid
-    )}${params.albumId ? `&album_id=${params.albumId}` : ""}`;
+    )}`;
+    if (params.albumId) {
+      url += `&album_id=${params.albumId}`;
+    }
+    if (params.folderId) {
+      url += `&id_folder=${encodeURIComponent(String(params.folderId))}`;
+    }
 
     const res = await fetch(url, {
       method: "GET",

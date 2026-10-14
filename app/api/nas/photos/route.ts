@@ -10,6 +10,7 @@ export async function GET(req: NextRequest) {
     const offset = searchParams.get("offset") || "0";
     const limit = searchParams.get("limit") || "50";
     const albumId = searchParams.get("album_id");
+    const folderId = searchParams.get("folder_id") || searchParams.get("id_folder");
 
     if (!sid) {
       return NextResponse.json(
@@ -31,6 +32,9 @@ export async function GET(req: NextRequest) {
       )}`;
       if (albumId) {
         queryUrl += `&album_id=${albumId}`;
+      }
+      if (folderId) {
+        queryUrl += `&id_folder=${encodeURIComponent(folderId)}`;
       }
 
       const res = await fetch(queryUrl, {
@@ -68,6 +72,9 @@ export async function GET(req: NextRequest) {
           friendlyError =
             "ไม่มีสิทธิ์เข้าถึงคลังภาพส่วนบุคคล หรืออัลบั้มนี้ต้องใช้รหัสผ่าน (Code 801)";
         }
+      } else if (data.error?.code === 120) {
+        friendlyError =
+          "บัญชีผู้ใช้นี้ได้รับสิทธิ์แบบกำหนดโฟลเดอร์เฉพาะ (Custom Access) ในพื้นที่ส่วนกลาง Synology Photos จึงจำเป็นต้องระบุโฟลเดอร์ หรือให้ผู้ดูแลระบบกำหนดสิทธิ์การเข้าถึงเป็น Full Access ใน Synology Photos (Code 120)";
       } else if (data.error?.code === 119) {
         friendlyError =
           "เซสชัน Synology หมดอายุหรือไม่ถูกต้อง กรุณายืนยันตัวตนใหม่อีกครั้ง (Code 119)";
