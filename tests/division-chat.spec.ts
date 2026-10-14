@@ -187,5 +187,8 @@ test.describe("ระบบแชทกลุ่มทางการของ�
     const dlBtn = bubble.locator("button:has-text('ดาวน์โหลด')").first();
     await expect(dlBtn).toBeVisible();
     await dlBtn.click();
+
+    // บันทึกภาพถ่ายหน้าจอสด
+    await page.screenshot({ path: 'chat-nas-live.png' });
   });
 });
