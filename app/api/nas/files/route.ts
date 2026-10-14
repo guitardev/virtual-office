@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listNasFiles, createNasFolder } from "@/lib/synology";
+import { listNasFiles, createNasFolder, deleteNasFiles, renameNasFile } from "@/lib/synology";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   try {
@@ -29,7 +31,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { action, sid, folderPath, folderName, nasUrl } = body;
+    const { action, sid, folderPath, folderName, paths, path, newName, nasUrl } = body;
     const targetUrl = nasUrl || process.env.SYNOLOGY_NAS_URL || "http://192.168.162.21:5000";
 
     if (!sid) {
@@ -50,6 +52,29 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(res);
     }
 
+    if (action === "delete") {
+      const targetPaths = Array.isArray(paths) ? paths : path ? [path] : [];
+      if (targetPaths.length === 0) {
+        return NextResponse.json(
+          { success: false, error: "กรุณาระบุไฟล์ที่ต้องการลบ (paths)" },
+          { status: 400 }
+        );
+      }
+      const res = await deleteNasFiles(sid, targetPaths, targetUrl);
+      return NextResponse.json(res);
+    }
+
+    if (action === "rename") {
+      if (!path || !newName) {
+        return NextResponse.json(
+          { success: false, error: "Path และ New Name จำเป็นสำหรับการเปลี่ยนชื่อไฟล์" },
+          { status: 400 }
+        );
+      }
+      const res = await renameNasFile(sid, path, newName, targetUrl);
+      return NextResponse.json(res);
+    }
+
     return NextResponse.json(
       { success: false, error: "Unsupported action" },
       { status: 400 }
@@ -61,3 +86,4 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+

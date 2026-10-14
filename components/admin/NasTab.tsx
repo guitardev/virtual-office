@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   SynologyConfig,
   DEFAULT_SYNOLOGY_CONFIG,
@@ -10,6 +10,7 @@ import {
   loginSynology,
   listNasFiles,
   createNasFolder,
+  deleteNasFiles,
   SynologyHealthStatus,
   SynologyFileItem,
 } from "@/lib/synology";
@@ -29,8 +30,10 @@ export function NasTab({ showToast }: NasTabProps) {
   const [currentFolder, setCurrentFolder] = useState<string>("/virtual-office");
   const [files, setFiles] = useState<SynologyFileItem[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load config on mount & test health
   useEffect(() => {
@@ -130,6 +133,79 @@ export function NasTab({ showToast }: NasTabProps) {
         loadFiles(serviceSid, currentFolder);
       } else {
         showToast(`❌ ไม่สามารถสร้างโฟลเดอร์: ${res.error}`);
+      }
+    } catch (err: any) {
+      showToast(`❌ เกิดข้อผิดพลาด: ${err?.message}`);
+    }
+  };
+
+  const handleNavigateFolder = (folderPath: string) => {
+    setCurrentFolder(folderPath);
+    if (serviceSid) {
+      loadFiles(serviceSid, folderPath);
+    }
+  };
+
+  const handleNavigateUp = () => {
+    if (currentFolder === config.sharedFolder || currentFolder === "/virtual-office") return;
+    const parts = currentFolder.split("/").filter(Boolean);
+    parts.pop();
+    const parent = "/" + parts.join("/");
+    handleNavigateFolder(parent || config.sharedFolder || "/virtual-office");
+  };
+
+  const handleDownloadFile = (filePath: string) => {
+    if (!serviceSid) return;
+    const url = `/api/nas/download?sid=${encodeURIComponent(serviceSid)}&path=${encodeURIComponent(
+      filePath
+    )}&mode=download&url=${encodeURIComponent(config.nasUrl)}`;
+    window.open(url, "_blank");
+  };
+
+  const handleUploadFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !serviceSid) return;
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("folder_path", currentFolder);
+      formData.append("sid", serviceSid);
+      formData.append("url", config.nasUrl);
+
+      const res = await fetch("/api/nas/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`📤 อัปโหลด "${file.name}" ขึ้น Synology NAS สำเร็จ`);
+        loadFiles(serviceSid, currentFolder);
+      } else {
+        showToast(`❌ อัปโหลดไฟล์ล้มเหลว: ${data.error}`);
+      }
+    } catch (err: any) {
+      showToast(`❌ เกิดข้อผิดพลาดในการอัปโหลด: ${err?.message}`);
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
+  const handleDeleteFile = async (filePath: string, fileName: string) => {
+    if (!serviceSid) return;
+    const confirmed = window.confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบ "${fileName}" ออกจาก Synology NAS?`);
+    if (!confirmed) return;
+
+    try {
+      const res = await deleteNasFiles(serviceSid, [filePath], config.nasUrl);
+      if (res.success) {
+        showToast(`🗑️ ลบ "${fileName}" เรียบร้อยแล้ว`);
+        loadFiles(serviceSid, currentFolder);
+      } else {
+        showToast(`❌ ไม่สามารถลบไฟล์: ${res.error}`);
       }
     } catch (err: any) {
       showToast(`❌ เกิดข้อผิดพลาด: ${err?.message}`);
@@ -376,6 +452,21 @@ export function NasTab({ showToast }: NasTabProps) {
 
               {serviceSid ? (
                 <div className="flex items-center gap-2">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleUploadFile}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                    className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    <span>{isUploading ? "⏳" : "📤"}</span>
+                    <span>{isUploading ? "กำลังอัปโหลด..." : "อัปโหลดไฟล์"}</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => setShowNewFolderModal(true)}
@@ -404,9 +495,20 @@ export function NasTab({ showToast }: NasTabProps) {
             </div>
 
             {/* Folder Breadcrumb */}
-            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-50 border border-slate-200/70 text-xs font-mono text-slate-600">
-              <span>📍 เส้นทาง:</span>
-              <span className="font-bold text-indigo-600">{currentFolder}</span>
+            <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-slate-50 border border-slate-200/70 text-xs font-mono text-slate-600">
+              <div className="flex items-center gap-2 truncate">
+                <span>📍 เส้นทาง:</span>
+                <span className="font-bold text-indigo-600 truncate">{currentFolder}</span>
+              </div>
+              {currentFolder !== (config.sharedFolder || "/virtual-office") && (
+                <button
+                  type="button"
+                  onClick={handleNavigateUp}
+                  className="px-2 py-0.5 rounded bg-white hover:bg-slate-200 text-slate-700 border border-slate-300 font-sans text-[11px] font-bold shrink-0 cursor-pointer"
+                >
+                  ⬆️ ขึ้น 1 ระดับ
+                </button>
+              )}
             </div>
 
             {/* Files List / Table */}
@@ -431,7 +533,7 @@ export function NasTab({ showToast }: NasTabProps) {
                   <div className="text-3xl">📂</div>
                   <div className="text-xs font-bold text-slate-700">โฟลเดอร์นี้ยังไม่มีไฟล์</div>
                   <div className="text-[11px] text-slate-400">
-                    กดปุ่ม &quot;+ สร้างโฟลเดอร์&quot; เพื่อเริ่มต้นสร้างหมวดหมู่เอกสาร
+                    กดปุ่ม &quot;📤 อัปโหลดไฟล์&quot; หรือ &quot;+ สร้างโฟลเดอร์&quot; เพื่อเริ่มต้นจัดเก็บเอกสาร
                   </div>
                 </div>
               ) : (
@@ -448,21 +550,40 @@ export function NasTab({ showToast }: NasTabProps) {
                       <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
                         <td className="py-2.5 px-3 font-medium flex items-center gap-2 text-slate-800">
                           <span>{file.isdir ? "📁" : "📄"}</span>
-                          <span className="truncate max-w-[220px]">{file.name}</span>
+                          {file.isdir ? (
+                            <button
+                              type="button"
+                              onClick={() => handleNavigateFolder(file.path)}
+                              className="font-bold text-indigo-600 hover:underline cursor-pointer truncate max-w-[220px] text-left"
+                            >
+                              {file.name}
+                            </button>
+                          ) : (
+                            <span className="truncate max-w-[220px]">{file.name}</span>
+                          )}
                         </td>
                         <td className="py-2.5 px-3 text-right text-slate-500 font-mono text-[11px]">
                           {file.isdir ? "-" : `${Math.round((file.size || 0) / 1024)} KB`}
                         </td>
                         <td className="py-2.5 px-3 text-right">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              showToast(`📄 ดาวน์โหลด "${file.name}" จาก NAS สำเร็จ`);
-                            }}
-                            className="px-2 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold text-[10px] cursor-pointer"
-                          >
-                            ดาวน์โหลด
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            {!file.isdir && (
+                              <button
+                                type="button"
+                                onClick={() => handleDownloadFile(file.path)}
+                                className="px-2 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold text-[10px] cursor-pointer"
+                              >
+                                ดาวน์โหลด
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteFile(file.path, file.name)}
+                              className="px-2 py-0.5 rounded-md bg-red-50 hover:bg-red-100 text-red-600 font-bold text-[10px] cursor-pointer"
+                            >
+                              ลบ
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}

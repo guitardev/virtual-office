@@ -341,3 +341,93 @@ export async function createNasFolder(
     return { success: false, error: err?.message };
   }
 }
+
+/**
+ * Delete one or more files/folders in Synology File Station
+ */
+export async function deleteNasFiles(
+  sid: string,
+  paths: string[],
+  nasUrl: string = "http://192.168.162.21:5000"
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (typeof window !== "undefined") {
+      const res = await fetch("/api/nas/files", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "delete",
+          sid,
+          paths,
+          nasUrl,
+        }),
+      });
+      return await res.json();
+    }
+
+    const cleanUrl = nasUrl.replace(/\/+$/, "");
+    const pathParam = JSON.stringify(paths);
+    const url = `${cleanUrl}/webapi/entry.cgi?api=SYNO.FileStation.Delete&version=2&method=start&path=${encodeURIComponent(
+      pathParam
+    )}&accurate_progress=true&_sid=${encodeURIComponent(sid)}`;
+
+    const res = await fetch(url, {
+      method: "GET",
+      signal: AbortSignal.timeout(10000),
+    });
+
+    const data = await res.json();
+    if (data.success) {
+      return { success: true };
+    }
+    return { success: false, error: data.error?.message || "ไม่สามารถลบไฟล์จาก NAS ได้" };
+  } catch (err: any) {
+    return { success: false, error: err?.message };
+  }
+}
+
+/**
+ * Rename a file or folder in Synology File Station
+ */
+export async function renameNasFile(
+  sid: string,
+  path: string,
+  newName: string,
+  nasUrl: string = "http://192.168.162.21:5000"
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (typeof window !== "undefined") {
+      const res = await fetch("/api/nas/files", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "rename",
+          sid,
+          path,
+          newName,
+          nasUrl,
+        }),
+      });
+      return await res.json();
+    }
+
+    const cleanUrl = nasUrl.replace(/\/+$/, "");
+    const url = `${cleanUrl}/webapi/entry.cgi?api=SYNO.FileStation.Rename&version=2&method=rename&path=${encodeURIComponent(
+      path
+    )}&name=${encodeURIComponent(newName)}&_sid=${encodeURIComponent(sid)}`;
+
+    const res = await fetch(url, {
+      method: "GET",
+      signal: AbortSignal.timeout(8000),
+    });
+
+    const data = await res.json();
+    if (data.success) {
+      return { success: true };
+    }
+    return { success: false, error: data.error?.message || "ไม่สามารถเปลี่ยนชื่อไฟล์ได้" };
+  } catch (err: any) {
+    return { success: false, error: err?.message };
+  }
+}
+
