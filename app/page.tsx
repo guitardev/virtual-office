@@ -64,6 +64,12 @@ import {
   fetchCarBookings,
   subscribeToCarBookings,
 } from "@/lib/supabase";
+import {
+  initCurrentSession,
+  listenSessionRevocation,
+  revokeSession,
+  getCurrentSessionId,
+} from "@/lib/session";
 
 interface NavItem {
   id: ModuleId;
@@ -489,6 +495,28 @@ export default function OmniOfficeApp() {
     }
   }, [isLiveConnected]);
 
+  // Active session lifecycle and remote revocation listener
+  useEffect(() => {
+    if (!currentUser) return;
+
+    initCurrentSession(currentUser.id, loginTime).catch(console.error);
+
+    const cleanup = listenSessionRevocation(() => {
+      // Remote session revocation triggered for this device
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.removeItem("omnioffice_auth_session");
+        } catch (e) {}
+      }
+      signOutUser().catch(console.error);
+      setCurrentUser(null);
+      setCurrentPage("dashboard");
+      showToast("🔒 เซสชันนี้ถูกยกเลิกการเชื่อมต่อจากอุปกรณ์อื่นแล้ว ระบบได้ออกจากระบบเพื่อความปลอดภัย");
+    });
+
+    return () => cleanup();
+  }, [currentUser?.id, loginTime]);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
@@ -565,6 +593,7 @@ export default function OmniOfficeApp() {
 
   const handleConfirmLogout = () => {
     if (currentUser) {
+      revokeSession(currentUser.id, getCurrentSessionId());
       addAuditLog(
         `${currentUser.name} (${ROLE_CONFIG[currentUserRole].label})`,
         "ออกจากระบบ (Logout)",

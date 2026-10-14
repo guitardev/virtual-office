@@ -242,7 +242,7 @@ export function subscribeToMembers(callback: (members: Member[]) => void) {
   if (!supabase) return () => {};
 
   const channel = supabase
-    .channel("public:users")
+    .channel(`public:users_${Math.random().toString(36).slice(2, 8)}`)
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "users" },
@@ -416,7 +416,7 @@ export function subscribeToAccessRequests(callback: (requests: AccessRequest[]) 
   if (!supabase) return () => {};
 
   const channel = supabase
-    .channel("public:access_requests")
+    .channel(`public:access_requests_${Math.random().toString(36).slice(2, 8)}`)
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "access_requests" },
@@ -611,7 +611,7 @@ export async function saveCarBooking(booking: CarBookingRequest): Promise<boolea
 export function subscribeToVehicles(callback: (vehicles: Vehicle[]) => void) {
   if (!supabase) return () => {};
   const channel = supabase
-    .channel("public:vehicles")
+    .channel(`public:vehicles_${Math.random().toString(36).slice(2, 8)}`)
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "vehicles" },
@@ -629,7 +629,7 @@ export function subscribeToVehicles(callback: (vehicles: Vehicle[]) => void) {
 export function subscribeToCarBookings(callback: (bookings: CarBookingRequest[]) => void) {
   if (!supabase) return () => {};
   const channel = supabase
-    .channel("public:car_bookings")
+    .channel(`public:car_bookings_${Math.random().toString(36).slice(2, 8)}`)
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "car_bookings" },
@@ -822,7 +822,7 @@ export async function updateChatMessagePin(msgId: string, isPinned: boolean): Pr
 export function subscribeToChatMessages(callback: () => void) {
   if (!supabase) return () => {};
   const channel = supabase
-    .channel("public:messages")
+    .channel(`public:messages_${Math.random().toString(36).slice(2, 8)}`)
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "messages" },
@@ -839,7 +839,7 @@ export function subscribeToChatMessages(callback: () => void) {
 export function subscribeToChatGroups(callback: () => void) {
   if (!supabase) return () => {};
   const channel = supabase
-    .channel("public:chat_channels")
+    .channel(`public:chat_channels_${Math.random().toString(36).slice(2, 8)}`)
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "chat_channels" },
@@ -912,7 +912,7 @@ export async function saveAuditLog(log: AuditLog): Promise<boolean> {
 export function subscribeToAuditLogs(callback: () => void) {
   if (!supabase) return () => {};
   const channel = supabase
-    .channel("public:audit_logs")
+    .channel(`public:audit_logs_${Math.random().toString(36).slice(2, 8)}`)
     .on(
       "postgres_changes",
       { event: "INSERT", schema: "public", table: "audit_logs" },
@@ -1089,7 +1089,7 @@ export async function deleteTask(id: string | number): Promise<boolean> {
 export function subscribeToTasks(callback: (tasks: TaskItem[]) => void) {
   if (!supabase) return () => {};
   const channel = supabase
-    .channel("public:tasks")
+    .channel(`public:tasks_${Math.random().toString(36).slice(2, 8)}`)
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "tasks" },
@@ -1182,7 +1182,7 @@ export async function deleteMeeting(id: string | number): Promise<boolean> {
 export function subscribeToMeetings(callback: (meetings: MeetingItem[]) => void) {
   if (!supabase) return () => {};
   const channel = supabase
-    .channel("public:meetings")
+    .channel(`public:meetings_${Math.random().toString(36).slice(2, 8)}`)
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "meetings" },
