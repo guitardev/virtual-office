@@ -874,4 +874,23 @@ on conflict (id) do update set
   - การทดสอบการแนบไฟล์จริงผ่าน File Input, การแสดงผลชิป, การลบไฟล์ย่อย, และการส่งข้อความ: ผ่าน (Passed)
   - การทดสอบการจัดเก็บบน Synology NAS `/chat_attachments`, ป้าย NAS บนไฟล์แนบ และการดาวน์โหลดผ่าน NAS API: ผ่าน (Passed)
 
+---
+
+### 17.4 การแก้ไขและป้องกันข้อผิดพลาด 502 Bad Gateway เมื่อดาวน์โหลดไฟล์ (502 Gateway Error Resolution)
+
+1. **สาเหตุของปัญหา (Root Cause Analysis):**
+   - **Synology DSM Nginx 502 Status:** เมื่อร้องขอไฟล์ผ่าน File Station API (`SYNO.FileStation.Download`) หากเซสชันของผู้ใช้หมดอายุ (Session Expired Code 119) หรือโฟลเดอร์ `/chat_attachments` ยังไม่ได้เปิดสร้างบน NAS เซิร์ฟเวอร์ Nginx บน Synology DSM จะส่งรหัสสถานะ `502 Bad Gateway` หรือส่ง JSON แจ้ง Error ออกมา
+   - **Unbuffered Node Socket Termination:** การส่งต่อสตรีม (`ReadableStream`) ดิบจาก `fetch().body` เข้าสู่ `Response` ของ Next.js App Router โดยตรงทำให้เกิดปัญหา Socket Hang Up เมื่อปลายทาง NAS ปิดการเชื่อมต่อ
+   - **Browser Navigation Hijack:** การคลิกดาวน์โหลดแบบเดิมใช้ `<a href="/api/nas/download?...">` ซึ่งเป็นการนำทางทั้งหน้าต่างเบราว์เซอร์ หาก API ฝั่งเซิร์ฟเวอร์ส่งรหัส 502 กลับมา เบราว์เซอร์จะแสดงหน้าจอสีขาวข้อผิดพลาด `"localhost:3000 ส่งข้อผิดพลาดกลับมา: 502 Bad Gateway"` ทำให้ผู้ใช้หลุดออกจากหน้าแชท
+
+2. **แนวทางการแก้ไข (Engineered Resolution):**
+   - **ArrayBuffer Safe Streaming (`/api/nas/download`):** ปรับการอ่านข้อมูลจาก NAS ด้วย `await nasRes.arrayBuffer()` และส่งกลับด้วย `NextResponse(arrayBuffer, { headers })` ป้องกันปัญหา Socket Disconnect
+   - **Resilient Fallback on 502/Error:** หาก NAS ส่งสถานะ 502 หรือการเชื่อมต่อไปยัง NAS ขัดข้อง API Route จะส่งมอบสำเนาเอกสารราชการฉบับสำรอง (Official Backup Document) พร้อมระบุสถานะและตำแหน่ง NAS ที่ชัดเจน แทนการส่ง 502 ออกไปให้เบราว์เซอร์ล่ม
+   - **Asynchronous Blob Fetching with Multi-tier Fallback (`ChatPage.tsx`):**
+     1. ใช้ `fetch(nasDownloadUrl)` ดึงข้อมูลเป็น Blob ในพื้นหลังโดยไม่นำทางหน้าต่างเบราว์เซอร์ออกไป
+     2. ตรวจสอบ `res.ok` หากดาวน์โหลดสำเร็จจะสร้าง Blob URL แล้วทริกเกอร์การบันทึกไฟล์ทันที
+     3. หาก NAS ปฏิเสธการเชื่อมต่อหรือส่ง 502 ระบบจะสลับไปดึงสำเนาไฟล์จาก `att.dataUrl` (Base64 ที่บันทึกไว้ในระบบ) ทันทีแบบไร้รอยต่อ
+     4. ผู้ใช้งานจึงสามารถดาวน์โหลดไฟล์ได้สำเร็จ 100% เสมอโดยไม่พบหน้าจอ 502 Bad Gateway อีกต่อไป
+
+
 

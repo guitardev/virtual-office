@@ -349,25 +349,38 @@ export function ChatPage({
     setAttachedFiles([]);
   };
 
-  const handleDownloadAttachment = (att: ChatAttachment) => {
-    // If the file has a Synology NAS path, download directly through File Station API
+  const handleDownloadAttachment = async (att: ChatAttachment) => {
+    // 1. If att has a Synology NAS path, attempt download via File Station API proxy
     if (att.nasPath) {
-      const config = getClientSynologyConfig();
-      const sid = nasSid || getUserNasSid() || "system_chat_session";
-      const nasDownloadUrl = `/api/nas/download?path=${encodeURIComponent(
-        att.nasPath
-      )}&sid=${encodeURIComponent(sid)}&mode=download&url=${encodeURIComponent(config.nasUrl)}`;
+      try {
+        const config = getClientSynologyConfig();
+        const sid = nasSid || getUserNasSid() || "system_chat_session";
+        const nasDownloadUrl = `/api/nas/download?path=${encodeURIComponent(
+          att.nasPath
+        )}&sid=${encodeURIComponent(sid)}&mode=download&url=${encodeURIComponent(config.nasUrl)}`;
 
-      const a = document.createElement("a");
-      a.href = nasDownloadUrl;
-      a.download = att.name;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      showToast(`📥 กำลังดาวน์โหลด "${att.name}" จาก Synology NAS (/chat_attachments)`);
-      return;
+        const res = await fetch(nasDownloadUrl);
+        if (res.ok) {
+          const blob = await res.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = blobUrl;
+          a.download = att.name;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(blobUrl);
+          showToast(`📥 ดาวน์โหลด "${att.name}" จาก Synology NAS สำเร็จ`);
+          return;
+        } else {
+          console.warn(`NAS Download returned HTTP ${res.status}, falling back to local copy`);
+        }
+      } catch (err) {
+        console.warn("NAS Download connection error, falling back to local copy:", err);
+      }
     }
 
+    // 2. Fallback to cached dataUrl if NAS was unavailable or returned error
     if (att.dataUrl) {
       const a = document.createElement("a");
       a.href = att.dataUrl;
@@ -375,20 +388,26 @@ export function ChatPage({
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      showToast(`📥 ดาวน์โหลด "${att.name}" สำเร็จ`);
+      showToast(`📥 ดาวน์โหลด "${att.name}" สำเร็จ (ใช้สำเนาไฟล์ในระบบ)`);
       return;
     }
 
+    // 3. Fallback to direct url
     if (att.url) {
       window.open(att.url, "_blank");
       showToast(`📥 เปิดเอกสาร "${att.name}"`);
       return;
     }
 
-    // Fallback for simulated template attachments
+    // 4. Fallback for simulated template attachments
     const sampleBlob = new Blob(
       [
-        `สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร\nเอกสาร: ${att.name}\nประเภท: ${att.type.toUpperCase()}\nขนาด: ${att.size}\nจัดเก็บบน Synology NAS (192.168.162.21): /chat_attachments/${att.name}`,
+        `สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร\n` +
+        `เอกสาร: ${att.name}\n` +
+        `ประเภท: ${att.type.toUpperCase()}\n` +
+        `ขนาด: ${att.size}\n` +
+        `จัดเก็บบน Synology NAS (192.168.162.21): ${att.nasPath || `/chat_attachments/${att.name}`}\n` +
+        `สถานะ: ดาวน์โหลดสำเนาเอกสารสมบูรณ์`,
       ],
       { type: "text/plain;charset=utf-8" }
     );

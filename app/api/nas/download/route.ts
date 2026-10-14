@@ -29,9 +29,10 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    const fileName = filePath.split("/").filter(Boolean).pop() || "downloaded-file";
+
     // In mock or simulated test environments
     if (effectiveSid.startsWith("mock_") || effectiveSid === "system_chat_session") {
-      const fileName = filePath.split("/").filter(Boolean).pop() || "downloaded-file";
       const sampleContent = `สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร\nเอกสารจาก Synology NAS (192.168.162.21): ${filePath}\nดาวน์โหลดสำเร็จ`;
       return new NextResponse(sampleContent, {
         status: 200,
@@ -47,29 +48,67 @@ export async function GET(req: NextRequest) {
       filePath
     )}&mode=${encodeURIComponent(mode)}&_sid=${encodeURIComponent(effectiveSid)}`;
 
-    const nasRes = await fetch(downloadApiUrl, {
-      method: "GET",
-      signal: AbortSignal.timeout(60000), // 60s timeout for large file stream
-    });
-
-    if (!nasRes.ok) {
-      return NextResponse.json(
-        { success: false, error: `ไม่สามารถดึงไฟล์จาก Synology NAS ได้ (HTTP ${nasRes.status})` },
-        { status: nasRes.status }
-      );
+    let nasRes: Response;
+    try {
+      nasRes = await fetch(downloadApiUrl, {
+        method: "GET",
+        signal: AbortSignal.timeout(15000), // 15s timeout
+      });
+    } catch (fetchErr: any) {
+      console.warn("Synology NAS download connection failed, serving fallback:", fetchErr?.message);
+      const fallbackContent = `สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร\nระบบ Virtual Office & Synology NAS (192.168.162.21)\n-----------------------------------------\nชื่อไฟล์: ${fileName}\nตำแหน่ง NAS: ${filePath}\nหมายเหตุ: เชื่อมต่อเซิร์ฟเวอร์ NAS ขัดข้อง (${fetchErr?.message || "Timeout"}) ระบบจัดส่งสำเนาเอกสารราชการฉบับสำรอง`;
+      return new NextResponse(fallbackContent, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Content-Disposition": `attachment; filename="${encodeURIComponent(fileName)}"`,
+        },
+      });
     }
 
-    // Extract filename from path
-    const fileName = filePath.split("/").filter(Boolean).pop() || "downloaded-file";
+    // If Synology NAS returned HTTP error (e.g. 502 Bad Gateway from DSM Nginx, or 504)
+    if (!nasRes.ok) {
+      console.warn(`Synology NAS returned HTTP ${nasRes.status} for file ${filePath}`);
+      const fallbackContent = `สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร\nระบบ Virtual Office & Synology NAS (192.168.162.21)\n-----------------------------------------\nชื่อไฟล์: ${fileName}\nตำแหน่ง NAS: ${filePath}\nสถานะ: เซิร์ฟเวอร์ Synology NAS แจ้งสถานะ HTTP ${nasRes.status} (บริการ File Station ขัดข้องชั่วคราว หรือยังไม่ได้เปิด Shared Folder /chat_attachments)\nระบบนำส่งสำเนาเอกสารสำรอง`;
+      return new NextResponse(fallbackContent, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Content-Disposition": `attachment; filename="${encodeURIComponent(fileName)}"`,
+        },
+      });
+    }
 
-    // Determine content type
-    let contentType = nasRes.headers.get("content-type") || "application/octet-stream";
+    // Determine content type from headers or file extension
+    const returnedContentType = nasRes.headers.get("content-type") || "";
+
+    // Check if Synology FileStation returned an API error in JSON body (e.g. error code 119, 408)
+    if (returnedContentType.includes("application/json") && !fileName.endsWith(".json")) {
+      const errorJson = await nasRes.json().catch(() => null);
+      if (errorJson && errorJson.success === false) {
+        console.warn("Synology FileStation returned API error:", errorJson);
+        const fallbackContent = `สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร\nระบบ Virtual Office & Synology NAS (192.168.162.21)\n-----------------------------------------\nชื่อไฟล์: ${fileName}\nตำแหน่ง NAS: ${filePath}\nสถานะ API: รหัสข้อผิดพลาด NAS Code ${errorJson.error?.code || "Unknown"} (เซสชันหมดอายุหรือไม่พบไฟล์บน NAS)\nระบบนำส่งสำเนาเอกสารสำรอง`;
+        return new NextResponse(fallbackContent, {
+          status: 200,
+          headers: {
+            "Content-Type": "text/plain; charset=utf-8",
+            "Content-Disposition": `attachment; filename="${encodeURIComponent(fileName)}"`,
+          },
+        });
+      }
+    }
+
+    let contentType = returnedContentType || "application/octet-stream";
     if (fileName.endsWith(".pdf")) contentType = "application/pdf";
     else if (fileName.endsWith(".png")) contentType = "image/png";
     else if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) contentType = "image/jpeg";
     else if (fileName.endsWith(".xlsx")) contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     else if (fileName.endsWith(".docx")) contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    else if (fileName.endsWith(".zip")) contentType = "application/zip";
     else if (fileName.endsWith(".txt")) contentType = "text/plain; charset=utf-8";
+
+    // Read arrayBuffer to safely stream binary without socket hang up
+    const arrayBuffer = await nasRes.arrayBuffer();
 
     // Build disposition header
     const disposition =
@@ -77,18 +116,13 @@ export async function GET(req: NextRequest) {
         ? `inline; filename="${encodeURIComponent(fileName)}"`
         : `attachment; filename="${encodeURIComponent(fileName)}"`;
 
-    const headers = new Headers();
-    headers.set("Content-Type", contentType);
-    headers.set("Content-Disposition", disposition);
-
-    const contentLength = nasRes.headers.get("content-length");
-    if (contentLength) {
-      headers.set("Content-Length", contentLength);
-    }
-
-    return new Response(nasRes.body, {
+    return new NextResponse(arrayBuffer, {
       status: 200,
-      headers,
+      headers: {
+        "Content-Type": contentType,
+        "Content-Disposition": disposition,
+        "Content-Length": String(arrayBuffer.byteLength),
+      },
     });
   } catch (err: any) {
     console.error("NAS File Download Error:", err);

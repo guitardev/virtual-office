@@ -75,9 +75,21 @@ export async function POST(req: NextRequest) {
       signal: AbortSignal.timeout(30000), // 30s timeout for upload
     });
 
-    const data = await nasRes.json();
+    if (!nasRes.ok) {
+      console.warn(`Synology NAS upload returned HTTP ${nasRes.status}`);
+      return NextResponse.json(
+        {
+          success: false,
+          error: `เซิร์ฟเวอร์ Synology NAS ส่งข้อผิดพลาด HTTP ${nasRes.status} (กรุณาตรวจสอบว่ามี Shared Folder ${folderPath} บน NAS)`,
+          code: nasRes.status,
+        },
+        { status: 400 }
+      );
+    }
 
-    if (data.success) {
+    const data = await nasRes.json().catch(() => null);
+
+    if (data && data.success) {
       return NextResponse.json({
         success: true,
         file: {
@@ -92,8 +104,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: data.error?.message || "Synology NAS ปฏิเสธการอัปโหลดไฟล์",
-        code: data.error?.code,
+        error: data?.error?.message || "Synology NAS ปฏิเสธการอัปโหลดไฟล์ (กรุณาตรวจสอบสิทธิ์การเขียน)",
+        code: data?.error?.code,
       },
       { status: 400 }
     );
