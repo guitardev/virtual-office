@@ -364,11 +364,11 @@ export function EditProfileModal({
                   {/* คำนำหน้า, ชื่อ, นามสกุล, ชื่อเล่น */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">คำนำหน้า</label>
+                      <label className="block text-xs sm:text-sm font-semibold text-slate-700 mb-1.5">คำนำหน้า</label>
                       <select
                         value={form.prefix}
                         onChange={(e) => setForm({ ...form, prefix: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:border-[#4F46E5]"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:bg-white focus:border-[#4F46E5] transition-colors"
                       >
                         <option value="">(ไม่ระบุคำนำหน้า)</option>
                         <option value="นาย">นาย</option>
@@ -380,7 +380,7 @@ export function EditProfileModal({
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      <label className="block text-xs sm:text-sm font-semibold text-slate-700 mb-1.5">
                         ชื่อ <span className="text-rose-500">*</span>
                       </label>
                       <input
@@ -388,11 +388,11 @@ export function EditProfileModal({
                         required
                         value={form.firstName}
                         onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:border-[#4F46E5]"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:bg-white focus:border-[#4F46E5] transition-colors"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      <label className="block text-xs sm:text-sm font-semibold text-slate-700 mb-1.5">
                         นามสกุล <span className="text-rose-500">*</span>
                       </label>
                       <input
@@ -400,17 +400,17 @@ export function EditProfileModal({
                         required
                         value={form.lastName}
                         onChange={(e) => setForm({ ...form, lastName: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:border-[#4F46E5]"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:bg-white focus:border-[#4F46E5] transition-colors"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">ชื่อเล่น (Nickname)</label>
+                      <label className="block text-xs sm:text-sm font-semibold text-slate-700 mb-1.5">ชื่อเล่น (Nickname)</label>
                       <input
                         type="text"
                         placeholder="เช่น เสก, บอย"
                         value={form.nickname}
                         onChange={(e) => setForm({ ...form, nickname: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:border-[#4F46E5]"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:bg-white focus:border-[#4F46E5] transition-colors"
                       />
                     </div>
                   </div>
@@ -418,13 +418,13 @@ export function EditProfileModal({
                   {/* ประเภทบุคลากร, ตำแหน่ง & กลุ่ม/ฝ่าย */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">ประเภทบุคลากร</label>
+                      <label className="block text-xs sm:text-sm font-semibold text-slate-700 mb-1.5">ประเภทบุคลากร</label>
                       <select
                         value={form.personnelType}
                         onChange={(e) =>
                           setForm({ ...form, personnelType: e.target.value as PersonnelType })
                         }
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 font-semibold focus:bg-white focus:border-[#4F46E5]"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 font-semibold focus:bg-white focus:border-[#4F46E5] transition-colors"
                       >
                         {GOVERNMENT_PERSONNEL_TYPES.map((pt) => (
                           <option key={pt} value={pt}>
@@ -434,7 +434,7 @@ export function EditProfileModal({
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      <label className="block text-xs sm:text-sm font-semibold text-slate-700 mb-1.5">
                         ตำแหน่ง (Position) <span className="text-rose-500">*</span>
                       </label>
                       <input
@@ -442,15 +442,15 @@ export function EditProfileModal({
                         required
                         value={form.position}
                         onChange={(e) => setForm({ ...form, position: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:border-[#4F46E5]"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:bg-white focus:border-[#4F46E5] transition-colors"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">กลุ่ม/ฝ่าย (Division / Section)</label>
+                      <label className="block text-xs sm:text-sm font-semibold text-slate-700 mb-1.5">กลุ่ม/ฝ่าย (Division / Section)</label>
                       <select
                         value={form.division}
                         onChange={(e) => setForm({ ...form, division: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:border-[#4F46E5]"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:bg-white focus:border-[#4F46E5] transition-colors"
                       >
                         {GOVERNMENT_DIVISIONS.map((div) => (
                           <option key={div} value={div}>
@@ -466,14 +466,14 @@ export function EditProfileModal({
                 <div className="p-4 md:p-5 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-4">
                   <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
                     <span className="text-base">📞</span>
-                    <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    <h4 className="text-xs sm:text-sm font-bold text-slate-900 uppercase tracking-wider">
                       ช่องทางการติดต่อสื่อสาร
                     </h4>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      <label className="block text-xs sm:text-sm font-semibold text-slate-700 mb-1.5">
                         อีเมลราชการ <span className="text-rose-500">*</span>
                       </label>
                       <input
@@ -481,27 +481,27 @@ export function EditProfileModal({
                         required
                         value={form.email}
                         onChange={(e) => setForm({ ...form, email: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:border-[#4F46E5]"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:bg-white focus:border-[#4F46E5] transition-colors"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">หมายเลขโทรศัพท์</label>
+                      <label className="block text-xs sm:text-sm font-semibold text-slate-700 mb-1.5">หมายเลขโทรศัพท์</label>
                       <input
                         type="tel"
                         placeholder="02-612-6000 หรือ 081-xxx-xxxx"
                         value={form.phone}
                         onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:border-[#4F46E5]"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:bg-white focus:border-[#4F46E5] transition-colors"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">Line ID</label>
+                      <label className="block text-xs sm:text-sm font-semibold text-slate-700 mb-1.5">Line ID</label>
                       <input
                         type="text"
                         placeholder="ไอดีไลน์สำหรับติดต่อ"
                         value={form.lineId}
                         onChange={(e) => setForm({ ...form, lineId: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:border-[#4F46E5]"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:bg-white focus:border-[#4F46E5] transition-colors"
                       />
                     </div>
                   </div>

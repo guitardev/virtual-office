@@ -741,13 +741,13 @@ export function TasksPage({
               placeholder="ค้นหาชื่องาน, คำอธิบาย, ผู้รับผิดชอบ, หรือแท็ก..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-indigo-500 transition-colors"
+              className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-indigo-500 transition-colors"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400 hover:text-slate-600"
               >
                 ✕
               </button>
@@ -758,7 +758,7 @@ export function TasksPage({
             <select
               value={selectedDeptFilter}
               onChange={(e) => setSelectedDeptFilter(e.target.value)}
-              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-700 focus:bg-white focus:border-indigo-500 transition-colors"
+              className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl text-slate-700 focus:bg-white focus:border-indigo-500 transition-colors cursor-pointer"
             >
               <option value="all">🏢 ทุกกลุ่มงาน / ฝ่าย</option>
               {GOVERNMENT_DIVISIONS.map((d) => (
@@ -773,7 +773,7 @@ export function TasksPage({
             <select
               value={selectedPriorityFilter}
               onChange={(e) => setSelectedPriorityFilter(e.target.value)}
-              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-700 focus:bg-white focus:border-indigo-500 transition-colors"
+              className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl text-slate-700 focus:bg-white focus:border-indigo-500 transition-colors cursor-pointer"
             >
               <option value="all">⚡ ทุกระดับความเร่งด่วน</option>
               <option value="high">🔥 สูงมาก (ด่วน)</option>

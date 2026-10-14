@@ -56,15 +56,47 @@
     font-family: var(--font-body), 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif !important;
   }
 
-  /* Explicit dropdown list and popup options styling */
-  select {
+  /* Form controls font size harmonization & Thai typography */
+  select,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="range"]),
+  textarea {
     font-family: var(--font-body), 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif !important;
+    font-size: 0.875rem !important; /* 14px comfortable baseline for Thai */
+    line-height: 1.5 !important;
   }
 
+  /* Dropdown Select elements */
+  select {
+    font-family: var(--font-body), 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif !important;
+    font-size: 0.875rem !important; /* 14px */
+    line-height: 1.5 !important;
+    min-height: 2.625rem; /* 42px standard form height */
+    cursor: pointer;
+  }
+
+  /* Dropdown options popup styling */
   select option, select optgroup {
     font-family: var(--font-body), 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif !important;
-    background-color: #FFFFFF;
-    color: #0F172A;
+    font-size: 0.9375rem !important; /* 15px clearly legible Thai text in popup menus */
+    line-height: 1.6 !important;
+    padding: 8px 12px !important;
+    background-color: #FFFFFF !important;
+    color: #0F172A !important;
+  }
+
+  /* Form Labels */
+  label:not([class*="flex"]) {
+    font-size: 0.8125rem !important; /* 13px */
+    line-height: 1.5 !important;
+    color: #334155; /* slate-700 */
+    font-weight: 600;
+  }
+
+  /* Form placeholders */
+  ::placeholder {
+    font-family: var(--font-body), 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif !important;
+    font-size: 0.875rem !important;
+    color: #94A3B8 !important;
   }
 
   @media print {
