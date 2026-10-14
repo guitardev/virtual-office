@@ -245,13 +245,131 @@ export async function loginSynology(
 }
 
 /**
+ * Map Synology FileStation error code to clear Thai message
+ */
+export function mapFileStationError(code?: number, defaultMsg?: string): string {
+  switch (code) {
+    case 408:
+      return "ไม่มีสิทธิ์เข้าถึง (Permission Denied ตามสิทธิ์บัญชี Synology DSM)";
+    case 418:
+      return "สิทธิ์ไม่เพียงพอในการดำเนินการนี้ (Permission Denied)";
+    case 119:
+      return "เซสชัน Synology NAS หมดอายุหรือเซสชันไม่ถูกต้อง กรุณาเข้าสู่ระบบใหม่";
+    case 403:
+      return "มีไฟล์หรือโฟลเดอร์ชื่อนี้อยู่แล้ว หรือการดำเนินการถูกยกเลิก";
+    case 414:
+      return "ขนาดไฟล์ใหญ่เกินกว่าที่ระบบ NAS กำหนด";
+    case 407:
+      return "ประเภทไฟล์นี้ถูกจำกัดตามนโยบายความปลอดภัยของ NAS";
+    default:
+      return defaultMsg || "การดำเนินการกับ Synology File Station ล้มเหลว";
+  }
+}
+
+const USER_NAS_SID_KEY = "omnioffice_nas_user_sid";
+const USER_NAS_ACCOUNT_KEY = "omnioffice_nas_user_account";
+
+/**
+ * Retrieve current logged-in user's personal Synology NAS session ID
+ */
+export function getUserNasSid(): string | null {
+  if (typeof window === "undefined") return null;
+  return sessionStorage.getItem(USER_NAS_SID_KEY) || localStorage.getItem(USER_NAS_SID_KEY);
+}
+
+/**
+ * Store user's personal Synology NAS session ID upon successful login
+ */
+export function setUserNasSid(sid: string, account?: string): void {
+  if (typeof window === "undefined") return;
+  sessionStorage.setItem(USER_NAS_SID_KEY, sid);
+  localStorage.setItem(USER_NAS_SID_KEY, sid);
+  if (account) {
+    sessionStorage.setItem(USER_NAS_ACCOUNT_KEY, account);
+    localStorage.setItem(USER_NAS_ACCOUNT_KEY, account);
+  }
+}
+
+/**
+ * Clear user's personal Synology NAS session ID upon logout
+ */
+export function clearUserNasSid(): void {
+  if (typeof window === "undefined") return;
+  sessionStorage.removeItem(USER_NAS_SID_KEY);
+  localStorage.removeItem(USER_NAS_SID_KEY);
+  sessionStorage.removeItem(USER_NAS_ACCOUNT_KEY);
+  localStorage.removeItem(USER_NAS_ACCOUNT_KEY);
+}
+
+/**
+ * Retrieve user's personal Synology NAS account name
+ */
+export function getUserNasAccount(): string | null {
+  if (typeof window === "undefined") return null;
+  return sessionStorage.getItem(USER_NAS_ACCOUNT_KEY) || localStorage.getItem(USER_NAS_ACCOUNT_KEY);
+}
+
+/**
+ * List shared folders that the user has permission to view on Synology NAS (Native DSM Permissions)
+ */
+export async function listNasShares(
+  sid: string,
+  nasUrl: string = "http://192.168.162.21:5000"
+): Promise<{ success: boolean; shares?: SynologyFileItem[]; error?: string; code?: number }> {
+  try {
+    if (typeof window !== "undefined") {
+      const res = await fetch(
+        `/api/nas/files?sid=${encodeURIComponent(sid)}&action=list_share&url=${encodeURIComponent(nasUrl)}`
+      );
+      return await res.json();
+    }
+
+    const cleanUrl = nasUrl.replace(/\/+$/, "");
+    const listUrl = `${cleanUrl}/webapi/entry.cgi?api=SYNO.FileStation.List&version=2&method=list_share&_sid=${encodeURIComponent(
+      sid
+    )}&additional=size,owner,time,real_path`;
+
+    const res = await fetch(listUrl, {
+      method: "GET",
+      signal: AbortSignal.timeout(8000),
+    });
+
+    const data = await res.json();
+    if (data.success && data.data?.shares) {
+      const shares: SynologyFileItem[] = data.data.shares.map((s: any) => ({
+        path: s.path,
+        name: s.name,
+        isdir: true,
+        size: 0,
+        additional: s.additional,
+      }));
+      return {
+        success: true,
+        shares,
+      };
+    }
+
+    return {
+      success: false,
+      error: mapFileStationError(data.error?.code, data.error?.message),
+      code: data.error?.code,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || "ไม่สามารถเชื่อมต่อดึงรายการแชร์จาก NAS ได้",
+    };
+  }
+}
+
+/**
  * List files and directories inside a Synology File Station shared folder
  */
 export async function listNasFiles(
   sid: string,
   folderPath: string = "/virtual-office",
   nasUrl: string = "http://192.168.162.21:5000"
-): Promise<{ success: boolean; files?: SynologyFileItem[]; error?: string }> {
+): Promise<{ success: boolean; files?: SynologyFileItem[]; error?: string; code?: number }> {
   try {
     // If in browser, proxy through /api/nas/files
     if (typeof window !== "undefined") {
@@ -285,7 +403,8 @@ export async function listNasFiles(
 
     return {
       success: false,
-      error: data.error?.message || `ไม่สามารถเรียกรายการไฟล์จากโฟลเดอร์ "${folderPath}"`,
+      error: mapFileStationError(data.error?.code, data.error?.message || `ไม่สามารถเรียกรายการไฟล์จากโฟลเดอร์ "${folderPath}"`),
+      code: data.error?.code,
     };
   } catch (err: any) {
     return {

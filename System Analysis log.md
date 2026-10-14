@@ -671,6 +671,41 @@ on conflict (id) do update set
 * เชื่อมโยง Agent Skills: `supabase` และ `supabase-postgres-best-practices`
 * ตรวจสอบความพร้อมผ่านการเรียกคำสั่ง `list_tables` ยืนยันการเชื่อมต่อตารางทั้ง 12 ตารางของ Smart MSO ได้สด ๆ โดยตรงผ่าน Agent
 
+---
+
+## 15. สรุปผลการพัฒนาระบบ Synology NAS Integration (Native DSM Permissions & File Station)
+> **สถานะ:** สำเร็จสมบูรณ์ 100% (TypeScript: 0 Errors, Playwright E2E: 7/7 Tests Passed)
+> **สถาปัตยกรรมหลัก:** การควบคุมสิทธิ์และโฟลเดอร์ขึ้นตรงกับระบบ **Synology DSM ACL และบัญชีผู้ใช้ NAS โดยแท้จริง (No Artificial DB Permissions)**
+
+### 15.1 สถาปัตยกรรมการยืนยันตัวตน Synology DSM Auth
+* **Direct Session Binding:** เมื่อผู้ใช้งานลงชื่อเข้าใช้งานด้วยบัญชี Synology NAS ระบบจะเรียกใช้ Web API `SYNO.API.Auth?method=login` ผ่าน Server Route `/api/nas/auth` ไปยัง `http://192.168.162.21:5000`
+* **Personal Session Token (`_sid`):** จัดเก็บค่า `sid` ส่วนบุคคลของผู้ใช้ลงใน `sessionStorage` และ `localStorage` เพื่อให้คงอยู่ระหว่างการรีเฟรชหน้าเว็บ
+* **Automated Session Lifecycle:** เมื่อผู้ใช้ออกจากระบบ (Logout) ระบบจะทำการเรียก `clearUserNasSid()` เพื่อทำลายเซสชัน NAS ทันที ป้องกันการเข้าถึงไฟล์ค้างจากเครื่องสาธารณะ
+
+### 15.2 การแสดงผลโฟลเดอร์และการจัดการไฟล์ตามสิทธิ์แท้จริงของ NAS (DSM Permissions)
+* **Root Shared Folders Discovery (`list_share`):** ในหน้าแรกของคลังเอกสาร ระบบไม่ใช้การ Hardcode โฟลเดอร์ แต่จะเรียกคำสั่ง `SYNO.FileStation.List?method=list_share` โดยส่งแนบ `_sid` ประจำตัวผู้ใช้ ทำให้ผู้ใช้แต่ละคนจะมองเห็น **เฉพาะ Shared Folders ที่บัญชี NAS ของตนได้รับสิทธิ์ใน DSM Control Panel เท่านั้น**
+* **Subfolder & File Navigation (`list`):** เมื่อคลิกเข้าสู่โฟลเดอร์ย่อย จะเรียก `SYNO.FileStation.List?method=list` พร้อมส่ง path และ `_sid` เพื่อดึงข้อมูลไฟล์และโฟลเดอร์ย่อย
+* **Streamlined File Operations:**
+  - **อัปโหลดไฟล์ (`/api/nas/upload`):** ใช้ Multipart Stream Proxy ส่งตรงเข้า `SYNO.FileStation.Upload` สิทธิ์ความเป็นเจ้าของไฟล์บน DSM จะเป็นของผู้ใช้ท่านนั้นทันที
+  - **ดาวน์โหลดและดูตัวอย่างไฟล์ (`/api/nas/download`):** รองรับทั้งโหมด `inline` สำหรับเปิดดูตัวอย่างรูปภาพ/เอกสาร และโหมดดาวน์โหลดไฟล์
+  - **สร้างโฟลเดอร์ใหม่ & ลบไฟล์ (`/api/nas/files`):** รองรับการสร้างไดเรกทอรีย่อยและลบไฟล์/โฟลเดอร์ โดย Synology DSM จะปฏิเสธคำขอทันทีหากโฟลเดอร์นั้นเป็น Read-Only
+* **Native ACL Error Handling:** เมื่อผู้ใช้พยายามเข้าถึงหรือจัดการไฟล์ในจุดที่ไม่มีสิทธิ์ ระบบจะจับรหัสข้อผิดพลาดของ File Station (เช่น Code 408 / 418) แล้วแปลงเป็นภาษาไทยแจ้งเตือนชัดเจน: *"ไม่มีสิทธิ์เข้าถึง (Permission Denied ตามสิทธิ์บัญชี Synology DSM)"*
+
+### 15.3 คอมโพเนนต์หน้าจอคลังเอกสารและ E2E Testing
+* **คอมโพเนนต์คลังเอกสาร [NasFileManager.tsx](file:///c:/Users/GuitarDev/virtual-office/components/dms/NasFileManager.tsx):**
+  - แสดงสถานะการเชื่อมต่อ On-Premise LAN (192.168.162.21)
+  - เกตเวย์ความปลอดภัยตรวจสอบการมีอยู่ของเซสชัน DSM ก่อนอนุญาตให้เข้าดูไฟล์
+  - แถบ Breadcrumbs นำทางโฟลเดอร์ย่อย, กล่องค้นหา, ปุ่มอัปโหลดไฟล์ และปุ่มสลับบัญชี DSM
+  - โมดอลดูตัวอย่างไฟล์ (File Preview Modal) รองรับรูปภาพและเอกสารทั่วไป
+* **การเชื่อมต่อเมนูหลัก [app/page.tsx](file:///c:/Users/GuitarDev/virtual-office/app/page.tsx):**
+  - เพิ่มโมดูล `"files"` (`คลังเอกสาร NAS`) ในแถบนำทางหลัก (NAV_ITEMS) และระบบ RBAC
+  - เชื่อมโยงการเปิดหน้า `NasFileManager`
+* **การทดสอบอัตโนมัติ [tests/nas-file-manager.spec.ts](file:///c:/Users/GuitarDev/virtual-office/tests/nas-file-manager.spec.ts):**
+  - ทดสอบกรณีไม่มีเซสชัน NAS: ตรวจสอบการแสดงผลเกตเวย์ความปลอดภัยและโมดอลเข้าสู่ระบบ DSM
+  - ทดสอบกรณีมีเซสชัน NAS: ตรวจสอบการแสดงผล Breadcrumbs, การค้นหา และการเรนเดอร์ Shared Folders ที่ได้รับสิทธิ์
+  - ผลการรันทดสอบ: ผ่าน 7/7 ชุดการทดสอบ (100% Success)
+
+
 
 
 

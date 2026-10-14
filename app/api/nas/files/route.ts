@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listNasFiles, createNasFolder, deleteNasFiles, renameNasFile } from "@/lib/synology";
+import { listNasFiles, listNasShares, createNasFolder, deleteNasFiles, renameNasFile } from "@/lib/synology";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   try {
     const searchParams = req.nextUrl.searchParams;
+    const action = searchParams.get("action");
     const folderPath = searchParams.get("folder_path") || "/virtual-office";
     const sid = searchParams.get("sid");
     const nasUrl = searchParams.get("url") || process.env.SYNOLOGY_NAS_URL || "http://192.168.162.21:5000";
@@ -15,6 +16,11 @@ export async function GET(req: NextRequest) {
         { success: false, error: "Missing Synology session ID (sid)" },
         { status: 401 }
       );
+    }
+
+    if (action === "list_share" || folderPath === "root" || folderPath === "/") {
+      const result = await listNasShares(sid, nasUrl);
+      return NextResponse.json(result);
     }
 
     const result = await listNasFiles(sid, folderPath, nasUrl);

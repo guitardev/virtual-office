@@ -14,6 +14,7 @@ import {
   isSupabaseConfigured,
   saveMember,
 } from "@/lib/supabase";
+import { setUserNasSid } from "@/lib/synology";
 
 interface LoginPageProps {
   onLogin: (member: Member, rememberMe: boolean) => void;
@@ -130,6 +131,9 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
           return false;
         });
         const memberToLogin = match || data.user;
+        if (data.sid) {
+          setUserNasSid(data.sid, data.account || nasUsername.trim());
+        }
         onLogin(memberToLogin, rememberMe);
         return;
       }

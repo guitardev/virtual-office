@@ -19,7 +19,8 @@ export type ModuleId =
   | "carbooking"
   | "user"
   | "admin"
-  | "reports";
+  | "reports"
+  | "files";
 
 export interface RoleInfo {
   id: Role;

@@ -36,6 +36,7 @@ import { UserPage } from "@/components/user/UserPage";
 import { EditProfileModal } from "@/components/user/EditProfileModal";
 import { AdminPage } from "@/components/admin/AdminPage";
 import { AdminModals } from "@/components/admin/AdminModals";
+import { NasFileManager } from "@/components/dms/NasFileManager";
 import {
   isSupabaseConfigured,
   fetchMembers,
@@ -70,6 +71,7 @@ import {
   revokeSession,
   getCurrentSessionId,
 } from "@/lib/session";
+import { clearUserNasSid } from "@/lib/synology";
 
 interface NavItem {
   id: ModuleId;
@@ -84,6 +86,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "task", label: "งานและโปรเจกต์", icon: "📋" },
   { id: "meetings", label: "การประชุม", icon: "📹" },
   { id: "carbooking", label: "รถยนต์สำนักงาน", icon: "🚗" },
+  { id: "files", label: "คลังเอกสาร NAS", icon: "📁" },
   { id: "reports", label: "รายงานและสถิติ", icon: "📈" },
   { id: "admin", label: "ระบบจัดการ & RBAC", icon: "⚙️" },
   { id: "user", label: "ข้อมูลส่วนตัว", icon: "👤" },
@@ -606,6 +609,7 @@ export default function OmniOfficeApp() {
         localStorage.removeItem("omnioffice_auth_session");
       } catch (e) {}
     }
+    clearUserNasSid();
     signOutUser().catch(console.error);
     setCurrentUser(null);
     setCurrentPage("dashboard");
@@ -1169,6 +1173,7 @@ export default function OmniOfficeApp() {
       task: taskCount,
       meetings: meetingCount,
       carbooking: carCount,
+      files: 0,
       reports: 0,
       admin: currentUserRole === "admin" ? pendingReqCount : 0,
       user: 0,
@@ -1967,6 +1972,13 @@ export default function OmniOfficeApp() {
                   currentUser={currentUser}
                   showToast={showToast}
                   members={members}
+                />
+              )}
+
+              {currentPage === "files" && (
+                <NasFileManager
+                  currentUser={currentUser}
+                  showToast={showToast}
                 />
               )}
 

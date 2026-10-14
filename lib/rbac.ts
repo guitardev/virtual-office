@@ -40,6 +40,7 @@ export const MODULE_NAMES: Record<ModuleId, { name: string; icon: string; desc: 
   user: { name: "ข้อมูลส่วนตัว (Profile)", icon: "👤", desc: "ข้อมูลผู้ใช้และการตั้งค่าส่วนบุคคล" },
   admin: { name: "ระบบจัดการ (Admin Panel)", icon: "⚙️", desc: "การจัดการสมาชิกและกำหนดสิทธิ์ RBAC" },
   reports: { name: "รายงานและสถิติ (Reports)", icon: "📈", desc: "รายงานสถิติการใช้งานและดาวน์โหลดสรุป" },
+  files: { name: "คลังเอกสาร NAS (File Station)", icon: "📁", desc: "ระบบจัดเก็บและจัดการไฟล์ตามสิทธิ์ Synology NAS" },
 };
 
 export const INITIAL_SYSTEM_MODULES: Record<ModuleId, SystemModule> = {
@@ -107,6 +108,14 @@ export const INITIAL_SYSTEM_MODULES: Record<ModuleId, SystemModule> = {
     enabled: true,
     maintenanceNotice: "ระบบข้อมูลส่วนตัวเปิดให้บริการปกติ",
   },
+  files: {
+    id: "files",
+    name: "คลังเอกสาร NAS (File Station)",
+    icon: "📁",
+    desc: "ระบบจัดเก็บและจัดการไฟล์ตามสิทธิ์ Synology NAS",
+    enabled: true,
+    maintenanceNotice: "ระบบคลังเอกสาร NAS เปิดให้บริการปกติ",
+  },
 };
 
 // Default Matrix: Which role can access which module
@@ -120,6 +129,7 @@ export const INITIAL_ROLE_PERMISSIONS: Record<Role, Record<ModuleId, boolean>> =
     user: true,
     admin: true,
     reports: true,
+    files: true,
   },
   manager: {
     dashboard: true,
@@ -130,6 +140,7 @@ export const INITIAL_ROLE_PERMISSIONS: Record<Role, Record<ModuleId, boolean>> =
     user: true,
     admin: false, // Managers cannot access RBAC Admin Panel
     reports: true,
+    files: true,
   },
   member: {
     dashboard: true,
@@ -140,6 +151,7 @@ export const INITIAL_ROLE_PERMISSIONS: Record<Role, Record<ModuleId, boolean>> =
     user: true,
     admin: false, // Regular members cannot access Admin
     reports: false, // Regular members cannot view company reports
+    files: true,
   },
   guest: {
     dashboard: false, // Guests cannot view internal dashboard
@@ -150,6 +162,7 @@ export const INITIAL_ROLE_PERMISSIONS: Record<Role, Record<ModuleId, boolean>> =
     user: true, // Can view own profile
     admin: false,
     reports: false,
+    files: false,
   },
 };
 
