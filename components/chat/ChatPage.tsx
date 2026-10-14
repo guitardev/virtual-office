@@ -1,13 +1,17 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { Member, ChatGroup, ChatMessage } from "@/lib/types";
+import { Member, ChatGroup, ChatMessage, ChatAttachment, AttachmentType } from "@/lib/types";
 import { INITIAL_MEMBERS, ROLE_CONFIG } from "@/lib/rbac";
 import {
   loadStoredChatGroups,
   saveStoredChatGroups,
   loadStoredChatMessages,
   saveStoredChatMessages,
+  detectAttachmentType,
+  formatAttachmentSize,
+  ATTACHMENT_TYPE_CONFIG,
+  GOVERNMENT_DOCUMENT_TEMPLATES,
 } from "@/lib/chat-data";
 import {
   fetchChatGroups,
@@ -43,18 +47,19 @@ export function ChatPage({
   // โหมดแสดงทุกกลุ่มสำหรับแอดมินเพื่อการตรวจสอบ (ค่าเริ่มต้น: false = เห็นเฉพาะกลุ่มที่ตนเป็นสมาชิก)
   const [adminShowAll, setAdminShowAll] = useState<boolean>(false);
 
-  // Modals
+  // Modals & Drawers
   const [showCreateGroupModal, setShowCreateGroupModal] = useState<boolean>(false);
   const [showMembersDrawer, setShowMembersDrawer] = useState<boolean>(false);
   const [showPinnedDropdown, setShowPinnedDropdown] = useState<boolean>(false);
 
-  // Simulated file attachment
-  const [attachedFile, setAttachedFile] = useState<{
-    name: string;
-    type: "pdf" | "image" | "doc";
-    size: string;
-  } | null>(null);
+  // Enhanced Multi-file Attachments state & Drag-and-Drop
+  const [attachedFiles, setAttachedFiles] = useState<ChatAttachment[]>([]);
+  const [showTemplatesDropdown, setShowTemplatesDropdown] = useState<boolean>(false);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [previewImage, setPreviewImage] = useState<ChatAttachment | null>(null);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Load chat state from storage and sync with Supabase and latest members
@@ -75,16 +80,26 @@ export function ChatPage({
 
     fetchChatMessages().then((remoteMsgs) => {
       if (isMounted && remoteMsgs) {
-        setMessages(remoteMsgs);
-        saveStoredChatMessages(remoteMsgs);
+        setMessages((prev) => {
+          const remoteIds = new Set(remoteMsgs.map((m) => m.id));
+          const unsynced = prev.filter((m) => !remoteIds.has(m.id));
+          const merged = [...remoteMsgs, ...unsynced];
+          saveStoredChatMessages(merged);
+          return merged;
+        });
       }
     });
 
     const unsubMsgs = subscribeToChatMessages(() => {
       fetchChatMessages().then((remoteMsgs) => {
         if (isMounted && remoteMsgs) {
-          setMessages(remoteMsgs);
-          saveStoredChatMessages(remoteMsgs);
+          setMessages((prev) => {
+            const remoteIds = new Set(remoteMsgs.map((m) => m.id));
+            const unsynced = prev.filter((m) => !remoteIds.has(m.id));
+            const merged = [...remoteMsgs, ...unsynced];
+            saveStoredChatMessages(merged);
+            return merged;
+          });
         }
       });
     });
@@ -199,6 +214,136 @@ export function ChatPage({
     });
   }, [accessibleGroups, channelSearch]);
 
+  // ─── FILE ATTACHMENT HANDLERS ───
+  const processFiles = (fileList: FileList | File[]) => {
+    const files = Array.from(fileList);
+    if (files.length === 0) return;
+
+    const readPromises = files.map((file) => {
+      return new Promise<ChatAttachment>((resolve) => {
+        const type = detectAttachmentType(file.name, file.type);
+        const size = formatAttachmentSize(file.size);
+        const id = `att_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+        const reader = new FileReader();
+        reader.onload = () => {
+          resolve({
+            id,
+            name: file.name,
+            type,
+            size,
+            mimeType: file.type || "application/octet-stream",
+            dataUrl: typeof reader.result === "string" ? reader.result : undefined,
+          });
+        };
+        reader.onerror = () => {
+          resolve({
+            id,
+            name: file.name,
+            type,
+            size,
+            mimeType: file.type || "application/octet-stream",
+          });
+        };
+        reader.readAsDataURL(file);
+      });
+    });
+
+    Promise.all(readPromises).then((newAttachments) => {
+      setAttachedFiles((prev) => [...prev, ...newAttachments]);
+      showToast(`📎 แนบไฟล์สำเร็จ ${newAttachments.length} รายการ`);
+    });
+  };
+
+  const handleSelectRealFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      processFiles(e.target.files);
+    }
+    e.target.value = "";
+  };
+
+  const handleAttachTemplate = (template: (typeof GOVERNMENT_DOCUMENT_TEMPLATES)[0]) => {
+    const newAtt: ChatAttachment = {
+      id: `tpl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      name: template.name,
+      type: template.type,
+      size: template.size,
+    };
+    setAttachedFiles((prev) => [...prev, newAtt]);
+    setShowTemplatesDropdown(false);
+    showToast(`📑 แนบแบบฟอร์มราชการ "${template.name}" เรียบร้อย`);
+  };
+
+  const handleRemoveAttachedFile = (id: string) => {
+    setAttachedFiles((prev) => prev.filter((f) => f.id !== id));
+  };
+
+  const handleClearAllAttachments = () => {
+    setAttachedFiles([]);
+  };
+
+  const handleDownloadAttachment = (att: ChatAttachment) => {
+    if (att.dataUrl) {
+      const a = document.createElement("a");
+      a.href = att.dataUrl;
+      a.download = att.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      showToast(`📥 ดาวน์โหลด "${att.name}" สำเร็จ`);
+      return;
+    }
+
+    if (att.url) {
+      window.open(att.url, "_blank");
+      showToast(`📥 เปิดเอกสาร "${att.name}"`);
+      return;
+    }
+
+    // Fallback for simulated template attachments
+    const sampleBlob = new Blob(
+      [
+        `สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร\nเอกสาร: ${att.name}\nประเภท: ${att.type.toUpperCase()}\nขนาด: ${att.size}\nดาวน์โหลดจากระบบแชทกลุ่มราชการ`,
+      ],
+      { type: "text/plain;charset=utf-8" }
+    );
+    const blobUrl = URL.createObjectURL(sampleBlob);
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = att.name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
+    showToast(`📥 ดาวน์โหลด "${att.name}" สำเร็จ`);
+  };
+
+  // Drag and drop handlers
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragging) setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    if (!isMemberOfActiveGroup) {
+      showToast("🔒 เฉพาะสมาชิกของกลุ่มเท่านั้นที่สามารถแนบไฟล์ได้");
+      return;
+    }
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      processFiles(e.dataTransfer.files);
+    }
+  };
+
   // Send message
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
@@ -206,9 +351,10 @@ export function ChatPage({
       showToast("🔒 คุณไม่ได้เป็นสมาชิกในกลุ่มนี้ ไม่สามารถส่งข้อความได้");
       return;
     }
-    if (!newMessageText.trim() && !attachedFile) return;
+    if (!newMessageText.trim() && attachedFiles.length === 0) return;
 
     const sender: Member = currentUser || members[0];
+    const primaryAtt = attachedFiles[0];
 
     const newMsg: ChatMessage = {
       id: `msg_${Date.now()}`,
@@ -225,9 +371,13 @@ export function ChatPage({
         minute: "2-digit",
       }) + " น.",
       tag: selectedTag || undefined,
-      attachmentName: attachedFile?.name,
-      attachmentType: attachedFile?.type,
-      attachmentSize: attachedFile?.size,
+      // Legacy single-file fields for backward compatibility
+      attachmentName: primaryAtt?.name,
+      attachmentType: primaryAtt?.type,
+      attachmentSize: primaryAtt?.size,
+      attachmentUrl: primaryAtt?.url || primaryAtt?.dataUrl,
+      // Rich multi-attachment array
+      attachments: attachedFiles.length > 0 ? attachedFiles : undefined,
       isPinned: false,
     };
 
@@ -238,7 +388,7 @@ export function ChatPage({
 
     setNewMessageText("");
     setSelectedTag(null);
-    setAttachedFile(null);
+    setAttachedFiles([]);
   };
 
   // Toggle pin
@@ -652,7 +802,27 @@ export function ChatPage({
             )}
 
             {/* Chat Message Thread */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-slate-50/30">
+            <div
+              className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-slate-50/30 relative"
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
+              {/* Drag and Drop Overlay */}
+              {isDragging && (
+                <div className="absolute inset-2 z-30 bg-indigo-600/10 backdrop-blur-xs border-2 border-dashed border-indigo-600 rounded-3xl flex flex-col items-center justify-center p-6 text-center pointer-events-none transition-all">
+                  <div className="w-16 h-16 rounded-2xl bg-white shadow-lg flex items-center justify-center text-3xl mb-3 text-indigo-600">
+                    📂
+                  </div>
+                  <div className="font-bold text-slate-800 text-base">
+                    วางไฟล์ที่นี่เพื่อแนบเอกสารราชการ
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    รองรับ PDF, Word, Excel, PowerPoint, รูปภาพ, บีบอัด ZIP, และไฟล์ทั่วไป
+                  </p>
+                </div>
+              )}
+
               {!isMemberOfActiveGroup ? (
                 <div className="h-full flex flex-col items-center justify-center text-center p-8 text-slate-500 my-auto">
                   <div className="w-16 h-16 rounded-3xl bg-amber-50 border border-amber-200 flex items-center justify-center text-3xl shadow-xs mb-4">
@@ -704,6 +874,22 @@ export function ChatPage({
             activeMessages.map((msg) => {
               const isMe = currentUser ? msg.senderId === currentUser.id : false;
               const senderRoleInfo = ROLE_CONFIG[msg.senderRole];
+
+              // Normalize attachments from either multi-attachment array or legacy single field
+              const messageAttachments: ChatAttachment[] =
+                msg.attachments && msg.attachments.length > 0
+                  ? msg.attachments
+                  : msg.attachmentName
+                  ? [
+                      {
+                        id: `${msg.id}_legacy_att`,
+                        name: msg.attachmentName,
+                        type: (msg.attachmentType as AttachmentType) || "other",
+                        size: msg.attachmentSize || "เอกสารราชการ",
+                        url: msg.attachmentUrl,
+                      },
+                    ]
+                  : [];
 
               return (
                 <div
@@ -763,37 +949,109 @@ export function ChatPage({
                         </div>
                       )}
 
-                      <p className="whitespace-pre-wrap">{msg.text}</p>
+                      {msg.text && <p className="whitespace-pre-wrap">{msg.text}</p>}
 
-                      {/* Attachment file card */}
-                      {msg.attachmentName && (
-                        <div
-                          className={`mt-2.5 p-2.5 rounded-xl border flex items-center justify-between gap-3 text-xs ${
-                            isMe
-                              ? "bg-indigo-900/40 border-indigo-400/30 text-white"
-                              : "bg-slate-50 border-slate-200 text-slate-800"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 truncate">
-                            <span className="text-xl">
-                              {msg.attachmentType === "pdf"
-                                ? "📕"
-                                : msg.attachmentType === "image"
-                                ? "🖼️"
-                                : "📘"}
-                            </span>
-                            <div className="truncate">
-                              <div className="font-bold truncate text-[11px]">{msg.attachmentName}</div>
-                              <div className="text-[10px] opacity-70 font-mono">{msg.attachmentSize || "เอกสารราชการ"}</div>
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => showToast(`📥 กำลังดาวน์โหลด ${msg.attachmentName}`)}
-                            className="px-2 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-[10px] font-bold shrink-0 transition-colors cursor-pointer"
-                          >
-                            ดาวน์โหลด
-                          </button>
+                      {/* Multi-Attachment Cards Rendering */}
+                      {messageAttachments.length > 0 && (
+                        <div className="mt-2.5 space-y-2">
+                          {messageAttachments.map((att) => {
+                            const config = ATTACHMENT_TYPE_CONFIG[att.type] || ATTACHMENT_TYPE_CONFIG.other;
+                            const isImg = att.type === "image" && (att.dataUrl || att.url);
+
+                            if (isImg) {
+                              return (
+                                <div
+                                  key={att.id}
+                                  className={`rounded-xl overflow-hidden border ${
+                                    isMe
+                                      ? "border-indigo-400/40 bg-indigo-950/30"
+                                      : "border-slate-200 bg-slate-50"
+                                  }`}
+                                >
+                                  <div
+                                    className="relative cursor-pointer group/img overflow-hidden max-h-48 flex items-center justify-center bg-black/5"
+                                    onClick={() => setPreviewImage(att)}
+                                  >
+                                    <img
+                                      src={att.dataUrl || att.url}
+                                      alt={att.name}
+                                      className="w-full h-auto object-cover max-h-48 group-hover/img:scale-105 transition-transform duration-200"
+                                    />
+                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center gap-2 text-white text-xs font-semibold">
+                                      <span>🔍 คลิกเพื่อขยาย</span>
+                                    </div>
+                                  </div>
+                                  <div className="p-2 flex items-center justify-between gap-2 text-xs">
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <span className="text-sm">🖼️</span>
+                                      <span className="font-semibold truncate text-[11px]">{att.name}</span>
+                                      <span className="text-[10px] opacity-70 shrink-0 font-mono">
+                                        ({att.size})
+                                      </span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDownloadAttachment(att);
+                                      }}
+                                      className={`px-2 py-0.5 rounded-lg text-[10px] font-bold shrink-0 transition-colors cursor-pointer ${
+                                        isMe
+                                          ? "bg-white/20 hover:bg-white/30 text-white"
+                                          : "bg-white hover:bg-slate-200 text-slate-700 border border-slate-200 shadow-2xs"
+                                      }`}
+                                    >
+                                      ดาวน์โหลด
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <div
+                                key={att.id}
+                                className={`p-2.5 rounded-xl border flex items-center justify-between gap-3 text-xs transition-colors ${
+                                  isMe ? config.bubbleBgMe : config.bubbleBgOther
+                                }`}
+                              >
+                                <div className="flex items-center gap-2.5 truncate">
+                                  <div
+                                    className={`w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0 ${
+                                      config.badgeBg
+                                    } ${config.badgeText} border ${config.border}`}
+                                  >
+                                    {config.icon}
+                                  </div>
+                                  <div className="truncate">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-bold truncate text-[11px]">{att.name}</span>
+                                      <span
+                                        className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold ${config.badgeBg} ${config.badgeText} shrink-0`}
+                                      >
+                                        {config.label}
+                                      </span>
+                                    </div>
+                                    <div className="text-[10px] opacity-70 font-mono mt-0.5">
+                                      {att.size || "เอกสารราชการ"}
+                                    </div>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDownloadAttachment(att)}
+                                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold shrink-0 transition-colors cursor-pointer flex items-center gap-1 ${
+                                    isMe
+                                      ? "bg-white/20 hover:bg-white/30 text-white"
+                                      : "bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs"
+                                  }`}
+                                >
+                                  <span>📥</span>
+                                  <span>ดาวน์โหลด</span>
+                                </button>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -817,7 +1075,7 @@ export function ChatPage({
         </div>
 
         {/* ─── BOTTOM: INPUT & ATTACHMENT BAR ─── */}
-        <div className="p-3 sm:p-4 border-t border-slate-200/80 bg-white space-y-2 shrink-0">
+        <div className="p-3 sm:p-4 border-t border-slate-200/80 bg-white space-y-2.5 shrink-0">
           {!isMemberOfActiveGroup ? (
             <div className="p-3.5 bg-amber-50/90 border border-amber-200/80 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-amber-900">
               <div className="flex items-center gap-2">
@@ -844,6 +1102,23 @@ export function ChatPage({
             </div>
           ) : (
             <>
+              {/* Hidden file pickers */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={handleSelectRealFiles}
+              />
+              <input
+                ref={imageInputRef}
+                type="file"
+                multiple
+                accept="image/*"
+                className="hidden"
+                onChange={handleSelectRealFiles}
+              />
+
               {/* Quick Tags and Attachments Bar */}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-1.5">
@@ -864,42 +1139,158 @@ export function ChatPage({
                   ))}
                 </div>
 
-                {/* Simulated file attachments */}
-                <div className="flex items-center gap-1.5">
+                {/* File Attachment Action Buttons */}
+                <div className="flex items-center gap-1.5 relative">
+                  {/* Real File Picker */}
                   <button
                     type="button"
-                    onClick={() => {
-                      setAttachedFile({
-                        name: `เอกสารราชการ_บันทึกข้อความ_${Date.now().toString().slice(-4)}.pdf`,
-                        type: "pdf",
-                        size: "1.8 MB",
-                      });
-                      showToast("📎 แนบไฟล์เอกสารราชการเรียบร้อย");
-                    }}
+                    onClick={() => fileInputRef.current?.click()}
                     className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold transition-colors cursor-pointer flex items-center gap-1"
-                    title="แนบเอกสาร PDF"
+                    title="แนบไฟล์จากเครื่อง (PDF, Word, Excel, PowerPoint, ZIP)"
                   >
                     <span>📎</span>
-                    <span>แนบไฟล์ PDF</span>
+                    <span>แนบไฟล์</span>
                   </button>
+
+                  {/* Image Picker */}
+                  <button
+                    type="button"
+                    onClick={() => imageInputRef.current?.click()}
+                    className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold transition-colors cursor-pointer flex items-center gap-1"
+                    title="แนบรูปภาพจากเครื่อง"
+                  >
+                    <span>🖼️</span>
+                    <span>รูปภาพ</span>
+                  </button>
+
+                  {/* Government Template Dropdown Toggle */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowTemplatesDropdown(!showTemplatesDropdown)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer flex items-center gap-1 ${
+                        showTemplatesDropdown
+                          ? "bg-indigo-100 text-indigo-700 font-bold"
+                          : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                      }`}
+                      title="เลือกแบบฟอร์มเอกสารราชการมาตรฐาน"
+                    >
+                      <span>📑</span>
+                      <span>แบบฟอร์มราชการ</span>
+                      <span className="text-[9px]">▾</span>
+                    </button>
+
+                    {/* Government Templates Dropdown Menu */}
+                    {showTemplatesDropdown && (
+                      <div className="absolute right-0 bottom-full mb-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 z-40 animate-fade-in space-y-1">
+                        <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100 text-xs font-bold text-slate-800">
+                          <span className="flex items-center gap-1.5">
+                            <span>📑</span>
+                            <span>แบบฟอร์มและเอกสารราชการต้นแบบ</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setShowTemplatesDropdown(false)}
+                            className="text-slate-400 hover:text-slate-600 text-xs"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        <div className="max-h-64 overflow-y-auto space-y-1 p-1">
+                          {GOVERNMENT_DOCUMENT_TEMPLATES.map((tpl) => {
+                            const cfg = ATTACHMENT_TYPE_CONFIG[tpl.type] || ATTACHMENT_TYPE_CONFIG.other;
+                            return (
+                              <button
+                                key={tpl.name}
+                                type="button"
+                                onClick={() => handleAttachTemplate(tpl)}
+                                className="w-full text-left p-2 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-200 transition-colors flex items-start gap-2.5 cursor-pointer group"
+                              >
+                                <span className="text-xl shrink-0 mt-0.5">{cfg.icon}</span>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[11px] font-bold text-slate-800 truncate group-hover:text-indigo-600">
+                                      {tpl.name}
+                                    </span>
+                                  </div>
+                                  <div className="text-[10px] text-slate-500 line-clamp-1 mt-0.5">
+                                    {tpl.description}
+                                  </div>
+                                  <div className="flex items-center gap-2 mt-1 text-[9px] text-slate-400 font-mono">
+                                    <span className={`px-1.5 py-0.2 rounded-md ${cfg.badgeBg} ${cfg.badgeText} font-bold`}>
+                                      {cfg.label}
+                                    </span>
+                                    <span>{tpl.size}</span>
+                                    <span>• {tpl.category}</span>
+                                  </div>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* Attached file preview chip */}
-              {attachedFile && (
-                <div className="p-2 bg-indigo-50 border border-indigo-200 rounded-xl flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
-                    <span>📕</span>
-                    <span className="font-bold text-indigo-950">{attachedFile.name}</span>
-                    <span className="text-slate-400 font-mono">({attachedFile.size})</span>
+              {/* Attached Files Preview Chips Container */}
+              {attachedFiles.length > 0 && (
+                <div className="p-2.5 bg-slate-50 border border-slate-200/90 rounded-2xl space-y-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                    <span className="flex items-center gap-1.5">
+                      <span>📎</span>
+                      <span>ไฟล์ที่พร้อมส่ง ({attachedFiles.length} รายการ)</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleClearAllAttachments}
+                      className="text-[11px] text-rose-600 hover:text-rose-700 hover:underline cursor-pointer"
+                    >
+                      ล้างทั้งหมด
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setAttachedFile(null)}
-                    className="text-slate-400 hover:text-rose-500 font-bold"
-                  >
-                    ✕
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    {attachedFiles.map((att) => {
+                      const cfg = ATTACHMENT_TYPE_CONFIG[att.type] || ATTACHMENT_TYPE_CONFIG.other;
+                      const isImg = att.type === "image" && (att.dataUrl || att.url);
+
+                      return (
+                        <div
+                          key={att.id}
+                          className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl flex items-center gap-2 text-xs shadow-2xs group hover:border-indigo-300 transition-colors"
+                        >
+                          {isImg ? (
+                            <img
+                              src={att.dataUrl || att.url}
+                              alt={att.name}
+                              className="w-7 h-7 rounded-lg object-cover border border-slate-200 shrink-0"
+                            />
+                          ) : (
+                            <span className="text-base">{cfg.icon}</span>
+                          )}
+                          <div className="max-w-[160px] truncate">
+                            <div className="font-semibold text-slate-800 text-[11px] truncate">
+                              {att.name}
+                            </div>
+                            <div className="text-[9px] text-slate-400 font-mono">
+                              <span className={`font-bold mr-1 ${cfg.badgeText}`}>{cfg.label}</span>
+                              {att.size}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveAttachedFile(att.id)}
+                            className="text-slate-400 hover:text-rose-600 font-bold ml-1 p-0.5 rounded-full hover:bg-rose-50"
+                            title={`ลบ ${att.name}`}
+                            data-testid={`remove-att-${att.name}`}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 
@@ -908,7 +1299,7 @@ export function ChatPage({
                 <div className="flex-1 relative">
                   <textarea
                     rows={2}
-                    placeholder={`พิมพ์ข้อความสนทนาในห้อง ${activeGroup.name}...`}
+                    placeholder={`พิมพ์ข้อความสนทนาในห้อง ${activeGroup.name}... (หรือลากวางไฟล์ที่นี่)`}
                     value={newMessageText}
                     onChange={(e) => setNewMessageText(e.target.value)}
                     onKeyDown={(e) => {
@@ -923,7 +1314,7 @@ export function ChatPage({
 
                 <button
                   type="submit"
-                  disabled={!newMessageText.trim() && !attachedFile}
+                  disabled={!newMessageText.trim() && attachedFiles.length === 0}
                   className="px-5 py-3 bg-[#4F46E5] hover:bg-indigo-700 disabled:opacity-40 disabled:hover:bg-[#4F46E5] text-white rounded-2xl text-xs font-bold shadow-md shadow-indigo-600/20 transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
                 >
                   <span>ส่ง</span>
@@ -957,6 +1348,54 @@ export function ChatPage({
           onUpdateGroupMembers={handleUpdateGroupMembers}
           showToast={showToast}
         />
+      )}
+
+      {/* ─── MODAL: IMAGE LIGHTBOX PREVIEW ─── */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center p-4 animate-fade-in"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div
+            className="max-w-4xl max-h-[90vh] bg-slate-900 rounded-3xl overflow-hidden shadow-2xl border border-slate-700 flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-4 py-3 bg-slate-800/80 border-b border-slate-700/80 flex items-center justify-between gap-3 text-white">
+              <div className="flex items-center gap-2 truncate">
+                <span className="text-lg">🖼️</span>
+                <span className="font-bold text-xs truncate">{previewImage.name}</span>
+                <span className="text-[10px] text-slate-400 font-mono">({previewImage.size})</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleDownloadAttachment(previewImage)}
+                  className="px-3 py-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-colors cursor-pointer flex items-center gap-1 shadow-xs"
+                >
+                  <span>📥</span>
+                  <span>ดาวน์โหลด</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewImage(null)}
+                  className="w-8 h-8 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white flex items-center justify-center text-xs transition-colors cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Image display */}
+            <div className="p-4 flex items-center justify-center overflow-auto max-h-[calc(90vh-100px)] bg-black/40">
+              <img
+                src={previewImage.dataUrl || previewImage.url}
+                alt={previewImage.name}
+                className="max-w-full max-h-[75vh] object-contain rounded-xl"
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

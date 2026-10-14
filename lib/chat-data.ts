@@ -1,4 +1,4 @@
-import { ChatGroup, ChatMessage, Member } from "./types";
+import { AttachmentType, ChatGroup, ChatMessage, Member } from "./types";
 import { INITIAL_MEMBERS } from "./rbac";
 
 export const DEFAULT_CHAT_GROUPS: ChatGroup[] = [
@@ -213,3 +213,205 @@ export function saveStoredChatMessages(messages: ChatMessage[]) {
     console.error("Failed to save chat messages:", err);
   }
 }
+
+/**
+ * Detect file type from filename and optional mimeType
+ */
+export function detectAttachmentType(fileName: string, mimeType?: string): AttachmentType {
+  const ext = fileName.split(".").pop()?.toLowerCase() || "";
+  if (["jpg", "jpeg", "png", "webp", "gif", "svg", "bmp"].includes(ext) || mimeType?.startsWith("image/")) {
+    return "image";
+  }
+  if (ext === "pdf" || mimeType === "application/pdf") {
+    return "pdf";
+  }
+  if (
+    ["doc", "docx", "odt", "rtf", "txt"].includes(ext) ||
+    mimeType?.includes("word") ||
+    mimeType?.includes("document")
+  ) {
+    return "doc";
+  }
+  if (
+    ["xls", "xlsx", "csv", "ods"].includes(ext) ||
+    mimeType?.includes("excel") ||
+    mimeType?.includes("spreadsheet") ||
+    mimeType?.includes("csv")
+  ) {
+    return "excel";
+  }
+  if (
+    ["ppt", "pptx", "odp"].includes(ext) ||
+    mimeType?.includes("presentation") ||
+    mimeType?.includes("powerpoint")
+  ) {
+    return "powerpoint";
+  }
+  if (
+    ["zip", "rar", "7z", "tar", "gz"].includes(ext) ||
+    mimeType?.includes("zip") ||
+    mimeType?.includes("archive") ||
+    mimeType?.includes("compressed")
+  ) {
+    return "zip";
+  }
+  if (["mp4", "mov", "avi", "mkv", "webm"].includes(ext) || mimeType?.startsWith("video/")) {
+    return "video";
+  }
+  if (["mp3", "wav", "m4a", "ogg", "aac", "flac"].includes(ext) || mimeType?.startsWith("audio/")) {
+    return "audio";
+  }
+  return "other";
+}
+
+/**
+ * Format bytes to human readable string
+ */
+export function formatAttachmentSize(bytes: number): string {
+  if (!bytes || bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+}
+
+export const ATTACHMENT_TYPE_CONFIG: Record<
+  AttachmentType,
+  {
+    icon: string;
+    label: string;
+    badgeBg: string;
+    badgeText: string;
+    border: string;
+    bubbleBgMe: string;
+    bubbleBgOther: string;
+  }
+> = {
+  pdf: {
+    icon: "📕",
+    label: "PDF",
+    badgeBg: "bg-rose-100",
+    badgeText: "text-rose-700",
+    border: "border-rose-200",
+    bubbleBgMe: "bg-rose-950/40 border-rose-400/30",
+    bubbleBgOther: "bg-rose-50/80 border-rose-200",
+  },
+  doc: {
+    icon: "📘",
+    label: "Word",
+    badgeBg: "bg-blue-100",
+    badgeText: "text-blue-700",
+    border: "border-blue-200",
+    bubbleBgMe: "bg-blue-950/40 border-blue-400/30",
+    bubbleBgOther: "bg-blue-50/80 border-blue-200",
+  },
+  excel: {
+    icon: "📊",
+    label: "Excel",
+    badgeBg: "bg-emerald-100",
+    badgeText: "text-emerald-700",
+    border: "border-emerald-200",
+    bubbleBgMe: "bg-emerald-950/40 border-emerald-400/30",
+    bubbleBgOther: "bg-emerald-50/80 border-emerald-200",
+  },
+  powerpoint: {
+    icon: "📙",
+    label: "PowerPoint",
+    badgeBg: "bg-amber-100",
+    badgeText: "text-amber-700",
+    border: "border-amber-200",
+    bubbleBgMe: "bg-amber-950/40 border-amber-400/30",
+    bubbleBgOther: "bg-amber-50/80 border-amber-200",
+  },
+  image: {
+    icon: "🖼️",
+    label: "รูปภาพ",
+    badgeBg: "bg-cyan-100",
+    badgeText: "text-cyan-700",
+    border: "border-cyan-200",
+    bubbleBgMe: "bg-cyan-950/40 border-cyan-400/30",
+    bubbleBgOther: "bg-cyan-50/80 border-cyan-200",
+  },
+  zip: {
+    icon: "🗜️",
+    label: "ZIP Archive",
+    badgeBg: "bg-purple-100",
+    badgeText: "text-purple-700",
+    border: "border-purple-200",
+    bubbleBgMe: "bg-purple-950/40 border-purple-400/30",
+    bubbleBgOther: "bg-purple-50/80 border-purple-200",
+  },
+  video: {
+    icon: "🎥",
+    label: "Video",
+    badgeBg: "bg-violet-100",
+    badgeText: "text-violet-700",
+    border: "border-violet-200",
+    bubbleBgMe: "bg-violet-950/40 border-violet-400/30",
+    bubbleBgOther: "bg-violet-50/80 border-violet-200",
+  },
+  audio: {
+    icon: "🎵",
+    label: "Audio",
+    badgeBg: "bg-fuchsia-100",
+    badgeText: "text-fuchsia-700",
+    border: "border-fuchsia-200",
+    bubbleBgMe: "bg-fuchsia-950/40 border-fuchsia-400/30",
+    bubbleBgOther: "bg-fuchsia-50/80 border-fuchsia-200",
+  },
+  other: {
+    icon: "📄",
+    label: "ไฟล์แนบ",
+    badgeBg: "bg-slate-100",
+    badgeText: "text-slate-700",
+    border: "border-slate-200",
+    bubbleBgMe: "bg-slate-800/40 border-slate-500/30",
+    bubbleBgOther: "bg-slate-50 border-slate-200",
+  },
+};
+
+export const GOVERNMENT_DOCUMENT_TEMPLATES = [
+  {
+    name: "บันทึกข้อความ_ขออนุมัติจัดโครงการสัมมนา2569.pdf",
+    type: "pdf" as AttachmentType,
+    size: "1.8 MB",
+    category: "หนังสือราชการ / บันทึกข้อความ",
+    description: "แบบฟอร์มบันทึกข้อความราชการมาตรฐาน พมจ.กำแพงเพชร",
+  },
+  {
+    name: "ร่างคำสั่งจังหวัดกำแพงเพชร_แต่งตั้งคณะทำงาน.docx",
+    type: "doc" as AttachmentType,
+    size: "840 KB",
+    category: "คำสั่ง / ระเบียบ",
+    description: "เอกสาร Word ต้นแบบคำสั่งจังหวัดพร้อมตราครุฑ",
+  },
+  {
+    name: "รายงานแผนงบประมาณและตัวชี้วัด_Q1_2569.xlsx",
+    type: "excel" as AttachmentType,
+    size: "620 KB",
+    category: "งบประมาณ / สถิติ",
+    description: "ตารางคำนวณสรุปการเบิกจ่ายงบประมาณรายไตรมาส",
+  },
+  {
+    name: "สไลด์นำเสนอผลการดำเนินงาน_ตรวจราชการ.pptx",
+    type: "powerpoint" as AttachmentType,
+    size: "4.5 MB",
+    category: "สไลด์นำเสนอ",
+    description: "ชุดสไลด์สรุปผลงานสำคัญรอบ 6 เดือน",
+  },
+  {
+    name: "ภาพถ่ายลงพื้นที่มอบถุงยังชีพผู้ประสบภัย.jpg",
+    type: "image" as AttachmentType,
+    size: "2.4 MB",
+    category: "ภาพถ่ายกิจกรรม",
+    description: "ภาพถ่ายความละเอียดสูงสำหรับงานประชาสัมพันธ์",
+  },
+  {
+    name: "ชุดเอกสารหลักฐานประกอบการเบิกจ่าย_งวดที่1.zip",
+    type: "zip" as AttachmentType,
+    size: "5.8 MB",
+    category: "แฟ้มรวบรวมหลักฐาน",
+    description: "ไฟล์บีบอัดใบเสร็จและใบสำคัญรับเงินโครงการ",
+  },
+];
+

@@ -328,6 +328,27 @@ export interface BookingNotificationLog {
 
 
 
+export type AttachmentType =
+  | "pdf"
+  | "image"
+  | "doc"
+  | "excel"
+  | "powerpoint"
+  | "zip"
+  | "video"
+  | "audio"
+  | "other";
+
+export interface ChatAttachment {
+  id: string;
+  name: string;
+  type: AttachmentType;
+  size: string;
+  url?: string;
+  dataUrl?: string;
+  mimeType?: string;
+}
+
 export interface ChatGroup {
   id: string;
   name: string;
@@ -355,7 +376,9 @@ export interface ChatMessage {
   timestamp: string;
   isPinned?: boolean;
   attachmentName?: string;
-  attachmentType?: "pdf" | "image" | "doc";
+  attachmentType?: AttachmentType;
   attachmentSize?: string;
+  attachmentUrl?: string;
+  attachments?: ChatAttachment[];
   tag?: string;
 }

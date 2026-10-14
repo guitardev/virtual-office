@@ -724,11 +724,26 @@ export function mapRowToChatMessage(row: any): ChatMessage {
     attachmentName: meta.attachment_name || row.attachment_name || undefined,
     attachmentType: meta.attachment_type || row.attachment_type || undefined,
     attachmentSize: meta.attachment_size || row.attachment_size || undefined,
+    attachmentUrl: row.attachment_url || meta.attachment_url || undefined,
+    attachments: Array.isArray(meta.attachments) && meta.attachments.length > 0
+      ? meta.attachments
+      : meta.attachment_name || row.attachment_name
+      ? [
+          {
+            id: `att_${row.id || "1"}`,
+            name: meta.attachment_name || row.attachment_name,
+            type: meta.attachment_type || row.attachment_type || "doc",
+            size: meta.attachment_size || row.attachment_size || "-",
+            url: row.attachment_url || meta.attachment_url || undefined,
+          },
+        ]
+      : undefined,
     isPinned: Boolean(meta.is_pinned ?? row.is_pinned),
   };
 }
 
 export function mapChatMessageToRow(m: ChatMessage): any {
+  const primaryAtt = m.attachments?.[0];
   return {
     id: m.id,
     channel_id: m.groupId,
@@ -739,11 +754,13 @@ export function mapChatMessageToRow(m: ChatMessage): any {
     sender_position: m.senderPosition || null,
     content: m.text,
     tag: m.tag || null,
-    attachment_url: null,
+    attachment_url: primaryAtt?.url || m.attachmentUrl || null,
     attachment_metadata: {
-      attachment_name: m.attachmentName || null,
-      attachment_type: m.attachmentType || null,
-      attachment_size: m.attachmentSize || null,
+      attachment_name: primaryAtt?.name || m.attachmentName || null,
+      attachment_type: primaryAtt?.type || m.attachmentType || null,
+      attachment_size: primaryAtt?.size || m.attachmentSize || null,
+      attachment_url: primaryAtt?.url || m.attachmentUrl || null,
+      attachments: m.attachments || (primaryAtt ? [primaryAtt] : []),
       sender_division: m.senderDivision || null,
       is_pinned: Boolean(m.isPinned),
     },
