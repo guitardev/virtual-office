@@ -44,9 +44,9 @@ test.describe("ระบบจัดการข้อมูลส่วนต�
     await expandBtn.click();
     await page.waitForTimeout(500);
 
-    // 5. ตรวจสอบคลังภาพถ่ายทางการ (Official Avatar Presets)
-    const officialPresetsLabel = page.locator("text=ทำเนียบภาพถ่ายข้าราชการ").first();
-    await expect(officialPresetsLabel).toBeVisible();
+    // 5. ตรวจสอบปุ่มอัปโหลดรูปภาพประจำตัว (Upload Avatar & URL Input)
+    const uploadBtn = page.locator("button:has-text('อัปโหลดจากเครื่อง')").first();
+    await expect(uploadBtn).toBeVisible();
 
     // 6. ทดสอบปิดหน้าต่างผ่านปุ่ม '✕ ปิดหน้าต่าง'
     await closeBtn.click();

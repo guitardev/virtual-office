@@ -85,7 +85,6 @@ export function EditProfileModal({
   onSubmit,
 }: EditProfileModalProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [showPresetGallery, setShowPresetGallery] = useState(true);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [customUrlInput, setCustomUrlInput] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(true);
@@ -293,26 +292,7 @@ export function EditProfileModal({
 
                         <button
                           type="button"
-                          onClick={() => {
-                            setShowPresetGallery(!showPresetGallery);
-                            setShowUrlInput(false);
-                          }}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer ${
-                            showPresetGallery
-                              ? "bg-indigo-100 border-indigo-300 text-indigo-900"
-                              : "bg-white hover:bg-slate-50 border-slate-200 text-slate-700"
-                          }`}
-                        >
-                          <span>👤</span>
-                          <span>ทำเนียบ ({OFFICIAL_AVATAR_PRESETS.length})</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowUrlInput(!showUrlInput);
-                            setShowPresetGallery(false);
-                          }}
+                          onClick={() => setShowUrlInput(!showUrlInput)}
                           className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer ${
                             showUrlInput
                               ? "bg-indigo-100 border-indigo-300 text-indigo-900"
@@ -364,49 +344,6 @@ export function EditProfileModal({
                       >
                         นำไปใช้
                       </button>
-                    </div>
-                  )}
-
-                  {/* Official Preset Gallery Grid */}
-                  {showPresetGallery && (
-                    <div className="pt-2 border-t border-slate-200/80 animate-fade-in space-y-2">
-                      <div className="text-[11px] font-bold text-slate-700 flex items-center justify-between">
-                        <span>ทำเนียบภาพถ่ายข้าราชการ พมจ.กำแพงเพชร:</span>
-                        <span className="text-[10px] text-slate-400">คลิกที่ภาพเพื่อเลือก</span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto p-1">
-                        {OFFICIAL_AVATAR_PRESETS.map((p) => {
-                          const isSelected = form.avatarUrl === p.url;
-                          return (
-                            <button
-                              key={p.id}
-                              type="button"
-                              onClick={() => {
-                                setForm({ ...form, avatarUrl: p.url });
-                              }}
-                              className={`p-2 rounded-xl border text-left transition-all flex items-center gap-2 cursor-pointer ${
-                                isSelected
-                                  ? "border-indigo-600 bg-indigo-50 ring-2 ring-indigo-600/30 shadow-xs"
-                                  : "border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50"
-                              }`}
-                            >
-                              <img
-                                src={p.url}
-                                alt={p.name}
-                                className="w-10 h-10 rounded-lg object-cover shrink-0 border border-slate-200"
-                              />
-                              <div className="min-w-0 flex-1">
-                                <div className="text-[11px] font-bold text-slate-800 truncate">
-                                  {p.name.split(" ")[0]}
-                                </div>
-                                <div className="text-[10px] text-slate-500 truncate">
-                                  {p.position}
-                                </div>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
                     </div>
                   )}
                 </div>
