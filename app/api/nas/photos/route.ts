@@ -1,0 +1,106 @@
+import { NextRequest, NextResponse } from "next/server";
+
+export async function GET(req: NextRequest) {
+  try {
+    const searchParams = req.nextUrl.searchParams;
+    const action = searchParams.get("action") || "list_items";
+    const space = searchParams.get("space") || "shared";
+    const sid = searchParams.get("sid");
+    const nasUrl = searchParams.get("nasUrl") || process.env.SYNOLOGY_NAS_URL || "http://192.168.162.21:5000";
+    const offset = searchParams.get("offset") || "0";
+    const limit = searchParams.get("limit") || "50";
+    const albumId = searchParams.get("album_id");
+
+    if (!sid) {
+      return NextResponse.json(
+        { success: false, error: "กรุณาระบุเซสชัน DSM (sid)", code: 119 },
+        { status: 401 }
+      );
+    }
+
+    const cleanUrl = nasUrl.replace(/\/+$/, "");
+
+    // ─── ACTION 1: LIST PHOTO / VIDEO ITEMS ───
+    if (action === "list_items") {
+      const apiName = space === "shared" ? "SYNO.FotoTeam.Browse.Item" : "SYNO.Foto.Browse.Item";
+      let queryUrl = `${cleanUrl}/webapi/entry.cgi?api=${apiName}&version=1&method=list&offset=${offset}&limit=${limit}&additional=["thumbnail","resolution","orientation","video_meta"]&_sid=${encodeURIComponent(
+        sid
+      )}`;
+      if (albumId) {
+        queryUrl += `&album_id=${albumId}`;
+      }
+
+      const res = await fetch(queryUrl, {
+        method: "GET",
+        signal: AbortSignal.timeout(10000),
+      });
+
+      const data = await res.json();
+      if (data.success && data.data) {
+        const rawList = data.data.list || [];
+        const items = rawList.map((item: any) => ({
+          id: item.id,
+          filename: item.filename,
+          filesize: item.filesize || 0,
+          time: item.time || Math.floor(Date.now() / 1000),
+          type: item.type === "video" ? "video" : "photo",
+          space,
+          thumbnail: item.additional?.thumbnail,
+          additional: item.additional,
+        }));
+        return NextResponse.json({
+          success: true,
+          items,
+          total: data.data.total || items.length,
+        });
+      }
+
+      return NextResponse.json({
+        success: false,
+        error: data.error?.message || `ไม่สามารถเรียกรายการรูปภาพจาก Synology Photos ได้ (Code ${data.error?.code})`,
+        code: data.error?.code,
+      });
+    }
+
+    // ─── ACTION 2: LIST ALBUMS ───
+    if (action === "list_albums") {
+      const queryUrl = `${cleanUrl}/webapi/entry.cgi?api=SYNO.Foto.Browse.Album&version=1&method=list&offset=${offset}&limit=${limit}&_sid=${encodeURIComponent(
+        sid
+      )}`;
+
+      const res = await fetch(queryUrl, {
+        method: "GET",
+        signal: AbortSignal.timeout(10000),
+      });
+
+      const data = await res.json();
+      if (data.success && data.data) {
+        const rawList = data.data.list || [];
+        const albums = rawList.map((a: any) => ({
+          id: a.id,
+          name: a.name,
+          item_count: a.item_count || 0,
+          cover: a.cover,
+        }));
+        return NextResponse.json({
+          success: true,
+          albums,
+          total: data.data.total || albums.length,
+        });
+      }
+
+      return NextResponse.json({
+        success: false,
+        error: data.error?.message || "ไม่สามารถเรียกอัลบั้มจาก Synology Photos ได้",
+        code: data.error?.code,
+      });
+    }
+
+    return NextResponse.json({ success: false, error: `Invalid action: ${action}` }, { status: 400 });
+  } catch (err: any) {
+    return NextResponse.json(
+      { success: false, error: err?.message || "Internal server error in photos API route" },
+      { status: 500 }
+    );
+  }
+}

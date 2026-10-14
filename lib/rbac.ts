@@ -41,6 +41,7 @@ export const MODULE_NAMES: Record<ModuleId, { name: string; icon: string; desc: 
   admin: { name: "ระบบจัดการ (Admin Panel)", icon: "⚙️", desc: "การจัดการสมาชิกและกำหนดสิทธิ์ RBAC" },
   reports: { name: "รายงานและสถิติ (Reports)", icon: "📈", desc: "รายงานสถิติการใช้งานและดาวน์โหลดสรุป" },
   files: { name: "คลังเอกสาร NAS (File Station)", icon: "📁", desc: "ระบบจัดเก็บและจัดการไฟล์ตามสิทธิ์ Synology NAS" },
+  gallery: { name: "คลังภาพและสื่อ (Synology Photos)", icon: "📸", desc: "คลังจัดเก็บและสืบค้นภาพถ่าย/วิดีโอกิจกรรมราชการ" },
 };
 
 export const INITIAL_SYSTEM_MODULES: Record<ModuleId, SystemModule> = {
@@ -116,6 +117,14 @@ export const INITIAL_SYSTEM_MODULES: Record<ModuleId, SystemModule> = {
     enabled: true,
     maintenanceNotice: "ระบบคลังเอกสาร NAS เปิดให้บริการปกติ",
   },
+  gallery: {
+    id: "gallery",
+    name: "คลังภาพและสื่อ (Synology Photos)",
+    icon: "📸",
+    desc: "คลังจัดเก็บและสืบค้นภาพถ่าย/วิดีโอกิจกรรมราชการ",
+    enabled: true,
+    maintenanceNotice: "ระบบคลังภาพและสื่อเปิดให้บริการปกติ",
+  },
 };
 
 // Default Matrix: Which role can access which module
@@ -130,6 +139,7 @@ export const INITIAL_ROLE_PERMISSIONS: Record<Role, Record<ModuleId, boolean>> =
     admin: true,
     reports: true,
     files: true,
+    gallery: true,
   },
   manager: {
     dashboard: true,
@@ -141,6 +151,7 @@ export const INITIAL_ROLE_PERMISSIONS: Record<Role, Record<ModuleId, boolean>> =
     admin: false, // Managers cannot access RBAC Admin Panel
     reports: true,
     files: true,
+    gallery: true,
   },
   member: {
     dashboard: true,
@@ -152,6 +163,7 @@ export const INITIAL_ROLE_PERMISSIONS: Record<Role, Record<ModuleId, boolean>> =
     admin: false, // Regular members cannot access Admin
     reports: false, // Regular members cannot view company reports
     files: true,
+    gallery: true,
   },
   guest: {
     dashboard: false, // Guests cannot view internal dashboard
@@ -163,6 +175,7 @@ export const INITIAL_ROLE_PERMISSIONS: Record<Role, Record<ModuleId, boolean>> =
     admin: false,
     reports: false,
     files: false,
+    gallery: false,
   },
 };
 

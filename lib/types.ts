@@ -20,7 +20,8 @@ export type ModuleId =
   | "user"
   | "admin"
   | "reports"
-  | "files";
+  | "files"
+  | "gallery";
 
 export interface RoleInfo {
   id: Role;

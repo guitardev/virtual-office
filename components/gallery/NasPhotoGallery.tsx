@@ -1,0 +1,749 @@
+"use client";
+
+import React, { useState, useEffect, useMemo } from "react";
+import { Member } from "@/lib/types";
+import {
+  getUserNasSid,
+  getUserNasAccount,
+  setUserNasSid,
+  clearUserNasSid,
+  getClientSynologyConfig,
+  checkNasHealth,
+  loginSynology,
+  SynologyHealthStatus,
+} from "@/lib/synology";
+import {
+  PhotoSpace,
+  SynologyPhotoItem,
+  SynologyPhotoAlbum,
+  listSynologyPhotos,
+  listSynologyAlbums,
+  getPhotoThumbnailUrl,
+  formatBytes,
+  formatPhotoTime,
+} from "@/lib/synology-photos";
+
+interface NasPhotoGalleryProps {
+  currentUser: Member;
+  showToast: (msg: string) => void;
+}
+
+export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps) {
+  const config = getClientSynologyConfig();
+  const [health, setHealth] = useState<SynologyHealthStatus | null>(null);
+
+  // User NAS Auth session
+  const [userSid, setUserSid] = useState<string | null>(() => getUserNasSid());
+  const [userNasAccount, setUserNasAccount] = useState<string | null>(() => getUserNasAccount());
+  const [showConnectModal, setShowConnectModal] = useState(false);
+  const [loginUsername, setLoginUsername] = useState(currentUser.name || "admin");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  // Gallery state
+  const [currentSpace, setCurrentSpace] = useState<PhotoSpace>("shared");
+  const [activeTab, setActiveTab] = useState<"all" | "photos" | "videos" | "albums">("all");
+  const [selectedAlbumId, setSelectedAlbumId] = useState<number | null>(null);
+  const [items, setItems] = useState<SynologyPhotoItem[]>([]);
+  const [albums, setAlbums] = useState<SynologyPhotoAlbum[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [permissionError, setPermissionError] = useState<string | null>(null);
+
+  // Lightbox Preview Modal
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  // Hydrate session on client mount
+  useEffect(() => {
+    const storedSid = getUserNasSid();
+    const storedAccount = getUserNasAccount();
+    if (storedSid) setUserSid(storedSid);
+    if (storedAccount) setUserNasAccount(storedAccount);
+  }, []);
+
+  // Health check on mount
+  useEffect(() => {
+    checkNasHealth(config.nasUrl).then(setHealth).catch(console.error);
+  }, [config.nasUrl]);
+
+  // Load photos or albums when userSid, space, or activeTab changes
+  useEffect(() => {
+    if (!userSid) {
+      setItems([]);
+      setAlbums([]);
+      return;
+    }
+
+    if (activeTab === "albums") {
+      loadAlbums(userSid, currentSpace);
+    } else {
+      loadPhotos(userSid, currentSpace, selectedAlbumId || undefined);
+    }
+  }, [userSid, currentSpace, activeTab, selectedAlbumId]);
+
+  // ─── LOAD DATA ───
+  const loadPhotos = async (sid: string, space: PhotoSpace, albumId?: number) => {
+    setIsLoading(true);
+    setPermissionError(null);
+    try {
+      const res = await listSynologyPhotos({
+        space,
+        albumId,
+        offset: 0,
+        limit: 100,
+        sid,
+        nasUrl: config.nasUrl,
+      });
+
+      if (res.success && res.items) {
+        setItems(res.items);
+      } else {
+        setItems([]);
+        setPermissionError(res.error || "ไม่สามารถดึงรูปภาพจาก Synology Photos ได้");
+        if (res.code === 119) {
+          clearUserNasSid();
+          setUserSid(null);
+        }
+      }
+    } catch (err: any) {
+      setPermissionError(err?.message || "เกิดข้อผิดพลาดในการโหลดรูปภาพ");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadAlbums = async (sid: string, space: PhotoSpace) => {
+    setIsLoading(true);
+    setPermissionError(null);
+    try {
+      const res = await listSynologyAlbums({
+        space,
+        offset: 0,
+        limit: 50,
+        sid,
+        nasUrl: config.nasUrl,
+      });
+
+      if (res.success && res.albums) {
+        setAlbums(res.albums);
+      } else {
+        setAlbums([]);
+        setPermissionError(res.error || "ไม่สามารถดึงรายการอัลบั้มได้");
+        if (res.code === 119) {
+          clearUserNasSid();
+          setUserSid(null);
+        }
+      }
+    } catch (err: any) {
+      setPermissionError(err?.message || "เกิดข้อผิดพลาดในการโหลดอัลบั้ม");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // ─── AUTH ACTIONS ───
+  const handleConnectNas = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginPassword) {
+      showToast("⚠️ กรุณากรอกรหัสผ่าน Synology NAS");
+      return;
+    }
+
+    setIsLoggingIn(true);
+    try {
+      const res = await loginSynology(loginUsername.trim(), loginPassword, config.nasUrl);
+      if (res.success && res.sid) {
+        setUserNasSid(res.sid, res.account || loginUsername.trim());
+        setUserSid(res.sid);
+        setUserNasAccount(res.account || loginUsername.trim());
+        setShowConnectModal(false);
+        setLoginPassword("");
+        showToast(`✅ เชื่อมต่อ Synology Photos บัญชี "${res.account || loginUsername}" สำเร็จ`);
+      } else {
+        showToast(`❌ เข้าสู่ระบบล้มเหลว: ${res.error}`);
+      }
+    } catch (err: any) {
+      showToast(`❌ เกิดข้อผิดพลาด: ${err?.message}`);
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleDisconnectNas = () => {
+    clearUserNasSid();
+    setUserSid(null);
+    setUserNasAccount(null);
+    setItems([]);
+    setAlbums([]);
+    showToast("🔒 ยกเลิกการเชื่อมต่อเซสชัน Synology Photos เรียบร้อยแล้ว");
+  };
+
+  // Filter items
+  const filteredItems = useMemo(() => {
+    return items.filter((item) => {
+      // Type filter
+      if (activeTab === "photos" && item.type !== "photo") return false;
+      if (activeTab === "videos" && item.type !== "video") return false;
+
+      // Search filter
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        return item.filename.toLowerCase().includes(q);
+      }
+      return true;
+    });
+  }, [items, activeTab, searchQuery]);
+
+  // Current Lightbox Item
+  const activeLightboxItem = lightboxIndex !== null && filteredItems[lightboxIndex] ? filteredItems[lightboxIndex] : null;
+
+  const handleNextLightbox = () => {
+    if (lightboxIndex === null) return;
+    setLightboxIndex((prev) => (prev! + 1 < filteredItems.length ? prev! + 1 : 0));
+  };
+
+  const handlePrevLightbox = () => {
+    if (lightboxIndex === null) return;
+    setLightboxIndex((prev) => (prev! - 1 >= 0 ? prev! - 1 : filteredItems.length - 1));
+  };
+
+  return (
+    <div className="max-w-7xl mx-auto space-y-6 animate-fadeIn pb-12">
+      {/* ─── HEADER HERO BANNER ─── */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#0E7490] via-[#0284C7] to-[#4F46E5] p-6 md:p-8 text-white shadow-xl shadow-cyan-600/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="flex items-center space-x-4">
+          <div className="w-14 h-14 rounded-2xl bg-white/15 backdrop-blur-md border border-white/20 flex items-center justify-center text-3xl shrink-0 shadow-inner">
+            📸
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-xl md:text-2xl font-bold font-heading text-white">
+                คลังภาพและสื่อราชการ (Synology Photos)
+              </h2>
+              <span
+                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  health?.online
+                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/30"
+                    : "bg-amber-500/20 text-amber-300 border border-amber-400/30"
+                }`}
+              >
+                <span className={`w-2 h-2 rounded-full ${health?.online ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`} />
+                {health?.online ? "On-Premise LAN พร้อมใช้งาน" : "ตรวจพบปัญหาเครือข่าย"}
+              </span>
+            </div>
+            <p className="text-xs text-cyan-100/90 mt-1 max-w-2xl leading-relaxed">
+              จัดเก็บ ค้นหา และเผยแพร่ภาพถ่ายกิจกรรมราชการและสื่อประชาสัมพันธ์ พมจ.กำแพงเพชร ผ่าน Synology Photos (192.168.162.21)
+            </p>
+          </div>
+        </div>
+
+        {/* User NAS Session Indicator */}
+        <div className="flex items-center gap-2.5 shrink-0">
+          {userSid ? (
+            <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/20 text-xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <div className="text-left">
+                <div className="text-[10px] text-cyan-200">สิทธิ์ Photos เข้าสู่ระบบ:</div>
+                <div className="font-bold text-white">
+                  {userNasAccount || currentUser.name || "Synology User"}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleDisconnectNas}
+                title="สลับบัญชีหรือออกจากเซสชัน Photos"
+                className="ml-2 px-2 py-0.5 rounded bg-white/20 hover:bg-white/30 text-[10px] font-bold cursor-pointer"
+              >
+                สลับบัญชี
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowConnectModal(true)}
+              className="px-3.5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>🔑</span>
+              <span>เชื่อมต่อบัญชี Synology NAS</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ─── NOT CONNECTED NOTICE ─── */}
+      {!userSid ? (
+        <div className="p-8 rounded-3xl bg-white border border-slate-200 shadow-sm text-center max-w-xl mx-auto space-y-4 my-8">
+          <div className="w-16 h-16 rounded-3xl bg-cyan-50 border border-cyan-100 flex items-center justify-center text-3xl mx-auto text-cyan-600">
+            🔐
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-slate-800 font-heading">
+              กรุณายืนยันตัวตนเพื่อเปิดคลังภาพ Synology Photos
+            </h3>
+            <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+              ระบบเชื่อมต่อกับ Synology Photos โดยตรงตามสิทธิ์บัญชีผู้ใช้ เพื่อแสดงอัลบั้มภาพกิจกรรมส่วนกลาง (Shared Space) และภาพส่วนตัว (Personal Space) ตามสิทธิ์ DSM ที่ได้รับอนุญาต
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowConnectModal(true)}
+            className="px-5 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold transition-all shadow-md cursor-pointer"
+          >
+            🔑 เข้าสู่ระบบเพื่อเปิดคลังภาพ
+          </button>
+        </div>
+      ) : (
+        /* ─── MAIN GALLERY INTERFACE ─── */
+        <div className="space-y-5">
+          {/* Controls Bar: Space Selector & Filter Tabs */}
+          <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+            {/* Space Switcher */}
+            <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl">
+              <button
+                type="button"
+                onClick={() => {
+                  setCurrentSpace("shared");
+                  setSelectedAlbumId(null);
+                }}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  currentSpace === "shared"
+                    ? "bg-white text-cyan-800 shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <span>🏛️</span>
+                <span>พื้นที่ส่วนกลาง พมจ. (Shared Space)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setCurrentSpace("personal");
+                  setSelectedAlbumId(null);
+                }}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  currentSpace === "personal"
+                    ? "bg-white text-cyan-800 shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <span>👤</span>
+                <span>พื้นที่ส่วนตัว (Personal Space)</span>
+              </button>
+            </div>
+
+            {/* Media Type Tabs */}
+            <div className="flex items-center gap-1.5 overflow-x-auto py-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab("all");
+                  setSelectedAlbumId(null);
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === "all" && !selectedAlbumId
+                    ? "bg-cyan-50 text-cyan-700 border border-cyan-200"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                🖼️ ทั้งหมด ({items.length})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab("photos");
+                  setSelectedAlbumId(null);
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === "photos"
+                    ? "bg-cyan-50 text-cyan-700 border border-cyan-200"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                📸 รูปภาพ
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab("videos");
+                  setSelectedAlbumId(null);
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === "videos"
+                    ? "bg-cyan-50 text-cyan-700 border border-cyan-200"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                🎥 วิดีโอ
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab("albums")}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === "albums"
+                    ? "bg-cyan-50 text-cyan-700 border border-cyan-200"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                📁 อัลบั้ม ({albums.length})
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  activeTab === "albums"
+                    ? loadAlbums(userSid, currentSpace)
+                    : loadPhotos(userSid, currentSpace, selectedAlbumId || undefined)
+                }
+                className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer"
+                title="รีเฟรชคลังภาพ"
+              >
+                🔄
+              </button>
+            </div>
+          </div>
+
+          {/* Search & Breadcrumb Bar */}
+          <div className="flex items-center justify-between gap-3 px-1">
+            <div className="flex items-center gap-2 text-xs text-slate-600">
+              <span className="font-semibold">
+                {currentSpace === "shared" ? "🏛️ พื้นที่ส่วนกลาง พมจ." : "👤 พื้นที่ส่วนบุคคล"}
+              </span>
+              {selectedAlbumId && (
+                <>
+                  <span>/</span>
+                  <span className="px-2 py-0.5 rounded-md bg-cyan-100 text-cyan-800 font-bold">
+                    อัลบั้ม #{selectedAlbumId}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAlbumId(null)}
+                    className="text-[11px] text-rose-600 hover:underline cursor-pointer"
+                  >
+                    ✕ ยกเลิกฟิลเตอร์
+                  </button>
+                </>
+              )}
+            </div>
+
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="ค้นหาชื่อไฟล์ภาพหรือวิดีโอ..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-7 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 w-44 sm:w-60"
+              />
+              <span className="absolute left-2.5 top-2 text-xs text-slate-400">🔍</span>
+            </div>
+          </div>
+
+          {/* ─── ERROR BANNER ─── */}
+          {permissionError && (
+            <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 flex items-start gap-2.5">
+              <span className="text-base shrink-0">⛔</span>
+              <div>
+                <strong className="font-bold">การแจ้งเตือนสิทธิ์ Synology Photos:</strong>
+                <p className="mt-0.5 text-rose-700">{permissionError}</p>
+              </div>
+            </div>
+          )}
+
+          {/* ─── LOADING STATE ─── */}
+          {isLoading ? (
+            <div className="py-24 text-center space-y-3 text-slate-400 text-xs">
+              <div className="text-4xl animate-spin">⏳</div>
+              <div className="font-medium">กำลังโหลดคลังภาพถ่ายและสื่อจาก Synology Photos...</div>
+            </div>
+          ) : activeTab === "albums" ? (
+            /* ─── ALBUMS VIEW ─── */
+            <div>
+              {albums.length === 0 ? (
+                <div className="py-20 text-center space-y-2 p-8 rounded-3xl bg-white border border-slate-200">
+                  <div className="text-4xl">📁</div>
+                  <div className="text-sm font-bold text-slate-700">ไม่พบอัลบั้มภาพในระบบ</div>
+                  <div className="text-xs text-slate-400 max-w-sm mx-auto">
+                    ท่านสามารถสร้างอัลบั้มและจัดกลุ่มรูปภาพกิจกรรมได้โดยตรงผ่านแอปพลิเคชัน Synology Photos บน DSM
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {albums.map((album) => (
+                    <div
+                      key={album.id}
+                      onClick={() => {
+                        setSelectedAlbumId(album.id);
+                        setActiveTab("all");
+                      }}
+                      className="group bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md transition-all overflow-hidden cursor-pointer flex flex-col"
+                    >
+                      <div className="h-40 bg-slate-100 flex items-center justify-center relative overflow-hidden">
+                        {album.cover ? (
+                          <img
+                            src={getPhotoThumbnailUrl(album.cover.id, "m", album.cover.cache_key, currentSpace, userSid)}
+                            alt={album.name}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <span className="text-5xl text-slate-300">📁</span>
+                        )}
+                        <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-full bg-black/60 text-white text-[10px] font-bold backdrop-blur-xs">
+                          {album.item_count} รายการ
+                        </span>
+                      </div>
+                      <div className="p-3.5">
+                        <div className="font-bold text-sm text-slate-800 truncate group-hover:text-cyan-700 transition-colors">
+                          {album.name}
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">
+                          คลิกเพื่อดูรูปภาพในอัลบั้มนี้ →
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            /* ─── PHOTOS & VIDEOS MASONRY / GRID VIEW ─── */
+            <div>
+              {filteredItems.length === 0 ? (
+                <div className="py-20 text-center space-y-2 p-8 rounded-3xl bg-white border border-slate-200">
+                  <div className="text-4xl">📸</div>
+                  <div className="text-sm font-bold text-slate-700">ไม่พบรูปภาพหรือวิดีโอในหมวดหมู่นี้</div>
+                  <div className="text-xs text-slate-400 max-w-sm mx-auto">
+                    {searchQuery
+                      ? "ไม่พบไฟล์ที่ตรงกับคำค้นหา กรุณาลองค้นหาด้วยคำอื่น"
+                      : "ยังไม่มีไฟล์ภาพในโฟลเดอร์นี้ หรือบัญชียังไม่ได้รับสิทธิ์เข้าถึงใน Synology Photos"}
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
+                  {filteredItems.map((item, idx) => (
+                    <div
+                      key={item.id}
+                      onClick={() => setLightboxIndex(idx)}
+                      className="group relative bg-slate-900 rounded-2xl overflow-hidden shadow-xs hover:shadow-xl transition-all cursor-pointer aspect-square"
+                    >
+                      <img
+                        src={getPhotoThumbnailUrl(
+                          item.id,
+                          "m",
+                          item.thumbnail?.cache_key,
+                          currentSpace,
+                          userSid
+                        )}
+                        alt={item.filename}
+                        className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-300 opacity-90 group-hover:opacity-100"
+                        loading="lazy"
+                      />
+
+                      {/* Video Indicator */}
+                      {item.type === "video" && (
+                        <div className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-black/70 text-white text-[10px] font-bold backdrop-blur-xs flex items-center gap-1">
+                          <span>▶</span>
+                          <span>วิดีโอ</span>
+                        </div>
+                      )}
+
+                      {/* Hover Info Overlay */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-3 flex flex-col justify-end text-white">
+                        <div className="text-xs font-bold truncate leading-tight">{item.filename}</div>
+                        <div className="text-[10px] text-slate-300 mt-0.5 flex items-center justify-between">
+                          <span>{formatPhotoTime(item.time).split(" ")[0]}</span>
+                          <span>{formatBytes(item.filesize)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── LIGHTBOX PREVIEW MODAL ─── */}
+      {activeLightboxItem && (
+        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col justify-between animate-fadeIn">
+          {/* Top Bar */}
+          <div className="p-4 px-6 flex items-center justify-between text-white border-b border-white/10 shrink-0">
+            <div className="flex items-center gap-3 truncate">
+              <span className="text-xl">{activeLightboxItem.type === "video" ? "🎥" : "🖼️"}</span>
+              <div className="truncate">
+                <div className="font-bold text-sm truncate">{activeLightboxItem.filename}</div>
+                <div className="text-[11px] text-slate-400">
+                  {formatPhotoTime(activeLightboxItem.time)} · {formatBytes(activeLightboxItem.filesize)}
+                  {activeLightboxItem.additional?.resolution && (
+                    <span> · {activeLightboxItem.additional.resolution.width}x{activeLightboxItem.additional.resolution.height}px</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 shrink-0">
+              <a
+                href={`/api/nas/photos/download?id=${activeLightboxItem.id}&filename=${encodeURIComponent(
+                  activeLightboxItem.filename
+                )}&space=${currentSpace}&sid=${userSid}`}
+                download
+                className="px-3 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-bold transition-all flex items-center gap-1.5"
+                title="ดาวน์โหลดไฟล์ต้นฉบับ"
+              >
+                <span>⬇️</span>
+                <span>ดาวน์โหลดต้นฉบับ</span>
+              </a>
+
+              <button
+                type="button"
+                onClick={() => setLightboxIndex(null)}
+                className="p-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-white text-sm font-bold transition-all cursor-pointer"
+                title="ปิดหน้าต่าง (Esc)"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          {/* Center Preview Content with Next/Prev Controls */}
+          <div className="relative flex-1 flex items-center justify-center p-4 overflow-hidden select-none">
+            {/* Prev Button */}
+            <button
+              type="button"
+              onClick={handlePrevLightbox}
+              className="absolute left-4 z-10 w-11 h-11 rounded-full bg-white/20 hover:bg-white/30 text-white text-xl flex items-center justify-center backdrop-blur-md transition-all cursor-pointer"
+              title="ก่อนหน้า (ลูกศรซ้าย)"
+            >
+              ‹
+            </button>
+
+            {/* Media Content */}
+            <div className="max-w-5xl max-h-[75vh] flex items-center justify-center">
+              <img
+                src={getPhotoThumbnailUrl(
+                  activeLightboxItem.id,
+                  "xl",
+                  activeLightboxItem.thumbnail?.cache_key,
+                  currentSpace,
+                  userSid
+                )}
+                alt={activeLightboxItem.filename}
+                className="max-w-full max-h-[75vh] object-contain rounded-xl shadow-2xl animate-scaleUp"
+              />
+            </div>
+
+            {/* Next Button */}
+            <button
+              type="button"
+              onClick={handleNextLightbox}
+              className="absolute right-4 z-10 w-11 h-11 rounded-full bg-white/20 hover:bg-white/30 text-white text-xl flex items-center justify-center backdrop-blur-md transition-all cursor-pointer"
+              title="ถัดไป (ลูกศรขวา)"
+            >
+              ›
+            </button>
+          </div>
+
+          {/* Bottom Thumbnails Strip */}
+          <div className="p-3 bg-black/60 border-t border-white/10 overflow-x-auto flex items-center justify-center gap-2 shrink-0">
+            {filteredItems.slice(Math.max(0, (lightboxIndex || 0) - 4), (lightboxIndex || 0) + 5).map((item, idx) => {
+              const actualIdx = filteredItems.findIndex((it) => it.id === item.id);
+              const isSelected = actualIdx === lightboxIndex;
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => setLightboxIndex(actualIdx)}
+                  className={`w-12 h-12 rounded-lg overflow-hidden shrink-0 cursor-pointer border-2 transition-all ${
+                    isSelected ? "border-cyan-400 scale-105" : "border-transparent opacity-60 hover:opacity-100"
+                  }`}
+                >
+                  <img
+                    src={getPhotoThumbnailUrl(item.id, "sm", item.thumbnail?.cache_key, currentSpace, userSid)}
+                    alt={item.filename}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ─── CONNECT NAS DSM MODAL ─── */}
+      {showConnectModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-scaleUp">
+            <div className="p-6 bg-gradient-to-r from-cyan-600 to-indigo-600 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">📸</span>
+                <div>
+                  <h3 className="font-bold text-base">เข้าสู่ระบบ Synology Photos</h3>
+                  <p className="text-[11px] text-cyan-100">
+                    ยืนยันตัวตนด้วยบัญชี DSM ประจำตัวของท่าน ({config.nasUrl})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowConnectModal(false)}
+                className="text-white/80 hover:text-white p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleConnectNas} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  ชื่อผู้ใช้ (NAS DSM Username)
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={loginUsername}
+                  onChange={(e) => setLoginUsername(e.target.value)}
+                  placeholder="เช่น admin หรือ somchai"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  รหัสผ่าน (NAS DSM Password)
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  placeholder="รหัสผ่านเข้าใช้งาน NAS"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowConnectModal(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoggingIn}
+                  className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold transition-all shadow-md cursor-pointer disabled:opacity-50"
+                >
+                  {isLoggingIn ? "กำลังเชื่อมต่อ..." : "ยืนยันและเปิดคลังภาพ"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

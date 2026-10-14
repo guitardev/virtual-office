@@ -37,6 +37,7 @@ import { EditProfileModal } from "@/components/user/EditProfileModal";
 import { AdminPage } from "@/components/admin/AdminPage";
 import { AdminModals } from "@/components/admin/AdminModals";
 import { NasFileManager } from "@/components/dms/NasFileManager";
+import { NasPhotoGallery } from "@/components/gallery/NasPhotoGallery";
 import {
   isSupabaseConfigured,
   fetchMembers,
@@ -87,6 +88,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "meetings", label: "การประชุม", icon: "📹" },
   { id: "carbooking", label: "รถยนต์สำนักงาน", icon: "🚗" },
   { id: "files", label: "คลังเอกสาร NAS", icon: "📁" },
+  { id: "gallery", label: "คลังภาพและสื่อ", icon: "📸" },
   { id: "reports", label: "รายงานและสถิติ", icon: "📈" },
   { id: "admin", label: "ระบบจัดการ & RBAC", icon: "⚙️" },
   { id: "user", label: "ข้อมูลส่วนตัว", icon: "👤" },
@@ -1174,6 +1176,7 @@ export default function OmniOfficeApp() {
       meetings: meetingCount,
       carbooking: carCount,
       files: 0,
+      gallery: 0,
       reports: 0,
       admin: currentUserRole === "admin" ? pendingReqCount : 0,
       user: 0,
@@ -1977,6 +1980,13 @@ export default function OmniOfficeApp() {
 
               {currentPage === "files" && (
                 <NasFileManager
+                  currentUser={currentUser}
+                  showToast={showToast}
+                />
+              )}
+
+              {currentPage === "gallery" && (
+                <NasPhotoGallery
                   currentUser={currentUser}
                   showToast={showToast}
                 />
