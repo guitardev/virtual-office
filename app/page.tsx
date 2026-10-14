@@ -370,7 +370,7 @@ export default function OmniOfficeApp() {
 
               handleLogin(memberToLogin, true);
               if (existingMember) {
-                showToast(`🎉 ยินดีต้อนรับกลับ คุณ${memberToLogin.name} (เข้าสู่ระบบด้วย LINE สำเร็จ)`);
+                showToast(`🎉 ยินดีต้อนรับกลับ ${memberToLogin.name} (เข้าสู่ระบบด้วย LINE สำเร็จ)`);
               } else {
                 showToast(`🎉 สมัครและเข้าสู่ระบบด้วย LINE: ${memberToLogin.name} สำเร็จ!`);
               }
@@ -586,7 +586,7 @@ export default function OmniOfficeApp() {
       "Authentication",
       "success"
     );
-    showToast(`👋 ยินดีต้อนรับกลับ คุณ${member.name}`);
+    showToast(`👋 ยินดีต้อนรับกลับ ${member.name}`);
   };
 
   const handleInitiateLogout = () => {

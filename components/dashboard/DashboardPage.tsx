@@ -40,7 +40,7 @@ export function DashboardPage({
               <span>· สิทธิ์ของคุณ: {ROLE_CONFIG[currentUserRole].label}</span>
             </div>
             <h1 className="text-2xl md:text-3xl font-bold font-heading text-white">
-              สวัสดีตอนเช้า, คุณ{currentUser.name} 👋
+              สวัสดีตอนเช้า, {currentUser.name} 👋
             </h1>
             <p className="text-indigo-100 text-sm mt-1.5 max-w-xl leading-relaxed">
               วันนี้คุณมี <span className="font-bold underline text-white">2 งานเร่งด่วน</span> ที่ต้องส่งมอบ และการประชุมสรุปแผนงานผลิตภัณฑ์ในเวลา 11:00 น.
