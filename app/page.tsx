@@ -526,11 +526,12 @@ export default function OmniOfficeApp() {
       new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) + " น.";
     setLoginTime(timeStr);
 
-    // Only update existing members in directory; do not add incomplete records to system database
+    // Auto-insert or update member in database & state without guessing unknown fields
     setMembers((prev) => {
       const exists = prev.some((m) => m.id === member.id);
-      return exists ? prev.map((m) => (m.id === member.id ? member : m)) : prev;
+      return exists ? prev.map((m) => (m.id === member.id ? member : m)) : [member, ...prev];
     });
+    saveMember(member).catch(console.error);
 
     if (rememberMe && typeof window !== "undefined") {
       try {

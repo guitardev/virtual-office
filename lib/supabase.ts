@@ -62,15 +62,19 @@ export const supabase = isSupabaseConfigured()
 export function mapRowToMember(row: any): Member {
   return {
     id: row.id,
-    prefix: row.prefix || "นาย",
+    prefix: row.prefix ?? "",
     firstName: row.first_name || (row.name ? row.name.split(" ")[0] : ""),
-    lastName: row.last_name || (row.name ? row.name.split(" ").slice(1).join(" ") : ""),
+    lastName: row.last_name ?? "",
     nickname: row.nickname || undefined,
-    name: row.name || `${row.prefix || ""}${row.first_name || ""} ${row.last_name || ""}`.trim(),
-    personnelType: (row.personnel_type as PersonnelType) || "ข้าราชการ",
-    position: row.position || "เจ้าหน้าที่",
-    division: row.division || "ฝ่ายบริหารทั่วไป",
-    department: row.division || "ฝ่ายบริหารทั่วไป",
+    name:
+      row.name ||
+      `${row.prefix ? row.prefix + " " : ""}${row.first_name || ""} ${row.last_name || ""}`.trim() ||
+      row.first_name ||
+      "ผู้ใช้งาน",
+    personnelType: row.personnel_type ? (row.personnel_type as PersonnelType) : undefined,
+    position: row.position || "รอกำหนดตำแหน่ง",
+    division: row.division || "รอกำหนดกลุ่มงาน",
+    department: row.division || "รอกำหนดกลุ่มงาน",
     email: row.email,
     phone: row.phone || "-",
     lineId: row.line_id || "-",
@@ -94,19 +98,19 @@ export function mapRowToMember(row: any): Member {
 export function mapMemberToRow(member: Member): any {
   return {
     id: member.id,
-    prefix: member.prefix,
-    first_name: member.firstName,
-    last_name: member.lastName,
+    prefix: member.prefix || "",
+    first_name: member.firstName || member.name,
+    last_name: member.lastName || "",
     nickname: member.nickname || null,
     name: member.name,
-    personnel_type: member.personnelType || "ข้าราชการ",
-    position: member.position,
-    division: member.division,
+    personnel_type: member.personnelType || null,
+    position: member.position || "รอกำหนดตำแหน่ง",
+    division: member.division || "รอกำหนดกลุ่มงาน",
     email: member.email,
-    phone: member.phone || null,
-    line_id: member.lineId || null,
+    phone: member.phone && member.phone !== "-" ? member.phone : null,
+    line_id: member.lineId && member.lineId !== "-" ? member.lineId : null,
     avatar_url: member.avatarUrl || null,
-    role: member.role,
+    role: member.role || "member",
   };
 }
 
@@ -1485,11 +1489,11 @@ export function findOrMapAuthMember(authUser: any, availableMembers: Member[]): 
     firstName,
     lastName,
     name: fullName,
-    personnelType: "ข้าราชการ",
-    position: metadata.position || "เจ้าหน้าที่ปฏิบัติการ",
-    division: metadata.division || "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์",
-    department: metadata.division || "ฝ่ายบริหารทั่วไป",
-    email: authUser.email || "user@m-society.go.th",
+    personnelType: undefined,
+    position: metadata.position || "รอกำหนดตำแหน่ง",
+    division: metadata.division || "รอกำหนดกลุ่มงาน",
+    department: metadata.division || "รอกำหนดกลุ่มงาน",
+    email: authUser.email || "user@nas.local",
     phone: "-",
     lineId: "-",
     role: (metadata.role as Role) || "member",

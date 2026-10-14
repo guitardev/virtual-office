@@ -119,13 +119,16 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
       setIsLoading(false);
 
       if (data.success && data.user) {
-        // Find existing match in official directory or use mapped member
-        const match = availableMembers.find(
-          (m) =>
-            m.email.toLowerCase().includes(nasUsername.toLowerCase()) ||
-            m.name.toLowerCase().includes(nasUsername.toLowerCase()) ||
-            (nasUsername.toLowerCase() === "admin" && m.role === "admin")
-        );
+        // Find exact match in official directory or use mapped member
+        const cleanUserLower = nasUsername.toLowerCase().trim();
+        const match = availableMembers.find((m) => {
+          if (cleanUserLower === "admin" && m.role === "admin") return true;
+          const emailUser = m.email.toLowerCase().split("@")[0];
+          if (emailUser === cleanUserLower) return true;
+          if (m.name.toLowerCase() === cleanUserLower) return true;
+          if (m.firstName.toLowerCase() === cleanUserLower) return true;
+          return false;
+        });
         const memberToLogin = match || data.user;
         onLogin(memberToLogin, rememberMe);
         return;
