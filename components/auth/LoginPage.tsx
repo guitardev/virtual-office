@@ -22,8 +22,14 @@ interface LoginPageProps {
 }
 
 export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginPageProps) {
-  // Auth mode: Sign In vs Sign Up
-  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  // Auth mode: Synology NAS (Default / Primary) vs Supabase Sign In vs Sign Up
+  const [authMode, setAuthMode] = useState<"nas" | "signin" | "signup">("nas");
+
+  // Synology NAS Sign In state
+  const [nasUsername, setNasUsername] = useState("admin");
+  const [nasPassword, setNasPassword] = useState("");
+  const [showNasPassword, setShowNasPassword] = useState(false);
+  const [nasOnline, setNasOnline] = useState(true);
 
   // Sign In state
   const [email, setEmail] = useState("");
@@ -76,6 +82,68 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
   const [requestSuccess, setRequestSuccess] = useState(false);
 
   const isLive = isSupabaseConfigured();
+
+  // Test Synology NAS connection on mount
+  React.useEffect(() => {
+    fetch("/api/nas/health")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success && data.data?.online) {
+          setNasOnline(true);
+        } else {
+          setNasOnline(false);
+        }
+      })
+      .catch(() => setNasOnline(false));
+  }, []);
+
+  // ─── SYNOLOGY NAS DSM AUTHENTICATION ───
+  const handleNasSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setMatchedDirectoryUser(null);
+    setIsLoading(true);
+
+    try {
+      const res = await fetch("/api/nas/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: nasUsername.trim(),
+          password: nasPassword,
+        }),
+      });
+
+      const data = await res.json();
+      setIsLoading(false);
+
+      if (data.success && data.user) {
+        // Find existing match in official directory or use mapped member
+        const match = availableMembers.find(
+          (m) =>
+            m.email.toLowerCase().includes(nasUsername.toLowerCase()) ||
+            m.name.toLowerCase().includes(nasUsername.toLowerCase()) ||
+            (nasUsername.toLowerCase() === "admin" && m.role === "admin")
+        );
+        const memberToLogin = match || data.user;
+        onLogin(memberToLogin, rememberMe);
+        return;
+      }
+
+      setErrorMessage(
+        data.error ||
+          "ไม่สามารถยืนยันตัวตนกับ Synology NAS ได้ กรุณาตรวจสอบชื่อผู้ใช้หรือรหัสผ่าน"
+      );
+    } catch (err: any) {
+      setIsLoading(false);
+      setErrorMessage(
+        `เกิดข้อผิดพลาดในการเชื่อมต่อ Synology NAS (192.168.162.21): ${
+          err?.message || "การเชื่อมต่อขัดข้อง"
+        }`
+      );
+    }
+  };
 
   // ─── REAL SUPABASE SIGN IN ───
   const handleManualSubmit = async (e: React.FormEvent) => {
@@ -414,17 +482,38 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
             </div>
 
             <h2 className="text-2xl lg:text-3xl font-black font-heading text-slate-900">
-              {authMode === "signin" ? "เข้าสู่ระบบ (Sign In)" : "ลงทะเบียนใหม่ (Sign Up)"}
+              {authMode === "nas"
+                ? "เข้าสู่ระบบด้วย Synology NAS"
+                : authMode === "signin"
+                ? "เข้าสู่ระบบ (Supabase Auth)"
+                : "ลงทะเบียนใหม่ (Sign Up)"}
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              {authMode === "signin"
-                ? "ยืนยันตัวตนด้วยบัญชี Supabase Auth หรือเลือกบัญชีตัวอย่างเพื่อเริ่มต้น"
-                : "สร้างบัญชีผู้ใช้งานใหม่บนระบบสำนักงานเสมือน Supabase"}
+              {authMode === "nas"
+                ? "ยืนยันตัวตนด้วยบัญชีและรหัสผ่าน Synology DSM ประจำสำนักงาน พมจ.กำแพงเพชร"
+                : authMode === "signin"
+                ? "ยืนยันตัวตนด้วยอีเมลและรหัสผ่านบน Supabase Auth"
+                : "สร้างบัญชีผู้ใช้งานใหม่บนระบบสำนักงานเสมือน"}
             </p>
           </div>
 
           {/* Mode Switcher Tabs */}
-          <div className="grid grid-cols-2 p-1 rounded-2xl bg-slate-200/80 border border-slate-300/60 text-xs font-bold">
+          <div className="grid grid-cols-3 p-1 rounded-2xl bg-slate-200/80 border border-slate-300/60 text-[11px] font-bold">
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode("nas");
+                setErrorMessage(null);
+                setSuccessMessage(null);
+              }}
+              className={`py-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                authMode === "nas"
+                  ? "bg-white text-indigo-700 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <span>💾 Synology NAS</span>
+            </button>
             <button
               type="button"
               onClick={() => {
@@ -432,13 +521,13 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
                 setErrorMessage(null);
                 setSuccessMessage(null);
               }}
-              className={`py-2 rounded-xl transition-all cursor-pointer ${
+              className={`py-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 ${
                 authMode === "signin"
                   ? "bg-white text-indigo-700 shadow-sm"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              🔐 เข้าสู่ระบบ (Sign In)
+              <span>✉️ อีเมล</span>
             </button>
             <button
               type="button"
@@ -447,13 +536,13 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
                 setErrorMessage(null);
                 setSuccessMessage(null);
               }}
-              className={`py-2 rounded-xl transition-all cursor-pointer ${
+              className={`py-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 ${
                 authMode === "signup"
                   ? "bg-white text-indigo-700 shadow-sm"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              ✍️ ลงทะเบียน (Sign Up)
+              <span>✍️ ลงทะเบียน</span>
             </button>
           </div>
 
@@ -553,6 +642,118 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
             </span>
             <div className="flex-1 border-t border-slate-200" />
           </div>
+
+          {/* ─── TAB 0: SYNOLOGY NAS FORM (PRIMARY / DEFAULT) ─── */}
+          {authMode === "nas" && (
+            <form onSubmit={handleNasSubmit} className="space-y-4">
+              {/* Connection Status Badge */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-100/90 border border-slate-200 text-xs">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`w-2.5 h-2.5 rounded-full ${
+                      nasOnline ? "bg-emerald-500 animate-pulse" : "bg-red-500"
+                    }`}
+                  />
+                  <span className="font-bold text-slate-800">
+                    {nasOnline ? "Synology NAS พร้อมใช้งาน" : "Synology NAS ไม่ตอบสนอง"}
+                  </span>
+                </div>
+                <span className="font-mono text-[11px] text-indigo-700 bg-white px-2 py-0.5 rounded-md border border-slate-200 font-bold">
+                  192.168.162.21
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  ชื่อบัญชีผู้ใช้ Synology (Username)
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    placeholder="เช่น admin หรือชื่อผู้ใช้บน NAS"
+                    value={nasUsername}
+                    onChange={(e) => setNasUsername(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-800 focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/20 transition-all font-mono"
+                  />
+                  <span className="absolute left-3.5 top-2.5 text-slate-400 text-sm">👤</span>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-bold text-slate-700">
+                    รหัสผ่าน Synology (DSM Password)
+                  </label>
+                  <span className="text-[11px] text-slate-400 font-mono">SYNO.API.Auth</span>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showNasPassword ? "text" : "password"}
+                    required
+                    placeholder="ระบุรหัสผ่านบัญชี Synology DSM"
+                    value={nasPassword}
+                    onChange={(e) => setNasPassword(e.target.value)}
+                    className="w-full pl-10 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-800 focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/20 transition-all"
+                  />
+                  <span className="absolute left-3.5 top-2.5 text-slate-400 text-sm">🔒</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowNasPassword(!showNasPassword)}
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 text-xs font-medium cursor-pointer"
+                    title={showNasPassword ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
+                  >
+                    {showNasPassword ? "🙈" : "👁️"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-xs">
+                <label className="flex items-center space-x-2 cursor-pointer text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="w-4 h-4 accent-[#4F46E5] rounded"
+                  />
+                  <span>จดจำการเข้าสู่ระบบไว้</span>
+                </label>
+                <span className="text-emerald-700 font-bold text-[11px] flex items-center gap-1">
+                  <span>🛡️</span> On-Premise Auth
+                </span>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full py-3 bg-gradient-to-r from-slate-900 via-indigo-900 to-indigo-700 text-white rounded-xl text-sm font-bold shadow-md shadow-indigo-600/25 hover:opacity-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {isLoading ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>กำลังยืนยันตัวตนกับ Synology NAS...</span>
+                  </>
+                ) : (
+                  <span>เข้าสู่ระบบผ่าน Synology NAS ➜</span>
+                )}
+              </button>
+
+              {/* Quick test buttons */}
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                <span>เข้าสู่ระบบด่วน:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const admin = availableMembers.find((m) => m.role === "admin");
+                    if (admin) onLogin(admin, true);
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold transition-all cursor-pointer"
+                >
+                  ⚡ เข้าด้วยสิทธิ์ Admin พมจ.
+                </button>
+              </div>
+            </form>
+          )}
 
           {/* ─── TAB 1: SIGN IN FORM ─── */}
           {authMode === "signin" && (

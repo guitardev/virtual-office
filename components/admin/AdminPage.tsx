@@ -6,6 +6,7 @@ import { MembersTab } from "./MembersTab";
 import { RequestsTab } from "./RequestsTab";
 import { MatrixTab } from "./MatrixTab";
 import { AuditTab } from "./AuditTab";
+import { NasTab } from "./NasTab";
 
 interface AdminPageProps {
   members: Member[];
@@ -16,8 +17,8 @@ interface AdminPageProps {
   auditLogs: AuditLog[];
   setAuditLogs: (logs: AuditLog[]) => void;
   initialAuditLogs: AuditLog[];
-  adminTab: "members" | "requests" | "matrix" | "audit";
-  setAdminTab: (tab: "members" | "requests" | "matrix" | "audit") => void;
+  adminTab: "members" | "requests" | "matrix" | "audit" | "nas";
+  setAdminTab: (tab: "members" | "requests" | "matrix" | "audit" | "nas") => void;
   memberSearch: string;
   setMemberSearch: (val: string) => void;
   requestSearch: string;
@@ -156,6 +157,7 @@ export function AdminPage({
             },
             { id: "matrix", label: "🔒 ตารางกำหนดสิทธิ์รายโมดูล (RBAC Matrix)" },
             { id: "audit", label: "📜 ประวัติการเข้าถึง (Audit Logs)", count: auditLogs.length },
+            { id: "nas", label: "💾 Synology NAS (192.168.162.21)" },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -231,6 +233,10 @@ export function AdminPage({
               showToast={showToast}
               initialAuditLogs={initialAuditLogs}
             />
+          )}
+
+          {adminTab === "nas" && (
+            <NasTab showToast={showToast} />
           )}
         </div>
       </div>

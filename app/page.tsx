@@ -109,7 +109,7 @@ export default function OmniOfficeApp() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [meetings, setMeetings] = useState<MeetingItem[]>([]);
   const [carBookings, setCarBookings] = useState<CarBookingRequest[]>([]);
-  const [adminTab, setAdminTab] = useState<"members" | "requests" | "matrix" | "audit">("members");
+  const [adminTab, setAdminTab] = useState<"members" | "requests" | "matrix" | "audit" | "nas">("members");
   const [memberSearch, setMemberSearch] = useState("");
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);

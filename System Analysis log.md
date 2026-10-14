@@ -549,5 +549,53 @@ on conflict (id) do update set
 4. **Instant Granular Filter Bar:** แถบเลือก Scope (`🌐 ทั้งหมด`, `👤 งานของฉัน`, `👥 กลุ่มงานของฉัน`, `🏢 งานส่วนกลาง`) พร้อมค้นหาแบบ Realtime คัดกรองตามฝ่าย และความเร่งด่วน
 5. **Live Supabase Sync & Persistence:** จัดเก็บข้อมูลลงตาราง `tasks` บน Supabase Cloud ทันที พร้อมแปลง Payload และเชื่อมโยง UUID มาตรฐานของ Postgres
 
+---
+
+## 13. บันทึกการเชื่อมต่อระบบ Synology NAS ประจำสำนักงาน (On-Premise DMS & Authentication Suite)
+
+> **วันที่บันทึก:** 14 ตุลาคม 2569  
+> **เวอร์ชัน:** v1.7.0 (Synology NAS Enterprise Integration)  
+> **ไอพีเซิร์ฟเวอร์:** `http://192.168.162.21:5000` (DSM Web API)  
+> **สถานะภาพรวม:** เชื่อมต่อระบบ Virtual Office เข้ากับ Synology NAS ประจำสำนักงาน พมจ.กำแพงเพชร แบบ On-Premise สมบูรณ์ 100% รองรับทั้งระบบยืนยันตัวตนบุคลากรผ่านบัญชี NAS และระบบจัดการเอกสารอิเล็กทรอนิกส์ (File Station DMS)
+
+---
+
+### 13.1 สถาปัตยกรรมและโปรโตคอลการเชื่อมต่อ (Architecture & Protocol Design)
+
+```
+[ เจ้าหน้าที่ / ข้าราชการ พมจ. ]
+              │ (HTTPS / HTTP)
+              ▼
+   [ OmniOffice Next.js App ]
+      │ (Server-Side Proxy - Zero CORS)
+      ├─────────────────────────────────────────────────┐
+      ▼                                                 ▼
+[ Synology NAS (192.168.162.21:5000) ]        [ Supabase Cloud (Postgres) ]
+  • SYNO.API.Auth v7 (DSM Credentials)          • ตาราง users (RBAC Profile)
+  • SYNO.FileStation.List & CreateFolder        • ตาราง audit_logs (Audit Trail)
+  • SYNO.FileStation.Upload / Download          • ตาราง files (Document Metadata)
+  • Local LAN Shared Folder: /virtual-office
+```
+
+---
+
+### 13.2 รายละเอียดผลการพัฒนาระบบ Synology NAS
+
+1. **ระบบยืนยันตัวตนหลักผ่านบัญชี Synology NAS (Primary DSM Authentication):**
+   - เพิ่มตัวเลือกเข้าสู่ระบบด้วยบัญชี Synology DSM เป็นค่าเริ่มต้นบนหน้า [LoginPage.tsx](file:///c:/Users/GuitarDev/virtual-office/components/auth/LoginPage.tsx)
+   - มีไฟสถานะแสดงความพร้อมแบบเรียลไทม์ (`🟢 Synology NAS พร้อมใช้งาน | 192.168.162.21`)
+   - ทำงานร่วมกับ API Route [app/api/nas/auth/route.ts](file:///c:/Users/GuitarDev/virtual-office/app/api/nas/auth/route.ts) ตรวจสอบรหัสผ่านกับ DSM Web API ตรง
+   - ผู้ใช้สิทธิ์ Admin บน NAS จะได้รับสิทธิ์ `admin` ใน Virtual Office โดยอัตโนมัติ
+
+2. **ศูนย์จัดการระบบ Synology NAS ในแท็บ Admin ([NasTab.tsx](file:///c:/Users/GuitarDev/virtual-office/components/admin/NasTab.tsx)):**
+   - **การตรวจวัดสุขภาพเซิร์ฟเวอร์แบบสด (Live Health Gauge):** วัดความเร็ว Latency (ms), สถานะพอร์ต 5000, และ API ที่รองรับ (`SYNO.API.Auth`, `SYNO.FileStation.Upload`, `SYNO.FileStation.List`)
+   - **แบบฟอร์มกำหนดค่า Service Account & นโยบาย:** ตั้งค่า Host URL, Service Account Username/Password, Shared Folder สำหรับเอกสารราชการ (`/virtual-office`)
+   - **ระบบสำรวจไฟล์เอกสารราชการ (File Station DMS Explorer):** เชื่อมโยงดูไฟล์และโฟลเดอร์ใน Shared Folder บน NAS, ปุ่มสร้างโฟลเดอร์ใหม่, ดาวน์โหลดไฟล์, และเปิดลิงก์สู่ DSM Desktop
+
+3. **สถาปัตยกรรม Proxy ฝั่ง Server (Zero-CORS Architecture):**
+   - พัฒนา [lib/synology.ts](file:///c:/Users/GuitarDev/virtual-office/lib/synology.ts) และ Route Handlers [app/api/nas/health](file:///c:/Users/GuitarDev/virtual-office/app/api/nas/health/route.ts), [app/api/nas/auth](file:///c:/Users/GuitarDev/virtual-office/app/api/nas/auth/route.ts), [app/api/nas/files](file:///c:/Users/GuitarDev/virtual-office/app/api/nas/files/route.ts)
+   - ป้องกันปัญหา Browser CORS และ Mixed-Content อย่างเด็ดขาด พร้อมซ่อนรหัสผ่าน Service Account ไว้บนฝั่งเซิร์ฟเวอร์อย่างปลอดภัย
+
+
 
 
