@@ -31,25 +31,70 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Synthesize or Map Officer Profile for Virtual Office
-    const isNasAdmin = authResult.is_admin || username.toLowerCase() === "admin" || username.toLowerCase() === "guitardev";
-    const displayName = username.toLowerCase() === "admin"
-      ? "ผู้ดูแลระบบ (Synology DSM Admin)"
-      : `เจ้าหน้าที่ (${username})`;
+    const trimmedUser = username.trim();
+    const isNasAdmin =
+      authResult.is_admin ||
+      trimmedUser.toLowerCase() === "admin" ||
+      trimmedUser.toLowerCase() === "guitardev";
+
+    // Clean unique ID that properly supports Thai (\u0E00-\u0E7F) and English without turning into "syno_______"
+    const cleanSlug = trimmedUser
+      .replace(/[^a-zA-Z0-9\u0E00-\u0E7F_-]/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_|_$/g, "");
+
+    let hash = 5381;
+    for (let i = 0; i < trimmedUser.length; i++) {
+      hash = (hash * 33) ^ trimmedUser.charCodeAt(i);
+    }
+    const hashStr = (hash >>> 0).toString(36).slice(0, 6);
+
+    const userId =
+      trimmedUser.toLowerCase() === "admin"
+        ? "syno_admin"
+        : cleanSlug
+        ? `syno_${cleanSlug}`
+        : `syno_user_${hashStr}`;
+
+    const isThai = /[\u0E00-\u0E7F]/.test(trimmedUser);
+    const nameParts = trimmedUser.split(/\s+/);
+    const firstName =
+      trimmedUser.toLowerCase() === "admin"
+        ? "ผู้ดูแลระบบ"
+        : nameParts[0] || trimmedUser;
+    const lastName =
+      trimmedUser.toLowerCase() === "admin"
+        ? "Synology"
+        : nameParts.slice(1).join(" ") || "พมจ.กำแพงเพชร";
+
+    const displayName =
+      trimmedUser.toLowerCase() === "admin"
+        ? "ผู้ดูแลระบบ (Synology DSM Admin)"
+        : isThai
+        ? trimmedUser
+        : `เจ้าหน้าที่ (${trimmedUser})`;
+
+    // Generate valid email address (standard email requires ASCII local-part)
+    const emailPrefix =
+      !isThai && cleanSlug ? cleanSlug.toLowerCase() : `syno_${hashStr}`;
+    const email = `${emailPrefix}@kpp-m-society.go.th`;
+    const lineId = !isThai ? `@syno_${trimmedUser.toLowerCase()}` : `@syno_${hashStr}`;
+    const avatarText = trimmedUser.slice(0, 2);
 
     const member: Member = {
-      id: `syno_${username.toLowerCase().replace(/[^a-z0-9]/g, "_")}`,
+      id: userId,
       prefix: "นาย",
-      firstName: username.toLowerCase() === "admin" ? "ผู้ดูแลระบบ" : username,
-      lastName: username.toLowerCase() === "admin" ? "Synology" : "พมจ.",
+      firstName,
+      lastName,
       name: displayName,
       personnelType: "ข้าราชการ",
       role: isNasAdmin ? "admin" : "member",
       position: isNasAdmin ? "ผู้ดูแลระบบเครือข่ายและระบบสารบรรณ NAS" : "เจ้าหน้าที่ปฏิบัติการประจำสำนักงาน",
       division: "ฝ่ายบริหารทั่วไป (กลุ่มงานสารบรรณและเทคโนโลยีสารสนเทศ)",
       department: "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
-      email: `${username.toLowerCase()}@kpp-m-society.go.th`,
+      email,
       phone: "055-705031 ต่อ 102",
-      lineId: `@syno_${username.toLowerCase()}`,
+      lineId,
       status: "active",
       joinedDate: new Date().toLocaleDateString("th-TH", {
         day: "numeric",
@@ -59,7 +104,7 @@ export async function POST(req: NextRequest) {
       avatarUrl: isNasAdmin
         ? "https://kamphaengphet.m-society.go.th/wp-content/uploads/2024/10/S__2457668.jpg"
         : undefined,
-      avatarText: username.slice(0, 2).toUpperCase(),
+      avatarText,
     };
 
     return NextResponse.json({
