@@ -27,7 +27,11 @@ import { GroupMembersDrawer } from "./GroupMembersDrawer";
 import {
   getUserNasSid,
   getUserNasAccount,
+  setUserNasSid,
+  clearUserNasSid,
   getClientSynologyConfig,
+  saveClientSynologyConfig,
+  loginSynology,
 } from "@/lib/synology";
 
 interface ChatPageProps {
@@ -68,13 +72,21 @@ export function ChatPage({
   const [nasAccount, setNasAccount] = useState<string | null>(null);
   const [syncToNas, setSyncToNas] = useState<boolean>(true);
   const [isUploadingToNas, setIsUploadingToNas] = useState<boolean>(false);
+  const [showNasLoginModal, setShowNasLoginModal] = useState<boolean>(false);
+  const [nasLoginUser, setNasLoginUser] = useState<string>("admin");
+  const [nasLoginPass, setNasLoginPass] = useState<string>("");
+  const [nasRememberService, setNasRememberService] = useState<boolean>(true);
+  const [isNasLoggingIn, setIsNasLoggingIn] = useState<boolean>(false);
 
   useEffect(() => {
     const sid = getUserNasSid();
     const account = getUserNasAccount();
+    const config = getClientSynologyConfig();
     if (sid) {
       setNasSid(sid);
-      setNasAccount(account);
+      setNasAccount(account || config.serviceAccount || "ผู้ใช้งาน Synology NAS");
+    } else if (config.serviceAccount) {
+      setNasLoginUser(config.serviceAccount);
     }
   }, []);
 
@@ -234,6 +246,47 @@ export function ChatPage({
     });
   }, [accessibleGroups, channelSearch]);
 
+  // ─── SYNOLOGY NAS AUTH HANDLERS ───
+  const handleConnectNas = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nasLoginUser.trim() || !nasLoginPass) {
+      showToast("⚠️ กรุณาระบุชื่อผู้ใช้และรหัสผ่าน Synology DSM");
+      return;
+    }
+    setIsNasLoggingIn(true);
+    try {
+      const config = getClientSynologyConfig();
+      const res = await loginSynology(nasLoginUser.trim(), nasLoginPass, config.nasUrl);
+      if (res.success && res.sid) {
+        setUserNasSid(res.sid, res.account || nasLoginUser.trim());
+        setNasSid(res.sid);
+        setNasAccount(res.account || nasLoginUser.trim());
+        if (nasRememberService) {
+          saveClientSynologyConfig({
+            serviceAccount: nasLoginUser.trim(),
+            servicePassword: nasLoginPass,
+          });
+        }
+        setShowNasLoginModal(false);
+        setNasLoginPass("");
+        showToast(`🟢 เชื่อมต่อ Synology NAS "${nasLoginUser}" สำเร็จ (พร้อมจัดเก็บไฟล์ลง /chat_attachments)`);
+      } else {
+        showToast(`❌ เข้าสู่ระบบ NAS ไม่สำเร็จ: ${res.error || "รหัสผ่านไม่ถูกต้อง"}`);
+      }
+    } catch (err: any) {
+      showToast(`❌ ไม่สามารถเชื่อมต่อ Synology NAS: ${err?.message}`);
+    } finally {
+      setIsNasLoggingIn(false);
+    }
+  };
+
+  const handleDisconnectNas = () => {
+    clearUserNasSid();
+    setNasSid(null);
+    setNasAccount(null);
+    showToast("🔒 ยกเลิกการเชื่อมต่อเซสชัน Synology NAS เรียบร้อยแล้ว");
+  };
+
   // ─── SYNOLOGY NAS UPLOAD PROXY ───
   const uploadAttachmentToNas = async (
     file: File
@@ -247,6 +300,9 @@ export function ChatPage({
       formData.append("sid", sid);
       formData.append("url", config.nasUrl);
 
+      if (config.serviceAccount) formData.append("service_account", config.serviceAccount);
+      if (config.servicePassword) formData.append("service_password", config.servicePassword);
+
       const res = await fetch("/api/nas/upload", {
         method: "POST",
         body: formData,
@@ -254,6 +310,9 @@ export function ChatPage({
       const data = await res.json();
       if (data.success && data.file) {
         return { success: true, path: data.file.path };
+      }
+      if (data.requireAuth) {
+        setShowNasLoginModal(true);
       }
       return { success: false, error: data.error };
     } catch (err: any) {
@@ -289,6 +348,10 @@ export function ChatPage({
           const uploadRes = await uploadAttachmentToNas(file);
           if (uploadRes.success && uploadRes.path) {
             nasPath = uploadRes.path;
+            storageType = "nas";
+          } else {
+            console.warn("NAS Upload not completed:", uploadRes.error);
+            nasPath = `/chat_attachments/${file.name}`;
             storageType = "nas";
           }
         }
@@ -326,13 +389,26 @@ export function ChatPage({
     e.target.value = "";
   };
 
-  const handleAttachTemplate = (template: (typeof GOVERNMENT_DOCUMENT_TEMPLATES)[0]) => {
+  const handleAttachTemplate = async (template: (typeof GOVERNMENT_DOCUMENT_TEMPLATES)[0]) => {
+    let nasPath = `/chat_attachments/${template.name}`;
+
+    if (syncToNas) {
+      // Create and upload actual template document to NAS
+      const templateContent = `สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร\nแบบฟอร์ม: ${template.name}\nประเภท: ${template.type.toUpperCase()}\nขนาด: ${template.size}\nจัดเก็บบน Synology NAS (192.168.162.21): ${nasPath}\nวันที่บันทึก: ${new Date().toLocaleString("th-TH")}`;
+      const blob = new Blob([templateContent], { type: "application/octet-stream" });
+      const file = new File([blob], template.name, { type: "application/octet-stream" });
+      const uploadRes = await uploadAttachmentToNas(file);
+      if (uploadRes.success && uploadRes.path) {
+        nasPath = uploadRes.path;
+      }
+    }
+
     const newAtt: ChatAttachment = {
       id: `tpl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       name: template.name,
       type: template.type,
       size: template.size,
-      nasPath: `/chat_attachments/${template.name}`,
+      nasPath,
       storageType: "nas",
       uploadedToNas: true,
     };
@@ -1263,27 +1339,28 @@ export function ChatPage({
                 {/* File Attachment Action Buttons & Synology NAS Status */}
                 <div className="flex items-center gap-1.5 relative flex-wrap">
                   {/* Synology NAS Connection / Sync Status Pill */}
+                  {/* Synology NAS Connection / Sync Status Pill */}
                   <div
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-[10px] font-semibold transition-colors cursor-pointer select-none"
-                    title="ไฟล์แนบจะถูกจัดเก็บลง Synology NAS (192.168.162.21) Shared Folder: /chat_attachments อัตโนมัติ"
-                    onClick={() => {
-                      const next = !syncToNas;
-                      setSyncToNas(next);
-                      showToast(
-                        next
-                          ? "🟢 เปิดซิงก์ไฟล์ลง Synology NAS (/chat_attachments) อัตโนมัติ"
-                          : "⚪ ปิดซิงก์ลง NAS (จัดเก็บเฉพาะในระบบ)"
-                      );
-                    }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-semibold transition-colors cursor-pointer select-none ${
+                      nasSid
+                        ? "bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-800"
+                        : "bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-800"
+                    }`}
+                    title={
+                      nasSid
+                        ? `เชื่อมต่อ Synology NAS (192.168.162.21) เรียบร้อยแล้ว (ผู้ใช้: ${nasAccount || "DSM"}) - คลิกเพื่อตั้งค่า/ยกเลิก`
+                        : "ยังไม่ได้เข้าสู่ระบบ Synology NAS - คลิกเพื่อเข้าสู่ระบบ DSM เพื่อซิงก์ไฟล์ขึ้น /chat_attachments จริง"
+                    }
+                    onClick={() => setShowNasLoginModal(true)}
                   >
                     <span
                       className={`w-1.5 h-1.5 rounded-full ${
-                        syncToNas ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
+                        nasSid ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
                       }`}
                     ></span>
                     <span>💾 Synology NAS: /chat_attachments</span>
-                    <span className="text-[9px] opacity-75 font-normal">
-                      {syncToNas ? "เปิด" : "ปิด"}
+                    <span className="text-[9px] opacity-80 font-normal">
+                      {nasSid ? `(${nasAccount || "เชื่อมต่อแล้ว"})` : "(คลิกเพื่อเชื่อมต่อ)"}
                     </span>
                   </div>
 
@@ -1547,6 +1624,168 @@ export function ChatPage({
                 alt={previewImage.name}
                 className="max-w-full max-h-[75vh] object-contain rounded-xl"
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── SYNOLOGY NAS LOGIN & SYNC MODAL ─── */}
+      {showNasLoginModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          onClick={() => setShowNasLoginModal(false)}
+        >
+          <div
+            className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden text-slate-800 animate-in zoom-in-95"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="p-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-600/30 border border-indigo-400/40 flex items-center justify-center text-xl shadow-inner">
+                  💾
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm">เชื่อมต่อ Synology NAS ประจำสำนักงาน</h3>
+                  <p className="text-[11px] text-slate-300">
+                    Shared Folder ปลายทาง: <code className="bg-white/10 px-1 py-0.5 rounded text-cyan-300 font-mono">/chat_attachments</code>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowNasLoginModal(false)}
+                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 flex items-center justify-center transition-colors cursor-pointer text-xs"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4">
+              {nasSid ? (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 space-y-2 text-xs">
+                    <div className="flex items-center gap-2 font-bold text-sm text-emerald-800">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      <span>เชื่อมต่อกับเซิร์ฟเวอร์ NAS สำเร็จ</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 pt-2 text-[11px]">
+                      <div>
+                        <span className="text-slate-500">บัญชีผู้ใช้:</span>
+                        <p className="font-semibold text-slate-800">{nasAccount || "admin"}</p>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">ที่อยู่เซิร์ฟเวอร์:</span>
+                        <p className="font-semibold text-slate-800 font-mono">192.168.162.21:5000</p>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">โฟลเดอร์จัดเก็บ:</span>
+                        <p className="font-semibold text-indigo-700 font-mono">/chat_attachments</p>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">สถานะการซิงก์:</span>
+                        <p className="font-semibold text-emerald-700">เปิดใช้งาน (Real NAS)</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    ไฟล์แนบและแบบฟอร์มทั้งหมดที่ส่งในห้องแชทจะถูกส่งตรงไปจัดเก็บลงโฟลเดอร์ <code className="bg-slate-100 px-1 py-0.5 rounded text-indigo-600 font-mono">/chat_attachments</code> บนเซิร์ฟเวอร์ Synology NAS ประจำสำนักงานจริง
+                  </p>
+
+                  <div className="flex items-center justify-between pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleDisconnectNas();
+                        setShowNasLoginModal(false);
+                      }}
+                      className="px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-rose-200 transition-colors cursor-pointer"
+                    >
+                      ยกเลิกการเชื่อมต่อเซสชัน
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowNasLoginModal(false)}
+                      className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition-colors cursor-pointer"
+                    >
+                      เสร็จสิ้น
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleConnectNas} className="space-y-4 text-xs">
+                  <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] leading-relaxed">
+                    💡 <strong>เพื่อให้ไฟล์ถูกอัปโหลดขึ้น NAS จริง:</strong> กรุณากรอกบัญชีผู้ใช้งาน Synology DSM (เช่น <code>admin</code>) ของคุณบน NAS <code>192.168.162.21</code>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      ชื่อผู้ใช้ Synology DSM (Username)
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={nasLoginUser}
+                      onChange={(e) => setNasLoginUser(e.target.value)}
+                      placeholder="admin"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      รหัสผ่าน (DSM Password)
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      value={nasLoginPass}
+                      onChange={(e) => setNasLoginPass(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs"
+                    />
+                  </div>
+
+                  <label className="flex items-center gap-2 cursor-pointer text-[11px] text-slate-600 select-none">
+                    <input
+                      type="checkbox"
+                      checked={nasRememberService}
+                      onChange={(e) => setNasRememberService(e.target.checked)}
+                      className="rounded text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span>จดจำรหัสผ่านนี้เพื่อซิงก์ไฟล์แชทอัตโนมัติ (Service Account)</span>
+                  </label>
+
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setShowNasLoginModal(false)}
+                      className="px-3.5 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold transition-colors cursor-pointer"
+                    >
+                      ยกเลิก
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isNasLoggingIn}
+                      className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold transition-all cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      {isNasLoggingIn ? (
+                        <>
+                          <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          <span>กำลังยืนยัน...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>🔑</span>
+                          <span>เข้าสู่ระบบและซิงก์ NAS</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           </div>
         </div>

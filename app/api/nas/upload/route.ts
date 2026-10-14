@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { loginSynology } from "@/lib/synology";
 
 export const dynamic = "force-dynamic";
 
@@ -6,20 +7,33 @@ export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
-    const folderPath = (formData.get("folder_path") as string) || "/virtual-office";
+    const folderPath = (formData.get("folder_path") as string) || "/chat_attachments";
     const sid = formData.get("sid") as string | null;
     const nasUrl =
       (formData.get("url") as string) ||
       process.env.SYNOLOGY_NAS_URL ||
       "http://192.168.162.21:5000";
 
-    const effectiveSid = sid || process.env.SYNOLOGY_SERVICE_SID || "system_chat_session";
+    const serviceAccount =
+      (formData.get("service_account") as string) ||
+      process.env.SYNOLOGY_SERVICE_ACCOUNT;
+    const servicePassword =
+      (formData.get("service_password") as string) ||
+      process.env.SYNOLOGY_SERVICE_PASSWORD;
 
-    if (!effectiveSid) {
-      return NextResponse.json(
-        { success: false, error: "กรุณาระบุ Synology Session ID (sid)" },
-        { status: 401 }
-      );
+    let effectiveSid = sid || process.env.SYNOLOGY_SERVICE_SID;
+
+    // If no valid session ID provided, try auto-authenticating with Service Account
+    if ((!effectiveSid || effectiveSid === "system_chat_session") && serviceAccount && servicePassword) {
+      try {
+        const auth = await loginSynology(serviceAccount, servicePassword, nasUrl);
+        if (auth.success && auth.sid) {
+          effectiveSid = auth.sid;
+          console.log(`[NAS Upload] Auto-authenticated service account: ${serviceAccount}`);
+        }
+      } catch (authErr: any) {
+        console.warn("[NAS Upload] Service account auto-login failed:", authErr?.message);
+      }
     }
 
     if (!file) {
@@ -29,8 +43,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // In mock or simulated test environments
-    if (effectiveSid.startsWith("mock_") || effectiveSid === "system_chat_session") {
+    // In mock or simulated test fallback environments
+    if (effectiveSid && (effectiveSid.startsWith("mock_") || effectiveSid === "system_chat_session")) {
       return NextResponse.json({
         success: true,
         file: {
@@ -59,7 +73,7 @@ export async function POST(req: NextRequest) {
     synoFormData.append("api", "SYNO.FileStation.Upload");
     synoFormData.append("version", "2");
     synoFormData.append("method", "upload");
-    synoFormData.append("_sid", effectiveSid);
+    synoFormData.append("_sid", effectiveSid || "");
     synoFormData.append("dest_folder_path", folderPath);
     synoFormData.append("create_parents", "true");
     synoFormData.append("overwrite", "true");
