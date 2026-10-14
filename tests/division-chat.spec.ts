@@ -144,4 +144,48 @@ test.describe("ระบบแชทกลุ่มทางการของ�
     await expect(sentBubble).toBeVisible();
     await expect(sentBubble.locator("text=รายงานผลการดำเนินงาน_ประจำปี.xlsx").first()).toBeVisible();
   });
+
+  test("การจัดเก็บบน Synology NAS: ตรวจสอบสถานะ /chat_attachments, ป้าย NAS บนไฟล์แนบ และการดาวน์โหลดผ่าน NAS API", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    // 1. ไปที่เมนู แชททีม
+    const chatNav = page
+      .locator("aside button:has-text('แชททีม'), nav button:has-text('แชททีม')")
+      .first();
+    await chatNav.click();
+
+    // 2. ตรวจสอบแถบสถานะการเชื่อมต่อ Synology NAS (/chat_attachments)
+    const nasStatusPill = page.locator("text=Synology NAS: /chat_attachments").first();
+    await expect(nasStatusPill).toBeVisible();
+
+    // 3. แนบแบบฟอร์มราชการ
+    const templateBtn = page.locator("button:has-text('แบบฟอร์มราชการ')").first();
+    await templateBtn.click();
+    const tpl = page.locator("button:has-text('รายงานแผนงบประมาณและตัวชี้วัด')").first();
+    await expect(tpl).toBeVisible();
+    await tpl.click();
+
+    // 4. ตรวจสอบว่าชิปแสดงไฟล์พร้อมส่ง มีป้าย 'NAS' กำกับ
+    const draftNasBadge = page.locator("div.flex:has-text('รายงานแผนงบประมาณและตัวชี้วัด_Q1_2569.xlsx') span:has-text('NAS')").first();
+    await expect(draftNasBadge).toBeVisible();
+
+    // 5. ส่งข้อความพร้อมเอกสารที่จัดเก็บบน Synology NAS
+    const messageInput = page.locator("textarea[placeholder*='พิมพ์ข้อความสนทนา']").first();
+    await messageInput.fill("ส่งแผนงบประมาณ Q1 จัดเก็บบน Synology NAS เรียบร้อยครับ");
+    const sendBtn = page.locator("button[type='submit']:has-text('ส่ง')").first();
+    await sendBtn.click();
+
+    // 6. ตรวจสอบข้อความและการ์ดไฟล์ในห้องแชท พร้อมป้าย '💾 NAS'
+    const bubble = page.locator("div.rounded-2xl:has-text('ส่งแผนงบประมาณ Q1 จัดเก็บบน Synology NAS เรียบร้อยครับ')").first();
+    await expect(bubble).toBeVisible();
+    await expect(bubble.locator("span:has-text('NAS')").first()).toBeVisible();
+
+    // 7. ทดสอบคลิกดาวน์โหลดเอกสารจาก NAS
+    const dlBtn = bubble.locator("button:has-text('ดาวน์โหลด')").first();
+    await expect(dlBtn).toBeVisible();
+    await dlBtn.click();
+  });
 });

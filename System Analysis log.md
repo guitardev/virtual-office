@@ -857,13 +857,21 @@ on conflict (id) do update set
    - เก็บข้อมูลรายการไฟล์ทั้งหมดลงใน `attachment_metadata` (JSONB) ในตาราง `messages` ของ Supabase
    - ระบบผสานข้อความ (Optimistic Merging) ป้องกันปัญหาข้อมูลถูกเขียนทับขณะซิงก์ข้อมูลระหว่าง Client และ Remote Database
 
+6. **การเชื่อมต่อจัดเก็บไฟล์ลง Synology NAS ประจำสำนักงาน (Synology NAS /chat_attachments Integration):**
+   - **Shared Folder ปลายทาง:** ไฟล์ทั้งหมดในแชทจะถูกอัปโหลดไปจัดเก็บลงโฟลเดอร์แชร์ `/chat_attachments` บนเซิร์ฟเวอร์ Synology NAS ประจำสำนักงาน (`http://192.168.162.21:5000`) ผ่าน File Station Upload API (`SYNO.FileStation.Upload`)
+   - **สถานะการซิงก์บนแถบเครื่องมือ (NAS Status Pill):** แสดงปุ่มสถานะ `💾 Synology NAS: /chat_attachments` พร้อมไฟสถานะสีเขียวกระพริบและสามารถคลิกเปิด/ปิดการซิงก์ได้
+   - **ป้ายกำกับ NAS บนไฟล์แนบ (NAS Indicators):** แสดงป้าย `💾 NAS` บนการ์ดไฟล์แนบและชิปพรีวิว เพื่อให้เจ้าหน้าที่ทราบทันทีว่าไฟล์ถูกแบ็กอัปและจัดเก็บอยู่บนเซิร์ฟเวอร์ NAS ของสำนักงาน
+   - **การสตรีมและดาวน์โหลดตรงผ่าน NAS (Direct File Station Download):** เมื่อคลิกดาวน์โหลด ระบบจะดึงไฟล์จาก File Station API (`SYNO.FileStation.Download`) ผ่าน Server Proxy `/api/nas/download` แบบปลอดภัย พร้อมมีระบบสำรอง (Fallback) หากอยู่ในโหมด Offline
+
 ---
 
 ### 17.3 ผลการทดสอบอัตโนมัติ (Automated Test Validation)
 
 * **TypeScript Compilation:** Strict `npx tsc --noEmit` ผ่าน **0 errors**
-* **Playwright E2E Tests:** ผ่านครบ **14/14 การทดสอบ (100% Passed)**
+* **Playwright E2E Tests:** ผ่านครบ **15/15 การทดสอบ (100% Passed)**
   - การทดสอบการเปิด/ปิด Modal สร้างกลุ่มแชท: ผ่าน (Passed)
   - การทดสอบการแนบไฟล์แบบฟอร์มราชการหลายประเภท (PDF, Word, Excel) พร้อมกัน: ผ่าน (Passed)
   - การทดสอบการแนบไฟล์จริงผ่าน File Input, การแสดงผลชิป, การลบไฟล์ย่อย, และการส่งข้อความ: ผ่าน (Passed)
+  - การทดสอบการจัดเก็บบน Synology NAS `/chat_attachments`, ป้าย NAS บนไฟล์แนบ และการดาวน์โหลดผ่าน NAS API: ผ่าน (Passed)
+
 

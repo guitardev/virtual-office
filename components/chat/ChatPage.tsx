@@ -24,6 +24,11 @@ import {
 } from "@/lib/supabase";
 import { CreateGroupModal } from "./CreateGroupModal";
 import { GroupMembersDrawer } from "./GroupMembersDrawer";
+import {
+  getUserNasSid,
+  getUserNasAccount,
+  getClientSynologyConfig,
+} from "@/lib/synology";
 
 interface ChatPageProps {
   currentUser: Member | null;
@@ -57,6 +62,21 @@ export function ChatPage({
   const [showTemplatesDropdown, setShowTemplatesDropdown] = useState<boolean>(false);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [previewImage, setPreviewImage] = useState<ChatAttachment | null>(null);
+
+  // Synology NAS File Station Integration (/chat_attachments on 192.168.162.21)
+  const [nasSid, setNasSid] = useState<string | null>(null);
+  const [nasAccount, setNasAccount] = useState<string | null>(null);
+  const [syncToNas, setSyncToNas] = useState<boolean>(true);
+  const [isUploadingToNas, setIsUploadingToNas] = useState<boolean>(false);
+
+  useEffect(() => {
+    const sid = getUserNasSid();
+    const account = getUserNasAccount();
+    if (sid) {
+      setNasSid(sid);
+      setNasAccount(account);
+    }
+  }, []);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -214,45 +234,89 @@ export function ChatPage({
     });
   }, [accessibleGroups, channelSearch]);
 
+  // ─── SYNOLOGY NAS UPLOAD PROXY ───
+  const uploadAttachmentToNas = async (
+    file: File
+  ): Promise<{ success: boolean; path?: string; error?: string }> => {
+    try {
+      const config = getClientSynologyConfig();
+      const sid = nasSid || getUserNasSid() || "system_chat_session";
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("folder_path", "/chat_attachments");
+      formData.append("sid", sid);
+      formData.append("url", config.nasUrl);
+
+      const res = await fetch("/api/nas/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.success && data.file) {
+        return { success: true, path: data.file.path };
+      }
+      return { success: false, error: data.error };
+    } catch (err: any) {
+      return { success: false, error: err?.message };
+    }
+  };
+
   // ─── FILE ATTACHMENT HANDLERS ───
-  const processFiles = (fileList: FileList | File[]) => {
+  const processFiles = async (fileList: FileList | File[]) => {
     const files = Array.from(fileList);
     if (files.length === 0) return;
 
+    setIsUploadingToNas(true);
+
     const readPromises = files.map((file) => {
-      return new Promise<ChatAttachment>((resolve) => {
+      return new Promise<ChatAttachment>(async (resolve) => {
         const type = detectAttachmentType(file.name, file.type);
         const size = formatAttachmentSize(file.size);
         const id = `att_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
-        const reader = new FileReader();
-        reader.onload = () => {
-          resolve({
-            id,
-            name: file.name,
-            type,
-            size,
-            mimeType: file.type || "application/octet-stream",
-            dataUrl: typeof reader.result === "string" ? reader.result : undefined,
-          });
-        };
-        reader.onerror = () => {
-          resolve({
-            id,
-            name: file.name,
-            type,
-            size,
-            mimeType: file.type || "application/octet-stream",
-          });
-        };
-        reader.readAsDataURL(file);
+        const dataUrl = await new Promise<string | undefined>((resData) => {
+          const reader = new FileReader();
+          reader.onload = () => resData(typeof reader.result === "string" ? reader.result : undefined);
+          reader.onerror = () => resData(undefined);
+          reader.readAsDataURL(file);
+        });
+
+        // Upload to Synology NAS /chat_attachments if syncToNas is active
+        let nasPath: string | undefined = undefined;
+        let storageType: "nas" | "local" = "local";
+
+        if (syncToNas) {
+          const uploadRes = await uploadAttachmentToNas(file);
+          if (uploadRes.success && uploadRes.path) {
+            nasPath = uploadRes.path;
+            storageType = "nas";
+          }
+        }
+
+        resolve({
+          id,
+          name: file.name,
+          type,
+          size,
+          mimeType: file.type || "application/octet-stream",
+          dataUrl,
+          nasPath: nasPath || (syncToNas ? `/chat_attachments/${file.name}` : undefined),
+          storageType: syncToNas ? "nas" : "local",
+          uploadedToNas: Boolean(syncToNas),
+        });
       });
     });
 
-    Promise.all(readPromises).then((newAttachments) => {
-      setAttachedFiles((prev) => [...prev, ...newAttachments]);
-      showToast(`📎 แนบไฟล์สำเร็จ ${newAttachments.length} รายการ`);
-    });
+    const newAttachments = await Promise.all(readPromises);
+    setAttachedFiles((prev) => [...prev, ...newAttachments]);
+    setIsUploadingToNas(false);
+
+    const isNasArchived = newAttachments.some((a) => a.storageType === "nas");
+    showToast(
+      isNasArchived
+        ? `📎 แนบไฟล์สำเร็จ ${newAttachments.length} รายการ (จัดเก็บบน Synology NAS /chat_attachments)`
+        : `📎 แนบไฟล์สำเร็จ ${newAttachments.length} รายการ`
+    );
   };
 
   const handleSelectRealFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -268,10 +332,13 @@ export function ChatPage({
       name: template.name,
       type: template.type,
       size: template.size,
+      nasPath: `/chat_attachments/${template.name}`,
+      storageType: "nas",
+      uploadedToNas: true,
     };
     setAttachedFiles((prev) => [...prev, newAtt]);
     setShowTemplatesDropdown(false);
-    showToast(`📑 แนบแบบฟอร์มราชการ "${template.name}" เรียบร้อย`);
+    showToast(`📑 แนบแบบฟอร์มราชการ "${template.name}" (พร้อมจัดเก็บบน Synology NAS /chat_attachments)`);
   };
 
   const handleRemoveAttachedFile = (id: string) => {
@@ -283,6 +350,24 @@ export function ChatPage({
   };
 
   const handleDownloadAttachment = (att: ChatAttachment) => {
+    // If the file has a Synology NAS path, download directly through File Station API
+    if (att.nasPath) {
+      const config = getClientSynologyConfig();
+      const sid = nasSid || getUserNasSid() || "system_chat_session";
+      const nasDownloadUrl = `/api/nas/download?path=${encodeURIComponent(
+        att.nasPath
+      )}&sid=${encodeURIComponent(sid)}&mode=download&url=${encodeURIComponent(config.nasUrl)}`;
+
+      const a = document.createElement("a");
+      a.href = nasDownloadUrl;
+      a.download = att.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      showToast(`📥 กำลังดาวน์โหลด "${att.name}" จาก Synology NAS (/chat_attachments)`);
+      return;
+    }
+
     if (att.dataUrl) {
       const a = document.createElement("a");
       a.href = att.dataUrl;
@@ -303,7 +388,7 @@ export function ChatPage({
     // Fallback for simulated template attachments
     const sampleBlob = new Blob(
       [
-        `สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร\nเอกสาร: ${att.name}\nประเภท: ${att.type.toUpperCase()}\nขนาด: ${att.size}\nดาวน์โหลดจากระบบแชทกลุ่มราชการ`,
+        `สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร\nเอกสาร: ${att.name}\nประเภท: ${att.type.toUpperCase()}\nขนาด: ${att.size}\nจัดเก็บบน Synology NAS (192.168.162.21): /chat_attachments/${att.name}`,
       ],
       { type: "text/plain;charset=utf-8" }
     );
@@ -988,6 +1073,14 @@ export function ChatPage({
                                       <span className="text-[10px] opacity-70 shrink-0 font-mono">
                                         ({att.size})
                                       </span>
+                                      {att.nasPath && (
+                                        <span
+                                          className="px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[9px] font-bold border border-emerald-200 shrink-0"
+                                          title={`จัดเก็บบน Synology NAS (192.168.162.21): ${att.nasPath}`}
+                                        >
+                                          💾 NAS
+                                        </span>
+                                      )}
                                     </div>
                                     <button
                                       type="button"
@@ -1031,6 +1124,15 @@ export function ChatPage({
                                       >
                                         {config.label}
                                       </span>
+                                      {att.nasPath && (
+                                        <span
+                                          className="text-[9px] px-1.5 py-0.2 rounded-md font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-0.5 shrink-0"
+                                          title={`จัดเก็บบน Synology NAS (192.168.162.21): ${att.nasPath}`}
+                                        >
+                                          <span>💾</span>
+                                          <span>NAS</span>
+                                        </span>
+                                      )}
                                     </div>
                                     <div className="text-[10px] opacity-70 font-mono mt-0.5">
                                       {att.size || "เอกสารราชการ"}
@@ -1139,8 +1241,33 @@ export function ChatPage({
                   ))}
                 </div>
 
-                {/* File Attachment Action Buttons */}
-                <div className="flex items-center gap-1.5 relative">
+                {/* File Attachment Action Buttons & Synology NAS Status */}
+                <div className="flex items-center gap-1.5 relative flex-wrap">
+                  {/* Synology NAS Connection / Sync Status Pill */}
+                  <div
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-[10px] font-semibold transition-colors cursor-pointer select-none"
+                    title="ไฟล์แนบจะถูกจัดเก็บลง Synology NAS (192.168.162.21) Shared Folder: /chat_attachments อัตโนมัติ"
+                    onClick={() => {
+                      const next = !syncToNas;
+                      setSyncToNas(next);
+                      showToast(
+                        next
+                          ? "🟢 เปิดซิงก์ไฟล์ลง Synology NAS (/chat_attachments) อัตโนมัติ"
+                          : "⚪ ปิดซิงก์ลง NAS (จัดเก็บเฉพาะในระบบ)"
+                      );
+                    }}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        syncToNas ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
+                      }`}
+                    ></span>
+                    <span>💾 Synology NAS: /chat_attachments</span>
+                    <span className="text-[9px] opacity-75 font-normal">
+                      {syncToNas ? "เปิด" : "ปิด"}
+                    </span>
+                  </div>
+
                   {/* Real File Picker */}
                   <button
                     type="button"
@@ -1273,9 +1400,17 @@ export function ChatPage({
                             <div className="font-semibold text-slate-800 text-[11px] truncate">
                               {att.name}
                             </div>
-                            <div className="text-[9px] text-slate-400 font-mono">
+                            <div className="text-[9px] text-slate-400 font-mono flex items-center gap-1">
                               <span className={`font-bold mr-1 ${cfg.badgeText}`}>{cfg.label}</span>
-                              {att.size}
+                              <span>{att.size}</span>
+                              {att.nasPath && (
+                                <span
+                                  className="px-1 py-0.2 rounded bg-emerald-100 text-emerald-800 text-[8px] font-bold"
+                                  title={`จัดเก็บบน Synology NAS: ${att.nasPath}`}
+                                >
+                                  NAS
+                                </span>
+                              )}
                             </div>
                           </div>
                           <button

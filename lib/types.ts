@@ -347,6 +347,9 @@ export interface ChatAttachment {
   url?: string;
   dataUrl?: string;
   mimeType?: string;
+  nasPath?: string; // e.g. "/chat_attachments/document.pdf"
+  storageType?: "nas" | "local" | "template";
+  uploadedToNas?: boolean;
 }
 
 export interface ChatGroup {
