@@ -54,17 +54,17 @@ export function UserPage({
                   className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
                     (currentUser.personnelType &&
                       PERSONNEL_TYPE_CONFIG[currentUser.personnelType]?.badgeColor) ||
-                    "bg-indigo-50 text-indigo-700 border-indigo-200"
+                    "bg-slate-100 text-slate-600 border-slate-200"
                   }`}
                 >
                   {(currentUser.personnelType &&
                     PERSONNEL_TYPE_CONFIG[currentUser.personnelType]?.icon) ||
-                    "🏛️"}{" "}
-                  {currentUser.personnelType || "ข้าราชการ"}
+                    "👤"}{" "}
+                  {currentUser.personnelType || "ยังไม่ระบุประเภทบุคลากร"}
                 </span>
               </div>
-              <p className="text-xs text-indigo-600 font-semibold mt-0.5">{currentUser.position}</p>
-              <p className="text-xs text-slate-500 mt-0.5">{currentUser.division}</p>
+              <p className="text-xs text-indigo-600 font-semibold mt-0.5">{currentUser.position || "รอกำหนดตำแหน่ง"}</p>
+              <p className="text-xs text-slate-500 mt-0.5">{currentUser.division || "รอกำหนดกลุ่มงาน"}</p>
             </div>
           </div>
 

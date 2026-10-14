@@ -65,45 +65,42 @@ export async function POST(req: NextRequest) {
     const lastName =
       trimmedUser.toLowerCase() === "admin"
         ? "Synology"
-        : nameParts.slice(1).join(" ") || "พมจ.กำแพงเพชร";
+        : nameParts.length > 1
+        ? nameParts.slice(1).join(" ")
+        : "";
 
     const displayName =
       trimmedUser.toLowerCase() === "admin"
         ? "ผู้ดูแลระบบ (Synology DSM Admin)"
-        : isThai
-        ? trimmedUser
-        : `เจ้าหน้าที่ (${trimmedUser})`;
+        : trimmedUser;
 
-    // Generate valid email address (standard email requires ASCII local-part)
+    // Use clean local placeholder for email without assuming fake official mail
     const emailPrefix =
-      !isThai && cleanSlug ? cleanSlug.toLowerCase() : `syno_${hashStr}`;
-    const email = `${emailPrefix}@kpp-m-society.go.th`;
-    const lineId = !isThai ? `@syno_${trimmedUser.toLowerCase()}` : `@syno_${hashStr}`;
+      !isThai && cleanSlug ? cleanSlug.toLowerCase() : `user_${hashStr}`;
+    const email = `${emailPrefix}@nas.local`;
     const avatarText = trimmedUser.slice(0, 2);
 
     const member: Member = {
       id: userId,
-      prefix: "นาย",
+      prefix: "",
       firstName,
       lastName,
       name: displayName,
-      personnelType: "ข้าราชการ",
+      personnelType: undefined,
       role: isNasAdmin ? "admin" : "member",
-      position: isNasAdmin ? "ผู้ดูแลระบบเครือข่ายและระบบสารบรรณ NAS" : "เจ้าหน้าที่ปฏิบัติการประจำสำนักงาน",
-      division: "ฝ่ายบริหารทั่วไป (กลุ่มงานสารบรรณและเทคโนโลยีสารสนเทศ)",
-      department: "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
+      position: isNasAdmin ? "ผู้ดูแลระบบ Synology DSM" : "รอกำหนดตำแหน่ง",
+      division: "รอกำหนดกลุ่มงาน",
+      department: "รอกำหนดกลุ่มงาน",
       email,
-      phone: "055-705031 ต่อ 102",
-      lineId,
+      phone: "-",
+      lineId: "-",
       status: "active",
       joinedDate: new Date().toLocaleDateString("th-TH", {
         day: "numeric",
         month: "short",
         year: "numeric",
       }),
-      avatarUrl: isNasAdmin
-        ? "https://kamphaengphet.m-society.go.th/wp-content/uploads/2024/10/S__2457668.jpg"
-        : undefined,
+      avatarUrl: undefined,
       avatarText,
     };
 

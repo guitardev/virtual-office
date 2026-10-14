@@ -526,12 +526,11 @@ export default function OmniOfficeApp() {
       new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) + " น.";
     setLoginTime(timeStr);
 
-    // Ensure member is in members list and persisted
+    // Only update existing members in directory; do not add incomplete records to system database
     setMembers((prev) => {
       const exists = prev.some((m) => m.id === member.id);
-      return exists ? prev : [member, ...prev];
+      return exists ? prev.map((m) => (m.id === member.id ? member : m)) : prev;
     });
-    saveMember(member).catch(() => {});
 
     if (rememberMe && typeof window !== "undefined") {
       try {
@@ -1107,7 +1106,12 @@ export default function OmniOfficeApp() {
     };
 
     setCurrentUser(updatedUser);
-    setMembers((prev) => prev.map((m) => (m.id === updatedUser.id ? updatedUser : m)));
+    setMembers((prev) => {
+      const exists = prev.some((m) => m.id === updatedUser.id);
+      return exists
+        ? prev.map((m) => (m.id === updatedUser.id ? updatedUser : m))
+        : [updatedUser, ...prev];
+    });
     saveMember(updatedUser).catch(console.error);
 
     if (typeof window !== "undefined") {
