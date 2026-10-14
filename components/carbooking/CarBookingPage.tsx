@@ -933,6 +933,8 @@ export function CarBookingPage({
                               ? "🚐"
                               : car.category.includes("กระบะ")
                               ? "🛻"
+                              : car.category.includes("จักรยานยนต์")
+                              ? "🏍️"
                               : "🚗"}
                           </span>
                           <span className="text-xs text-slate-400 font-medium">ไม่มีรูปภาพประกอบ</span>
@@ -1556,6 +1558,8 @@ export function CarBookingPage({
                               ? "🚐"
                               : v.category.includes("กระบะ")
                               ? "🛻"
+                              : v.category.includes("จักรยานยนต์")
+                              ? "🏍️"
                               : "🚗"}
                           </div>
                         )}

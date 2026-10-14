@@ -234,7 +234,7 @@ export interface Vehicle {
   id: string;
   name: string;
   licensePlate: string;
-  category: "รถตู้ส่วนกลาง" | "รถกระบะตรวจการณ์" | "รถยนต์นั่งส่วนบุคคล" | "รถกระบะบรรทุก" | "รถตู้ VIP ผู้บริหาร";
+  category: "รถตู้ส่วนกลาง" | "รถกระบะตรวจการณ์" | "รถยนต์นั่งส่วนบุคคล" | "รถกระบะบรรทุก" | "รถตู้ VIP ผู้บริหาร" | "รถจักรยานยนต์";
   capacity: number;
   driverName?: string;
   fuelType: string;

@@ -17,6 +17,7 @@ const CATEGORY_OPTIONS: Vehicle["category"][] = [
   "รถยนต์นั่งส่วนบุคคล",
   "รถตู้ VIP ผู้บริหาร",
   "รถกระบะบรรทุก",
+  "รถจักรยานยนต์",
 ];
 
 const FUEL_TYPE_OPTIONS = [

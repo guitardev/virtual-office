@@ -55,6 +55,8 @@ export function VehicleDetailModal({
                   ? "🚐"
                   : vehicle.category.includes("กระบะ")
                   ? "🛻"
+                  : vehicle.category.includes("จักรยานยนต์")
+                  ? "🏍️"
                   : "🚗"}
               </div>
               <div>

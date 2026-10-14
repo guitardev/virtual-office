@@ -272,10 +272,11 @@ on conflict (id) do update set
 - [x] เพิ่ม CSRF State Verification ใน LINE OAuth Flow *(เพิ่มการตรวจสอบ State ใน app/page.tsx และ forward state ใน callback route)*
 - [x] เพิ่ม Server-Side LINE ID Token Verification API *(เพิ่มการเรียก LINE oauth2/v2.1/verify ใน app/api/auth/line/exchange/route.ts)*
 - [x] ลบข้อมูล Demo ออกจากระบบและเชื่อมต่อ Supabase Live Database ครบทุกโมดูล *(ดำเนินการแล้ว 100%)*
+- [x] ปรับปรุงฐานข้อมูลยานพาหนะราชการ 10 คัน และขยาย Constraint `vehicles_category_check` รองรับรถจักรยานยนต์ *(ดำเนินการแล้ว 100% ทั้งบน Supabase Live DB และซอร์สโค้ด)*
 
 ### 🟠 ความสำคัญสูง (Next Sprint - Phases 12 & 13)
 - [ ] พัฒนาฟังก์ชัน `hasCarBookingOverlap` ตรวจจับเวลาจองซ้อนทับใน [lib/carbooking-data.ts](file:///c:/Users/GuitarDev/virtual-office/lib/carbooking-data.ts)
-- [ ] สร้างคอมโพเนนต์ Fleet Timeline & Gantt Schedule View แสดงสถานะภารกิจรถ 5 คัน
+- [ ] สร้างคอมโพเนนต์ Fleet Timeline & Gantt Schedule View แสดงสถานะภารกิจรถ 10 คัน
 - [ ] เพิ่ม Dynamic QR Code สำหรับตรวจรับกุญแจและลงเวลาเดินทาง
 - [ ] เพิ่มฟิลด์ `presence_status` ในตาราง `users` และแสดง Live Presence Status Bar บน Header/Sidebar
 - [ ] รันคำสั่ง SQL สร้างตาราง `audit_logs` และบันทึกกิจกรรมลงระบบจริง
@@ -291,9 +292,9 @@ on conflict (id) do update set
 
 ## 9. บันทึกประวัติการปรับปรุงและอัปเดตระบบ (Execution Log & Changelog)
 
-> **บันทึกเมื่อ:** 12 ตุลาคม 2569  
-> **เวอร์ชัน:** v1.4.5 (Database Schema Alignment & LocalStorage Synchronization)  
-> **สถานะการ Build:** `next build` ผ่านสำเร็จ 100% (Turbopack, TypeScript Strict Mode, Static Page Generation 7/7)
+> **บันทึกล่าสุด:** 14 ตุลาคม 2569  
+> **เวอร์ชัน:** v1.4.6 (Official 10-Vehicle Fleet & Category Constraint Expansion)  
+> **สถานะการทดสอบ:** `npx tsc --noEmit` ผ่าน 100% (0 errors), Playwright E2E Tests 5/5 ชุดผ่านทั้งหมด
 
 ### 9.5 สรุปการปรับปรุงความสอดคล้องของ Schema และการจัดการ LocalStorage (v1.4.5)
 * **อัปเดต [supabase/schema.sql](file:///c:/Users/GuitarDev/virtual-office/supabase/schema.sql) ให้เป็นเวอร์ชันปัจจุบันสมบูรณ์ 100%:**
@@ -308,6 +309,28 @@ on conflict (id) do update set
   * เพิ่ม Merge Strategy เพื่อรักษาข้อมูล Local-only หรือรายการที่สร้างขึ้นในโหมดออฟไลน์ ไม่ให้ถูกเขียนทับหายไปเมื่อดึงข้อมูลสดจาก Supabase
 * **เพิ่ม Realtime WebSocket Subscription สำหรับ `access_requests`:**
   * สร้างฟังก์ชัน `subscribeToAccessRequests` ใน `lib/supabase.ts` และเชื่อมต่อใน `app/page.tsx` ทำให้คำขอสิทธิ์ใหม่แสดงขึ้นหน้า Admin แบบทันที
+
+### 9.6 สรุปการปรับปรุงฐานข้อมูลยานพาหนะราชการ พมจ.กำแพงเพชร (Official 10-Vehicle Fleet Update)
+* **นำเข้าข้อมูลยานพาหนะจริง 10 คันลงสู่ Supabase Live Database:**
+  1. `veh_1`: รถประจำตำแหน่ง พมจ. (กน 7872 กำแพงเพชร) — รถยนต์นั่งส่วนบุคคล (เบนซิน ไฮบริด)
+  2. `veh_2`: รถยนต์ส่วนกลาง (กน 8121 กำแพงเพชร) — รถยนต์นั่งส่วนบุคคล
+  3. `veh_3`: รถยนต์ส่วนกลาง (กฉ 5196 กำแพงเพชร) — รถยนต์นั่งส่วนบุคคล
+  4. `veh_4`: รถยนต์ส่วนกลาง พก. (กฉ 9733 กำแพงเพชร) — รถยนต์นั่งส่วนบุคคล / ศูนย์บริการคนพิการจังหวัด (พก.)
+  5. `veh_5`: รถกระบะตรวจการณ์ (กค 6520 กำแพงเพชร) — รถกระบะตรวจการณ์ ยกสูง ลุยพื้นที่ทุรกันดาร
+  6. `veh_6`: รถกระบะบรรทุก/ตรวจการณ์ (กง 3659 กำแพงเพชร) — รถกระบะบรรทุกงานพัสดุและสิ่งของช่วยเหลือ
+  7. `veh_7`: รถตู้ส่วนกลาง (นข 1422 กำแพงเพชร) — รถตู้ส่วนกลาง 12 ที่นั่ง แอร์ไมโครบัส
+  8. `veh_8`: รถตู้ส่วนกลาง (นข 3598 กำแพงเพชร) — รถตู้ส่วนกลาง 12 ที่นั่ง เดินทางเป็นหมู่คณะ
+  9. `veh_9`: รถกระบะตรวจการณ์ (กข 6972 กำแพงเพชร) — รถกระบะตรวจการณ์ 4WD ตรวจราชการ 11 อำเภอ
+  10. `veh_10`: รถจักรยานยนต์ส่วนกลาง (กษย 929 กำแพงเพชร) — รถจักรยานยนต์ส่วนกลาง งานรับ-ส่งหนังสือราชการด่วน
+* **ขยาย Schema & Constraint เพื่อรองรับรถจักรยานยนต์ (`รถจักรยานยนต์`):**
+  * รันคำสั่ง SQL แก้ไข `vehicles_category_check` บน Supabase เพิ่ม `'รถจักรยานยนต์'`
+  * อัปเดต TypeScript Type Definition ใน [lib/types.ts](file:///c:/Users/GuitarDev/virtual-office/lib/types.ts)
+  * อัปเดตตัวเลือกในแบบฟอร์ม [components/carbooking/VehicleFormModal.tsx](file:///c:/Users/GuitarDev/virtual-office/components/carbooking/VehicleFormModal.tsx) และพรีเซ็ตใน [lib/carbooking-data.ts](file:///c:/Users/GuitarDev/virtual-office/lib/carbooking-data.ts)
+  * รองรับไอคอนเฉพาะ `🏍️` สำหรับรถจักรยานยนต์ใน [VehicleDetailModal.tsx](file:///c:/Users/GuitarDev/virtual-office/components/carbooking/VehicleDetailModal.tsx) และ [CarBookingPage.tsx](file:///c:/Users/GuitarDev/virtual-office/components/carbooking/CarBookingPage.tsx)
+  * ซิงก์โครงสร้างและ Seed Data ใน [supabase/schema.sql](file:///c:/Users/GuitarDev/virtual-office/supabase/schema.sql)
+* **การทดสอบความถูกต้อง:**
+  * `npx tsc --noEmit` ผ่าน 100%
+  * Playwright E2E Tests ผ่านครบทุกชุด 5/5
 
 ### 9.3 สรุปการพัฒนาระบบจองรถราชการ 3 ชั้น (Phase 11: Car Booking E-Approval)
 * **โครงสร้างข้อมูลและประเภท (Types & Interfaces):**
