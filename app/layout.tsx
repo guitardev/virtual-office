@@ -16,8 +16,8 @@ const sarabun = Sarabun({
 });
 
 export const metadata = {
-  title: "OmniOffice — ระบบออฟฟิศเสมือน",
-  description: "ระบบสื่อสารและทำงานร่วมกันในองค์กร",
+  title: "Smart MSO — ระบบออฟฟิศเสมือน",
+  description: "ระบบสื่อสารและทำงานร่วมกันในองค์กร Smart MSO",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

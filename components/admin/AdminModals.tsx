@@ -399,7 +399,7 @@ export function AdminModals({
                     setViewingMember(null);
                     setMemberToDelete(m);
                   }}
-                  disabled={viewingMember.id === "usr_1" || (currentUser ? viewingMember.id === currentUser.id : false)}
+                  disabled={currentUser ? viewingMember.id === currentUser.id : false}
                   className="px-3.5 py-2.5 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 text-xs font-bold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
                 >
                   <span>🗑️</span>

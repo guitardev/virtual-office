@@ -16,8 +16,8 @@ export function Sidebar({ open, onClose }) {
     <div className={`fixed top-0 left-0 z-40 h-screen w-64 bg-sidebar text-sidebar-text transform transition-transform duration-300 ${open ? "translate-x-0" : "-translate-x-full"} md:translate-x-0`}>
       <div className="flex items-center justify-center h-16 border-b border-border">
         <div className="flex items-center space-x-3">
-          <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center text-white font-bold">Σ</div>
-          <span className="text-lg font-bold text-white font-heading">OmniOffice</span>
+          <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center text-white font-bold">M</div>
+          <span className="text-lg font-bold text-white font-heading">Smart MSO</span>
         </div>
       </div>
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">

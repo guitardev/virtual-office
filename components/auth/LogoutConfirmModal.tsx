@@ -32,15 +32,17 @@ export function LogoutConfirmModal({
         <div className="p-6 md:p-8 space-y-6">
           {/* Header with Icon */}
           <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-red-50 border border-red-200 text-red-600 flex items-center justify-center text-2xl shrink-0 shadow-xs">
-              🚪
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center shrink-0 shadow-xs">
+              <svg className="w-6 h-6 stroke-[2]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
+              </svg>
             </div>
             <div className="flex-1">
               <h3 className="text-xl font-bold font-heading text-slate-900">
                 ยืนยันการออกจากระบบ
               </h3>
               <p className="text-xs text-slate-500 mt-1">
-                Confirm Sign Out from OmniOffice
+                Confirm Sign Out from Smart MSO
               </p>
             </div>
           </div>

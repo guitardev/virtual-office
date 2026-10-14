@@ -3,8 +3,8 @@ import Link from "next/link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "ข้อกำหนดและเงื่อนไขการใช้งาน (Terms of Service) — OmniOffice",
-  description: "ข้อกำหนดและเงื่อนไขการเข้าใช้งานระบบสำนักงานเสมือน OmniOffice ข้อบังคับด้านความปลอดภัยและจริยธรรมการปฏิบัติงาน",
+  title: "ข้อกำหนดและเงื่อนไขการใช้งาน (Terms of Service) — Smart MSO",
+  description: "ข้อกำหนดและเงื่อนไขการเข้าใช้งานระบบสำนักงานเสมือน Smart MSO ข้อบังคับด้านความปลอดภัยและจริยธรรมการปฏิบัติงาน",
 };
 
 export default function TermsOfServicePage() {
@@ -18,11 +18,11 @@ export default function TermsOfServicePage() {
             className="flex items-center space-x-3 group transition-transform hover:scale-102"
           >
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#4F46E5] to-[#818CF8] flex items-center justify-center text-white font-black text-xl shadow-md shadow-indigo-500/25">
-              Σ
+              MSO
             </div>
             <div>
               <span className="text-lg font-black text-white font-heading tracking-tight block leading-none">
-                OmniOffice
+                Smart MSO
               </span>
               <span className="text-[10px] text-indigo-400 font-semibold tracking-wider">
                 VIRTUAL OFFICE
@@ -64,7 +64,7 @@ export default function TermsOfServicePage() {
           </h1>
 
           <p className="text-slate-400 text-sm sm:text-base max-w-2xl mx-auto leading-relaxed">
-            กรุณาอ่านข้อกำหนดและเงื่อนไขนี้อย่างละเอียดก่อนเข้าสู่ระบบและเริ่มใช้งาน OmniOffice
+            กรุณาอ่านข้อกำหนดและเงื่อนไขนี้อย่างละเอียดก่อนเข้าสู่ระบบและเริ่มใช้งาน Smart MSO
             การเข้าสู่ระบบถือเป็นการยอมรับข้อผูกพันตามข้อกำหนดทั้งหมดนี้
           </p>
 
@@ -120,7 +120,7 @@ export default function TermsOfServicePage() {
             </h2>
           </div>
           <p className="text-sm text-slate-300 leading-relaxed">
-            ข้อกำหนดนี้ใช้บังคับกับการเข้าถึงและการใช้งานแพลตฟอร์มสำนักงานเสมือน OmniOffice รวมถึงโมดูลแชททีม, กระดาน Kanban, ระบบจองรถยนต์สำนักงาน, ระบบจัดการประชุม, และเครื่องมือบริหารทรัพยากรทั้งหมด การเข้าสู่ระบบถือว่าท่านได้อ่าน ทำความเข้าใจ และตกลงที่จะปฏิบัติตามข้อกำหนดนี้อย่างเคร่งครัด
+            ข้อกำหนดนี้ใช้บังคับกับการเข้าถึงและการใช้งานแพลตฟอร์มสำนักงานเสมือน Smart MSO รวมถึงโมดูลแชททีม, กระดาน Kanban, ระบบจองรถยนต์สำนักงาน, ระบบจัดการประชุม, และเครื่องมือบริหารทรัพยากรทั้งหมด การเข้าสู่ระบบถือว่าท่านได้อ่าน ทำความเข้าใจ และตกลงที่จะปฏิบัติตามข้อกำหนดนี้อย่างเคร่งครัด
           </p>
         </section>
 
@@ -224,7 +224,7 @@ export default function TermsOfServicePage() {
         {/* Bottom Navigation */}
         <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-800 text-xs text-slate-400">
           <div>
-            © 2026 OmniOffice Enterprise Platform. สงวนลิขสิทธิ์ทั้งหมด
+            © 2026 Smart MSO Enterprise Platform. สงวนลิขสิทธิ์ทั้งหมด
           </div>
           <div className="flex items-center space-x-4">
             <Link href="/policy" className="text-indigo-400 hover:underline font-semibold">

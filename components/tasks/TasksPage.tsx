@@ -48,7 +48,7 @@ export function TasksPage({
   const [taskPriority, setTaskPriority] = useState<"high" | "medium" | "low">("medium");
   const [taskDue, setTaskDue] = useState("");
   const [taskVisibility, setTaskVisibility] = useState<TaskVisibility>("department");
-  const [taskAssigneeId, setTaskAssigneeId] = useState(currentUser?.id || "usr_1");
+  const [taskAssigneeId, setTaskAssigneeId] = useState(currentUser?.id || (members[0]?.id ?? ""));
   const [taskTagsInput, setTaskTagsInput] = useState("");
   const [newSubtasks, setNewSubtasks] = useState<{ id: string; text: string; done: boolean }[]>([]);
   const [currentSubtaskText, setCurrentSubtaskText] = useState("");
@@ -190,7 +190,7 @@ export function TasksPage({
     setTaskPriority("medium");
     setTaskDue("");
     setTaskVisibility("department");
-    setTaskAssigneeId(currentUser?.id || "usr_1");
+    setTaskAssigneeId(currentUser?.id || (members[0]?.id ?? ""));
     setTaskTagsInput("");
     setNewSubtasks([]);
     setCurrentSubtaskText("");

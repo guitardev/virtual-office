@@ -3,8 +3,8 @@ import Link from "next/link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "นโยบายความเป็นส่วนตัว (Privacy Policy) — OmniOffice",
-  description: "นโยบายการคุ้มครองข้อมูลส่วนบุคคลและมาตรฐานความปลอดภัยของแพลตฟอร์มสำนักงานเสมือน OmniOffice (PDPA Compliant)",
+  title: "นโยบายความเป็นส่วนตัว (Privacy Policy) — Smart MSO",
+  description: "นโยบายการคุ้มครองข้อมูลส่วนบุคคลและมาตรฐานความปลอดภัยของแพลตฟอร์มสำนักงานเสมือน Smart MSO (PDPA Compliant)",
 };
 
 export default function PrivacyPolicyPage() {
@@ -18,11 +18,11 @@ export default function PrivacyPolicyPage() {
             className="flex items-center space-x-3 group transition-transform hover:scale-102"
           >
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#4F46E5] to-[#818CF8] flex items-center justify-center text-white font-black text-xl shadow-md shadow-indigo-500/25">
-              Σ
+              MSO
             </div>
             <div>
               <span className="text-lg font-black text-white font-heading tracking-tight block leading-none">
-                OmniOffice
+                Smart MSO
               </span>
               <span className="text-[10px] text-indigo-400 font-semibold tracking-wider">
                 VIRTUAL OFFICE
@@ -64,7 +64,7 @@ export default function PrivacyPolicyPage() {
           </h1>
 
           <p className="text-slate-400 text-sm sm:text-base max-w-2xl mx-auto leading-relaxed">
-            ระบบสำนักงานเสมือน OmniOffice ให้ความสำคัญสูงสุดต่อการรักษาความมั่นคงปลอดภัย
+            ระบบสำนักงานเสมือน Smart MSO ให้ความสำคัญสูงสุดต่อการรักษาความมั่นคงปลอดภัย
             และการคุ้มครองข้อมูลส่วนบุคคลของบุคลากรตามพระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562
           </p>
 
@@ -120,7 +120,7 @@ export default function PrivacyPolicyPage() {
             </h2>
           </div>
           <p className="text-sm text-slate-300 leading-relaxed">
-            ระบบ OmniOffice จัดเก็บข้อมูลเฉพาะเท่าที่จำเป็นต่อการปฏิบัติงานและการบริหารจัดการภายในองค์กร ดังนี้:
+            ระบบ Smart MSO จัดเก็บข้อมูลเฉพาะเท่าที่จำเป็นต่อการปฏิบัติงานและการบริหารจัดการภายในองค์กร ดังนี้:
           </p>
           <ul className="space-y-2 text-sm text-slate-300 pl-4 list-disc marker:text-indigo-400">
             <li>
@@ -185,7 +185,7 @@ export default function PrivacyPolicyPage() {
             </h2>
           </div>
           <p className="text-sm text-slate-300 leading-relaxed">
-            ระบบ OmniOffice มีการเชื่อมต่อกับระบบคลาวด์และฐานข้อมูลมาตรฐานระดับองค์กร:
+            ระบบ Smart MSO มีการเชื่อมต่อกับระบบคลาวด์และฐานข้อมูลมาตรฐานระดับองค์กร:
           </p>
           <ul className="space-y-2 text-sm text-slate-300 pl-4 list-disc marker:text-indigo-400">
             <li>
@@ -254,7 +254,7 @@ export default function PrivacyPolicyPage() {
         {/* Bottom Navigation */}
         <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-800 text-xs text-slate-400">
           <div>
-            © 2026 OmniOffice Enterprise Platform. สงวนลิขสิทธิ์ทั้งหมด
+            © 2026 Smart MSO Enterprise Platform. สงวนลิขสิทธิ์ทั้งหมด
           </div>
           <div className="flex items-center space-x-4">
             <Link href="/term" className="text-indigo-400 hover:underline font-semibold">

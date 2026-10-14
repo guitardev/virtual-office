@@ -114,7 +114,7 @@ export function mapMemberToRow(member: Member): any {
   };
 }
 
-const MEMBERS_STORAGE_KEY = "omnioffice_members_cache_v1";
+const MEMBERS_STORAGE_KEY = "omnioffice_members_cache_v2";
 
 /**
  * Get members from local cache or fallback to INITIAL_MEMBERS
@@ -1006,12 +1006,17 @@ export function mapTaskToRow(task: TaskItem): any {
     reviewNotes: task.reviewNotes || null,
   };
 
+  // Note: tasks.assignee_id in Supabase references users(id).
+  // Because users can authenticate via Supabase Auth, Synology, or offline/cached profiles,
+  // we preserve the full assignee details in richPayload (assigneeName, assigneeId).
+  // To avoid breaking foreign key constraints on newly created or non-synced accounts,
+  // we do not force assignee_id at the DB relational column level unless validated.
   const row: any = {
     title: task.title,
     description: JSON.stringify(richPayload),
     status: task.status,
     priority: task.priority,
-    assignee_id: task.assigneeId || task.assignee || null,
+    assignee_id: null,
   };
 
   if (task.due) {
@@ -1055,7 +1060,15 @@ export async function saveTask(task: TaskItem): Promise<TaskItem | null> {
 
     if (isUuid) {
       row.id = task.id;
-      const { data, error } = await supabase.from("tasks").upsert(row).select().single();
+      let { data, error } = await supabase.from("tasks").upsert(row).select().single();
+      // If foreign key constraint violates (e.g. assignee_id not present in users table), retry with assignee_id: null
+      if (error && error.code === "23503") {
+        console.warn("Retrying task upsert without assignee_id foreign key constraint:", error.message);
+        row.assignee_id = null;
+        const retryRes = await supabase.from("tasks").upsert(row).select().single();
+        data = retryRes.data;
+        error = retryRes.error;
+      }
       if (error) {
         console.error("Error upserting task in Supabase:", error);
         return null;
@@ -1063,7 +1076,15 @@ export async function saveTask(task: TaskItem): Promise<TaskItem | null> {
       return data ? mapRowToTask(data) : task;
     } else {
       delete row.id;
-      const { data, error } = await supabase.from("tasks").insert(row).select().single();
+      let { data, error } = await supabase.from("tasks").insert(row).select().single();
+      // If foreign key constraint violates, retry with assignee_id: null
+      if (error && error.code === "23503") {
+        console.warn("Retrying task insert without assignee_id foreign key constraint:", error.message);
+        row.assignee_id = null;
+        const retryRes = await supabase.from("tasks").insert(row).select().single();
+        data = retryRes.data;
+        error = retryRes.error;
+      }
       if (error) {
         console.error("Error inserting task into Supabase:", error);
         return null;

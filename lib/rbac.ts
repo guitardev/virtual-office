@@ -159,6 +159,7 @@ export const GOVERNMENT_PERSONNEL_TYPES = [
   "พนักงานราชการ",
   "พนักงานกองทุน",
   "พนักงานจ้างเหมาบริการ",
+  "เจ้าหน้าที่โครงการ",
   "ที่ปรึกษา/ผู้ทรงคุณวุฒิ",
 ] as const;
 
@@ -196,6 +197,12 @@ export const PERSONNEL_TYPE_CONFIG: Record<
     icon: "🤝",
     desc: "ผู้ปฏิบัติงานตามสัญญาจ้างเหมาบริการรายปี",
   },
+  เจ้าหน้าที่โครงการ: {
+    label: "เจ้าหน้าที่โครงการ",
+    badgeColor: "bg-cyan-50 text-cyan-700 border-cyan-200",
+    icon: "🎯",
+    desc: "ผู้ปฏิบัติงานโครงการตามแผนงาน/ยุทธศาสตร์ประจำปี",
+  },
   "ที่ปรึกษา/ผู้ทรงคุณวุฒิ": {
     label: "ที่ปรึกษา/ผู้ทรงคุณวุฒิ",
     badgeColor: "bg-indigo-50 text-indigo-700 border-indigo-200",
@@ -214,26 +221,6 @@ export const GOVERNMENT_DIVISIONS = [
 ] as const;
 
 export const INITIAL_MEMBERS: Member[] = [
-  {
-    id: "usr_1",
-    prefix: "นางสาว",
-    firstName: "มะลิวัน",
-    lastName: "สิทธิโยธี",
-    name: "นางสาวมะลิวัน สิทธิโยธี",
-    nickname: "มิ",
-    personnelType: "ข้าราชการ",
-    position: "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
-    division: "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร (ผู้บริหาร)",
-    department: "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร (ผู้บริหาร)",
-    email: "maliwan.s@m-society.go.th",
-    phone: "055-705031 ต่อ 101",
-    lineId: "maliwan_kpp",
-    role: "admin",
-    status: "active",
-    joinedDate: "1 ม.ค. 2024",
-    avatarText: "มส",
-    avatarUrl: "https://kamphaengphet.m-society.go.th/wp-content/uploads/2024/10/S__2457668.jpg",
-  },
   {
     id: "usr_2",
     prefix: "นาย",

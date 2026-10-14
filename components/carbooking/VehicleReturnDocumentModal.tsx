@@ -212,7 +212,7 @@ export function VehicleReturnDocumentModal({
 
           {/* Footer note */}
           <div className="mt-8 text-[11px] text-slate-400 text-center border-t border-slate-100 pt-3">
-            * เอกสารนี้จัดทำผ่านระบบ OmniOffice Virtual Office พมจ.กำแพงเพชร เพื่อใช้เป็นหลักฐานการส่งคืนและการบำรุงรักษายานพาหนะราชการ
+            * เอกสารนี้จัดทำผ่านระบบ Smart MSO พมจ.กำแพงเพชร เพื่อใช้เป็นหลักฐานการส่งคืนและการบำรุงรักษายานพาหนะราชการ
           </div>
         </div>
       </div>

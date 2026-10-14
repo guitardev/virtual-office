@@ -19,6 +19,9 @@
 9. [สรุปผลการปฏิรูปสถาปัตยกรรมโค้ด (Refactoring & Delivery Log)](#9-สรุปผลการปรับปรุงระบบและบันทึกการส่งมอบ)
 10. [การวิเคราะห์โครงการสากลบน GitHub และการกำหนดยุทธศาสตร์การพัฒนา](#10-การวิเคราะห์โครงการสากลบน-github-และการกำหนดยุทธศาสตร์การพัฒนา)
 11. [บันทึกการพัฒนาระบบสดบน Supabase Live Database และนโยบาย Zero-Demo](#11-บันทึกการพัฒนาระบบสดบน-supabase-live-database-และนโยบาย-zero-demo)
+12. [บันทึกการพัฒนาระบบบริหารจัดการยานพาหนะและเกจน้ำมันเสมือนจริง](#12-บันทึกการพัฒนาระบบบริหารจัดการยานพาหนะราชการและเกจวัดระดับน้ำมันเสมือนจริง-car-booking--analog-gauges)
+13. [บันทึกการพัฒนาระบบเชื่อมโยง Synology NAS (On-Premises Private Cloud)](#13-บันทึกการพัฒนาระบบเชื่อมโยง-synology-nas-on-premises-private-cloud)
+14. [บันทึกการยกระดับระบบสู่ Smart MSO และการเชื่อมต่อ Supabase Remote MCP](#14-บันทึกการยกระดับระบบสู่-smart-mso-และการเชื่อมต่อ-supabase-remote-mcp)
 
 ---
 
@@ -595,6 +598,56 @@ on conflict (id) do update set
 3. **สถาปัตยกรรม Proxy ฝั่ง Server (Zero-CORS Architecture):**
    - พัฒนา [lib/synology.ts](file:///c:/Users/GuitarDev/virtual-office/lib/synology.ts) และ Route Handlers [app/api/nas/health](file:///c:/Users/GuitarDev/virtual-office/app/api/nas/health/route.ts), [app/api/nas/auth](file:///c:/Users/GuitarDev/virtual-office/app/api/nas/auth/route.ts), [app/api/nas/files](file:///c:/Users/GuitarDev/virtual-office/app/api/nas/files/route.ts)
    - ป้องกันปัญหา Browser CORS และ Mixed-Content อย่างเด็ดขาด พร้อมซ่อนรหัสผ่าน Service Account ไว้บนฝั่งเซิร์ฟเวอร์อย่างปลอดภัย
+
+---
+
+## 14. บันทึกการยกระดับระบบสู่ "Smart MSO" และการเชื่อมต่อ Supabase Remote MCP
+
+> **วันที่บันทึก:** 14 ตุลาคม 2569  
+> **สถานะ:** สำเร็จสมบูรณ์ 100% (TypeScript: 0 Errors, Playwright E2E: 5/5 Passed)
+
+### 14.1 การปรับเปลี่ยนแบรนด์และอัตลักษณ์ระบบสู่ "Smart MSO"
+* **การรีแบรนด์โปรเจกต์:** เปลี่ยนชื่อแอปพลิเคชันจาก OmniOffice / Virtual Office เป็น **"Smart MSO"** ในทุกจุดสำคัญ
+  - [package.json](file:///c:/Users/GuitarDev/virtual-office/package.json): ปรับชื่อ package เป็น `smart-mso`
+  - [app/layout.tsx](file:///c:/Users/GuitarDev/virtual-office/app/layout.tsx): ปรับ Title และ Metadata เป็น `"Smart MSO — ระบบออฟฟิศเสมือน"`
+  - [app/page.tsx](file:///c:/Users/GuitarDev/virtual-office/app/page.tsx) & [components/layout/Sidebar.tsx](file:///c:/Users/GuitarDev/virtual-office/components/layout/Sidebar.tsx): อัปเดตโลโก้แบรนด์เป็น **MSO / Smart MSO (RBAC WORKSPACE)** ทั้งโหมดเดสก์ท็อปและมือถือ
+  - [LoginPage.tsx](file:///c:/Users/GuitarDev/virtual-office/components/auth/LoginPage.tsx): ปรับโลโก้ Header, แท็กไลน์ และข้อความ Copyright
+  - [UserPage.tsx](file:///c:/Users/GuitarDev/virtual-office/components/user/UserPage.tsx): ปรับ Badge เป็น `Smart MSO Government Profile v1.0`
+  - [ReportsPage.tsx](file:///c:/Users/GuitarDev/virtual-office/components/reports/ReportsPage.tsx): ปรับชื่อไฟล์ส่งออก CSV เป็น `Smart_MSO_Report_...`
+  - เอกสารราชการขอใช้รถ & ใบส่งคืนรถ ([CarBookingDocumentModal.tsx](file:///c:/Users/GuitarDev/virtual-office/components/carbooking/CarBookingDocumentModal.tsx), [VehicleReturnDocumentModal.tsx](file:///c:/Users/GuitarDev/virtual-office/components/carbooking/VehicleReturnDocumentModal.tsx)): ระบุจัดทำผ่านระบบ Smart MSO พมจ.กำแพงเพชร
+  - หน้านโยบายความเป็นส่วนตัวและข้อกำหนด ([policy](file:///c:/Users/GuitarDev/virtual-office/app/policy/page.tsx), [term](file:///c:/Users/GuitarDev/virtual-office/app/term/page.tsx))
+
+### 14.2 การยกระดับดีไซน์ปุ่มออกจากระบบ (Modern Logout Icon Upgrade)
+* ยกเลิกการใช้อิโมจิ `🚪` ในทุกหน้าจอ เปลี่ยนมาใช้ **Modern Vector Icon (SVG Arrow-Bracket Sign-Out)** ที่มีความคมชัด ละเอียด สวยงาม และได้สัดส่วน:
+  - แถบเมนูด้านข้าง (Sidebar Footer)
+  - แถบหัวเว็บด้านบน (Header Quick Logout)
+  - รายการในเมนู Dropdown สมาชิก
+  - ปุ่มออกจากระบบในแท็บข้อมูลส่วนตัวบุคลากร ([UserPage.tsx](file:///c:/Users/GuitarDev/virtual-office/components/user/UserPage.tsx))
+  - หน้าต่างโมดอลยืนยันการออกจากระบบ ([LogoutConfirmModal.tsx](file:///c:/Users/GuitarDev/virtual-office/components/auth/LogoutConfirmModal.tsx))
+
+### 14.3 การปฏิรูปจัดการบัญชีบุคลากรและปลดล็อค Root User `usr_1`
+* **ปลดล็อคการลบบุคลากร:** นำเงื่อนไข Protected Root Account ออกจาก [app/page.tsx](file:///c:/Users/GuitarDev/virtual-office/app/page.tsx) และ [MembersTab.tsx](file:///c:/Users/GuitarDev/virtual-office/components/admin/MembersTab.tsx) ทำให้สามารถจัดการลบบุคลากรได้ตามต้องการ
+* **ล้างบัญชี Seed `usr_1` ออกจากระบบเริ่มต้น:**
+  - ลบ Record `usr_1` ออกจาก `INITIAL_MEMBERS` ใน [lib/rbac.ts](file:///c:/Users/GuitarDev/virtual-office/lib/rbac.ts)
+  - อัปเดต Schema [supabase/schema.sql](file:///c:/Users/GuitarDev/virtual-office/supabase/schema.sql) นำแถว `usr_1` ออกจากคำสั่ง Seed และอัปเดตห้องแชททางการให้ใช้ `usr_2` เป็นผู้สร้างเริ่มต้นแทน
+  - ปรับปรุงการสืบทอด Fallback ผู้รับผิดชอบงานในบอร์ด Kanban ([TasksPage.tsx](file:///c:/Users/GuitarDev/virtual-office/components/tasks/TasksPage.tsx)) ไม่ให้ผูกกับ `usr_1`
+  - ปรับ Local Storage Cache Key เป็น `omnioffice_members_cache_v2` เพื่อเคลียร์ข้อมูลเดิมที่ตกค้างในเบราว์เซอร์อัตโนมัติ
+
+### 14.4 การเพิ่มประเภทบุคลากร "เจ้าหน้าที่โครงการ" (Personnel Type Extension)
+* เพิ่มประเภทบุคลากรใหม่ **"เจ้าหน้าที่โครงการ"** รองรับสัญญาจ้างงานตามโครงการยุทธศาสตร์:
+  - เพิ่มใน Union Type [lib/types.ts](file:///c:/Users/GuitarDev/virtual-office/lib/types.ts)
+  - กำหนดค่า Badge สี Cyan (`bg-cyan-50 text-cyan-700 border-cyan-200`) และไอคอน `🎯` ใน [lib/rbac.ts](file:///c:/Users/GuitarDev/virtual-office/lib/rbac.ts)
+  - อัปเดต CHECK Constraint ใน [supabase/schema.sql](file:///c:/Users/GuitarDev/virtual-office/supabase/schema.sql) และรันอัปเดตบนฐานข้อมูลจริงของ Supabase เรียบร้อย
+
+### 14.5 การแก้ไขข้อผิดพลาด Foreign Key ในระบบ Tasks (Kanban Resiliency)
+* แก้ไขปัญหา `tasks_assignee_id_fkey` ละเมิด Foreign Key เมื่อผู้ใช้ใหม่หรือบัญชีจากระบบอื่นบันทึกงาน
+* ปรับ [lib/supabase.ts](file:///c:/Users/GuitarDev/virtual-office/lib/supabase.ts) ให้เก็บข้อมูลชื่อและ ID ผู้รับผิดชอบครบถ้วนผ่าน `richPayload` ในฟิลด์ `description` พร้อมกลไก Auto-Retry ป้องกันการเกิด Warning ในหน้าเว็บ
+
+### 14.6 การเชื่อมต่อ Supabase Remote MCP เข้าสู่ Antigravity IDE
+* ติดตั้งและเปิดใช้งาน **Supabase Remote MCP** (`https://mcp.supabase.com/mcp`) เชื่อมต่อกับ Project Ref `xkeiuyhkokmecefzzynb`
+* เชื่อมโยง Agent Skills: `supabase` และ `supabase-postgres-best-practices`
+* ตรวจสอบความพร้อมผ่านการเรียกคำสั่ง `list_tables` ยืนยันการเชื่อมต่อตารางทั้ง 12 ตารางของ Smart MSO ได้สด ๆ โดยตรงผ่าน Agent
+
 
 
 

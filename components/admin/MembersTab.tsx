@@ -186,12 +186,10 @@ export function MembersTab({
                     <button
                       type="button"
                       onClick={() => setMemberToDelete(m)}
-                      disabled={m.id === "usr_1" || (currentUser ? m.id === currentUser.id : false)}
+                      disabled={currentUser ? m.id === currentUser.id : false}
                       className="px-2.5 py-1.5 rounded-lg bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 text-xs font-bold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 shadow-2xs"
                       title={
-                        m.id === "usr_1"
-                          ? "บัญชีผู้บริหารหลักไม่สามารถลบได้"
-                          : currentUser && m.id === currentUser.id
+                        currentUser && m.id === currentUser.id
                           ? "ไม่สามารถลบบัญชีที่กำลังล็อกอินอยู่ได้"
                           : "ลบบุคลากรออกจากระบบ"
                       }

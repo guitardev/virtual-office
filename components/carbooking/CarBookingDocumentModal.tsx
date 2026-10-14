@@ -283,7 +283,7 @@ export function CarBookingDocumentModal({
 
           {/* Footer note */}
           <div className="mt-8 text-[11px] text-slate-400 text-center border-t border-slate-100 pt-3">
-            * เอกสารนี้สร้างจากระบบ OmniOffice Virtual Office พมจ.กำแพงเพชร ตามระเบียบสำนักนายกรัฐมนตรีว่าด้วยการใช้รถราชการ พ.ศ. 2523 และที่แก้ไขเพิ่มเติม
+            * เอกสารนี้สร้างจากระบบ Smart MSO พมจ.กำแพงเพชร ตามระเบียบสำนักนายกรัฐมนตรีว่าด้วยการใช้รถราชการ พ.ศ. 2523 และที่แก้ไขเพิ่มเติม
           </div>
         </div>
       </div>

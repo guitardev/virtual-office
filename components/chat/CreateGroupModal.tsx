@@ -69,7 +69,7 @@ export function CreateGroupModal({
         month: "short",
         day: "numeric",
       }),
-      createdBy: currentUser?.id || "usr_1",
+      createdBy: currentUser?.id || "system",
     };
 
     onCreateGroup(newGroup);

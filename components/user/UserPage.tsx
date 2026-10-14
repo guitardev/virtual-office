@@ -166,7 +166,7 @@ export function UserPage({
             <h3 className="text-sm font-bold font-heading text-slate-800">
               🏛️ ข้อมูลส่วนบุคคลข้าราชการและเจ้าหน้าที่รัฐ
             </h3>
-            <span className="text-[11px] text-slate-400">OmniOffice Government Profile v1.0</span>
+            <span className="text-[11px] text-slate-400">Smart MSO Government Profile v1.0</span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -462,9 +462,20 @@ export function UserPage({
           <button
             type="button"
             onClick={handleInitiateLogout}
-            className="px-4 py-2 bg-red-50 text-red-600 rounded-xl text-sm font-bold hover:bg-red-100 transition-colors cursor-pointer flex items-center gap-1.5"
+            className="px-4 py-2 bg-rose-50 text-rose-600 rounded-xl text-sm font-semibold hover:bg-rose-100 hover:text-rose-700 transition-colors cursor-pointer flex items-center gap-2 group"
           >
-            <span>🚪</span>
+            <svg
+              className="w-4 h-4 text-rose-500 group-hover:text-rose-700 transition-colors stroke-[2]"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"
+              />
+            </svg>
             <span>ออกจากระบบ</span>
           </button>
         </div>

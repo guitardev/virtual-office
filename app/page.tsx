@@ -818,12 +818,6 @@ export default function OmniOfficeApp() {
       return;
     }
 
-    if (memberToDelete.id === "usr_1") {
-      showToast("⚠️ ไม่สามารถลบบัญชีผู้บริหารหลักของระบบได้ (Protected Root Account)");
-      setMemberToDelete(null);
-      return;
-    }
-
     setMembers((prev) => prev.filter((m) => m.id !== memberToDelete.id));
     deleteMember(memberToDelete.id).catch(console.error);
 
@@ -1263,7 +1257,7 @@ export default function OmniOfficeApp() {
               💬
             </div>
             <h3 className="text-lg font-bold font-heading">กำลังยืนยันตัวตนด้วยบัญชี LINE...</h3>
-            <p className="text-xs text-slate-300 mt-1">กำลังตรวจสอบ Authorization Token และเชื่อมต่อระบบ OmniOffice</p>
+            <p className="text-xs text-slate-300 mt-1">กำลังตรวจสอบ Authorization Token และเชื่อมต่อระบบ Smart MSO</p>
           </div>
         )}
 
@@ -1431,10 +1425,21 @@ export default function OmniOfficeApp() {
       <button
         type="button"
         onClick={handleInitiateLogout}
-        className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/20 transition-all cursor-pointer"
+        className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold text-rose-300 hover:text-white hover:bg-rose-500/15 border border-rose-500/25 transition-all cursor-pointer group shadow-xs"
       >
-        <span>🚪</span>
-        <span>ออกจากระบบ (Logout)</span>
+        <svg
+          className="w-4 h-4 text-rose-400 group-hover:text-rose-200 transition-colors stroke-[2]"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"
+          />
+        </svg>
+        <span>ออกจากระบบ</span>
       </button>
     </div>
   );
@@ -1564,11 +1569,11 @@ export default function OmniOfficeApp() {
         <div className="flex items-center justify-between h-16 px-5 border-b border-slate-800 shrink-0">
           <div className="flex items-center space-x-3">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#4F46E5] to-[#818CF8] flex items-center justify-center text-white font-black text-lg shadow-md shadow-indigo-500/30">
-              Σ
+              MSO
             </div>
             <div>
               <span className="text-lg font-bold text-white font-heading tracking-tight block leading-tight">
-                OmniOffice
+                Smart MSO
               </span>
               <span className="text-[10px] text-indigo-400 font-medium tracking-wide">
                 RBAC WORKSPACE
@@ -1594,10 +1599,10 @@ export default function OmniOfficeApp() {
           <aside className="relative w-72 bg-[#0F172A] text-slate-300 flex flex-col h-full z-10 shadow-2xl">
             <div className="flex items-center justify-between h-16 px-6 border-b border-slate-800">
               <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 rounded-lg bg-[#4F46E5] flex items-center justify-center text-white font-bold">
-                  Σ
+                <div className="w-8 h-8 rounded-lg bg-[#4F46E5] flex items-center justify-center text-white font-bold text-xs">
+                  MSO
                 </div>
-                <span className="text-lg font-bold text-white font-heading">OmniOffice</span>
+                <span className="text-lg font-bold text-white font-heading">Smart MSO</span>
               </div>
               <button
                 type="button"
@@ -1836,9 +1841,20 @@ export default function OmniOfficeApp() {
                     <button
                       type="button"
                       onClick={handleInitiateLogout}
-                      className="w-full px-4 py-2 text-left text-red-600 hover:bg-red-50 flex items-center gap-2.5 text-xs font-bold transition-colors cursor-pointer"
+                      className="w-full px-4 py-2 text-left text-rose-600 hover:bg-rose-50 flex items-center gap-2.5 text-xs font-semibold transition-colors cursor-pointer group"
                     >
-                      <span>🚪</span>
+                      <svg
+                        className="w-4 h-4 text-rose-500 group-hover:text-rose-600 transition-colors stroke-[2]"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"
+                        />
+                      </svg>
                       <span>ออกจากระบบ (Logout)</span>
                     </button>
                   </div>
@@ -1849,10 +1865,22 @@ export default function OmniOfficeApp() {
             <button
               type="button"
               onClick={handleInitiateLogout}
-              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
+              className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer group"
               title="ออกจากระบบ (Logout)"
+              aria-label="ออกจากระบบ"
             >
-              🚪
+              <svg
+                className="w-5 h-5 group-hover:translate-x-0.5 transition-transform stroke-[2]"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"
+                />
+              </svg>
             </button>
           </div>
         </header>

@@ -396,12 +396,12 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
 
         {/* Brand Header */}
         <div className="relative z-10 flex items-center space-x-3.5">
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-[#4F46E5] to-[#818CF8] flex items-center justify-center text-white font-black text-2xl shadow-lg shadow-indigo-500/30">
-            Σ
+          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-[#4F46E5] to-[#818CF8] flex items-center justify-center text-white font-black text-xl shadow-lg shadow-indigo-500/30">
+            MSO
           </div>
           <div>
             <span className="text-2xl font-black text-white font-heading tracking-tight block leading-tight">
-              OmniOffice
+              Smart MSO
             </span>
             <span className="text-xs text-indigo-400 font-semibold tracking-wider">
               ENTERPRISE VIRTUAL OFFICE PLATFORM
@@ -453,7 +453,7 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
         {/* Footer Info */}
         <div className="relative z-10 text-xs text-slate-400 pt-6 border-t border-white/10 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <span>© 2026 OmniOffice.</span>
+            <span>© 2026 Smart MSO.</span>
             <Link href="/policy" className="hover:text-white underline underline-offset-2">
               Privacy Policy
             </Link>
