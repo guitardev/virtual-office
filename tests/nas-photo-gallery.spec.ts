@@ -164,4 +164,56 @@ test.describe("ระบบคลังภาพและสื่อราช�
     await closeLightboxBtn.click();
     await expect(downloadBtn).toBeHidden();
   });
+
+  test("เมื่อพบข้อผิดพลาด Code 801 (Shared Space ยังไม่เปิด) ควรแสดงคำแนะนำ สลับพื้นที่ และเปิดดูคู่มือตั้งค่า DSM ได้", async ({
+    page,
+  }) => {
+    // ดัก API ให้คืน Code 801 เมื่อเรียก Shared Space และ Personal Space
+    await page.route("**/api/nas/photos?*", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: false,
+          code: 801,
+          error:
+            "ยังไม่ได้เปิดใช้งานพื้นที่ส่วนกลาง (Shared Space) หรือบัญชีนี้ยังไม่ได้รับสิทธิ์เข้าถึงใน Synology Photos (แนะนำ: สลับไปที่ 'พื้นที่ส่วนบุคคล' หรือเปิดใช้งาน Shared Space ในการตั้งค่า Synology Photos บน DSM)",
+        }),
+      });
+    });
+
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    // จำลองเซสชัน
+    await page.evaluate(() => {
+      localStorage.setItem("omnioffice_nas_user_sid", "mock_photos_sid");
+      localStorage.setItem("omnioffice_nas_user_account", "itadmin");
+      sessionStorage.setItem("omnioffice_nas_user_sid", "mock_photos_sid");
+      sessionStorage.setItem("omnioffice_nas_user_account", "itadmin");
+    });
+
+    const galleryNav = page
+      .locator("aside button:has-text('คลังภาพและสื่อ'), nav button:has-text('คลังภาพและสื่อ')")
+      .first();
+    await galleryNav.click();
+
+    // ตรวจสอบว่ามีกล่องแจ้งเตือนพร้อม Code 801
+    const errorBanner = page.locator("text=Code 801").first();
+    await expect(errorBanner).toBeVisible();
+
+    // ตรวจสอบปุ่มสลับไปยังพื้นที่ส่วนบุคคล
+    const switchToPersonalBtn = page.locator("button:has-text('สลับไปยังพื้นที่ส่วนบุคคล')").first();
+    await expect(switchToPersonalBtn).toBeVisible();
+
+    // ตรวจสอบปุ่มเปิดคู่มือ DSM
+    const guideBtn = page.locator("button:has-text('วิธีเปิดใช้งาน Shared Space บน Synology DSM')").first();
+    await expect(guideBtn).toBeVisible();
+
+    // คลิกเปิดคู่มือ
+    await guideBtn.click();
+    const dsmGuideContent = page.locator("text=ขั้นตอนการเปิดใช้งาน Shared Space สำหรับผู้ดูแลระบบ Synology (DSM)").first();
+    await expect(dsmGuideContent).toBeVisible();
+  });
 });
+

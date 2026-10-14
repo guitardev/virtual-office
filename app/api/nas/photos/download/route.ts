@@ -15,7 +15,8 @@ export async function GET(req: NextRequest) {
 
     const cleanUrl = nasUrl.replace(/\/+$/, "");
     const apiName = space === "shared" ? "SYNO.FotoTeam.Download" : "SYNO.Foto.Download";
-    const downloadUrl = `${cleanUrl}/webapi/entry.cgi?api=${apiName}&version=1&method=download&unit_id=[${id}]&_sid=${encodeURIComponent(
+    const unitIdParam = encodeURIComponent(`[${id}]`);
+    const downloadUrl = `${cleanUrl}/webapi/entry.cgi?api=${apiName}&version=1&method=download&unit_id=${unitIdParam}&_sid=${encodeURIComponent(
       sid
     )}`;
 

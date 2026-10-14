@@ -23,7 +23,10 @@ export async function GET(req: NextRequest) {
     // ─── ACTION 1: LIST PHOTO / VIDEO ITEMS ───
     if (action === "list_items") {
       const apiName = space === "shared" ? "SYNO.FotoTeam.Browse.Item" : "SYNO.Foto.Browse.Item";
-      let queryUrl = `${cleanUrl}/webapi/entry.cgi?api=${apiName}&version=1&method=list&offset=${offset}&limit=${limit}&additional=["thumbnail","resolution","orientation","video_meta"]&_sid=${encodeURIComponent(
+      const additionalParam = encodeURIComponent(
+        JSON.stringify(["thumbnail", "resolution", "orientation", "video_meta"])
+      );
+      let queryUrl = `${cleanUrl}/webapi/entry.cgi?api=${apiName}&version=1&method=list&offset=${offset}&limit=${limit}&additional=${additionalParam}&_sid=${encodeURIComponent(
         sid
       )}`;
       if (albumId) {
@@ -55,9 +58,24 @@ export async function GET(req: NextRequest) {
         });
       }
 
+      // Friendly Thai diagnostic messages for known Synology Photos error codes
+      let friendlyError = data.error?.message;
+      if (data.error?.code === 801) {
+        if (space === "shared") {
+          friendlyError =
+            "ยังไม่ได้เปิดใช้งานพื้นที่ส่วนกลาง (Shared Space) หรือบัญชีนี้ยังไม่ได้รับสิทธิ์เข้าถึงใน Synology Photos (แนะนำ: สลับไปที่ 'พื้นที่ส่วนบุคคล' หรือเปิดใช้งาน Shared Space ในการตั้งค่า Synology Photos บน DSM)";
+        } else {
+          friendlyError =
+            "ไม่มีสิทธิ์เข้าถึงคลังภาพส่วนบุคคล หรืออัลบั้มนี้ต้องใช้รหัสผ่าน (Code 801)";
+        }
+      } else if (data.error?.code === 119) {
+        friendlyError =
+          "เซสชัน Synology หมดอายุหรือไม่ถูกต้อง กรุณายืนยันตัวตนใหม่อีกครั้ง (Code 119)";
+      }
+
       return NextResponse.json({
         success: false,
-        error: data.error?.message || `ไม่สามารถเรียกรายการรูปภาพจาก Synology Photos ได้ (Code ${data.error?.code})`,
+        error: friendlyError || `ไม่สามารถเรียกรายการรูปภาพจาก Synology Photos ได้ (Code ${data.error?.code})`,
         code: data.error?.code,
       });
     }

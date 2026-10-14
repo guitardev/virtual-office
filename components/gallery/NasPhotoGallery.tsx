@@ -49,6 +49,8 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [permissionError, setPermissionError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<number | null>(null);
+  const [showSharedSpaceGuide, setShowSharedSpaceGuide] = useState(false);
 
   // Lightbox Preview Modal
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -82,9 +84,10 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
   }, [userSid, currentSpace, activeTab, selectedAlbumId]);
 
   // ─── LOAD DATA ───
-  const loadPhotos = async (sid: string, space: PhotoSpace, albumId?: number) => {
+  const loadPhotos = async (sid: string, space: PhotoSpace, albumId?: number, isAutoFallback: boolean = false) => {
     setIsLoading(true);
     setPermissionError(null);
+    setErrorCode(null);
     try {
       const res = await listSynologyPhotos({
         space,
@@ -98,7 +101,27 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
       if (res.success && res.items) {
         setItems(res.items);
       } else {
+        // If Shared Space returns Code 801 on initial load, auto-fallback to Personal Space
+        if (space === "shared" && res.code === 801 && !isAutoFallback) {
+          const fallbackRes = await listSynologyPhotos({
+            space: "personal",
+            albumId,
+            offset: 0,
+            limit: 100,
+            sid,
+            nasUrl: config.nasUrl,
+          });
+
+          if (fallbackRes.success && fallbackRes.items) {
+            setCurrentSpace("personal");
+            setItems(fallbackRes.items);
+            showToast("ℹ️ สลับมาแสดง 'พื้นที่ส่วนบุคคล' อัตโนมัติ (เนื่องจากยังไม่ได้เปิด Shared Space บน DSM)");
+            return;
+          }
+        }
+
         setItems([]);
+        setErrorCode(res.code || null);
         setPermissionError(res.error || "ไม่สามารถดึงรูปภาพจาก Synology Photos ได้");
         if (res.code === 119) {
           clearUserNasSid();
@@ -115,6 +138,7 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
   const loadAlbums = async (sid: string, space: PhotoSpace) => {
     setIsLoading(true);
     setPermissionError(null);
+    setErrorCode(null);
     try {
       const res = await listSynologyAlbums({
         space,
@@ -128,6 +152,7 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
         setAlbums(res.albums);
       } else {
         setAlbums([]);
+        setErrorCode(res.code || null);
         setPermissionError(res.error || "ไม่สามารถดึงรายการอัลบั้มได้");
         if (res.code === 119) {
           clearUserNasSid();
@@ -443,12 +468,82 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
 
           {/* ─── ERROR BANNER ─── */}
           {permissionError && (
-            <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 flex items-start gap-2.5">
-              <span className="text-base shrink-0">⛔</span>
-              <div>
-                <strong className="font-bold">การแจ้งเตือนสิทธิ์ Synology Photos:</strong>
-                <p className="mt-0.5 text-rose-700">{permissionError}</p>
+            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-900 space-y-3 shadow-xs">
+              <div className="flex items-start gap-3">
+                <span className="text-xl shrink-0">⚠️</span>
+                <div className="flex-1">
+                  <div className="font-bold text-amber-950 text-sm flex items-center gap-2">
+                    <span>การแจ้งเตือนสิทธิ์ Synology Photos</span>
+                    {errorCode && (
+                      <span className="px-2 py-0.5 rounded-md bg-amber-200/80 text-amber-900 text-[11px] font-mono font-bold">
+                        Code {errorCode}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-amber-800 leading-relaxed font-medium">
+                    {permissionError}
+                  </p>
+                </div>
               </div>
+
+              {/* Action Buttons & Guide Toggle */}
+              <div className="pt-2 border-t border-amber-500/20 flex flex-wrap items-center gap-2">
+                {currentSpace === "shared" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCurrentSpace("personal");
+                      setSelectedAlbumId(null);
+                    }}
+                    className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span>👤</span>
+                    <span>สลับไปยังพื้นที่ส่วนบุคคล (Personal Space)</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setShowSharedSpaceGuide(!showSharedSpaceGuide)}
+                  className="px-3 py-1.5 rounded-xl bg-white/90 hover:bg-white text-slate-700 font-bold text-xs transition-all border border-slate-300 shadow-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span>{showSharedSpaceGuide ? "▲" : "📖"}</span>
+                  <span>{showSharedSpaceGuide ? "ซ่อนขั้นตอนการตั้งค่า DSM" : "วิธีเปิดใช้งาน Shared Space บน Synology DSM"}</span>
+                </button>
+              </div>
+
+              {/* Expandable DSM Setup Guide */}
+              {showSharedSpaceGuide && (
+                <div className="mt-3 p-3.5 rounded-xl bg-white/95 border border-amber-200 text-slate-700 text-xs space-y-2">
+                  <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                    <span>💡</span>
+                    <span>ขั้นตอนการเปิดใช้งาน Shared Space สำหรับผู้ดูแลระบบ Synology (DSM):</span>
+                  </div>
+                  <ol className="list-decimal list-inside space-y-1 text-slate-600 pl-1 leading-relaxed">
+                    <li>
+                      เปิดเว็บเบราว์เซอร์เข้าสู่ระบบ <strong>Synology DSM</strong> (เช่น <code className="bg-slate-100 px-1 py-0.5 rounded text-cyan-800">http://192.168.162.21:5000</code>) ด้วยบัญชีผู้ดูแลระบบ (Admin)
+                    </li>
+                    <li>
+                      เปิดแอปพลิเคชัน <strong>Synology Photos</strong>
+                    </li>
+                    <li>
+                      คลิกไอคอนโปรไฟล์บัญชีผู้ใช้ที่มุมขวาบน แล้วเลือก <strong>การตั้งค่า (Settings)</strong>
+                    </li>
+                    <li>
+                      คลิกที่แถบ <strong>พื้นที่ที่แชร์ (Shared Space)</strong>
+                    </li>
+                    <li>
+                      ทำเครื่องหมายถูกที่ช่อง <strong>"เปิดใช้งานพื้นที่ที่แชร์" (Enable Shared Space)</strong>
+                    </li>
+                    <li>
+                      คลิกปุ่ม <strong>"กำหนดสิทธิ์การเข้าถึง" (Set Access Permissions)</strong> เพื่อมอบสิทธิ์การดูหรือจัดการภาพให้แก่ผู้ใช้งานหรือกลุ่มงาน
+                    </li>
+                    <li>
+                      กด <strong>บันทึก (Save)</strong> จากนั้นกลับมากดปุ่มรีเฟรช 🔄 ในหน้านี้
+                    </li>
+                  </ol>
+                </div>
+              )}
             </div>
           )}
 

@@ -732,11 +732,21 @@ on conflict (id) do update set
   - เพิ่มโมดูล `"gallery"` (`คลังภาพและสื่อ` 📸) ใน [lib/rbac.ts](file:///c:/Users/GuitarDev/virtual-office/lib/rbac.ts) และแถบนำทาง [app/page.tsx](file:///c:/Users/GuitarDev/virtual-office/app/page.tsx)
 * **การทดสอบอัตโนมัติ [tests/nas-photo-gallery.spec.ts](file:///c:/Users/GuitarDev/virtual-office/tests/nas-photo-gallery.spec.ts):**
   - ครอบคลุมทั้งกรณีก่อนและหลังเข้าสู่ระบบ NAS, การสลับ Space, การฟิลเตอร์ และการเปิด Lightbox
-  - ผลการรันชุดทดสอบทั้งโปรเจกต์: **ผ่านครบ 9/9 รายการ (100% Passed)**
+  - ผลการรันชุดทดสอบทั้งโปรเจกต์: **ผ่านครบ 10/10 รายการ (100% Passed)**
 
-
-
-
-
-
-
+### 16.3 การแก้ไขปัญหาการแจ้งเตือนสิทธิ์ Synology Photos (Code 801)
+* **สาเหตุของข้อผิดพลาด (Root Cause):**
+  1. **สถานะพื้นที่ส่วนกลาง (Shared Space Not Enabled / Restricted):**
+     - ใน Synology Photos การเรียกดูภาพส่วนกลางใช้ API `SYNO.FotoTeam.Browse.Item` ซึ่งจะส่งคืนรหัสข้อผิดพลาด **Code 801** เมื่อยังไม่ได้เปิดใช้งานพื้นที่ส่วนกลาง (Shared Space) ในการตั้งค่าแพ็กเกจ Synology Photos บน DSM หรือบัญชีผู้ใช้ปัจจุบันยังไม่ได้รับสิทธิ์เข้าถึงโฟลเดอร์ `/photo`
+  2. **URL Query Encoding:**
+     - อาร์กิวเมนต์ `additional=["thumbnail","resolution","orientation","video_meta"]` และ `unit_id=[id]` จำเป็นต้องผ่าน `encodeURIComponent` เพื่อความเข้ากันได้ 100% กับ WebAPI parser ของ DSM
+* **แนวทางแก้ไขและมาตรการป้องกัน (Implemented Solutions):**
+  1. **URL Parameter Encoding:**
+     - อัปเดตใน [app/api/nas/photos/route.ts](file:///c:/Users/GuitarDev/virtual-office/app/api/nas/photos/route.ts), [app/api/nas/photos/download/route.ts](file:///c:/Users/GuitarDev/virtual-office/app/api/nas/photos/download/route.ts) และ [lib/synology-photos.ts](file:///c:/Users/GuitarDev/virtual-office/lib/synology-photos.ts) ให้เข้ารหัส `additional` และ `unit_id` ด้วย `encodeURIComponent(JSON.stringify(...))`
+  2. **ระบบ Auto-Fallback ชาญฉลาด:**
+     - ใน [components/gallery/NasPhotoGallery.tsx](file:///c:/Users/GuitarDev/virtual-office/components/gallery/NasPhotoGallery.tsx): หากเปิดหน้าคลังภาพแล้วพื้นที่ส่วนกลาง (`shared`) ส่งคืน Code 801 ระบบจะทดลองสลับมาโหลด `personal` space ให้โดยอัตโนมัติ พร้อมแจ้งเตือนแบบ Friendly Toast
+  3. **แผงแนะนำและคู่มือการตั้งค่า DSM บนหน้าจอ:**
+     - ปรับปรุง Error Banner ให้แสดงรหัส Code อย่างชัดเจน พร้อมปุ่มลัด **"สลับไปยังพื้นที่ส่วนบุคคล (Personal Space)"** ทันทีในคลิกเดียว
+     - เพิ่มปุ่มขยายคู่มือ **"วิธีเปิดใช้งาน Shared Space บน Synology DSM"** อธิบายขั้นตอน 7 สเต็ปสำหรับ Admin เพื่อเปิดแชร์อัลบั้มให้ทุกคนในหน่วยงาน
+  4. **การทดสอบอัตโนมัติ (Playwright E2E):**
+     - เพิ่มชุดทดสอบจำลอง Error Code 801 ตรวจสอบว่าปุ่มสลับพื้นที่และคู่มือ DSM สามารถเปิดและโต้ตอบได้สมบูรณ์ (รวมผ่าน 10/10 ชุดทดสอบทั้งโปรเจกต์)
