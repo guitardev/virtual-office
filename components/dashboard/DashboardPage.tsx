@@ -1,8 +1,23 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Member, Role, ModuleId, TaskItem, MeetingItem } from "@/lib/types";
 import { ROLE_CONFIG, MODULE_NAMES } from "@/lib/rbac";
+
+function getTimeGreeting(): { text: string; icon: string } {
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 12) {
+    return { text: "สวัสดีตอนเช้า", icon: "🌅" };
+  } else if (hour >= 12 && hour < 13) {
+    return { text: "สวัสดีตอนเที่ยง", icon: "☀️" };
+  } else if (hour >= 13 && hour < 17) {
+    return { text: "สวัสดีตอนบ่าย", icon: "🌤️" };
+  } else if (hour >= 17 && hour < 21) {
+    return { text: "สวัสดีตอนเย็น", icon: "🌇" };
+  } else {
+    return { text: "สวัสดีตอนค่ำ", icon: "🌙" };
+  }
+}
 
 interface DashboardPageProps {
   currentUser: Member;
@@ -29,6 +44,16 @@ export function DashboardPage({
   showToast,
   rolePermissions,
 }: DashboardPageProps) {
+  const [greeting, setGreeting] = useState<{ text: string; icon: string }>(() => getTimeGreeting());
+
+  useEffect(() => {
+    setGreeting(getTimeGreeting());
+    const interval = setInterval(() => {
+      setGreeting(getTimeGreeting());
+    }, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Welcome Hero Banner */}
@@ -39,8 +64,9 @@ export function DashboardPage({
               <span>✨ ระบบสิทธิ์ RBAC เปิดใช้งาน</span>
               <span>· สิทธิ์ของคุณ: {ROLE_CONFIG[currentUserRole].label}</span>
             </div>
-            <h1 className="text-2xl md:text-3xl font-bold font-heading text-white">
-              สวัสดีตอนเช้า, {currentUser.name} 👋
+            <h1 className="text-2xl md:text-3xl font-bold font-heading text-white flex items-center gap-2 flex-wrap">
+              <span>{greeting.text}, {currentUser.name}</span>
+              <span>{greeting.icon}</span>
             </h1>
             <p className="text-indigo-100 text-sm mt-1.5 max-w-xl leading-relaxed">
               วันนี้คุณมี <span className="font-bold underline text-white">2 งานเร่งด่วน</span> ที่ต้องส่งมอบ และการประชุมสรุปแผนงานผลิตภัณฑ์ในเวลา 11:00 น.
