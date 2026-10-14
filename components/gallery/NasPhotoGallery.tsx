@@ -23,6 +23,8 @@ import {
   getPhotoThumbnailUrl,
   formatBytes,
   formatPhotoTime,
+  groupPhotosByMonth,
+  PhotoMonthGroup,
 } from "@/lib/synology-photos";
 
 interface NasPhotoGalleryProps {
@@ -42,10 +44,22 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
   const [loginPassword, setLoginPassword] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // Gallery state
+  // Gallery view mode & filter state (closely mirroring Synology Photos DSM 7+)
   const [currentSpace, setCurrentSpace] = useState<PhotoSpace>("shared");
-  const [activeTab, setActiveTab] = useState<"folders" | "all" | "photos" | "videos" | "albums">("folders");
+  const [activeTab, setActiveTab] = useState<"folders" | "timeline" | "all" | "photos" | "videos" | "albums">("folders");
   const [selectedAlbumId, setSelectedAlbumId] = useState<number | null>(null);
+
+  // Grid sizing & Sorting controls (Synology Photos style)
+  const [gridSize, setGridSize] = useState<"sm" | "md" | "lg">("md");
+  const [sortOrder, setSortOrder] = useState<"newest" | "oldest" | "name_asc" | "size_desc">("newest");
+
+  // Multi-Selection mode & batch actions
+  const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
+  const [isSelecting, setIsSelecting] = useState(false);
+
+  // Direct NAS media upload
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   // Folder & Album-by-Folder state
   const [folders, setFolders] = useState<SynologyPhotoFolder[]>([]);
@@ -62,8 +76,12 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
   const [errorCode, setErrorCode] = useState<number | null>(null);
   const [showSharedSpaceGuide, setShowSharedSpaceGuide] = useState(false);
 
-  // Lightbox Preview Modal
+  // Lightbox Pro with EXIF Panel, Rotation, Zoom & Slideshow
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [showExifPanel, setShowExifPanel] = useState(false);
+  const [photoRotation, setPhotoRotation] = useState<number>(0);
+  const [photoZoom, setPhotoZoom] = useState<number>(1);
+  const [isSlideshow, setIsSlideshow] = useState(false);
 
   // Hydrate session on client mount
   useEffect(() => {
@@ -292,24 +310,147 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
     setUserNasAccount(null);
     setItems([]);
     setAlbums([]);
+    setFolders([]);
+    setSelectedFolder(null);
+    setSelectedItemIds([]);
     showToast("🔒 ยกเลิกการเชื่อมต่อเซสชัน Synology Photos เรียบร้อยแล้ว");
   };
 
-  // Filter items
+  // Filter & sort items (Synology Photos engine)
   const filteredItems = useMemo(() => {
-    return items.filter((item) => {
+    let result = items.filter((item) => {
       // Type filter
       if (activeTab === "photos" && item.type !== "photo") return false;
       if (activeTab === "videos" && item.type !== "video") return false;
 
-      // Search filter
+      // Search filter across filename, EXIF camera, tags, description
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
-        return item.filename.toLowerCase().includes(q);
+        const filenameMatch = item.filename.toLowerCase().includes(q);
+        const cameraMatch = item.additional?.exif?.camera?.toLowerCase().includes(q);
+        const tagMatch = item.additional?.tag?.some((t) => t.toLowerCase().includes(q));
+        const descMatch = item.additional?.description?.toLowerCase().includes(q);
+        return filenameMatch || cameraMatch || tagMatch || descMatch;
       }
       return true;
     });
-  }, [items, activeTab, searchQuery]);
+
+    // Sorting
+    result.sort((a, b) => {
+      if (sortOrder === "newest") return b.time - a.time;
+      if (sortOrder === "oldest") return a.time - b.time;
+      if (sortOrder === "name_asc") return a.filename.localeCompare(b.filename);
+      if (sortOrder === "size_desc") return b.filesize - a.filesize;
+      return 0;
+    });
+
+    return result;
+  }, [items, activeTab, searchQuery, sortOrder]);
+
+  // Timeline groups (grouped by Year & Month)
+  const timelineGroups = useMemo(() => {
+    return groupPhotosByMonth(filteredItems);
+  }, [filteredItems]);
+
+  // Reset lightbox zoom/rotation on item change
+  useEffect(() => {
+    setPhotoRotation(0);
+    setPhotoZoom(1);
+  }, [lightboxIndex]);
+
+  // Lightbox slideshow auto-play timer
+  useEffect(() => {
+    if (!isSlideshow || lightboxIndex === null) return;
+    const interval = setInterval(() => {
+      setLightboxIndex((prev) =>
+        prev !== null && prev + 1 < filteredItems.length ? prev + 1 : 0
+      );
+    }, 3500);
+    return () => clearInterval(interval);
+  }, [isSlideshow, lightboxIndex, filteredItems.length]);
+
+  // Multi-Selection handlers
+  const handleToggleSelectItem = (id: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedItemIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAll = () => {
+    setSelectedItemIds(filteredItems.map((i) => i.id));
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedItemIds([]);
+  };
+
+  const handleBatchDownload = () => {
+    if (selectedItemIds.length === 0 || !userSid) return;
+    showToast(`📥 เริ่มดาวน์โหลด ${selectedItemIds.length} รายการจาก Synology Photos...`);
+    selectedItemIds.forEach((id) => {
+      const item = items.find((i) => i.id === id);
+      if (item) {
+        const a = document.createElement("a");
+        a.href = `/api/nas/photos/download?id=${item.id}&filename=${encodeURIComponent(
+          item.filename
+        )}&space=${item.space}&sid=${encodeURIComponent(userSid)}&nasUrl=${encodeURIComponent(config.nasUrl)}`;
+        a.download = item.filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
+    });
+  };
+
+  // Direct media upload handler to NAS
+  const handleUploadFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !userSid) return;
+
+    setIsUploading(true);
+    showToast(`⏳ กำลังอัปโหลด ${files.length} ไฟล์เข้าสู่ Synology Photos...`);
+
+    const destFolderPath = selectedFolder
+      ? currentSpace === "shared"
+        ? `/photo/${selectedFolder.name}`
+        : `/home/Photos/${selectedFolder.name}`
+      : currentSpace === "shared"
+      ? `/photo`
+      : `/home/Photos`;
+
+    try {
+      let successCount = 0;
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("folder_path", destFolderPath);
+        formData.append("sid", userSid);
+        formData.append("url", config.nasUrl);
+
+        const res = await fetch("/api/nas/upload", {
+          method: "POST",
+          body: formData,
+        });
+        const data = await res.json();
+        if (data.success) successCount++;
+      }
+
+      showToast(`✅ อัปโหลดสำเร็จ ${successCount} จาก ${files.length} ไฟล์ เข้าสู่ "${destFolderPath}"`);
+      if (selectedFolder) {
+        loadPhotos(userSid, currentSpace, undefined, selectedFolder.id);
+      } else {
+        loadFolders(userSid, currentSpace, 0);
+        loadPhotos(userSid, currentSpace);
+      }
+    } catch (err: any) {
+      showToast(`❌ การอัปโหลดล้มเหลว: ${err?.message}`);
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   // Current Lightbox Item
   const activeLightboxItem = lightboxIndex !== null && filteredItems[lightboxIndex] ? filteredItems[lightboxIndex] : null;
@@ -322,6 +463,87 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
   const handlePrevLightbox = () => {
     if (lightboxIndex === null) return;
     setLightboxIndex((prev) => (prev! - 1 >= 0 ? prev! - 1 : filteredItems.length - 1));
+  };
+
+  // Reusable item grid renderer for Photos, Videos, Folders, and Timeline
+  const renderItemGrid = (itemList: SynologyPhotoItem[]) => {
+    const gridClasses = {
+      sm: "grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2",
+      md: "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5",
+      lg: "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-5",
+    }[gridSize];
+
+    return (
+      <div className={gridClasses}>
+        {itemList.map((item) => {
+          const overallIdx = filteredItems.findIndex((it) => it.id === item.id);
+          const isSelected = selectedItemIds.includes(item.id);
+
+          return (
+            <div
+              key={item.id}
+              onClick={() => {
+                if (isSelecting) {
+                  setSelectedItemIds((prev) =>
+                    isSelected ? prev.filter((x) => x !== item.id) : [...prev, item.id]
+                  );
+                } else {
+                  setLightboxIndex(overallIdx >= 0 ? overallIdx : 0);
+                }
+              }}
+              className={`group relative bg-slate-900 rounded-2xl overflow-hidden shadow-xs hover:shadow-xl transition-all cursor-pointer aspect-square ${
+                isSelected ? "ring-3 ring-cyan-500 ring-offset-2" : ""
+              }`}
+            >
+              {/* Multi-selection Checkbox */}
+              <div
+                onClick={(e) => handleToggleSelectItem(item.id, e)}
+                className={`absolute top-2 left-2 z-10 w-6 h-6 rounded-lg flex items-center justify-center transition-all cursor-pointer text-xs font-bold ${
+                  isSelected
+                    ? "bg-cyan-600 text-white shadow-md ring-2 ring-white scale-105"
+                    : isSelecting
+                    ? "bg-black/40 text-transparent hover:bg-black/60 border border-white/50"
+                    : "opacity-0 group-hover:opacity-100 bg-black/40 text-transparent hover:bg-black/60 border border-white/50"
+                }`}
+                title={isSelected ? "ยกเลิกเลือก" : "เลือกรูปนี้"}
+              >
+                {isSelected ? "✓" : ""}
+              </div>
+
+              <img
+                src={getPhotoThumbnailUrl(
+                  item.id,
+                  gridSize === "sm" ? "sm" : "m",
+                  item.thumbnail?.cache_key,
+                  currentSpace,
+                  userSid
+                )}
+                alt={item.filename}
+                className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-300 opacity-90 group-hover:opacity-100"
+                loading="lazy"
+              />
+
+              {/* Video Badge */}
+              {item.type === "video" && (
+                <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded-full bg-black/70 text-white text-[10px] font-bold backdrop-blur-xs flex items-center gap-1">
+                  <span>▶</span>
+                  <span>วิดีโอ</span>
+                </div>
+              )}
+
+              {/* Hover Info Overlay */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-2.5 flex flex-col justify-end text-white">
+                <div className="text-xs font-bold truncate leading-tight drop-shadow-xs">{item.filename}</div>
+                <div className="text-[10px] text-slate-300 mt-0.5 flex items-center justify-between">
+                  <span>{formatPhotoTime(item.time).split(" ")[0]}</span>
+                  <span>{formatBytes(item.filesize)}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
   };
 
   return (
@@ -412,138 +634,248 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
       ) : (
         /* ─── MAIN GALLERY INTERFACE ─── */
         <div className="space-y-5">
-          {/* Controls Bar: Space Selector & Filter Tabs */}
-          <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-            {/* Space Switcher */}
-            <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl">
-              <button
-                type="button"
-                onClick={() => {
-                  setCurrentSpace("shared");
-                  setSelectedAlbumId(null);
-                  setSelectedFolder(null);
-                  setFolderBreadcrumbs([{ id: 0, name: "โฟลเดอร์หลัก" }]);
-                }}
-                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  currentSpace === "shared"
-                    ? "bg-white text-cyan-800 shadow-xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                <span>🏛️</span>
-                <span>พื้นที่ส่วนกลาง พมจ. (Shared Space)</span>
-              </button>
+          {/* Controls Bar: Space Selector, Filter Tabs, Batch & Tools */}
+          <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-3.5">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              {/* Space Switcher */}
+              <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentSpace("shared");
+                    setSelectedAlbumId(null);
+                    setSelectedFolder(null);
+                    setFolderBreadcrumbs([{ id: 0, name: "โฟลเดอร์หลัก" }]);
+                  }}
+                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    currentSpace === "shared"
+                      ? "bg-white text-cyan-800 shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <span>🏛️</span>
+                  <span>พื้นที่ส่วนกลาง พมจ. (Shared Space)</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setCurrentSpace("personal");
-                  setSelectedAlbumId(null);
-                  setSelectedFolder(null);
-                  setFolderBreadcrumbs([{ id: 0, name: "โฟลเดอร์หลัก" }]);
-                }}
-                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  currentSpace === "personal"
-                    ? "bg-white text-cyan-800 shadow-xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                <span>👤</span>
-                <span>พื้นที่ส่วนตัว (Personal Space)</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentSpace("personal");
+                    setSelectedAlbumId(null);
+                    setSelectedFolder(null);
+                    setFolderBreadcrumbs([{ id: 0, name: "โฟลเดอร์หลัก" }]);
+                  }}
+                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    currentSpace === "personal"
+                      ? "bg-white text-cyan-800 shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <span>👤</span>
+                  <span>พื้นที่ส่วนตัว (Personal Space)</span>
+                </button>
+              </div>
+
+              {/* View Modes & Filter Tabs */}
+              <div className="flex items-center gap-1.5 overflow-x-auto py-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab("folders");
+                    setSelectedAlbumId(null);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    activeTab === "folders"
+                      ? "bg-cyan-50 text-cyan-700 border border-cyan-200"
+                      : "text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  📁 โฟลเดอร์กิจกรรม ({folders.length})
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab("timeline");
+                    setSelectedAlbumId(null);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    activeTab === "timeline"
+                      ? "bg-cyan-50 text-cyan-700 border border-cyan-200"
+                      : "text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  📅 ไทม์ไลน์
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab("all");
+                    setSelectedAlbumId(null);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    activeTab === "all" && !selectedAlbumId
+                      ? "bg-cyan-50 text-cyan-700 border border-cyan-200"
+                      : "text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  🖼️ ทั้งหมด ({items.length})
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab("photos");
+                    setSelectedAlbumId(null);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    activeTab === "photos"
+                      ? "bg-cyan-50 text-cyan-700 border border-cyan-200"
+                      : "text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  📸 รูปภาพ
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab("videos");
+                    setSelectedAlbumId(null);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    activeTab === "videos"
+                      ? "bg-cyan-50 text-cyan-700 border border-cyan-200"
+                      : "text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  🎥 วิดีโอ
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("albums")}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    activeTab === "albums"
+                      ? "bg-cyan-50 text-cyan-700 border border-cyan-200"
+                      : "text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  🏷️ อัลบั้ม ({albums.length})
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (activeTab === "albums") {
+                      loadAlbums(userSid, currentSpace);
+                    } else if (activeTab === "folders") {
+                      loadFolders(userSid, currentSpace, selectedFolder?.id || 0);
+                      if (selectedFolder) loadPhotos(userSid, currentSpace, undefined, selectedFolder.id);
+                    } else {
+                      loadPhotos(userSid, currentSpace, selectedAlbumId || undefined, selectedFolder?.id);
+                    }
+                  }}
+                  className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer"
+                  title="รีเฟรชคลังภาพ"
+                >
+                  🔄
+                </button>
+              </div>
             </div>
 
-            {/* Media Type & Folder Tabs */}
-            <div className="flex items-center gap-1.5 overflow-x-auto py-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab("folders");
-                  setSelectedAlbumId(null);
-                }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === "folders"
-                    ? "bg-cyan-50 text-cyan-700 border border-cyan-200"
-                    : "text-slate-600 hover:bg-slate-100"
-                }`}
-              >
-                📁 โฟลเดอร์กิจกรรม ({folders.length})
-              </button>
+            {/* Second row: Action tools (Upload, Multi-select, Sorting, Grid sizing) */}
+            <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Direct Upload Button to NAS */}
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleUploadFiles}
+                  multiple
+                  accept="image/*,video/*"
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading}
+                  className="px-3.5 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  title="อัปโหลดภาพหรือวิดีโอตรงเข้าสู่ Synology Photos"
+                >
+                  <span>{isUploading ? "⏳" : "📤"}</span>
+                  <span>{isUploading ? "กำลังอัปโหลด..." : "อัปโหลดภาพ"}</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab("all");
-                  setSelectedAlbumId(null);
-                }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === "all" && !selectedAlbumId
-                    ? "bg-cyan-50 text-cyan-700 border border-cyan-200"
-                    : "text-slate-600 hover:bg-slate-100"
-                }`}
-              >
-                🖼️ ทั้งหมด ({items.length})
-              </button>
+                {/* Multi-Selection Mode Toggle */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSelecting(!isSelecting);
+                    if (isSelecting) setSelectedItemIds([]);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    isSelecting
+                      ? "bg-cyan-100 text-cyan-800 border border-cyan-300 shadow-xs"
+                      : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                  }`}
+                >
+                  <span>✓</span>
+                  <span>{isSelecting ? `เลือกอยู่ (${selectedItemIds.length})` : "เลือกหลายรูป"}</span>
+                </button>
+              </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab("photos");
-                  setSelectedAlbumId(null);
-                }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === "photos"
-                    ? "bg-cyan-50 text-cyan-700 border border-cyan-200"
-                    : "text-slate-600 hover:bg-slate-100"
-                }`}
-              >
-                📸 รูปภาพ
-              </button>
+              <div className="flex items-center gap-3 self-end sm:self-auto flex-wrap">
+                {/* Sort Order Selector */}
+                <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                  <span className="text-[11px] font-bold">เรียงลำดับ:</span>
+                  <select
+                    value={sortOrder}
+                    onChange={(e) => setSortOrder(e.target.value as any)}
+                    className="px-2.5 py-1 rounded-xl border border-slate-200 bg-white text-xs text-slate-700 font-medium focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 cursor-pointer"
+                  >
+                    <option value="newest">📅 ใหม่ล่าสุด</option>
+                    <option value="oldest">⏳ เก่าสุดก่อน</option>
+                    <option value="name_asc">🔤 ชื่อไฟล์ (A-Z)</option>
+                    <option value="size_desc">💾 ขนาดไฟล์ (ใหญ่-เล็ก)</option>
+                  </select>
+                </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab("videos");
-                  setSelectedAlbumId(null);
-                }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === "videos"
-                    ? "bg-cyan-50 text-cyan-700 border border-cyan-200"
-                    : "text-slate-600 hover:bg-slate-100"
-                }`}
-              >
-                🎥 วิดีโอ
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab("albums")}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === "albums"
-                    ? "bg-cyan-50 text-cyan-700 border border-cyan-200"
-                    : "text-slate-600 hover:bg-slate-100"
-                }`}
-              >
-                🏷️ อัลบั้ม ({albums.length})
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (activeTab === "albums") {
-                    loadAlbums(userSid, currentSpace);
-                  } else if (activeTab === "folders") {
-                    loadFolders(userSid, currentSpace, selectedFolder?.id || 0);
-                    if (selectedFolder) loadPhotos(userSid, currentSpace, undefined, selectedFolder.id);
-                  } else {
-                    loadPhotos(userSid, currentSpace, selectedAlbumId || undefined, selectedFolder?.id);
-                  }
-                }}
-                className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer"
-                title="รีเฟรชคลังภาพ"
-              >
-                🔄
-              </button>
+                {/* Grid Size S / M / L */}
+                <div className="flex items-center p-0.5 bg-slate-100 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setGridSize("sm")}
+                    className={`px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      gridSize === "sm" ? "bg-white text-cyan-800 shadow-xs" : "text-slate-500 hover:text-slate-800"
+                    }`}
+                    title="กริดขนาดเล็ก (S: 6-8 คอลัมน์)"
+                  >
+                    S
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGridSize("md")}
+                    className={`px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      gridSize === "md" ? "bg-white text-cyan-800 shadow-xs" : "text-slate-500 hover:text-slate-800"
+                    }`}
+                    title="กริดขนาดกลาง (M: 4-5 คอลัมน์)"
+                  >
+                    M
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGridSize("lg")}
+                    className={`px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      gridSize === "lg" ? "bg-white text-cyan-800 shadow-xs" : "text-slate-500 hover:text-slate-800"
+                    }`}
+                    title="กริดขนาดใหญ่ (L: 2-3 คอลัมน์)"
+                  >
+                    L
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -611,10 +943,10 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
             <div className="relative">
               <input
                 type="text"
-                placeholder="ค้นหาชื่อไฟล์ภาพหรือวิดีโอ..."
+                placeholder="ค้นหาชื่อไฟล์ หรือ EXIF..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-7 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 w-44 sm:w-60"
+                className="pl-7 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 w-48 sm:w-64"
               />
               <span className="absolute left-2.5 top-2 text-xs text-slate-400">🔍</span>
             </div>
@@ -810,49 +1142,11 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                       <div className="text-xs text-slate-400">
                         {searchQuery
                           ? "ไม่พบไฟล์ที่ตรงกับคำค้นหา"
-                          : "สามารถอัปโหลดไฟล์ภาพเข้ามาไว้ในโฟลเดอร์นี้ผ่าน Synology Photos หรือ File Station"}
+                          : "สามารถอัปโหลดไฟล์ภาพเข้ามาไว้ในโฟลเดอร์นี้ผ่าน Synology Photos หรือกดปุ่ม 'อัปโหลดภาพ' ด้านบน"}
                       </div>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
-                      {filteredItems.map((item, idx) => (
-                        <div
-                          key={item.id}
-                          onClick={() => setLightboxIndex(idx)}
-                          className="group relative bg-slate-900 rounded-2xl overflow-hidden shadow-xs hover:shadow-xl transition-all cursor-pointer aspect-square"
-                        >
-                          <img
-                            src={getPhotoThumbnailUrl(
-                              item.id,
-                              "m",
-                              item.thumbnail?.cache_key,
-                              item.space,
-                              userSid
-                            )}
-                            alt={item.filename}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 opacity-90 group-hover:opacity-100"
-                            loading="lazy"
-                          />
-
-                          {item.type === "video" && (
-                            <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded-md bg-black/60 text-white text-[10px] font-bold flex items-center gap-1 backdrop-blur-xs">
-                              <span>🎥</span>
-                              <span>วิดีโอ</span>
-                            </div>
-                          )}
-
-                          <div className="absolute inset-x-0 bottom-0 p-2.5 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                            <div className="text-xs font-medium text-white truncate drop-shadow-xs">
-                              {item.filename}
-                            </div>
-                            <div className="text-[10px] text-slate-300 flex items-center justify-between mt-0.5">
-                              <span>{formatBytes(item.filesize)}</span>
-                              <span>{formatPhotoTime(item.time)}</span>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                    renderItemGrid(filteredItems)
                   )}
                 </div>
               ) : folders.length === 0 ? (
@@ -879,6 +1173,56 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                   </button>
                 </div>
               ) : null}
+            </div>
+          ) : activeTab === "timeline" ? (
+            /* ─── TIMELINE VIEW (Grouped by Year & Month) ─── */
+            <div className="space-y-8">
+              {timelineGroups.length === 0 ? (
+                <div className="py-20 text-center space-y-2 p-8 rounded-3xl bg-white border border-slate-200">
+                  <div className="text-4xl">📅</div>
+                  <div className="text-sm font-bold text-slate-700">ไม่พบรูปภาพในไทม์ไลน์</div>
+                  <div className="text-xs text-slate-400 max-w-sm mx-auto">
+                    {searchQuery ? "ไม่พบไฟล์ที่ตรงกับคำค้นหา" : "ยังไม่มีภาพถ่ายในพื้นที่นี้"}
+                  </div>
+                </div>
+              ) : (
+                timelineGroups.map((group) => {
+                  const groupIds = group.items.map((i) => i.id);
+                  const allGroupSelected = groupIds.every((id) => selectedItemIds.includes(id));
+                  return (
+                    <div key={group.monthKey} className="space-y-3">
+                      {/* Sticky Month Header */}
+                      <div className="sticky top-2 z-10 bg-white/90 backdrop-blur-md py-2.5 px-4 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-base">📅</span>
+                          <h3 className="text-sm font-bold text-slate-800 font-heading">
+                            {group.monthTitle}
+                          </h3>
+                          <span className="px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-800 text-[11px] font-bold">
+                            {group.items.length} รายการ
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (allGroupSelected) {
+                              setSelectedItemIds((prev) => prev.filter((id) => !groupIds.includes(id)));
+                            } else {
+                              setSelectedItemIds((prev) => Array.from(new Set([...prev, ...groupIds])));
+                            }
+                          }}
+                          className="text-xs text-cyan-700 hover:text-cyan-900 font-bold cursor-pointer px-2.5 py-1 rounded-lg hover:bg-cyan-50 transition-colors"
+                        >
+                          {allGroupSelected ? "✕ ยกเลิกทั้งเดือน" : "✓ เลือกทั้งเดือน"}
+                        </button>
+                      </div>
+
+                      {/* Month Photos Grid */}
+                      {renderItemGrid(group.items)}
+                    </div>
+                  );
+                })
+              )}
             </div>
           ) : activeTab === "albums" ? (
             /* ─── ALBUMS VIEW ─── */
@@ -944,70 +1288,150 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
-                  {filteredItems.map((item, idx) => (
-                    <div
-                      key={item.id}
-                      onClick={() => setLightboxIndex(idx)}
-                      className="group relative bg-slate-900 rounded-2xl overflow-hidden shadow-xs hover:shadow-xl transition-all cursor-pointer aspect-square"
-                    >
-                      <img
-                        src={getPhotoThumbnailUrl(
-                          item.id,
-                          "m",
-                          item.thumbnail?.cache_key,
-                          currentSpace,
-                          userSid
-                        )}
-                        alt={item.filename}
-                        className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-300 opacity-90 group-hover:opacity-100"
-                        loading="lazy"
-                      />
-
-                      {/* Video Indicator */}
-                      {item.type === "video" && (
-                        <div className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-black/70 text-white text-[10px] font-bold backdrop-blur-xs flex items-center gap-1">
-                          <span>▶</span>
-                          <span>วิดีโอ</span>
-                        </div>
-                      )}
-
-                      {/* Hover Info Overlay */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-3 flex flex-col justify-end text-white">
-                        <div className="text-xs font-bold truncate leading-tight">{item.filename}</div>
-                        <div className="text-[10px] text-slate-300 mt-0.5 flex items-center justify-between">
-                          <span>{formatPhotoTime(item.time).split(" ")[0]}</span>
-                          <span>{formatBytes(item.filesize)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                renderItemGrid(filteredItems)
               )}
             </div>
           )}
         </div>
       )}
 
-      {/* ─── LIGHTBOX PREVIEW MODAL ─── */}
+      {/* ─── FLOATING BATCH ACTION BAR (Synology Photos style) ─── */}
+      {selectedItemIds.length > 0 && (
+        <div className="fixed bottom-6 inset-x-0 z-40 flex justify-center pointer-events-none px-4">
+          <div className="pointer-events-auto bg-slate-900/95 text-white backdrop-blur-xl border border-white/20 px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-4 flex-wrap max-w-xl animate-scaleUp">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
+              <span className="text-xs font-bold">
+                เลือกแล้ว {selectedItemIds.length} รายการ
+              </span>
+            </div>
+
+            <div className="h-4 w-px bg-white/20 hidden sm:block" />
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleSelectAll}
+                className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-medium cursor-pointer transition-colors"
+              >
+                เลือกทั้งหมด ({filteredItems.length})
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDeselectAll}
+                className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-medium cursor-pointer transition-colors"
+              >
+                ล้างการเลือก
+              </button>
+
+              <button
+                type="button"
+                onClick={handleBatchDownload}
+                className="px-3.5 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>📥</span>
+                <span>ดาวน์โหลดที่เลือก</span>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleDeselectAll}
+              className="text-slate-400 hover:text-white text-sm p-1 cursor-pointer ml-auto"
+              title="ปิดแถบเครื่องมือ"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ─── LIGHTBOX PRO PREVIEW & EXIF INSPECTOR ─── */}
       {activeLightboxItem && (
-        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col justify-between animate-fadeIn">
-          {/* Top Bar */}
-          <div className="p-4 px-6 flex items-center justify-between text-white border-b border-white/10 shrink-0">
-            <div className="flex items-center gap-3 truncate">
-              <span className="text-xl">{activeLightboxItem.type === "video" ? "🎥" : "🖼️"}</span>
+        <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col justify-between animate-fadeIn select-none">
+          {/* Top Bar with Pro Controls */}
+          <div className="p-3.5 px-6 flex items-center justify-between text-white border-b border-white/10 shrink-0 gap-4 flex-wrap">
+            <div className="flex items-center gap-3 truncate min-w-0">
+              <span className="text-xl shrink-0">{activeLightboxItem.type === "video" ? "🎥" : "🖼️"}</span>
               <div className="truncate">
                 <div className="font-bold text-sm truncate">{activeLightboxItem.filename}</div>
                 <div className="text-[11px] text-slate-400">
                   {formatPhotoTime(activeLightboxItem.time)} · {formatBytes(activeLightboxItem.filesize)}
                   {activeLightboxItem.additional?.resolution && (
-                    <span> · {activeLightboxItem.additional.resolution.width}x{activeLightboxItem.additional.resolution.height}px</span>
+                    <span> · {activeLightboxItem.additional.resolution.width}×{activeLightboxItem.additional.resolution.height}px</span>
                   )}
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-3 shrink-0">
+            {/* Lightbox Pro Toolbar */}
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              {/* Slideshow button */}
+              <button
+                type="button"
+                onClick={() => setIsSlideshow(!isSlideshow)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  isSlideshow ? "bg-amber-500 text-white shadow-md animate-pulse" : "bg-white/20 hover:bg-white/30 text-white"
+                }`}
+                title={isSlideshow ? "หยุดการเล่นสไลด์โชว์" : "เล่นสไลด์โชว์อัตโนมัติ (3.5 วินาที/ภาพ)"}
+              >
+                <span>{isSlideshow ? "⏸️" : "▶️"}</span>
+                <span className="hidden sm:inline">{isSlideshow ? "หยุดสไลด์" : "ฉายสไลด์"}</span>
+              </button>
+
+              {/* Rotate button */}
+              <button
+                type="button"
+                onClick={() => setPhotoRotation((prev) => (prev + 90) % 360)}
+                className="p-1.5 px-2.5 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                title="หมุนภาพ 90 องศา"
+              >
+                <span>🔄</span>
+                <span className="hidden md:inline">หมุน</span>
+              </button>
+
+              {/* Zoom Controls */}
+              <div className="flex items-center bg-white/20 rounded-xl p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setPhotoZoom((prev) => Math.max(0.5, Number((prev - 0.25).toFixed(2))))}
+                  className="px-2 py-1 hover:bg-white/20 rounded-lg text-white text-xs font-bold cursor-pointer"
+                  title="ย่อขนาด"
+                >
+                  −
+                </button>
+                <span
+                  onClick={() => setPhotoZoom(1)}
+                  className="px-2 text-[11px] text-white/90 font-mono cursor-pointer hover:underline"
+                  title="คลิกเพื่อรีเซ็ต 100%"
+                >
+                  {Math.round(photoZoom * 100)}%
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPhotoZoom((prev) => Math.min(3, Number((prev + 0.25).toFixed(2))))}
+                  className="px-2 py-1 hover:bg-white/20 rounded-lg text-white text-xs font-bold cursor-pointer"
+                  title="ขยายขนาด"
+                >
+                  +
+                </button>
+              </div>
+
+              {/* Info Inspector (EXIF) toggle */}
+              <button
+                type="button"
+                onClick={() => setShowExifPanel(!showExifPanel)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  showExifPanel ? "bg-cyan-600 text-white shadow-md" : "bg-white/20 hover:bg-white/30 text-white"
+                }`}
+                title="เปิด/ปิด แผงข้อมูลภาพถ่ายและ EXIF (Info Inspector)"
+              >
+                <span>ℹ️</span>
+                <span className="hidden sm:inline">ข้อมูลภาพ</span>
+              </button>
+
+              {/* Download button */}
               <a
                 href={`/api/nas/photos/download?id=${activeLightboxItem.id}&filename=${encodeURIComponent(
                   activeLightboxItem.filename
@@ -1017,13 +1441,14 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                 title="ดาวน์โหลดไฟล์ต้นฉบับ"
               >
                 <span>⬇️</span>
-                <span>ดาวน์โหลดต้นฉบับ</span>
+                <span className="hidden sm:inline">ดาวน์โหลดต้นฉบับ</span>
               </a>
 
+              {/* Close button */}
               <button
                 type="button"
                 onClick={() => setLightboxIndex(null)}
-                className="p-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-white text-sm font-bold transition-all cursor-pointer"
+                className="p-1.5 px-2.5 rounded-xl bg-white/20 hover:bg-white/30 text-white text-sm font-bold transition-all cursor-pointer"
                 title="ปิดหน้าต่าง (Esc)"
               >
                 ✕
@@ -1031,47 +1456,218 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
             </div>
           </div>
 
-          {/* Center Preview Content with Next/Prev Controls */}
-          <div className="relative flex-1 flex items-center justify-center p-4 overflow-hidden select-none">
-            {/* Prev Button */}
-            <button
-              type="button"
-              onClick={handlePrevLightbox}
-              className="absolute left-4 z-10 w-11 h-11 rounded-full bg-white/20 hover:bg-white/30 text-white text-xl flex items-center justify-center backdrop-blur-md transition-all cursor-pointer"
-              title="ก่อนหน้า (ลูกศรซ้าย)"
-            >
-              ‹
-            </button>
+          {/* Center Main Stage + Sliding EXIF Inspector */}
+          <div className="relative flex-1 flex overflow-hidden">
+            {/* Center Preview Content with Next/Prev Controls */}
+            <div className="relative flex-1 flex items-center justify-center p-4 overflow-hidden select-none">
+              {/* Prev Button */}
+              <button
+                type="button"
+                onClick={handlePrevLightbox}
+                className="absolute left-4 z-10 w-11 h-11 rounded-full bg-white/20 hover:bg-white/30 text-white text-xl flex items-center justify-center backdrop-blur-md transition-all cursor-pointer"
+                title="ก่อนหน้า (ลูกศรซ้าย)"
+              >
+                ‹
+              </button>
 
-            {/* Media Content */}
-            <div className="max-w-5xl max-h-[75vh] flex items-center justify-center">
-              <img
-                src={getPhotoThumbnailUrl(
-                  activeLightboxItem.id,
-                  "xl",
-                  activeLightboxItem.thumbnail?.cache_key,
-                  currentSpace,
-                  userSid
-                )}
-                alt={activeLightboxItem.filename}
-                className="max-w-full max-h-[75vh] object-contain rounded-xl shadow-2xl animate-scaleUp"
-              />
+              {/* Media Content with Rotation & Zoom */}
+              <div className="max-w-5xl max-h-[75vh] flex items-center justify-center overflow-hidden">
+                <img
+                  src={getPhotoThumbnailUrl(
+                    activeLightboxItem.id,
+                    "xl",
+                    activeLightboxItem.thumbnail?.cache_key,
+                    currentSpace,
+                    userSid
+                  )}
+                  alt={activeLightboxItem.filename}
+                  style={{
+                    transform: `rotate(${photoRotation}deg) scale(${photoZoom})`,
+                    transition: "transform 0.2s ease-out",
+                  }}
+                  className="max-w-full max-h-[75vh] object-contain rounded-xl shadow-2xl origin-center"
+                />
+              </div>
+
+              {/* Next Button */}
+              <button
+                type="button"
+                onClick={handleNextLightbox}
+                className="absolute right-4 z-10 w-11 h-11 rounded-full bg-white/20 hover:bg-white/30 text-white text-xl flex items-center justify-center backdrop-blur-md transition-all cursor-pointer"
+                title="ถัดไป (ลูกศรขวา)"
+              >
+                ›
+              </button>
             </div>
 
-            {/* Next Button */}
-            <button
-              type="button"
-              onClick={handleNextLightbox}
-              className="absolute right-4 z-10 w-11 h-11 rounded-full bg-white/20 hover:bg-white/30 text-white text-xl flex items-center justify-center backdrop-blur-md transition-all cursor-pointer"
-              title="ถัดไป (ลูกศรขวา)"
-            >
-              ›
-            </button>
+            {/* Sliding EXIF Info Inspector Sidebar */}
+            {showExifPanel && (
+              <div className="w-80 md:w-96 bg-slate-900/95 backdrop-blur-xl border-l border-white/10 p-5 text-white overflow-y-auto shrink-0 flex flex-col gap-4 z-20 animate-fadeIn">
+                <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">ℹ️</span>
+                    <h4 className="font-bold text-sm">ข้อมูลภาพถ่าย (Inspector)</h4>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowExifPanel(false)}
+                    className="text-white/60 hover:text-white p-1 text-xs cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* File Details */}
+                <div className="space-y-2 text-xs">
+                  <div className="font-bold text-cyan-400 uppercase tracking-wider text-[10px]">
+                    รายละเอียดไฟล์ (File Specs)
+                  </div>
+                  <div className="space-y-1.5 bg-white/5 p-3 rounded-xl border border-white/5">
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">ชื่อไฟล์:</span>
+                      <span className="font-medium text-right truncate max-w-[180px]">{activeLightboxItem.filename}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">ประเภท:</span>
+                      <span className="font-medium uppercase">{activeLightboxItem.type}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">ขนาด:</span>
+                      <span className="font-medium">{formatBytes(activeLightboxItem.filesize)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">ความละเอียด:</span>
+                      <span className="font-medium">
+                        {activeLightboxItem.additional?.resolution
+                          ? `${activeLightboxItem.additional.resolution.width} × ${activeLightboxItem.additional.resolution.height} px`
+                          : "ไม่ระบุ"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">วันที่บันทึก:</span>
+                      <span className="font-medium">{formatPhotoTime(activeLightboxItem.time)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Camera & Lens EXIF */}
+                <div className="space-y-2 text-xs">
+                  <div className="font-bold text-cyan-400 uppercase tracking-wider text-[10px]">
+                    ข้อมูลกล้องและเลนส์ (EXIF Camera)
+                  </div>
+                  <div className="space-y-2 bg-white/5 p-3 rounded-xl border border-white/5">
+                    <div>
+                      <div className="text-slate-400 text-[10px]">กล้องถ่ายภาพ</div>
+                      <div className="font-bold text-slate-100 mt-0.5">
+                        {activeLightboxItem.additional?.exif?.camera_maker
+                          ? `${activeLightboxItem.additional.exif.camera_maker} `
+                          : ""}
+                        {activeLightboxItem.additional?.exif?.camera || "ไม่พบข้อมูลกล้อง"}
+                      </div>
+                    </div>
+
+                    {activeLightboxItem.additional?.exif?.lens && (
+                      <div>
+                        <div className="text-slate-400 text-[10px]">เลนส์ (Lens)</div>
+                        <div className="font-medium text-slate-200 mt-0.5 text-[11px]">
+                          {activeLightboxItem.additional.exif.lens}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Exposure Triangle Grid */}
+                    <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-white/10 text-center">
+                      <div className="bg-black/30 p-2 rounded-lg">
+                        <div className="text-[10px] text-slate-400">โฟกัส</div>
+                        <div className="font-bold text-white text-[11px] mt-0.5">
+                          {activeLightboxItem.additional?.exif?.focal_length
+                            ? `${activeLightboxItem.additional.exif.focal_length}mm`
+                            : "-"}
+                        </div>
+                      </div>
+                      <div className="bg-black/30 p-2 rounded-lg">
+                        <div className="text-[10px] text-slate-400">รูรับแสง</div>
+                        <div className="font-bold text-white text-[11px] mt-0.5">
+                          {activeLightboxItem.additional?.exif?.f_number
+                            ? `f/${activeLightboxItem.additional.exif.f_number}`
+                            : "-"}
+                        </div>
+                      </div>
+                      <div className="bg-black/30 p-2 rounded-lg">
+                        <div className="text-[10px] text-slate-400">ชัตเตอร์</div>
+                        <div className="font-bold text-white text-[11px] mt-0.5">
+                          {activeLightboxItem.additional?.exif?.exposure_time
+                            ? `${activeLightboxItem.additional.exif.exposure_time}s`
+                            : "-"}
+                        </div>
+                      </div>
+                      <div className="bg-black/30 p-2 rounded-lg">
+                        <div className="text-[10px] text-slate-400">ISO</div>
+                        <div className="font-bold text-white text-[11px] mt-0.5">
+                          {activeLightboxItem.additional?.exif?.iso || "-"}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Location / Address */}
+                {activeLightboxItem.additional?.address && (
+                  <div className="space-y-2 text-xs">
+                    <div className="font-bold text-cyan-400 uppercase tracking-wider text-[10px]">
+                      ตำแหน่งสถานที่ (Location)
+                    </div>
+                    <div className="bg-white/5 p-3 rounded-xl border border-white/5 flex items-start gap-2">
+                      <span className="text-base">📍</span>
+                      <div className="text-[11px] leading-relaxed text-slate-200">
+                        {[
+                          activeLightboxItem.additional.address.route,
+                          activeLightboxItem.additional.address.district,
+                          activeLightboxItem.additional.address.city,
+                          activeLightboxItem.additional.address.country,
+                        ]
+                          .filter(Boolean)
+                          .join(", ") || "ตำแหน่งตามพิกัดดาวเทียม"}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tags & Description */}
+                {((activeLightboxItem.additional?.tag && activeLightboxItem.additional.tag.length > 0) ||
+                  activeLightboxItem.additional?.description) && (
+                  <div className="space-y-2 text-xs">
+                    <div className="font-bold text-cyan-400 uppercase tracking-wider text-[10px]">
+                      แท็กและคำอธิบาย (Tags & Notes)
+                    </div>
+                    <div className="bg-white/5 p-3 rounded-xl border border-white/5 space-y-2">
+                      {activeLightboxItem.additional?.description && (
+                        <p className="text-[11px] text-slate-300 italic">
+                          "{activeLightboxItem.additional.description}"
+                        </p>
+                      )}
+                      {activeLightboxItem.additional?.tag && activeLightboxItem.additional.tag.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {activeLightboxItem.additional.tag.map((t, idx) => (
+                            <span
+                              key={idx}
+                              className="px-2 py-0.5 rounded-md bg-cyan-500/20 text-cyan-300 text-[10px] font-medium"
+                            >
+                              #{t}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Bottom Thumbnails Strip */}
           <div className="p-3 bg-black/60 border-t border-white/10 overflow-x-auto flex items-center justify-center gap-2 shrink-0">
-            {filteredItems.slice(Math.max(0, (lightboxIndex || 0) - 4), (lightboxIndex || 0) + 5).map((item, idx) => {
+            {filteredItems.slice(Math.max(0, (lightboxIndex || 0) - 4), (lightboxIndex || 0) + 5).map((item) => {
               const actualIdx = filteredItems.findIndex((it) => it.id === item.id);
               const isSelected = actualIdx === lightboxIndex;
               return (

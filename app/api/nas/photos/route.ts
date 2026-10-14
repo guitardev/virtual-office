@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
     if (action === "list_items") {
       const apiName = space === "shared" ? "SYNO.FotoTeam.Browse.Item" : "SYNO.Foto.Browse.Item";
       const additionalParam = encodeURIComponent(
-        JSON.stringify(["thumbnail", "resolution", "orientation", "video_meta"])
+        JSON.stringify(["thumbnail", "resolution", "orientation", "video_meta", "exif", "description", "tag", "address"])
       );
       let queryUrl = `${cleanUrl}/webapi/entry.cgi?api=${apiName}&version=1&method=list&offset=${offset}&limit=${limit}&additional=${additionalParam}&_sid=${encodeURIComponent(
         sid

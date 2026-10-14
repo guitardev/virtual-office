@@ -325,6 +325,193 @@ test.describe("ระบบคลังภาพและสื่อราช�
     await backBtn.click();
     await expect(folderCard).toBeVisible();
   });
+
+  test("ฟีเจอร์ระดับ Synology Photos: ไทม์ไลน์ (Timeline View), แถบ Batch Action, ปรับขนาดกริด S/M/L, และ Lightbox EXIF Inspector", async ({
+    page,
+  }) => {
+    // ดัก API จำลองภาพพร้อมข้อมูล EXIF ละเอียด
+    await page.route("**/api/nas/photos?*", async (route) => {
+      const url = new URL(route.request().url());
+      const action = url.searchParams.get("action");
+
+      if (action === "list_folders") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ success: true, folders: [] }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            items: [
+              {
+                id: 201,
+                filename: "ceremony_kamphaengphet_01.jpg",
+                filesize: 3450000,
+                time: 1776240000, // April 2026
+                type: "photo",
+                space: "shared",
+                thumbnail: { cache_key: "ck_ceremony" },
+                additional: {
+                  resolution: { width: 3840, height: 2160 },
+                  exif: {
+                    camera: "EOS R5",
+                    camera_maker: "Canon",
+                    lens: "RF 24-70mm F2.8 L IS USM",
+                    f_number: 2.8,
+                    exposure_time: "1/250",
+                    iso: 400,
+                    focal_length: 50,
+                  },
+                  address: {
+                    route: "ถนนราชดำเนิน",
+                    district: "เมืองกำแพงเพชร",
+                    city: "กำแพงเพชร",
+                    country: "ไทย",
+                  },
+                  tag: ["งานพิธี", "พมจ"],
+                  description: "ภาพพิธีมอบทุนการศึกษา",
+                },
+              },
+              {
+                id: 202,
+                filename: "ceremony_kamphaengphet_02.jpg",
+                filesize: 2800000,
+                time: 1776243600,
+                type: "photo",
+                space: "shared",
+                thumbnail: { cache_key: "ck_ceremony_2" },
+                additional: {
+                  resolution: { width: 1920, height: 1080 },
+                },
+              },
+            ],
+            total: 2,
+          }),
+        });
+      }
+    });
+
+    await page.route("**/api/nas/photos/thumbnail?*", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "image/svg+xml",
+        body: `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="200" height="200" fill="#0891b2"/></svg>`,
+      });
+    });
+
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    await page.evaluate(() => {
+      localStorage.setItem("omnioffice_nas_user_sid", "mock_photos_sid");
+      localStorage.setItem("omnioffice_nas_user_account", "itadmin");
+      sessionStorage.setItem("omnioffice_nas_user_sid", "mock_photos_sid");
+      sessionStorage.setItem("omnioffice_nas_user_account", "itadmin");
+    });
+
+    const galleryNav = page
+      .locator("aside button:has-text('คลังภาพและสื่อ'), nav button:has-text('คลังภาพและสื่อ')")
+      .first();
+    await galleryNav.click();
+
+    // 1. ตรวจสอบปุ่มเครื่องมือระดับ Synology Photos (Upload, Sort, Grid Size S/M/L)
+    const uploadBtn = page.locator("button:has-text('อัปโหลดภาพ')").first();
+    await expect(uploadBtn).toBeVisible();
+
+    const sortSelect = page.locator("select").first();
+    await expect(sortSelect).toBeVisible();
+
+    const gridSizeSm = page.locator("button[title*='กริดขนาดเล็ก']").first();
+    await expect(gridSizeSm).toBeVisible();
+    await gridSizeSm.click();
+
+    const gridSizeLg = page.locator("button[title*='กริดขนาดใหญ่']").first();
+    await expect(gridSizeLg).toBeVisible();
+    await gridSizeLg.click();
+
+    // 2. สลับไปที่แท็บ 'ไทม์ไลน์' (Timeline View)
+    const timelineTab = page.locator("button:has-text('ไทม์ไลน์')").first();
+    await expect(timelineTab).toBeVisible();
+    await timelineTab.click();
+
+    // ตรวจสอบ Sticky Month Header
+    const monthHeader = page.locator("text=2569").first();
+    await expect(monthHeader).toBeVisible();
+
+    // 3. ทดสอบ Multi-Selection Mode & Floating Batch Action Bar
+    const selectModeBtn = page.locator("button:has-text('เลือกหลายรูป')").first();
+    await expect(selectModeBtn).toBeVisible();
+    await selectModeBtn.click();
+
+    // คลิกเลือกภาพแรก
+    const firstCheckbox = page.locator("div[title='เลือกรูปนี้']").first();
+    await expect(firstCheckbox).toBeVisible();
+    await firstCheckbox.click();
+
+    // ตรวจสอบการปรากฏของ Floating Batch Action Bar
+    const batchBar = page.locator("text=เลือกแล้ว 1 รายการ").first();
+    await expect(batchBar).toBeVisible();
+
+    const batchDownloadBtn = page.locator("button:has-text('ดาวน์โหลดที่เลือก')").first();
+    await expect(batchDownloadBtn).toBeVisible();
+
+    // ล้างการเลือก
+    const clearSelectionBtn = page.locator("button:has-text('ล้างการเลือก')").first();
+    await clearSelectionBtn.click();
+    await expect(batchBar).toBeHidden();
+
+    // ปิดโหมดเลือกหลายรูป
+    const exitSelectBtn = page.locator("button:has-text('เลือกอยู่')").first();
+    await exitSelectBtn.click();
+
+    // 4. ทดสอบ Lightbox Pro และ EXIF Info Inspector
+    const photoCard = page.locator("text=ceremony_kamphaengphet_01.jpg").first();
+    await photoCard.click();
+
+    // ตรวจสอบปุ่ม Pro Toolbar ใน Lightbox
+    const rotateBtn = page.locator("button[title*='หมุนภาพ']").first();
+    await expect(rotateBtn).toBeVisible();
+    await rotateBtn.click(); // หมุน 90 องศา
+
+    const zoomReset = page.locator("span[title*='รีเซ็ต 100%']").first();
+    await expect(zoomReset).toBeVisible();
+
+    const slideshowBtn = page.locator("button[title*='สไลด์โชว์']").first();
+    await expect(slideshowBtn).toBeVisible();
+
+    // เปิด Info Inspector Panel (EXIF)
+    const exifToggleBtn = page.locator("button[title*='Info Inspector']").first();
+    await expect(exifToggleBtn).toBeVisible();
+    await exifToggleBtn.click();
+
+    // ตรวจสอบข้อมูลใน Info Inspector Panel
+    const inspectorTitle = page.locator("h4:has-text('ข้อมูลภาพถ่าย (Inspector)')").first();
+    await expect(inspectorTitle).toBeVisible();
+
+    const cameraModel = page.locator("text=Canon EOS R5").first();
+    await expect(cameraModel).toBeVisible();
+
+    const lensModel = page.locator("text=RF 24-70mm F2.8 L IS USM").first();
+    await expect(lensModel).toBeVisible();
+
+    const fNumber = page.locator("text=f/2.8").first();
+    await expect(fNumber).toBeVisible();
+
+    const isoValue = page.locator("text=400").first();
+    await expect(isoValue).toBeVisible();
+
+    const addressLocation = page.locator("text=ถนนราชดำเนิน, เมืองกำแพงเพชร, กำแพงเพชร, ไทย").first();
+    await expect(addressLocation).toBeVisible();
+
+    // ปิด Lightbox
+    const closeBtn = page.locator("button[title*='ปิดหน้าต่าง']").first();
+    await closeBtn.click();
+    await expect(inspectorTitle).toBeHidden();
+  });
 });
 
 

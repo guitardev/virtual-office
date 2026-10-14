@@ -26,6 +26,23 @@ export interface SynologyPhotoItem {
     orientation?: number;
     video_meta?: { duration: number };
     description?: string;
+    tag?: string[];
+    address?: {
+      city?: string;
+      district?: string;
+      country?: string;
+      route?: string;
+    };
+    exif?: {
+      camera?: string;
+      camera_maker?: string;
+      lens?: string;
+      f_number?: number;
+      exposure_time?: string;
+      iso?: number;
+      focal_length?: number;
+      date_time?: string;
+    };
   };
 }
 
@@ -97,7 +114,7 @@ export async function listSynologyPhotos(params: {
     const cleanUrl = nasUrl.replace(/\/+$/, "");
     const apiName = space === "shared" ? "SYNO.FotoTeam.Browse.Item" : "SYNO.Foto.Browse.Item";
     const additionalParam = encodeURIComponent(
-      JSON.stringify(["thumbnail", "resolution", "orientation", "video_meta"])
+      JSON.stringify(["thumbnail", "resolution", "orientation", "video_meta", "exif", "description", "tag", "address"])
     );
     let url = `${cleanUrl}/webapi/entry.cgi?api=${apiName}&version=1&method=list&offset=${
       params.offset || 0
@@ -372,3 +389,40 @@ export function formatPhotoTime(timestampSeconds: number): string {
     return "-";
   }
 }
+
+export interface PhotoMonthGroup {
+  monthKey: string;
+  monthTitle: string;
+  items: SynologyPhotoItem[];
+}
+
+/**
+ * Group photo items by Year & Month for Synology Photos Timeline view
+ */
+export function groupPhotosByMonth(items: SynologyPhotoItem[]): PhotoMonthGroup[] {
+  const map = new Map<string, { monthTitle: string; items: SynologyPhotoItem[] }>();
+
+  for (const item of items) {
+    const d = new Date(item.time * 1000);
+    const yearMonthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const monthTitle = d.toLocaleDateString("th-TH", {
+      month: "long",
+      year: "numeric",
+    });
+
+    if (!map.has(yearMonthKey)) {
+      map.set(yearMonthKey, { monthTitle, items: [] });
+    }
+    map.get(yearMonthKey)!.items.push(item);
+  }
+
+  // Sort groups descending by date key
+  return Array.from(map.entries())
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([monthKey, val]) => ({
+      monthKey,
+      monthTitle: val.monthTitle,
+      items: val.items,
+    }));
+}
+
