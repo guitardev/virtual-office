@@ -19,7 +19,7 @@ test.describe("ระบบยานพาหนะราชการ & เก�
     await fleetTabBtn.click();
 
     // 3. ตรวจสอบการ์ดรถยนต์แต่ละคัน
-    const carCards = page.locator(".rounded-2xl.border.border-slate-200");
+    const carCards = page.locator(".rounded-3xl.border, .rounded-2xl.border");
     await expect(carCards.first()).toBeVisible();
 
     // ตรวจสอบการแสดงเลขไมล์ Odometer

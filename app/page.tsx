@@ -614,23 +614,6 @@ export default function OmniOfficeApp() {
     showToast("👋 ออกจากระบบเรียบร้อยแล้ว");
   };
 
-  // Switch role simulation
-  const handleSwitchRole = (newRole: Role) => {
-    setCurrentUserRole(newRole);
-    const matchingMember = members.find((m) => m.role === newRole);
-    if (matchingMember) {
-      setCurrentUser(matchingMember);
-    }
-    const roleInfo = ROLE_CONFIG[newRole];
-    showToast(`🔄 สลับบทบาทเป็น: ${roleInfo.label}`);
-
-    addAuditLog(
-      matchingMember ? matchingMember.name : (currentUser ? currentUser.name : "ผู้ใช้งาน"),
-      `สลับโหมดจำลองสิทธิ์เป็น ${roleInfo.label}`,
-      "RBAC Simulation",
-      "success"
-    );
-  };
 
   // Change member role
   const handleChangeMemberRole = (memberId: string, newRole: Role) => {
@@ -1501,15 +1484,6 @@ export default function OmniOfficeApp() {
         >
           ← กลับหน้าแรก
         </button>
-        {currentUserRole !== "admin" && (
-          <button
-            type="button"
-            onClick={() => handleSwitchRole("admin")}
-            className="px-5 py-2.5 bg-[#4F46E5] text-white rounded-xl text-sm font-bold hover:bg-[#4338CA] transition-colors shadow-md shadow-indigo-600/20 cursor-pointer"
-          >
-            👑 สลับเป็น Admin เพื่อทดสอบ
-          </button>
-        )}
       </div>
     </div>
   );
@@ -1690,29 +1664,6 @@ export default function OmniOfficeApp() {
               </span>
             </div>
 
-            {/* Interactive Role Simulator Pill */}
-            <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-slate-100 border border-slate-200">
-              <span className="text-[11px] font-bold text-slate-500 px-2 hidden lg:inline">
-                สิทธิ์ทดสอบ:
-              </span>
-              {(["admin", "manager", "member", "guest"] as Role[]).map((r) => {
-                const active = currentUserRole === r;
-                return (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => handleSwitchRole(r)}
-                    className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all ${
-                      active
-                        ? "bg-[#4F46E5] text-white shadow-sm"
-                        : "text-slate-600 hover:bg-slate-200/80"
-                    }`}
-                  >
-                    {ROLE_CONFIG[r].icon} {r.toUpperCase()}
-                  </button>
-                );
-              })}
-            </div>
 
             {/* Notification Bell & Dropdown */}
             <div className="relative">
