@@ -1093,6 +1093,41 @@ on conflict (id) do update set
   - สถานะบนส่วนหัวแสดงเป็น `Supabase Live (สีเขียว)` อย่างถูกต้อง
   - การเชื่อมต่อ Realtime WebSocket (`/realtime/v1/websocket`) สมบูรณ์
 
+---
 
+## 22. การปิดบังและปกป้อง URL/IP ของ Synology NAS เพื่อความปลอดภัย (NAS Endpoint Masking & Threat Mitigation)
+> **สถานะปัจจุบัน:** ✅ **ดำเนินการเสร็จสิ้นสมบูรณ์ 100% (Secured & Verified)**  
+> **วันเวลาที่ดำเนินการ:** 15 ตุลาคม 2569 เวลา 17:10 น.
 
+### 22.1 วัตถุประสงค์และการประเมินความเสี่ยงด้านความมั่นคงปลอดภัย (Security Threat Analysis)
+การแสดงโดเมนจริง (`nas.smso.site`) หรือหมายเลขไอพีภายในสำนักงาน (`192.168.162.21:5000`) บนหน้าจอฝั่งผู้ใช้งาน (Client UI), Tooltips, Toast Messages และการตอบสนองของ Health API มีความเสี่ยงต่อการถูกเจาะจงโจมตี (Reconnaissance / Targeted Attacks) เช่น:
+1. การสแกนพอร์ตหาช่องโหว่บน DSM Web API โดยตรงจากผู้ไม่หวังดี
+2. การพยายามทำ DDoS หรือ Brute Force รหัสผ่านผ่านพอร์ต 5000
+3. ข้อมูลโครงสร้างเครือข่ายภายใน (Internal LAN Topology) รั่วไหลสู่สาธารณะ
 
+### 22.2 มาตรการและจุดที่ทำการแก้ไข (Implemented Mitigations)
+1. **หน้าเข้าสู่ระบบ ([LoginPage.tsx](file:///c:/Users/GuitarDev/virtual-office/components/auth/LoginPage.tsx)):**
+   - ถอดการแสดงผลป้าย URL/โดเมน (`nasHostLabel`) ออกทั้งหมด
+   - แทนที่ด้วยป้ายแสดงสถานะการเชื่อมต่อความปลอดภัย: `🟢 ออนไลน์ (Online)` หรือ `🔴 ออฟไลน์ (Offline)`
+   - ดักกรองข้อความแจ้งเตือนข้อผิดพลาด (Error Sanitization) ไม่ให้มี URL หรือ IP หลุดออกไปสู่หน้าจอ
+2. **ระบบคลังภาพและสื่อราชการ ([NasPhotoGallery.tsx](file:///c:/Users/GuitarDev/virtual-office/components/gallery/NasPhotoGallery.tsx)):**
+   - เปลี่ยนปุ่มและ Toast แจ้งเตือนจากการระบุ URL/IP ตรง เป็นการระบุโหมดความปลอดภัย:
+     - `สลับใช้โหมดเครือข่ายภายใน (LAN)`
+     - `สลับใช้โหมดความปลอดภัยภายนอก (Zero Trust)`
+   - ปิดบัง URL ในคำอธิบายส่วนหัวและคู่มือตั้งค่าสิทธิ์ DSM Shared Space
+3. **ระบบคลังเอกสารราชการ ([NasFileManager.tsx](file:///c:/Users/GuitarDev/virtual-office/components/dms/NasFileManager.tsx)):**
+   - ลบการระบุ IP `(192.168.162.21)` ออกจากคำอธิบายส่วนหัว
+   - เปลี่ยน `Target: {config.nasUrl}` เป็น `🛡️ โหมดจัดเก็บความปลอดภัยสูง (Protected)`
+4. **ห้องสื่อสารและแชทราชการ ([ChatPage.tsx](file:///c:/Users/GuitarDev/virtual-office/components/chat/ChatPage.tsx)):**
+   - ปิดบัง IP เซิร์ฟเวอร์ใน Tooltip แถบเครื่องมือ, หัวข้อไฟล์แนบ, และเนื้อหาเทมเพลตแบบฟอร์มราชการ
+   - ใน Modal เชื่อมต่อเซสชัน เปลี่ยนการแสดงผล IP ให้เป็นระดับความปลอดภัย: `🛡️ Zero Trust (ปลอดภัย)`
+5. **ศูนย์ควบคุมผู้ดูแลระบบ ([NasTab.tsx](file:///c:/Users/GuitarDev/virtual-office/components/admin/NasTab.tsx)):**
+   - ปิดบัง URL และ IP ในแถบแจ้งเตือนเครือข่ายและปุ่มสลับ/รีเซ็ตความปลอดภัย
+6. **การป้องกันบน Backend API ([app/api/nas/health/route.ts](file:///c:/Users/GuitarDev/virtual-office/app/api/nas/health/route.ts) & [download/route.ts](file:///c:/Users/GuitarDev/virtual-office/app/api/nas/download/route.ts)):**
+   - ปรับปรุง Health Endpoint ไม่ให้ส่งค่า `host` และ `port` จริงกลับไปยังเบราว์เซอร์ โดยแปลงเป็นระดับความปลอดภัย `Cloudflare Zero Trust (Secured)` / `Office LAN (Secured)` และกรอง IP ออกจาก Error Message ทั้งหมด
+   - ปิดบัง IP ในข้อความ Fallback เมื่อดาวน์โหลดไฟล์
+
+### 22.3 ผลการทดสอบและการตรวจสอบ (Validation & Verification)
+- **Production Build:** รัน `npm run build` ผ่านสมบูรณ์ 100% (0 errors, Type check สำเร็จ)
+- **Automated Browser Visual Test:** ทดสอบบันทึกภาพหน้าจอจริงผ่าน Playwright Browser พบว่าหน้าจอแสดงผลเฉพาะสถานะ `🟢 ออนไลน์ (Online)` อย่างสวยงาม ไร้ข้อมูล URL/IP รั่วไหล 100%
+- **End-to-End Test Suite:** อัปเดตชุดทดสอบ `nas-file-manager.spec.ts` และ `nas-photo-gallery.spec.ts` รองรับการทำงานแบบ Endpoint Masking ผ่านฉลุย

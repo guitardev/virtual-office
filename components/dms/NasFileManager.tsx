@@ -324,7 +324,7 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
               </span>
             </div>
             <p className="text-xs text-indigo-200/80 mt-0.5">
-              ระบบจัดเก็บและเข้าถึงไฟล์ราชการตามสิทธิ์บัญชีผู้ใช้และโฟลเดอร์ของ Synology NAS ประจำสำนักงาน พมจ.กำแพงเพชร (192.168.162.21)
+              ระบบจัดเก็บและเข้าถึงไฟล์ราชการตามสิทธิ์บัญชีผู้ใช้และโฟลเดอร์ของ Synology NAS ประจำสำนักงาน พมจ.กำแพงเพชร
             </p>
           </div>
         </div>
@@ -635,8 +635,9 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
                 <strong>การควบคุมสิทธิ์ระดับระบบปฏิบัติการ:</strong> สิทธิ์การเข้าถึง อ่าน เขียน และลบไฟล์ ถูกบังคับใช้โดยตรงผ่านระบบ DSM ACL บน Synology NAS
               </span>
             </div>
-            <div className="font-mono text-[10px] text-slate-400 shrink-0">
-              Target: {config.nasUrl}
+            <div className="text-[10px] text-slate-500 shrink-0 flex items-center gap-1 font-semibold">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              <span>โหมดจัดเก็บความปลอดภัยสูง (Protected)</span>
             </div>
           </div>
         </div>

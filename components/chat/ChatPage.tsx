@@ -395,7 +395,7 @@ export function ChatPage({
 
     if (syncToNas) {
       // Create and upload actual template document to NAS
-      const templateContent = `สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร\nแบบฟอร์ม: ${template.name}\nประเภท: ${template.type.toUpperCase()}\nขนาด: ${template.size}\nจัดเก็บบน Synology NAS (192.168.162.21): ${nasPath}\nวันที่บันทึก: ${new Date().toLocaleString("th-TH")}`;
+      const templateContent = `สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร\nแบบฟอร์ม: ${template.name}\nประเภท: ${template.type.toUpperCase()}\nขนาด: ${template.size}\nจัดเก็บบน Synology NAS: ${nasPath}\nวันที่บันทึก: ${new Date().toLocaleString("th-TH")}`;
       const blob = new Blob([templateContent], { type: "application/octet-stream" });
       const file = new File([blob], template.name, { type: "application/octet-stream" });
       const uploadRes = await uploadAttachmentToNas(file);
@@ -483,7 +483,7 @@ export function ChatPage({
         `เอกสาร: ${att.name}\n` +
         `ประเภท: ${att.type.toUpperCase()}\n` +
         `ขนาด: ${att.size}\n` +
-        `จัดเก็บบน Synology NAS (192.168.162.21): ${att.nasPath || `/chat_attachments/${att.name}`}\n` +
+        `จัดเก็บบน Synology NAS: ${att.nasPath || `/chat_attachments/${att.name}`}\n` +
         `สถานะ: ดาวน์โหลดสำเนาเอกสารสมบูรณ์`,
       ],
       { type: "text/plain;charset=utf-8" }
@@ -1172,7 +1172,7 @@ export function ChatPage({
                                       {att.nasPath && (
                                         <span
                                           className="px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[9px] font-bold border border-emerald-200 shrink-0"
-                                          title={`จัดเก็บบน Synology NAS (192.168.162.21): ${att.nasPath}`}
+                                          title={`จัดเก็บบน Synology NAS: ${att.nasPath}`}
                                         >
                                           💾 NAS
                                         </span>
@@ -1223,7 +1223,7 @@ export function ChatPage({
                                       {att.nasPath && (
                                         <span
                                           className="text-[9px] px-1.5 py-0.2 rounded-md font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-0.5 shrink-0"
-                                          title={`จัดเก็บบน Synology NAS (192.168.162.21): ${att.nasPath}`}
+                                          title={`จัดเก็บบน Synology NAS: ${att.nasPath}`}
                                         >
                                           <span>💾</span>
                                           <span>NAS</span>
@@ -1349,7 +1349,7 @@ export function ChatPage({
                     }`}
                     title={
                       nasSid
-                        ? `เชื่อมต่อ Synology NAS (192.168.162.21) เรียบร้อยแล้ว (ผู้ใช้: ${nasAccount || "DSM"}) - คลิกเพื่อตั้งค่า/ยกเลิก`
+                        ? `เชื่อมต่อ Synology NAS เรียบร้อยแล้ว (ผู้ใช้: ${nasAccount || "DSM"}) - คลิกเพื่อตั้งค่า/ยกเลิก`
                         : "ยังไม่ได้เข้าสู่ระบบ Synology NAS - คลิกเพื่อเข้าสู่ระบบ DSM เพื่อซิงก์ไฟล์ขึ้น /chat_attachments จริง"
                     }
                     onClick={() => setShowNasLoginModal(true)}
@@ -1677,8 +1677,11 @@ export function ChatPage({
                         <p className="font-semibold text-slate-800">{nasAccount || "admin"}</p>
                       </div>
                       <div>
-                        <span className="text-slate-500">ที่อยู่เซิร์ฟเวอร์:</span>
-                        <p className="font-semibold text-slate-800 font-mono">192.168.162.21:5000</p>
+                        <span className="text-slate-500">ระดับความปลอดภัย:</span>
+                        <p className="font-semibold text-emerald-700 flex items-center gap-1">
+                          <span>🛡️</span>
+                          <span>Zero Trust (ปลอดภัย)</span>
+                        </p>
                       </div>
                       <div>
                         <span className="text-slate-500">โฟลเดอร์จัดเก็บ:</span>
@@ -1718,7 +1721,7 @@ export function ChatPage({
               ) : (
                 <form onSubmit={handleConnectNas} className="space-y-4 text-xs">
                   <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] leading-relaxed">
-                    💡 <strong>เพื่อให้ไฟล์ถูกอัปโหลดขึ้น NAS จริง:</strong> กรุณากรอกบัญชีผู้ใช้งาน Synology DSM (เช่น <code>admin</code>) ของคุณบน NAS <code>192.168.162.21</code>
+                    💡 <strong>เพื่อให้ไฟล์ถูกอัปโหลดขึ้น NAS จริง:</strong> กรุณากรอกบัญชีผู้ใช้งาน Synology DSM (เช่น <code>admin</code>) ของคุณประจำสำนักงาน พมจ.กำแพงเพชร
                   </div>
 
                   <div>

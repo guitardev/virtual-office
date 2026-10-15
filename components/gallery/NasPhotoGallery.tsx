@@ -934,7 +934,7 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
               </span>
             </div>
             <p className="text-xs text-cyan-100/90 mt-1 max-w-2xl leading-relaxed">
-              จัดเก็บ ค้นหา และเผยแพร่ภาพถ่ายกิจกรรมราชการและสื่อประชาสัมพันธ์ พมจ.กำแพงเพชร ผ่าน Synology Photos ({config.nasUrl.replace(/^https?:\/\//, "")})
+              จัดเก็บ ค้นหา และเผยแพร่ภาพถ่ายกิจกรรมราชการและสื่อประชาสัมพันธ์ พมจ.กำแพงเพชร ผ่านระบบ Synology Photos (ศูนย์ข้อมูลความปลอดภัยสูง)
             </p>
           </div>
         </div>
@@ -1400,27 +1400,28 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                     type="button"
                     onClick={() => {
                       saveClientSynologyConfig({ nasUrl: "http://192.168.162.21:5000" });
-                      showToast("🔄 สลับไปใช้ IP วงแลน (http://192.168.162.21:5000) เรียบร้อย");
+                      showToast("🔄 สลับไปใช้โหมดเครือข่ายภายในสำนักงาน (Office LAN) เรียบร้อย");
                       window.location.reload();
                     }}
                     className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
-                    title="หากอยู่ในวงแลนสำนักงาน และ Cloudflare Tunnel ขัดข้อง สามารถสลับมาใช้ IP ตรงได้"
+                    title="สลับโหมดการเชื่อมต่อไปยังเครือข่ายภายในสำนักงาน พมจ.กำแพงเพชร"
                   >
                     <span>🔄</span>
-                    <span>สลับใช้ IP วงแลน (192.168.162.21:5000)</span>
+                    <span>สลับใช้โหมดเครือข่ายภายใน (LAN)</span>
                   </button>
                 ) : (
                   <button
                     type="button"
                     onClick={() => {
                       saveClientSynologyConfig({ nasUrl: "https://nas.smso.site" });
-                      showToast("🌐 สลับไปใช้ Cloudflare Tunnel (https://nas.smso.site) เรียบร้อย");
+                      showToast("🌐 สลับไปใช้โหมดความปลอดภัยภายนอก (Cloudflare Zero Trust) เรียบร้อย");
                       window.location.reload();
                     }}
                     className="px-3.5 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white font-bold text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                    title="สลับโหมดการเชื่อมต่อไปยัง Cloudflare Zero Trust เพื่อความปลอดภัย"
                   >
                     <span>🌐</span>
-                    <span>สลับใช้ Cloudflare Tunnel (nas.smso.site)</span>
+                    <span>สลับใช้โหมดความปลอดภัยภายนอก (Zero Trust)</span>
                   </button>
                 )}
 
@@ -1451,7 +1452,7 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                       </div>
                       <ol className="list-decimal list-inside space-y-1 pl-2 text-[11px]">
                         <li>
-                          เปิดเว็บเบราว์เซอร์เข้าสู่ระบบ <strong>Synology DSM</strong> (<code className="bg-slate-100 px-1 py-0.5 rounded text-cyan-800">{config.nasUrl}</code>) ด้วยบัญชีผู้ดูแลระบบ (Admin)
+                          เปิดเว็บเบราว์เซอร์เข้าสู่ระบบ <strong>Synology DSM</strong> ของสำนักงาน ด้วยบัญชีผู้ดูแลระบบ (Admin)
                         </li>
                         <li>
                           เปิดแอป <strong>Synology Photos</strong> &gt; คลิกไอคอนโปรไฟล์มุมขวาบน &gt; <strong>การตั้งค่า (Settings)</strong>
@@ -2214,7 +2215,7 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                 <div>
                   <h3 className="font-bold text-base">เข้าสู่ระบบ Synology Photos</h3>
                   <p className="text-[11px] text-cyan-100">
-                    ยืนยันตัวตนด้วยบัญชี DSM ประจำตัวของท่าน ({config.nasUrl})
+                    ยืนยันตัวตนด้วยบัญชี Synology DSM ประจำสำนักงาน
                   </p>
                 </div>
               </div>

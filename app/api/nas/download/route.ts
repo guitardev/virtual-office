@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
 
     // In mock or simulated test environments
     if (effectiveSid.startsWith("mock_") || effectiveSid === "system_chat_session") {
-      const sampleContent = `สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร\nเอกสารจาก Synology NAS (192.168.162.21): ${filePath}\nดาวน์โหลดสำเร็จ`;
+      const sampleContent = `สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร\nเอกสารจาก Synology NAS (Secure Storage): ${filePath}\nดาวน์โหลดสำเร็จ`;
       return new NextResponse(sampleContent, {
         status: 200,
         headers: {
@@ -57,7 +57,8 @@ export async function GET(req: NextRequest) {
       });
     } catch (fetchErr: any) {
       console.warn("Synology NAS download connection failed, serving fallback:", fetchErr?.message);
-      const fallbackContent = `สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร\nระบบ Virtual Office & Synology NAS (192.168.162.21)\n-----------------------------------------\nชื่อไฟล์: ${fileName}\nตำแหน่ง NAS: ${filePath}\nหมายเหตุ: เชื่อมต่อเซิร์ฟเวอร์ NAS ขัดข้อง (${fetchErr?.message || "Timeout"}) ระบบจัดส่งสำเนาเอกสารราชการฉบับสำรอง`;
+      const safeErr = (fetchErr?.message || "Timeout").replace(/https?:\/\/[^\s]+/g, "NAS Server").replace(/192\.168\.\d+\.\d+(:?\d+)?/g, "Internal Network");
+      const fallbackContent = `สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร\nระบบ Virtual Office & Synology NAS (Secure Storage)\n-----------------------------------------\nชื่อไฟล์: ${fileName}\nตำแหน่ง NAS: ${filePath}\nหมายเหตุ: เชื่อมต่อเซิร์ฟเวอร์ NAS ขัดข้อง (${safeErr}) ระบบจัดส่งสำเนาเอกสารราชการฉบับสำรอง`;
       return new NextResponse(fallbackContent, {
         status: 200,
         headers: {
@@ -70,7 +71,7 @@ export async function GET(req: NextRequest) {
     // If Synology NAS returned HTTP error (e.g. 502 Bad Gateway from DSM Nginx, or 504)
     if (!nasRes.ok) {
       console.warn(`Synology NAS returned HTTP ${nasRes.status} for file ${filePath}`);
-      const fallbackContent = `สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร\nระบบ Virtual Office & Synology NAS (192.168.162.21)\n-----------------------------------------\nชื่อไฟล์: ${fileName}\nตำแหน่ง NAS: ${filePath}\nสถานะ: เซิร์ฟเวอร์ Synology NAS แจ้งสถานะ HTTP ${nasRes.status} (บริการ File Station ขัดข้องชั่วคราว หรือยังไม่ได้เปิด Shared Folder /chat_attachments)\nระบบนำส่งสำเนาเอกสารสำรอง`;
+      const fallbackContent = `สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร\nระบบ Virtual Office & Synology NAS (Secure Storage)\n-----------------------------------------\nชื่อไฟล์: ${fileName}\nตำแหน่ง NAS: ${filePath}\nสถานะ: เซิร์ฟเวอร์ Synology NAS แจ้งสถานะ HTTP ${nasRes.status} (บริการ File Station ขัดข้องชั่วคราว หรือยังไม่ได้เปิด Shared Folder /chat_attachments)\nระบบนำส่งสำเนาเอกสารสำรอง`;
       return new NextResponse(fallbackContent, {
         status: 200,
         headers: {
@@ -88,7 +89,7 @@ export async function GET(req: NextRequest) {
       const errorJson = await nasRes.json().catch(() => null);
       if (errorJson && errorJson.success === false) {
         console.warn("Synology FileStation returned API error:", errorJson);
-        const fallbackContent = `สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร\nระบบ Virtual Office & Synology NAS (192.168.162.21)\n-----------------------------------------\nชื่อไฟล์: ${fileName}\nตำแหน่ง NAS: ${filePath}\nสถานะ API: รหัสข้อผิดพลาด NAS Code ${errorJson.error?.code || "Unknown"} (เซสชันหมดอายุหรือไม่พบไฟล์บน NAS)\nระบบนำส่งสำเนาเอกสารสำรอง`;
+        const fallbackContent = `สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร\nระบบ Virtual Office & Synology NAS (Secure Storage)\n-----------------------------------------\nชื่อไฟล์: ${fileName}\nตำแหน่ง NAS: ${filePath}\nสถานะ API: รหัสข้อผิดพลาด NAS Code ${errorJson.error?.code || "Unknown"} (เซสชันหมดอายุหรือไม่พบไฟล์บน NAS)\nระบบนำส่งสำเนาเอกสารสำรอง`;
         return new NextResponse(fallbackContent, {
           status: 200,
           headers: {

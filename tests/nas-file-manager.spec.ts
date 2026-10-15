@@ -19,8 +19,8 @@ test.describe("ระบบคลังเอกสาร Synology NAS (NAS File
     const heading = page.locator("h2:has-text('คลังเอกสารราชการ (Synology File Station)')").first();
     await expect(heading).toBeVisible();
 
-    const nasIpText = page.locator("text=192.168.162.21").first();
-    await expect(nasIpText).toBeVisible();
+    const nasSecText = page.locator("text=พมจ.กำแพงเพชร").first();
+    await expect(nasSecText).toBeVisible();
 
     // 4. ตรวจสอบเกตเวย์ความปลอดภัย: ต้องยืนยันตัวตนด้วยบัญชี Synology NAS ตามสิทธิ์ DSM
     const authGateNotice = page.locator("h3:has-text('กรุณายืนยันตัวตนด้วยบัญชี Synology NAS')").first();

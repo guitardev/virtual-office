@@ -33,7 +33,6 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
   const [nasPassword, setNasPassword] = useState("");
   const [showNasPassword, setShowNasPassword] = useState(false);
   const [nasOnline, setNasOnline] = useState(true);
-  const [nasHostLabel, setNasHostLabel] = useState("nas.smso.site");
 
   // Sign In state
   const [email, setEmail] = useState("");
@@ -94,13 +93,6 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
       config.nasUrl ||
       process.env.NEXT_PUBLIC_SYNOLOGY_NAS_URL ||
       "https://nas.smso.site";
-
-    try {
-      const parsedHost = new URL(targetUrl).host;
-      setNasHostLabel(parsedHost);
-    } catch {
-      setNasHostLabel("nas.smso.site");
-    }
 
     fetch(`/api/nas/health?url=${encodeURIComponent(targetUrl)}`)
       .then((r) => r.json())
@@ -174,7 +166,6 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
             if (lanData && (lanData.success || (lanData.code && lanData.code !== 1033))) {
               data = lanData;
               saveClientSynologyConfig({ nasUrl: lanUrl });
-              setNasHostLabel("192.168.162.21:5000 (LAN)");
             }
           } catch {}
         }
@@ -201,16 +192,13 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
         return;
       }
 
-      setErrorMessage(
-        data.error ||
-          "ไม่สามารถยืนยันตัวตนกับ Synology NAS ได้ กรุณาตรวจสอบชื่อผู้ใช้หรือรหัสผ่าน"
-      );
+      const rawErr = data.error || "ไม่สามารถยืนยันตัวตนกับ Synology NAS ได้ กรุณาตรวจสอบชื่อผู้ใช้หรือรหัสผ่าน";
+      setErrorMessage(rawErr.replace(/https?:\/\/[^\s]+/g, "เซิร์ฟเวอร์ NAS"));
     } catch (err: any) {
       setIsLoading(false);
+      const msg = err?.message || "การเชื่อมต่อขัดข้อง";
       setErrorMessage(
-        `เกิดข้อผิดพลาดในการเชื่อมต่อ Synology NAS: ${
-          err?.message || "การเชื่อมต่อขัดข้อง"
-        }`
+        `เกิดข้อผิดพลาดในการเชื่อมต่อ Synology NAS: ${msg.replace(/https?:\/\/[^\s]+/g, "เซิร์ฟเวอร์ NAS")}`
       );
     }
   };
@@ -749,8 +737,19 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
                     {nasOnline ? "Synology NAS พร้อมใช้งาน" : "Synology NAS ไม่ตอบสนอง"}
                   </span>
                 </div>
-                <span className="font-mono text-[11px] text-indigo-700 bg-white px-2 py-0.5 rounded-md border border-slate-200 font-bold">
-                  {nasHostLabel}
+                <span
+                  className={`px-2.5 py-0.5 rounded-md border font-semibold text-[11px] flex items-center gap-1.5 ${
+                    nasOnline
+                      ? "text-emerald-700 bg-emerald-50 border-emerald-200"
+                      : "text-rose-700 bg-rose-50 border-rose-200"
+                  }`}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      nasOnline ? "bg-emerald-500" : "bg-rose-500"
+                    }`}
+                  />
+                  <span>{nasOnline ? "ออนไลน์ (Online)" : "ออฟไลน์ (Offline)"}</span>
                 </span>
               </div>
 

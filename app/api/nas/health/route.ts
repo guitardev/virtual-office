@@ -11,10 +11,24 @@ export async function GET(req: NextRequest) {
       "https://nas.smso.site";
 
     const status = await checkNasHealth(nasUrl);
+    const isCloudflare = nasUrl.includes("nas.smso.site");
+
+    const sanitizedStatus = {
+      ...status,
+      host: status.online
+        ? (isCloudflare ? "Cloudflare Zero Trust (Secured)" : "Office LAN (Secured)")
+        : "Unavailable",
+      port: undefined,
+      error: status.error
+        ? status.error
+            .replace(/https?:\/\/[^\s]+/g, "เซิร์ฟเวอร์ NAS")
+            .replace(/192\.168\.\d+\.\d+(:?\d+)?/g, "เครือข่ายภายใน")
+        : undefined,
+    };
 
     return NextResponse.json({
       success: true,
-      data: status,
+      data: sanitizedStatus,
     });
   } catch (err: any) {
     return NextResponse.json(

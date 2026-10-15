@@ -296,10 +296,10 @@ export function NasTab({ showToast }: NasTabProps) {
             <span className="text-xl">⚠️</span>
             <div>
               <div className="font-bold text-xs">
-                ตรวจพบว่าระบบกำลังเชื่อมต่อผ่าน IP ภายใน ({config.nasUrl})
+                ตรวจพบว่าระบบกำลังเชื่อมต่อผ่าน IP เครือข่ายภายในสำนักงาน (Office LAN)
               </div>
               <div className="text-[11px] text-amber-800/80 mt-0.5 leading-relaxed">
-                หากท่านเข้าใช้งานระบบจากภายนอกสำนักงานหรือผ่าน Vercel จะไม่สามารถเชื่อมต่อไปยัง IP วงแลนได้ แนะนำให้สลับใช้โดเมน Cloudflare Tunnel
+                หากท่านเข้าใช้งานระบบจากภายนอกสำนักงานหรือผ่าน Vercel จะไม่สามารถเชื่อมต่อไปยัง IP วงแลนได้ แนะนำให้สลับใช้โดเมน Cloudflare Zero Trust
               </div>
             </div>
           </div>
@@ -308,7 +308,7 @@ export function NasTab({ showToast }: NasTabProps) {
             onClick={handleSwitchToCloudflare}
             className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-all shadow-xs shrink-0 cursor-pointer"
           >
-            🌐 สลับใช้ https://nas.smso.site
+            🌐 สลับใช้ Cloudflare Zero Trust (ความปลอดภัยสูง)
           </button>
         </div>
       )}
@@ -426,7 +426,7 @@ export function NasTab({ showToast }: NasTabProps) {
                 required
                 value={config.nasUrl}
                 onChange={(e) => setConfig({ ...config, nasUrl: e.target.value })}
-                placeholder="https://nas.smso.site"
+                placeholder="https://your-domain.site"
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 text-xs font-mono text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
               />
               <button
@@ -434,7 +434,7 @@ export function NasTab({ showToast }: NasTabProps) {
                 onClick={handleSwitchToCloudflare}
                 className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold cursor-pointer flex items-center gap-1 mt-1.5"
               >
-                <span>🌐 รีเซ็ตเป็นโดเมน Cloudflare Tunnel (https://nas.smso.site)</span>
+                <span>🌐 รีเซ็ตเป็นค่าความปลอดภัยเริ่มต้น (Cloudflare Zero Trust)</span>
               </button>
             </div>
 
