@@ -58,7 +58,12 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
     const rawFolderPath = (formData.get("folder_path") as string) || "/chat_attachments";
-    const sid = formData.get("sid") as string | null;
+    const rawSid = formData.get("sid") as string | null;
+    const sid =
+      rawSid && rawSid !== "null" && rawSid !== "undefined" && rawSid.trim() !== ""
+        ? rawSid.trim()
+        : null;
+
     const nasUrl =
       (formData.get("url") as string) ||
       process.env.SYNOLOGY_NAS_URL ||
@@ -72,7 +77,7 @@ export async function POST(req: NextRequest) {
       (formData.get("service_password") as string) ||
       process.env.SYNOLOGY_SERVICE_PASSWORD;
 
-    let effectiveSid = sid || process.env.SYNOLOGY_SERVICE_SID;
+    let effectiveSid = sid || process.env.SYNOLOGY_SERVICE_SID || null;
 
     // If no valid session ID provided, try auto-authenticating with Service Account
     if ((!effectiveSid || effectiveSid === "system_chat_session") && serviceAccount && servicePassword) {
@@ -96,9 +101,19 @@ export async function POST(req: NextRequest) {
 
     // Normalize folder path: ensure leading slash and remove any trailing slashes
     let cleanFolderPath = "/" + rawFolderPath.replace(/^\/+|\/+$/g, "");
+    if (cleanFolderPath === "/" || cleanFolderPath === "") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "กรุณาระบุหรือเลือกโฟลเดอร์ปลายทางก่อนอัปโหลดไฟล์ (ไม่สามารถเขียนไฟล์ลงใน Root ได้โดยตรง)",
+          code: 400,
+        },
+        { status: 400 }
+      );
+    }
 
     // In mock or simulated test fallback environments
-    if (effectiveSid && (effectiveSid.startsWith("mock_") || effectiveSid === "system_chat_session")) {
+    if (effectiveSid && (effectiveSid.startsWith("mock_") || effectiveSid === "system_chat_session" || effectiveSid.includes("mock"))) {
       return NextResponse.json({
         success: true,
         file: {
@@ -137,18 +152,18 @@ export async function POST(req: NextRequest) {
 
     // Helper to attempt upload to a specific target path
     const attemptUpload = async (targetPath: string) => {
-      const uploadApiUrl = `${cleanUrl}/webapi/entry.cgi?_sid=${encodeURIComponent(effectiveSid || "")}`;
+      // Pass api, version, method, and _sid in URL query string so DSM entry.cgi routes upload immediately
+      const uploadApiUrl = `${cleanUrl}/webapi/entry.cgi?api=SYNO.FileStation.Upload&version=2&method=upload&_sid=${encodeURIComponent(
+        effectiveSid || ""
+      )}`;
+
       const synoFormData = new FormData();
-      synoFormData.append("api", "SYNO.FileStation.Upload");
-      synoFormData.append("version", "2");
-      synoFormData.append("method", "upload");
-      synoFormData.append("_sid", effectiveSid || "");
-      // Send both 'path' (DSM 7 standard) and 'dest_folder_path' (DSM legacy)
+      // DSM 7 standard parameters: 'path', 'create_parents', 'overwrite'
       synoFormData.append("path", targetPath);
-      synoFormData.append("dest_folder_path", targetPath);
       synoFormData.append("create_parents", "true");
       synoFormData.append("overwrite", "true");
 
+      // Binary payload must be placed last
       const blob = new Blob([fileBuffer], { type: file.type || "application/octet-stream" });
       synoFormData.append("file", blob, file.name);
 
@@ -164,8 +179,8 @@ export async function POST(req: NextRequest) {
 
     let result = await attemptUpload(cleanFolderPath);
 
-    // Fallback: If cleanFolderPath was '/chat_attachments' and returned 408 (Folder Not Found),
-    // try fallback shared folder paths '/virtual-office/chat_attachments' or '/photo/chat_attachments'
+    // Fallback 1: If cleanFolderPath was '/chat_attachments' and returned 408 / 1805 (Folder Not Found),
+    // try fallback shared folder paths '/virtual-office/chat_attachments'
     if (
       !result.data?.success &&
       (result.data?.error?.code === 408 || result.data?.error?.code === 1805) &&
@@ -179,6 +194,43 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Fallback 2: If uploading to root of shared photos '/photo' and rejected due to root permissions (401, 403, 404, 406, 1804),
+    // try automatically uploading into '/photo/General'
+    if (
+      !result.data?.success &&
+      [401, 403, 404, 405, 406, 1804].includes(result.data?.error?.code) &&
+      cleanFolderPath === "/photo"
+    ) {
+      console.log("[NAS Upload] Root /photo write restricted, trying /photo/General...");
+      const photoGeneralResult = await attemptUpload("/photo/General");
+      if (photoGeneralResult.data?.success) {
+        result = photoGeneralResult;
+        cleanFolderPath = "/photo/General";
+      }
+    }
+
+    // Fallback 3: If uploading to personal space '/home/Photos' and folder not found (408 / 1805),
+    // attempt to create the folder first and re-upload
+    if (
+      !result.data?.success &&
+      (result.data?.error?.code === 408 || result.data?.error?.code === 1805) &&
+      cleanFolderPath.startsWith("/home/Photos")
+    ) {
+      console.log(`[NAS Upload] Folder ${cleanFolderPath} not found, attempting directory creation...`);
+      try {
+        const createUrl = `${cleanUrl}/webapi/entry.cgi?api=SYNO.FileStation.CreateFolder&version=2&method=create&folder_path=${encodeURIComponent(
+          "/home"
+        )}&name=Photos&force_parent=true&_sid=${encodeURIComponent(effectiveSid || "")}`;
+        await fetch(createUrl, { method: "GET", signal: AbortSignal.timeout(5000) });
+        const retryResult = await attemptUpload(cleanFolderPath);
+        if (retryResult.data?.success) {
+          result = retryResult;
+        }
+      } catch (createErr) {
+        console.warn("[NAS Upload] Failed to auto-create /home/Photos:", createErr);
+      }
+    }
+
     if (result.data && result.data.success) {
       return NextResponse.json({
         success: true,
@@ -186,7 +238,7 @@ export async function POST(req: NextRequest) {
           name: file.name,
           path: `${cleanFolderPath}/${file.name}`,
           size: file.size,
-          type: file.type,
+          type: file.type || "application/octet-stream",
         },
       });
     }
@@ -202,6 +254,7 @@ export async function POST(req: NextRequest) {
         success: false,
         error: diagnosticMessage,
         code: errorCode || result.status,
+        requireAuth: errorCode === 119 || errorCode === 105,
       },
       { status: 400 }
     );

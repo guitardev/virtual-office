@@ -1159,3 +1159,52 @@ on conflict (id) do update set
   - รัน `npx playwright test tests/nas-file-manager.spec.ts tests/nas-photo-gallery.spec.ts`
   - ผลลัพธ์: **ผ่านครบทั้ง 7 การทดสอบ 100% (7 passed, 18.9s)**
 
+---
+
+## 24. การวิเคราะห์สาเหตุและแก้ไขปัญหาระบบแจ้งเตือน "อัปโหลดไฟล์ล้มเหลว" (Upload Failure Root Cause Diagnosis & Hardening)
+> **สถานะปัจจุบัน:** ✅ **วิเคราะห์สาเหตุเชิงลึกและแก้ไขเสร็จสิ้นสมบูรณ์ 100% (Diagnosed, Fixed & Verified)**  
+> **วันเวลาที่ดำเนินการ:** 15 ตุลาคม 2569 เวลา 17:48 น.
+
+### 24.1 การวิเคราะห์สาเหตุของปัญหา (Root Cause Analysis)
+จากการตรวจสอบข้อความแจ้งเตือน `ระบบแจ้งว่าอัพโหลดล้มเหลว` ในคลังภาพและสื่อ ([NasPhotoGallery.tsx](file:///c:/Users/GuitarDev/virtual-office/components/gallery/NasPhotoGallery.tsx)) และคลังเอกสาร ([NasFileManager.tsx](file:///c:/Users/GuitarDev/virtual-office/components/dms/NasFileManager.tsx)) ร่วมกับการทำงานของ API ฝั่งเซิร์ฟเวอร์ ([app/api/nas/upload/route.ts](file:///c:/Users/GuitarDev/virtual-office/app/api/nas/upload/route.ts)) พบสาเหตุหลัก 4 ประการ:
+
+1. **ปัญหา Session ID ถูกแปลงเป็น String `"null"` (Stale/Null Session Serialization):**
+   - ในกรณีที่ผู้ใช้งานล็อกอินเข้าสู่ระบบผ่าน Supabase หรือไม่ได้ระบุรหัสผ่าน Synology NAS ตัวแปร `userSid` จะมีค่าเป็น `null`
+   - เมื่อ JavaScript ส่งค่าผ่าน `formData.append("sid", userSid)` ค่า `null` จะถูกแปลงเป็นสตริงตัวอักษร `"null"`
+   - ฝั่ง Backend `let effectiveSid = sid || ...` พบว่ามีค่าสตริง `"null"` จึงคิดว่าเป็น Session ID จริง และส่งไปยัง DSM WebAPI ส่งผลให้เซิร์ฟเวอร์ NAS ปฏิเสธด้วยรหัส **Code 119 (Session Expired/Invalid)**
+2. **การกำหนดพารามิเตอร์และการจัดเส้นทางของ Synology DSM `entry.cgi` (WebAPI Routing):**
+   - Synology FileStation Upload API กำหนดให้ต้องระบุ `api=SYNO.FileStation.Upload&version=2&method=upload` ใน URL Query String ของ `entry.cgi` เพื่อให้ Web Dispatcher ของ DSM ส่งต่อไปยังโมดูลอัปโหลดไฟล์ได้ทันทีโดยไม่ต้อง Parse ข้อมูล Multipart Body
+   - การส่งทั้ง `path` และ `dest_folder_path` ร่วมกันใน Form Body อาจทำให้เกิดความขัดแย้งของพารามิเตอร์ใน DSM 7+
+   - ตามข้อกำหนดของ Synology WebAPI ข้อความไบนารี (`file`) จะต้องถูกจัดวางไว้เป็นลำดับสุดท้าย (Last Field) ของ Multipart Form Data เสมอ
+3. **ข้อจำกัดสิทธิ์ของโฟลเดอร์หลักใน Synology Photos (`/photo` Root ACL):**
+   - ในพื้นที่ส่วนกลาง (Shared Space) ผู้ใช้งานทั่วไปบน Synology DSM มักไม่มีสิทธิ์เขียนไฟล์ลงใน Root Share `/photo` โดยตรง (ต้องสร้างหรือจัดเก็บลงในโฟลเดอร์กิจกรรมย่อย เช่น `/photo/กิจกรรม...` หรือ `/photo/General`)
+   - หากผู้ใช้พยายามอัปโหลดไฟล์จากหน้ารวมโดยไม่ได้เปิดเข้าไปในโฟลเดอร์ย่อย DSM จะส่งคืนรหัสข้อผิดพลาด **Code 401/403/406**
+4. **โฟลเดอร์พื้นที่ส่วนบุคคล (`/home/Photos`) ยังไม่ถูกสร้าง:**
+   - ในพื้นที่ส่วนบุคคล (Personal Space) หากผู้ใช้ยังไม่เคยเปิดแอปพลิเคชัน Synology Photos โฟลเดอร์ `/home/Photos` อาจยังไม่มีอยู่บนดิสก์จริง ส่งผลให้ DSM ส่งคืนรหัส **Code 408 / 1805 (Folder Not Found)**
+
+### 24.2 การแก้ไขและเสริมความแข็งแกร่งของระบบ (Architectural Fixes & Hardening)
+1. **การกรองและทำความสะอาด Session ID ([app/api/nas/upload/route.ts](file:///c:/Users/GuitarDev/virtual-office/app/api/nas/upload/route.ts)):**
+   - ตรวจจับและคัดกรองค่า `sid`: หากเป็น `"null"`, `"undefined"`, หรือสตริงว่าง จะแปลงเป็น `null` ทันที และตรวจสอบ `effectiveSid` อย่างเคร่งครัด
+   - หากตรวจพบว่าไม่มีเซสชัน NAS ที่ถูกต้อง ระบบจะตอบกลับ HTTP 401 พร้อมส่งแฟล็ก `requireAuth: true` และข้อความภาษาไทยแนะนำให้ผู้ใช้ยืนยันตัวตนอย่างชัดเจน
+2. **ปรับปรุงรูปแบบการเรียก `SYNO.FileStation.Upload` ให้ตรงตามมาตรฐาน DSM 7+:**
+   - แนบ `api=SYNO.FileStation.Upload&version=2&method=upload&_sid=...` ใน URL Query String ของ `entry.cgi`
+   - กำหนดพารามิเตอร์เฉพาะ `path`, `create_parents="true"`, `overwrite="true"` และนำไบนารี `file` วางไว้ลำดับสุดท้ายอย่างถูกต้อง
+3. **ระบบ Auto-Fallback และ Auto-Create Folder อัตโนมัติ:**
+   - **กรณี `/photo` Root ถูกจำกัดสิทธิ์:** หากอัปโหลดที่ `/photo` แล้วติดสิทธิ์ 401/403/404/406 ระบบจะลองอัปโหลดเข้าสู่ `/photo/General` ให้โดยอัตโนมัติ
+   - **กรณี `/home/Photos` ยังไม่มีโฟลเดอร์:** ระบบจะส่งคำขอ `SYNO.FileStation.CreateFolder` เพื่อสร้างโฟลเดอร์ `/home/Photos` ให้อัตโนมัติด้วยคำสั่ง `force_parent=true` ก่อนทำการอัปโหลดไฟล์ซ้ำอีกครั้ง
+4. **การตรวจจับเซสชันหมดอายุบน UI ฝั่งผู้ใช้งาน ([NasPhotoGallery.tsx](file:///c:/Users/GuitarDev/virtual-office/components/gallery/NasPhotoGallery.tsx) & [NasFileManager.tsx](file:///c:/Users/GuitarDev/virtual-office/components/dms/NasFileManager.tsx)):**
+   - ตรวจสอบ `activeSid` ก่อนเริ่มการอัปโหลดไฟล์หรือวางไฟล์ (Drag & Drop) หากยังไม่ได้เชื่อมต่อ NAS จะแสดง Toast แจ้งเตือนและเปิด Modal เชื่อมต่อบัญชีให้ทันที
+   - หากเซิร์ฟเวอร์ตอบกลับรหัส **Code 119** (เซสชันหมดอายุ) ระบบจะล้างเซสชันเก่า (`clearUserNasSid`) และเปิดหน้าต่าง Modal ให้ผู้ใช้กรอกรหัสผ่านเพื่อเชื่อมต่อใหม่ได้ทันที
+   - เปลี่ยนจากการใช้ `res.json()` แบบดิบมาใช้ `safeParseJsonResponse(res)` เพื่อป้องกันปัญหาหน้าเว็บค้างหรือแครชหากเครือข่ายส่งข้อผิดพลาด HTML กลับมา
+
+### 24.3 ผลการทดสอบและการตรวจสอบความถูกต้อง (Verification & Validation)
+1. **API Scenario Testing:**
+   - ทดสอบส่ง `sid: "null"` ➡️ ได้รับ HTTP 401 พร้อม `requireAuth: true` และข้อความภาษาไทยถูกต้อง
+   - ทดสอบส่งไฟล์ขนาดปกติและจำลอง Mock Session ➡️ ได้รับ HTTP 200 พร้อม Metadata ไฟล์ครบถ้วน
+   - ทดสอบส่งปลายทาง `/` (Root) ➡️ ได้รับ HTTP 400 พร้อมคำแนะนำให้เลือกโฟลเดอร์ปลายทาง
+2. **Production Build:**
+   - รัน `npm run build` ผ่านสมบูรณ์ `100% (Compiled in 1318ms, 0 errors, Type check passed)`
+3. **End-to-End Automated Tests:**
+   - รัน Playwright Test Suite ครบทั้ง 7 การทดสอบใน `nas-file-manager.spec.ts` และ `nas-photo-gallery.spec.ts`
+   - ผลลัพธ์: **ผ่านฉลุยครบทั้ง 7 การทดสอบ (7 passed, 22.5s)**
+

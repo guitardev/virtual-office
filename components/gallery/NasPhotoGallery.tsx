@@ -12,6 +12,7 @@ import {
   checkNasHealth,
   loginSynology,
   SynologyHealthStatus,
+  safeParseJsonResponse,
 } from "@/lib/synology";
 import {
   PhotoSpace,
@@ -719,7 +720,16 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
 
   // ─── DIRECT MEDIA UPLOAD & DRAG-AND-DROP TO NAS ───
   const uploadFileList = async (fileList: FileList | File[]) => {
-    if (!fileList || fileList.length === 0 || !userSid) return;
+    if (!fileList || fileList.length === 0) return;
+
+    // Check for valid active Synology session
+    const activeSid = userSid && userSid !== "null" && userSid !== "undefined" && userSid.trim() !== "" ? userSid : null;
+    if (!activeSid) {
+      showToast("⚠️ กรุณายืนยันตัวตนหรือเข้าสู่ระบบ Synology NAS ก่อนทำการอัปโหลดไฟล์");
+      setShowConnectModal(true);
+      return;
+    }
+
     const fileArray = Array.from(fileList);
 
     // Filter valid image and video formats
@@ -758,24 +768,37 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
     try {
       let successCount = 0;
       let lastErrorMessage = "";
+      let requiresReauth = false;
+
       for (let i = 0; i < validMedia.length; i++) {
         const file = validMedia[i];
         const formData = new FormData();
         formData.append("file", file);
         formData.append("folder_path", destFolderPath);
-        formData.append("sid", userSid);
+        formData.append("sid", activeSid);
         formData.append("url", config.nasUrl);
 
         const res = await fetch("/api/nas/upload", {
           method: "POST",
           body: formData,
         });
-        const data = await res.json();
+        const data = await safeParseJsonResponse(res);
         if (data.success) {
           successCount++;
         } else {
           lastErrorMessage = data.error || "Synology NAS ปฏิเสธการอัปโหลดไฟล์";
+          if (data.code === 119 || data.requireAuth) {
+            requiresReauth = true;
+          }
         }
+      }
+
+      if (requiresReauth) {
+        clearUserNasSid();
+        setUserSid(null);
+        setShowConnectModal(true);
+        showToast("⚠️ เซสชัน Synology NAS หมดอายุ กรุณาเข้าสู่ระบบใหม่อีกครั้ง");
+        return;
       }
 
       if (successCount === validMedia.length) {
@@ -785,11 +808,12 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
       } else {
         showToast(`❌ อัปโหลดไฟล์ล้มเหลว: ${lastErrorMessage || "Synology NAS ปฏิเสธการเขียนไฟล์"}`);
       }
+
       if (selectedFolder) {
-        loadPhotos(userSid, currentSpace, undefined, selectedFolder.id);
+        loadPhotos(activeSid, currentSpace, undefined, selectedFolder.id);
       } else {
-        loadFolders(userSid, currentSpace, 0);
-        loadPhotos(userSid, currentSpace);
+        loadFolders(activeSid, currentSpace, 0);
+        loadPhotos(activeSid, currentSpace);
       }
     } catch (err: any) {
       showToast(`❌ การอัปโหลดล้มเหลว: ${err?.message}`);
@@ -837,6 +861,12 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
     dragCounter.current = 0;
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const activeSid = userSid && userSid !== "null" && userSid !== "undefined" && userSid.trim() !== "" ? userSid : null;
+      if (!activeSid) {
+        showToast("⚠️ กรุณายืนยันตัวตนหรือเข้าสู่ระบบ Synology NAS ก่อนวางไฟล์เพื่ออัปโหลด");
+        setShowConnectModal(true);
+        return;
+      }
       await uploadFileList(e.dataTransfer.files);
     }
   };

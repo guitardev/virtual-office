@@ -195,7 +195,15 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
 
   // ─── FILE OPERATIONS & DRAG-AND-DROP UPLOAD ───
   const uploadFileList = async (fileList: FileList | File[]) => {
-    if (!fileList || fileList.length === 0 || !userSid) return;
+    if (!fileList || fileList.length === 0) return;
+
+    const activeSid = userSid && userSid !== "null" && userSid !== "undefined" && userSid.trim() !== "" ? userSid : null;
+    if (!activeSid) {
+      showToast("⚠️ กรุณายืนยันตัวตนด้วยบัญชี Synology NAS ก่อนอัปโหลดไฟล์");
+      setShowConnectModal(true);
+      return;
+    }
+
     if (!currentPath) {
       showToast("⚠️ กรุณาคลิกเลือกโฟลเดอร์แชร์ปลายทางก่อนอัปโหลดไฟล์");
       return;
@@ -207,6 +215,7 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
 
     let successCount = 0;
     let lastError = "";
+    let requiresReauth = false;
 
     try {
       for (let i = 0; i < filesToUpload.length; i++) {
@@ -214,7 +223,7 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
         const formData = new FormData();
         formData.append("file", file);
         formData.append("folder_path", currentPath);
-        formData.append("sid", userSid);
+        formData.append("sid", activeSid);
         formData.append("url", config.nasUrl);
 
         const res = await fetch("/api/nas/upload", {
@@ -226,7 +235,18 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
           successCount++;
         } else {
           lastError = data.error || "Synology NAS ปฏิเสธการอัปโหลด";
+          if (data.code === 119 || data.requireAuth) {
+            requiresReauth = true;
+          }
         }
+      }
+
+      if (requiresReauth) {
+        clearUserNasSid();
+        setUserSid(null);
+        setShowConnectModal(true);
+        showToast("⚠️ เซสชัน Synology NAS หมดอายุ กรุณาเข้าสู่ระบบใหม่อีกครั้ง");
+        return;
       }
 
       if (successCount === filesToUpload.length) {
@@ -236,7 +256,7 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
       } else {
         showToast(`❌ อัปโหลดไฟล์ล้มเหลว: ${lastError || "Synology NAS ปฏิเสธการเขียนไฟล์"}`);
       }
-      loadFolderContents(userSid, currentPath);
+      loadFolderContents(activeSid, currentPath);
     } catch (err: any) {
       showToast(`❌ เกิดข้อผิดพลาดในการอัปโหลด: ${err?.message}`);
     } finally {
@@ -285,6 +305,12 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
     dragCounter.current = 0;
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const activeSid = userSid && userSid !== "null" && userSid !== "undefined" && userSid.trim() !== "" ? userSid : null;
+      if (!activeSid) {
+        showToast("⚠️ กรุณายืนยันตัวตนด้วยบัญชี Synology NAS ก่อนวางไฟล์เพื่ออัปโหลด");
+        setShowConnectModal(true);
+        return;
+      }
       if (!currentPath) {
         showToast("⚠️ กรุณาคลิกเลือกโฟลเดอร์แชร์ปลายทางก่อนวางไฟล์เพื่ออัปโหลด");
         return;
