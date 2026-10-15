@@ -501,16 +501,20 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
     setIsUploading(true);
     showToast(`⏳ กำลังอัปโหลด ${files.length} ไฟล์เข้าสู่ Synology Photos...`);
 
-    const destFolderPath = selectedFolder
-      ? currentSpace === "shared"
-        ? `/photo/${selectedFolder.name}`
-        : `/home/Photos/${selectedFolder.name}`
-      : currentSpace === "shared"
-      ? `/photo`
-      : `/home/Photos`;
+    const subPath =
+      folderBreadcrumbs.length > 1
+        ? folderBreadcrumbs
+            .slice(1)
+            .map((b) => b.name)
+            .join("/")
+        : selectedFolder?.name || "";
+
+    const basePath = currentSpace === "shared" ? "/photo" : "/home/Photos";
+    const destFolderPath = subPath ? `${basePath}/${subPath}` : basePath;
 
     try {
       let successCount = 0;
+      let lastErrorMessage = "";
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const formData = new FormData();
@@ -524,10 +528,20 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
           body: formData,
         });
         const data = await res.json();
-        if (data.success) successCount++;
+        if (data.success) {
+          successCount++;
+        } else {
+          lastErrorMessage = data.error || "Synology NAS ปฏิเสธการอัปโหลดไฟล์";
+        }
       }
 
-      showToast(`✅ อัปโหลดสำเร็จ ${successCount} จาก ${files.length} ไฟล์ เข้าสู่ "${destFolderPath}"`);
+      if (successCount === files.length) {
+        showToast(`✅ อัปโหลดสำเร็จทั้ง ${successCount} ไฟล์ เข้าสู่ "${destFolderPath}"`);
+      } else if (successCount > 0) {
+        showToast(`⚠️ อัปโหลดสำเร็จ ${successCount}/${files.length} ไฟล์ (${lastErrorMessage})`);
+      } else {
+        showToast(`❌ อัปโหลดไฟล์ล้มเหลว: ${lastErrorMessage || "Synology NAS ปฏิเสธการเขียนไฟล์"}`);
+      }
       if (selectedFolder) {
         loadPhotos(userSid, currentSpace, undefined, selectedFolder.id);
       } else {
