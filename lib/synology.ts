@@ -286,17 +286,34 @@ export async function loginSynology(
       };
     }
 
-    const cleanUrl = nasUrl.replace(/\/+$/, "");
-    const loginUrl = `${cleanUrl}/webapi/entry.cgi?api=SYNO.API.Auth&version=7&method=login&account=${encodeURIComponent(
-      account
-    )}&passwd=${encodeURIComponent(passwd)}&session=FileStation&format=sid`;
+    const attemptLogin = async (url: string) => {
+      const cleanUrl = url.replace(/\/+$/, "");
+      const loginUrl = `${cleanUrl}/webapi/entry.cgi?api=SYNO.API.Auth&version=7&method=login&account=${encodeURIComponent(
+        account
+      )}&passwd=${encodeURIComponent(passwd)}&session=FileStation&format=sid`;
 
-    const res = await fetch(loginUrl, {
-      method: "GET",
-      signal: AbortSignal.timeout(8000),
-    });
+      const res = await fetch(loginUrl, {
+        method: "GET",
+        signal: AbortSignal.timeout(6000),
+      });
 
-    const data = await safeParseJsonResponse(res);
+      return await safeParseJsonResponse(res);
+    };
+
+    let data = await attemptLogin(nasUrl);
+
+    // Fallback to local LAN IP if Cloudflare Tunnel domain is offline (Error 1033 / 530)
+    if (!data.success && (data.code === 1033 || nasUrl.includes("nas.smso.site"))) {
+      const lanUrl = "http://192.168.162.21:5000";
+      if (nasUrl !== lanUrl) {
+        try {
+          const lanData = await attemptLogin(lanUrl);
+          if (lanData && (lanData.success || (lanData.code && lanData.code !== 1033))) {
+            data = lanData;
+          }
+        } catch {}
+      }
+    }
 
     if (data.success && data.data?.sid) {
       return {
@@ -307,8 +324,11 @@ export async function loginSynology(
       };
     }
 
-    const errorCode = data.error?.code || 0;
-    let errorMessage = "ชื่อผู้ใช้หรือรหัสผ่านบน Synology NAS ไม่ถูกต้อง";
+    const errorCode = (typeof data.error === "object" ? data.error?.code : data.code) || 0;
+    let errorMessage =
+      typeof data.error === "string"
+        ? data.error
+        : data.error?.message || "ชื่อผู้ใช้หรือรหัสผ่านบน Synology NAS ไม่ถูกต้อง";
     if (errorCode === 400) errorMessage = "ไม่มีบัญชีผู้ใช้งานนี้ในระบบ Synology NAS";
     if (errorCode === 401) errorMessage = "รหัสผ่านไม่ถูกต้อง หรือบัญชีถูกปิดการใช้งาน";
     if (errorCode === 402) errorMessage = "บัญชีนี้ถูกล็อค กรุณาติดต่อผู้ดูแลระบบ";

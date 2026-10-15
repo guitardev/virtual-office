@@ -15,6 +15,7 @@ import {
   checkNasHealth,
   loginSynology,
   SynologyHealthStatus,
+  safeParseJsonResponse,
 } from "@/lib/synology";
 import { Member } from "@/lib/types";
 
@@ -211,7 +212,7 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
         method: "POST",
         body: formData,
       });
-      const data = await res.json();
+      const data = await safeParseJsonResponse(res);
       if (data.success) {
         showToast(`📤 อัปโหลด "${file.name}" ไปยัง Synology NAS สำเร็จ`);
         loadFolderContents(userSid, currentPath);

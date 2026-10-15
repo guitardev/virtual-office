@@ -14,7 +14,7 @@ import {
   isSupabaseConfigured,
   saveMember,
 } from "@/lib/supabase";
-import { setUserNasSid, getClientSynologyConfig } from "@/lib/synology";
+import { setUserNasSid, getClientSynologyConfig, saveClientSynologyConfig, safeParseJsonResponse } from "@/lib/synology";
 import { TurnstileWidget } from "./TurnstileWidget";
 
 interface LoginPageProps {
@@ -150,17 +150,36 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
         process.env.NEXT_PUBLIC_SYNOLOGY_NAS_URL ||
         "https://nas.smso.site";
 
-      const res = await fetch("/api/nas/auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username: nasUsername.trim(),
-          password: nasPassword,
-          nasUrl: targetUrl,
-        }),
-      });
+      const attemptAuth = async (url: string) => {
+        const res = await fetch("/api/nas/auth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: nasUsername.trim(),
+            password: nasPassword,
+            nasUrl: url,
+          }),
+        });
+        return await safeParseJsonResponse(res);
+      };
 
-      const data = await res.json();
+      let data = await attemptAuth(targetUrl);
+
+      // Auto fallback to LAN IP if Cloudflare Tunnel domain is offline (Error 1033 / 530)
+      if (!data.success && (data.code === 1033 || targetUrl.includes("nas.smso.site"))) {
+        const lanUrl = "http://192.168.162.21:5000";
+        if (targetUrl !== lanUrl) {
+          try {
+            const lanData = await attemptAuth(lanUrl);
+            if (lanData && (lanData.success || (lanData.code && lanData.code !== 1033))) {
+              data = lanData;
+              saveClientSynologyConfig({ nasUrl: lanUrl });
+              setNasHostLabel("192.168.162.21:5000 (LAN)");
+            }
+          } catch {}
+        }
+      }
+
       setIsLoading(false);
 
       if (data.success && data.user) {
@@ -189,7 +208,7 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
     } catch (err: any) {
       setIsLoading(false);
       setErrorMessage(
-        `เกิดข้อผิดพลาดในการเชื่อมต่อ Synology NAS (192.168.162.21): ${
+        `เกิดข้อผิดพลาดในการเชื่อมต่อ Synology NAS: ${
           err?.message || "การเชื่อมต่อขัดข้อง"
         }`
       );

@@ -32,6 +32,7 @@ import {
   getClientSynologyConfig,
   saveClientSynologyConfig,
   loginSynology,
+  safeParseJsonResponse,
 } from "@/lib/synology";
 
 interface ChatPageProps {
@@ -307,7 +308,7 @@ export function ChatPage({
         method: "POST",
         body: formData,
       });
-      const data = await res.json();
+      const data = await safeParseJsonResponse(res);
       if (data.success && data.file) {
         return { success: true, path: data.file.path };
       }
