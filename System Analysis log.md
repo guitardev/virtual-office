@@ -1063,5 +1063,36 @@ on conflict (id) do update set
   - ทดสอบแก้ไขชื่อเล่นเป็น "กิต", ตำแหน่งเป็น "หัวหน้ากลุ่มงานเทคโนโลยีดิจิทัล", เบอร์โทรเป็น "089-111-2222"
   - ผลลัพธ์: การ์ดโปรไฟล์บนหน้าเว็บอัปเดตทันทีแบบ Realtime และเมื่อกดรีเฟรชหน้าเว็บ (F5 / Reload) ข้อมูลยังคงแสดงผลถูกต้อง 100%
 
+---
+
+## 21. ผลการตรวจสอบการฟื้นตัวของระบบ Supabase Cloud (Live Health & Data Verification)
+> **สถานะปัจจุบัน:** ✅ **สมบูรณ์ครบถ้วน 100% (Healthy & Operational)**  
+> **วันเวลาที่ตรวจสอบ:** 15 ตุลาคม 2569 เวลา 16:46 น.
+
+### 21.1 การทดสอบสถานะตารางฐานข้อมูล (Database Schema & Table Integrity)
+รันสคริปต์ [scripts/check-supabase.mjs](file:///c:/Users/GuitarDev/virtual-office/scripts/check-supabase.mjs) ผ่าน API ตรวจสอบทั้ง 7 ตารางหลัก:
+* ✅ `users` (ทำเนียบบุคลากร): พบข้อมูล 5 รายการ (พร้อมโครงสร้างฟิลด์ครบ)
+* ✅ `vehicles` (รถยนต์ราชการส่วนกลาง): พบ 10 คัน
+* ✅ `car_bookings` (คำขอจองรถราชการ): 0 รายการ (พร้อมใช้งาน)
+* ✅ `access_requests` (คำขอสิทธิ์เข้าใช้งาน): 2 รายการ
+* ✅ `chat_channels` (ห้องแชทตามกลุ่มงาน): 8 ห้องทางการ
+* ✅ `messages` (ข้อความแชทและเอกสาร): 11 ข้อความ
+* ✅ `audit_logs` (ประวัติกิจกรรมระบบ): 57 รายการ
+
+### 21.2 การทดสอบคำสั่ง SQL และความเร็วตอบสนอง (PostgreSQL 17 Engine)
+* ทดสอบเชื่อมต่อตรงผ่าน Supabase MCP (`SELECT current_timestamp, version();`):
+  - ผลลัพธ์: ตอบสนองในเวลาน้อยกว่า 1.5 วินาที
+  - เครื่องยนต์ฐานข้อมูล: `PostgreSQL 17.11 on x86_64-pc-linux-gnu`
+* ทดสอบบันทึกข้อมูลบุคลากรแบบ Upsert (`client.from('users').upsert()`):
+  - ทดสอบอัปเดตข้อมูลบัญชี `syno_guitardev`
+  - ผลลัพธ์: `Upsert Error: null`, บันทึกและส่งคืนผลลัพธ์ลงฐานข้อมูลสำเร็จ 100%
+
+### 21.3 การทดสอบบนเบราว์เซอร์จริง (End-to-End Client Validation)
+* ตรวจสอบ Console Error บนหน้าเว็บ `http://localhost:3000`:
+  - ข้อผิดพลาด CORS และ Cloudflare 522/504 หายไปทั้งหมด 100%
+  - สถานะบนส่วนหัวแสดงเป็น `Supabase Live (สีเขียว)` อย่างถูกต้อง
+  - การเชื่อมต่อ Realtime WebSocket (`/realtime/v1/websocket`) สมบูรณ์
+
+
 
 
