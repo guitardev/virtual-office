@@ -27,6 +27,9 @@ function getSynologyUploadErrorMessage(code?: number, folderPath?: string): stri
     case 407:
       return "เกิดข้อผิดพลาดของระบบไฟล์ภายใน Synology NAS";
     case 408:
+      if (folderPath?.includes("/home")) {
+        return `ไม่พบโฟลเดอร์ "${folderPath}" บน NAS (สำหรับพื้นที่ส่วนบุคคล กรุณาตรวจสอบว่าได้เปิด "User Home service" ใน DSM Control Panel > User & Group > Advanced แล้วหรือไม่)`;
+      }
       return `ไม่พบโฟลเดอร์แชร์ปลายทาง "${folderPath}" บน Synology NAS (กรุณาสร้าง Shared Folder นี้ใน DSM Control Panel ก่อน)`;
     case 414:
       return "มีไฟล์ชื่อนี้อยู่แล้วในระบบ และไม่อนุญาตให้เขียนทับ";
@@ -41,6 +44,9 @@ function getSynologyUploadErrorMessage(code?: number, folderPath?: string): stri
     case 1804:
       return `ไม่มีสิทธิ์เขียนไฟล์ หรือไม่พบโฟลเดอร์ปลายทาง "${folderPath}" บน Synology NAS`;
     case 1805:
+      if (folderPath?.includes("/home")) {
+        return `ไม่พบโฟลเดอร์ "${folderPath}" บน NAS (สำหรับพื้นที่ส่วนบุคคล กรุณาตรวจสอบว่าได้เปิด "User Home service" ใน DSM Control Panel > User & Group > Advanced แล้วหรือไม่)`;
+      }
       return `ไม่พบโฟลเดอร์แชร์ปลายทาง "${folderPath}" บน NAS (กรุณาตรวจสอบว่ามี Shared Folder นี้ใน DSM Control Panel)`;
     default:
       return `Synology NAS ปฏิเสธการอัปโหลดไฟล์ (รหัสข้อผิดพลาด: ${code || "Unknown"}, โฟลเดอร์ปลายทาง: "${folderPath || "ไม่ระบุ"}")`;

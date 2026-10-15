@@ -1144,31 +1144,58 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                 <div className="mt-3 p-3.5 rounded-xl bg-white/95 border border-amber-200 text-slate-700 text-xs space-y-2">
                   <div className="font-bold text-slate-800 flex items-center gap-1.5">
                     <span>💡</span>
-                    <span>ขั้นตอนการเปิดใช้งาน Shared Space สำหรับผู้ดูแลระบบ Synology (DSM):</span>
+                    <span>คู่มือการตั้งค่าสิทธิ์ Synology Photos &amp; พื้นที่จัดเก็บบน DSM:</span>
                   </div>
-                  <ol className="list-decimal list-inside space-y-1 text-slate-600 pl-1 leading-relaxed">
-                    <li>
-                      เปิดเว็บเบราว์เซอร์เข้าสู่ระบบ <strong>Synology DSM</strong> (เช่น <code className="bg-slate-100 px-1 py-0.5 rounded text-cyan-800">http://192.168.162.21:5000</code>) ด้วยบัญชีผู้ดูแลระบบ (Admin)
-                    </li>
-                    <li>
-                      เปิดแอปพลิเคชัน <strong>Synology Photos</strong>
-                    </li>
-                    <li>
-                      คลิกไอคอนโปรไฟล์บัญชีผู้ใช้ที่มุมขวาบน แล้วเลือก <strong>การตั้งค่า (Settings)</strong>
-                    </li>
-                    <li>
-                      คลิกที่แถบ <strong>พื้นที่ที่แชร์ (Shared Space)</strong>
-                    </li>
-                    <li>
-                      ทำเครื่องหมายถูกที่ช่อง <strong>"เปิดใช้งานพื้นที่ที่แชร์" (Enable Shared Space)</strong>
-                    </li>
-                    <li>
-                      คลิกปุ่ม <strong>"กำหนดสิทธิ์การเข้าถึง" (Set Access Permissions)</strong> เพื่อมอบสิทธิ์การดูหรือจัดการภาพให้แก่ผู้ใช้งานหรือกลุ่มงาน
-                    </li>
-                    <li>
-                      กด <strong>บันทึก (Save)</strong> จากนั้นกลับมากดปุ่มรีเฟรช 🔄 ในหน้านี้
-                    </li>
-                  </ol>
+
+                  <div className="space-y-3 text-slate-600 pl-1 leading-relaxed">
+                    {/* Section 1: Shared Space */}
+                    <div className="space-y-1">
+                      <div className="font-bold text-cyan-900 flex items-center gap-1">
+                        <span>🏛️</span>
+                        <span>1. การเปิดใช้งานและแก้สิทธิ์พื้นที่ส่วนกลาง (Shared Space - /photo):</span>
+                      </div>
+                      <ol className="list-decimal list-inside space-y-1 pl-2 text-[11px]">
+                        <li>
+                          เปิดเว็บเบราว์เซอร์เข้าสู่ระบบ <strong>Synology DSM</strong> (<code className="bg-slate-100 px-1 py-0.5 rounded text-cyan-800">{config.nasUrl}</code>) ด้วยบัญชีผู้ดูแลระบบ (Admin)
+                        </li>
+                        <li>
+                          เปิดแอป <strong>Synology Photos</strong> &gt; คลิกไอคอนโปรไฟล์มุมขวาบน &gt; <strong>การตั้งค่า (Settings)</strong>
+                        </li>
+                        <li>
+                          เลือกแท็บ <strong>พื้นที่ที่แชร์ (Shared Space)</strong> &gt; ทำเครื่องหมายถูก <strong>"เปิดใช้งานพื้นที่ที่แชร์"</strong>
+                        </li>
+                        <li>
+                          คลิก <strong>"กำหนดสิทธิ์การเข้าถึง" (Set Access Permissions)</strong>:
+                          <ul className="list-disc list-inside pl-4 text-slate-500">
+                            <li>หากต้องการให้เห็นภาพรวมทั้งหมด ให้ตั้งสิทธิ์เป็น <strong>Full Access</strong></li>
+                            <li>หากตั้งเป็น <strong>Custom (Code 120)</strong> ผู้ใช้จะเห็นเฉพาะโฟลเดอร์ที่ได้รับมอบหมายเท่านั้น</li>
+                          </ul>
+                        </li>
+                      </ol>
+                    </div>
+
+                    {/* Section 2: Personal Space / home/Photos */}
+                    <div className="space-y-1 pt-1.5 border-t border-amber-100">
+                      <div className="font-bold text-cyan-900 flex items-center gap-1">
+                        <span>👤</span>
+                        <span>2. การเปิดใช้งานพื้นที่ส่วนตัว (Personal Space - /home/Photos):</span>
+                      </div>
+                      <ol className="list-decimal list-inside space-y-1 pl-2 text-[11px]">
+                        <li>
+                          เข้า DSM <strong>Control Panel</strong> &gt; <strong>User &amp; Group (ผู้ใช้และกลุ่ม)</strong> &gt; แท็บ <strong>Advanced (ขั้นสูง)</strong>
+                        </li>
+                        <li>
+                          เลื่อนลงมาที่หัวข้อ <strong>User Home (หน้าแรกของผู้ใช้)</strong> &gt; ติ๊กถูกที่ <strong>"เปิดใช้งานบริการหน้าแรกของผู้ใช้" (Enable user home service)</strong>
+                        </li>
+                        <li>
+                          เปิดแอป <strong>Synology Photos</strong> &gt; คลิกไอคอนโปรไฟล์ &gt; <strong>การตั้งค่า (Settings)</strong> &gt; แท็บ <strong>Personal (ส่วนบุคคล)</strong>
+                        </li>
+                        <li>
+                          ทำเครื่องหมายถูกที่ <strong>"เปิดใช้งานพื้นที่ส่วนบุคคล" (Enable Personal Space)</strong> ระบบจะสร้างโฟลเดอร์ <code className="bg-slate-100 px-1 py-0.5 rounded text-indigo-700">/home/Photos</code> ให้ผู้ใช้แต่ละคนโดยอัตโนมัติ
+                        </li>
+                      </ol>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
