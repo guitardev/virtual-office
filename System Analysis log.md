@@ -1021,4 +1021,47 @@ on conflict (id) do update set
    - Commit: `feat(photos): add folder creation, album creation, item deletion and batch actions per NAS permissions`
    - พุชขึ้นกิ่ง `main` บน GitHub Repository เรียบร้อยแล้ว
 
+---
+
+## 20. การวิเคราะห์และแก้ไขปัญหา: การอัปเดตข้อมูลส่วนบุคคลของผู้ใช้ไม่สะท้อนผล (User Profile Persistence & Sync Fix)
+> **ปัญหาที่พบ:** ผู้ใช้งานเมื่อเข้าไปแก้ไขข้อมูลส่วนบุคคล (Profile) เช่น ชื่อ, คำนำหน้า, ตำแหน่ง, ฝ่าย, เบอร์โทรศัพท์, ชื่อเล่น แล้วพบว่าข้อมูลไม่อัปเดตทันที หรือเมื่อรีเฟรชหน้าเว็บแล้วข้อมูลย้อนกลับเป็นค่าเดิม
+
+### 20.1 การวิเคราะห์สาเหตุเชิงลึก (Root Cause Analysis)
+
+1. **ฟังก์ชัน `isRealMember` ใน [lib/supabase.ts](file:///c:/Users/GuitarDev/virtual-office/lib/supabase.ts) ตัดทิ้งข้อมูลบุคลากรจริง:**
+   - ก่อนหน้านี้มีคำสั่งกรอง `if (/^usr_\d+$/.test(m.id)) return false;` เพื่อคัดกรองข้อมูลจำลอง (Mock)
+   - แต่ในฐานข้อมูลจริง [supabase/schema.sql](file:///c:/Users/GuitarDev/virtual-office/supabase/schema.sql) และ [scripts/seed-users.js](file:///c:/Users/GuitarDev/virtual-office/scripts/seed-users.js) บัญชีบุคลากรจริงของ พมจ. กำแพงเพชร (นายเสกพล, นายวรวุฒิ, นายพนมศักย์ ฯลฯ) ถูกกำหนด ID เป็น `usr_2` ถึง `usr_11`
+   - ส่งผลให้เมื่อแก้ไขข้อมูล สคริปต์ `saveLocalMembers` จะกรองสมาชิกเหล่านี้ทิ้งออกจาก `smartmso_members_cache_v3` โดยอัตโนมัติ
+2. **`getSupabaseSession()` และ `subscribeToAuthChanges()` เขียนทับ `currentUser` ด้วยข้อมูลว่าง:**
+   - ใน [app/page.tsx](file:///c:/Users/GuitarDev/virtual-office/app/page.tsx) เมื่อโหลดหน้าเว็บ จะมีตัวดักจับเซสชัน Supabase Auth ซึ่งเรียก `findOrMapAuthMember` แล้วนำค่า Member ที่มีเฉพาะชื่อกับอีเมล (ตำแหน่งและเบอร์โทรเป็นค่าว่าง/รอกำหนด) ไปสั่ง `setCurrentUser(authMember)` โดยตรง
+   - ส่งผลให้ทับข้อมูลที่ผู้ใช้เพิ่งปรับปรุงไป
+3. **สถานะฐานข้อมูล Supabase Cloud เกิด Cloudflare Error 522 (Connection Timeout):**
+   - โครงการ Supabase Cloud (`xkeiuyhkokmecefzzynb.supabase.co`) อยู่ในสถานะระงับชั่วคราว (Paused / Connection Timeout) ทำให้คำสั่ง `supabase.from("users").upsert()` ล้มเหลวแบบเงียบๆ หากไม่ได้บันทึกลงใน Local Cache อย่างสมบูรณ์
+4. **ปัญหาคำนำหน้าชื่อภาษาไทยซ้ำซ้อน (Double Prefix):**
+   - ในฟังก์ชัน `handleOpenEditProfile` และ `handleSaveProfile` หากชื่อต้นมีคำนำหน้าติดมาด้วย เช่น "นายเสกพล" เมื่อเลือกคำนำหน้า "นาย" ระบบจะรวมเป็น "นายนายเสกพล"
+5. **การบันทึกเซสชัน `smartmso_auth_session` มีเงื่อนไข:**
+   - ฟังก์ชันเดิมตรวจสอบ `if (savedSession)` ก่อนเขียนลง `localStorage` หากเซสชันเดิมถูกล้าง ข้อมูลใหม่จะไม่ถูกเขียนลงเครื่อง
+
+### 20.2 แนวทางการแก้ไข (Implemented Solution)
+
+1. **ปรับปรุง `isRealMember` ใน [lib/supabase.ts](file:///c:/Users/GuitarDev/virtual-office/lib/supabase.ts):**
+   - เปลี่ยนเงื่อนไขเป็นการกรองเฉพาะ `m.id === "usr_1" || m.id === "usr_mock"` เท่านั้น และเก็บรักษาข้อมูลบุคลากรจริง `usr_2` ถึง `usr_99` ไว้ครบถ้วน
+2. **ผสานข้อมูลเซสชัน (Preserve Custom Profile State):**
+   - ปรับปรุง `getSupabaseSession` และ `authSub` ใน [app/page.tsx](file:///c:/Users/GuitarDev/virtual-office/app/page.tsx) ให้ทำการผสาน (Merge) ข้อมูลกับ `prev` เสมอ เพื่อไม่ให้ฟิลด์ที่กำหนดเอง (เช่น `nickname`, `position`, `division`, `phone`, `lineId`, `personnelType`) ถูกลบเป็นค่าว่าง
+3. **ปรับปรุงการผสานข้อมูลใน `fetchMembers()`:**
+   - เมื่อเชื่อมต่อฐานข้อมูลได้ จะผสานข้อมูลที่ผู้ใช้แก้ไขในเครื่องเข้ากับข้อมูลจากเซิร์ฟเวอร์ โดยยึดข้อมูลที่ผู้ใช้ปรับปรุงล่าสุดเป็นหลัก
+4. **เพิ่มระบบซิงค์ `updateSupabaseUserMetadata`:**
+   - อัปเดตข้อมูลไปยัง GoTrue Auth User Metadata ควบคู่กับตาราง `users`
+5. **แก้ปัญหาชื่อและคำนำหน้าภาษาไทยซ้ำซ้อน:**
+   - กรองคำนำหน้าออกจาก `firstName` ทั้งตอนเปิดฟอร์มและตอนกดบันทึก
+6. **บังคับเขียน `smartmso_auth_session` อย่างไม่มีเงื่อนไข และส่ง Custom Event:**
+   - ส่ง `window.dispatchEvent(new Event("storage"))` เพื่อให้ทุกแท็บและคอมโพเนนต์ที่เปิดอยู่ซิงค์ข้อมูลใหม่ทันทีโดยไม่ต้องรีโหลดหน้าเว็บ
+
+### 20.3 ผลการทดสอบ (Verification)
+- **Turbopack Build:** ผ่านสมบูรณ์ `Compiled successfully in 1395ms`
+- **Playwright Automated Browser Testing:**
+  - ทดสอบแก้ไขชื่อเล่นเป็น "กิต", ตำแหน่งเป็น "หัวหน้ากลุ่มงานเทคโนโลยีดิจิทัล", เบอร์โทรเป็น "089-111-2222"
+  - ผลลัพธ์: การ์ดโปรไฟล์บนหน้าเว็บอัปเดตทันทีแบบ Realtime และเมื่อกดรีเฟรชหน้าเว็บ (F5 / Reload) ข้อมูลยังคงแสดงผลถูกต้อง 100%
+
+
 

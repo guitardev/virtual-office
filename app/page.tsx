@@ -44,6 +44,7 @@ import {
   saveMember,
   deleteMember,
   subscribeToMembers,
+  updateSupabaseUserMetadata,
   fetchAccessRequests,
   saveAccessRequest,
   subscribeToAccessRequests,
@@ -445,8 +446,31 @@ export default function SmartMSOApp() {
         if (session?.user) {
           setMembers((currentMembers) => {
             const authMember = findOrMapAuthMember(session.user, currentMembers);
-            setCurrentUser(authMember);
-            setCurrentUserRole(authMember.role);
+            setCurrentUser((prev) => {
+              if (
+                prev &&
+                (prev.id === authMember.id ||
+                  (prev.email && prev.email.toLowerCase() === authMember.email?.toLowerCase()))
+              ) {
+                return {
+                  ...authMember,
+                  prefix: prev.prefix || authMember.prefix,
+                  firstName: prev.firstName || authMember.firstName,
+                  lastName: prev.lastName || authMember.lastName,
+                  nickname: prev.nickname || authMember.nickname,
+                  name: prev.name || authMember.name,
+                  personnelType: prev.personnelType || authMember.personnelType,
+                  position: prev.position && prev.position !== "รอกำหนดตำแหน่ง" ? prev.position : authMember.position,
+                  division: prev.division && prev.division !== "รอกำหนดกลุ่มงาน" ? prev.division : authMember.division,
+                  phone: prev.phone && prev.phone !== "-" ? prev.phone : authMember.phone,
+                  lineId: prev.lineId && prev.lineId !== "-" ? prev.lineId : authMember.lineId,
+                  avatarUrl: prev.avatarUrl || authMember.avatarUrl,
+                  role: prev.role || authMember.role,
+                };
+              }
+              return authMember;
+            });
+            setCurrentUserRole((prev) => prev || authMember.role);
             return currentMembers;
           });
         }
@@ -457,8 +481,31 @@ export default function SmartMSOApp() {
         if (event === "SIGNED_IN" && session?.user) {
           setMembers((currentMembers) => {
             const authMember = findOrMapAuthMember(session.user, currentMembers);
-            setCurrentUser(authMember);
-            setCurrentUserRole(authMember.role);
+            setCurrentUser((prev) => {
+              if (
+                prev &&
+                (prev.id === authMember.id ||
+                  (prev.email && prev.email.toLowerCase() === authMember.email?.toLowerCase()))
+              ) {
+                return {
+                  ...authMember,
+                  prefix: prev.prefix || authMember.prefix,
+                  firstName: prev.firstName || authMember.firstName,
+                  lastName: prev.lastName || authMember.lastName,
+                  nickname: prev.nickname || authMember.nickname,
+                  name: prev.name || authMember.name,
+                  personnelType: prev.personnelType || authMember.personnelType,
+                  position: prev.position && prev.position !== "รอกำหนดตำแหน่ง" ? prev.position : authMember.position,
+                  division: prev.division && prev.division !== "รอกำหนดกลุ่มงาน" ? prev.division : authMember.division,
+                  phone: prev.phone && prev.phone !== "-" ? prev.phone : authMember.phone,
+                  lineId: prev.lineId && prev.lineId !== "-" ? prev.lineId : authMember.lineId,
+                  avatarUrl: prev.avatarUrl || authMember.avatarUrl,
+                  role: prev.role || authMember.role,
+                };
+              }
+              return authMember;
+            });
+            setCurrentUserRole((prev) => prev || authMember.role);
             return currentMembers;
           });
         } else if (event === "SIGNED_OUT") {
@@ -766,14 +813,22 @@ export default function SmartMSOApp() {
     e.preventDefault();
     if (!adminEditingMember) return;
 
-    const fullName = `${adminEditForm.prefix}${adminEditForm.firstName} ${adminEditForm.lastName}`.trim();
-    const initials = (adminEditForm.firstName.trim() || adminEditingMember.name).slice(0, 2);
+    const prefix = adminEditForm.prefix.trim();
+    let sanitizedFirst = adminEditForm.firstName.trim();
+    if (prefix && sanitizedFirst.startsWith(prefix)) {
+      sanitizedFirst = sanitizedFirst.slice(prefix.length).trim();
+    }
+    const trimmedLast = adminEditForm.lastName.trim();
+
+    const namesCombined = `${sanitizedFirst} ${trimmedLast}`.trim();
+    const fullName = prefix ? `${prefix}${namesCombined}` : namesCombined;
+    const initials = (sanitizedFirst || adminEditingMember.name).slice(0, 2);
 
     const updatedMember: Member = {
       ...adminEditingMember,
-      prefix: adminEditForm.prefix,
-      firstName: adminEditForm.firstName.trim(),
-      lastName: adminEditForm.lastName.trim(),
+      prefix,
+      firstName: sanitizedFirst,
+      lastName: trimmedLast,
       nickname: adminEditForm.nickname.trim() || undefined,
       name: fullName,
       personnelType: adminEditForm.personnelType,
@@ -781,8 +836,8 @@ export default function SmartMSOApp() {
       division: adminEditForm.division,
       department: adminEditForm.division,
       email: adminEditForm.email.trim(),
-      phone: adminEditForm.phone.trim(),
-      lineId: adminEditForm.lineId.trim(),
+      phone: adminEditForm.phone.trim() || "-",
+      lineId: adminEditForm.lineId.trim() || "-",
       role: adminEditForm.role,
       status: adminEditForm.status,
       avatarUrl: adminEditForm.avatarUrl ? adminEditForm.avatarUrl.trim() : undefined,
@@ -796,18 +851,36 @@ export default function SmartMSOApp() {
     if (currentUser && currentUser.id === updatedMember.id) {
       setCurrentUser(updatedMember);
       setCurrentUserRole(updatedMember.role);
+      updateSupabaseUserMetadata({
+        prefix,
+        first_name: sanitizedFirst,
+        last_name: trimmedLast,
+        name: fullName,
+        nickname: updatedMember.nickname,
+        position: updatedMember.position,
+        division: updatedMember.division,
+        phone: updatedMember.phone,
+        line_id: updatedMember.lineId,
+        personnel_type: updatedMember.personnelType,
+        avatar_url: updatedMember.avatarUrl,
+      }).catch(() => {});
+
       if (typeof window !== "undefined") {
         try {
           const savedSession =
             localStorage.getItem("smartmso_auth_session") ||
             localStorage.getItem("omnioffice_auth_session");
-          if (savedSession) {
-            const parsed = JSON.parse(savedSession);
-            localStorage.setItem(
-              "smartmso_auth_session",
-              JSON.stringify({ ...parsed, user: updatedMember })
-            );
-          }
+          const parsed = savedSession ? JSON.parse(savedSession) : {};
+          localStorage.setItem(
+            "smartmso_auth_session",
+            JSON.stringify({
+              ...parsed,
+              user: updatedMember,
+              loginTime: parsed.loginTime || loginTime,
+              rememberMe: true,
+            })
+          );
+          window.dispatchEvent(new Event("storage"));
         } catch (err) {}
       }
     }
@@ -1083,17 +1156,33 @@ export default function SmartMSOApp() {
   // Profile Edit Handlers
   const handleOpenEditProfile = () => {
     if (!currentUser) return;
+    const prefix = (currentUser.prefix || "").trim();
+    let cleanFirst = (
+      currentUser.firstName ||
+      (currentUser.name ? currentUser.name.split(" ")[0] : "") ||
+      ""
+    ).trim();
+    if (prefix && cleanFirst.startsWith(prefix)) {
+      cleanFirst = cleanFirst.slice(prefix.length).trim();
+    }
+    const cleanLast = (
+      currentUser.lastName ||
+      (currentUser.name && currentUser.name.includes(" ")
+        ? currentUser.name.split(" ").slice(1).join(" ")
+        : "")
+    ).trim();
+
     setEditProfileForm({
-      prefix: currentUser.prefix || "",
-      firstName: currentUser.firstName || currentUser.name.split(" ")[0] || currentUser.name || "",
-      lastName: currentUser.lastName || (currentUser.name.includes(" ") ? currentUser.name.split(" ").slice(1).join(" ") : ""),
+      prefix,
+      firstName: cleanFirst,
+      lastName: cleanLast,
       nickname: currentUser.nickname || "",
       personnelType: currentUser.personnelType || "ข้าราชการ",
       position: currentUser.position || "",
       division: currentUser.division || (GOVERNMENT_DIVISIONS[0] as string),
       email: currentUser.email || "",
-      phone: currentUser.phone || "",
-      lineId: currentUser.lineId || "",
+      phone: currentUser.phone && currentUser.phone !== "-" ? currentUser.phone : "",
+      lineId: currentUser.lineId && currentUser.lineId !== "-" ? currentUser.lineId : "",
       avatarUrl: currentUser.avatarUrl || "",
     });
     setShowEditProfileModal(true);
@@ -1103,18 +1192,25 @@ export default function SmartMSOApp() {
     e.preventDefault();
     if (!currentUser) return;
 
-    const namesCombined = `${editProfileForm.firstName.trim()} ${editProfileForm.lastName.trim()}`.trim();
-    const fullName = editProfileForm.prefix
-      ? `${editProfileForm.prefix}${namesCombined}`
-      : namesCombined;
+    const trimmedFirst = editProfileForm.firstName.trim();
+    const trimmedLast = editProfileForm.lastName.trim();
+    const prefix = editProfileForm.prefix.trim();
 
-    const initials = (editProfileForm.firstName.trim() || currentUser.name).slice(0, 2);
+    // Prevent duplicate prefix if user typed it into first name
+    let sanitizedFirst = trimmedFirst;
+    if (prefix && sanitizedFirst.startsWith(prefix)) {
+      sanitizedFirst = sanitizedFirst.slice(prefix.length).trim();
+    }
+
+    const namesCombined = `${sanitizedFirst} ${trimmedLast}`.trim();
+    const fullName = prefix ? `${prefix}${namesCombined}` : namesCombined;
+    const initials = (sanitizedFirst || currentUser.name).slice(0, 2);
 
     const updatedUser: Member = {
       ...currentUser,
-      prefix: editProfileForm.prefix,
-      firstName: editProfileForm.firstName.trim(),
-      lastName: editProfileForm.lastName.trim(),
+      prefix,
+      firstName: sanitizedFirst,
+      lastName: trimmedLast,
       nickname: editProfileForm.nickname.trim() || undefined,
       name: fullName,
       personnelType: editProfileForm.personnelType,
@@ -1122,34 +1218,61 @@ export default function SmartMSOApp() {
       division: editProfileForm.division,
       department: editProfileForm.division,
       email: editProfileForm.email.trim(),
-      phone: editProfileForm.phone.trim(),
-      lineId: editProfileForm.lineId.trim(),
+      phone: editProfileForm.phone.trim() || "-",
+      lineId: editProfileForm.lineId.trim() || "-",
       avatarUrl: editProfileForm.avatarUrl ? editProfileForm.avatarUrl.trim() : undefined,
       avatarText: initials,
     };
 
+    // 1. Immediately update in-memory active user state
     setCurrentUser(updatedUser);
+
+    // 2. Update directory member list
     setMembers((prev) => {
       const exists = prev.some((m) => m.id === updatedUser.id);
       return exists
         ? prev.map((m) => (m.id === updatedUser.id ? updatedUser : m))
         : [updatedUser, ...prev];
     });
+
+    // 3. Save to local cache & Supabase table
     saveMember(updatedUser).catch(console.error);
 
+    // 4. Synchronize Supabase Auth user metadata if logged in via Auth
+    updateSupabaseUserMetadata({
+      prefix,
+      first_name: sanitizedFirst,
+      last_name: trimmedLast,
+      name: fullName,
+      nickname: updatedUser.nickname,
+      position: updatedUser.position,
+      division: updatedUser.division,
+      phone: updatedUser.phone,
+      line_id: updatedUser.lineId,
+      personnel_type: updatedUser.personnelType,
+      avatar_url: updatedUser.avatarUrl,
+    }).catch(() => {});
+
+    // 5. Always persist updated session to localStorage for immediate reload consistency
     if (typeof window !== "undefined") {
       try {
         const savedSession =
           localStorage.getItem("smartmso_auth_session") ||
           localStorage.getItem("omnioffice_auth_session");
-        if (savedSession) {
-          const parsed = JSON.parse(savedSession);
-          localStorage.setItem(
-            "smartmso_auth_session",
-            JSON.stringify({ ...parsed, user: updatedUser })
-          );
-        }
-      } catch (err) {}
+        const parsed = savedSession ? JSON.parse(savedSession) : {};
+        localStorage.setItem(
+          "smartmso_auth_session",
+          JSON.stringify({
+            ...parsed,
+            user: updatedUser,
+            loginTime: parsed.loginTime || loginTime,
+            rememberMe: true,
+          })
+        );
+        window.dispatchEvent(new Event("storage"));
+      } catch (err) {
+        console.warn("Could not save session to localStorage:", err);
+      }
     }
 
     addAuditLog(

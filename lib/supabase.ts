@@ -121,12 +121,12 @@ const LEGACY_MEMBERS_STORAGE_KEYS = [
 ];
 
 /**
- * Filter out legacy mock user IDs (usr_1 through usr_99)
+ * Filter out legacy mock user IDs (usr_1 or usr_mock only)
  */
 export function isRealMember(m: Member): boolean {
   if (!m || !m.id) return false;
-  // Match usr_1, usr_2, ..., usr_999 (mock IDs), but keep real syno_*, line_*, or custom IDs
-  if (/^usr_\d+$/.test(m.id)) return false;
+  // Filter out only legacy mock user 'usr_1' or 'usr_mock', keeping real seeded personnel (usr_2 through usr_99), syno_*, line_*, etc.
+  if (m.id === "usr_1" || m.id === "usr_mock") return false;
   return true;
 }
 
@@ -192,9 +192,32 @@ export async function fetchMembers(): Promise<Member[]> {
 
     const liveMembers = data.map(mapRowToMember).filter(isRealMember);
     const liveIds = new Set(liveMembers.map((m) => m.id));
+    const localMap = new Map(localMembers.map((m) => [m.id, m]));
+    const mergedLive = liveMembers.map((live) => {
+      const local = localMap.get(live.id);
+      if (!local) return live;
+      // Preserve local customizations if present and non-placeholder
+      return {
+        ...live,
+        prefix: local.prefix || live.prefix,
+        firstName: local.firstName || live.firstName,
+        lastName: local.lastName || live.lastName,
+        name: local.name || live.name,
+        nickname: local.nickname || live.nickname,
+        position: local.position && local.position !== "รอกำหนดตำแหน่ง" ? local.position : live.position,
+        division: local.division && local.division !== "รอกำหนดกลุ่มงาน" ? local.division : live.division,
+        department: local.department || live.department,
+        personnelType: local.personnelType || live.personnelType,
+        phone: local.phone && local.phone !== "-" ? local.phone : live.phone,
+        lineId: local.lineId && local.lineId !== "-" ? local.lineId : live.lineId,
+        avatarUrl: local.avatarUrl || live.avatarUrl,
+        avatarText: local.avatarText || live.avatarText,
+        role: local.role || live.role,
+      };
+    });
     // Preserve local-only real members (e.g. offline created users or local LINE profiles not yet synced)
     const localOnly = localMembers.filter((m) => !liveIds.has(m.id) && isRealMember(m));
-    const mergedMembers = [...liveMembers, ...localOnly];
+    const mergedMembers = [...mergedLive, ...localOnly];
 
     // Keep local cache up-to-date with latest records
     saveLocalMembers(mergedMembers);
@@ -709,10 +732,12 @@ export function mapRowToChatGroup(row: any): ChatGroup {
     icon: row.icon || "💬",
     type: row.type || "division",
     isOfficial: Boolean(row.is_official),
-    memberIds: Array.isArray(row.member_ids) ? row.member_ids.filter((id: string) => !/^usr_\d+$/.test(id)) : [],
+    memberIds: Array.isArray(row.member_ids)
+      ? row.member_ids.filter((id: string) => id !== "usr_1" && id !== "usr_mock")
+      : [],
     pinnedMessageIds: Array.isArray(row.pinned_message_ids) ? row.pinned_message_ids : [],
     createdAt: row.created_at ? new Date(row.created_at).toLocaleDateString("th-TH") : "วันนี้",
-    createdBy: row.created_by && !/^usr_\d+$/.test(row.created_by) ? row.created_by : undefined,
+    createdBy: row.created_by && row.created_by !== "usr_1" && row.created_by !== "usr_mock" ? row.created_by : undefined,
   };
 }
 
@@ -1572,5 +1597,25 @@ export function findOrMapAuthMember(authUser: any, availableMembers: Member[]): 
     avatarText: firstName.slice(0, 2),
     joinedDate: "วันนี้",
   };
+}
+
+/**
+ * Update authenticated user metadata in Supabase GoTrue Auth
+ */
+export async function updateSupabaseUserMetadata(metadata: Record<string, any>): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    const { error } = await supabase.auth.updateUser({
+      data: metadata,
+    });
+    if (error) {
+      console.warn("Could not update Supabase Auth user metadata:", error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn("Exception updating Supabase Auth user metadata:", err);
+    return false;
+  }
 }
 
