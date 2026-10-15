@@ -38,8 +38,8 @@ export function ReturnVehicleModal({
   const [issuesFound, setIssuesFound] = useState<string>("ไม่มีข้อบกพร่อง รถยนต์และอุปกรณ์ส่วนควบอยู่ในสภาพเรียบร้อย");
   const [notes, setNotes] = useState<string>("ส่งคืนกุญแจรถ บัตรเติมน้ำมัน และเอกสารประจำรถเรียบร้อย");
 
-  const defaultInspector = inspectors.find((i) => i.id === "usr_2") || inspectors[0] || currentUser;
-  const [inspectorId, setInspectorId] = useState<string>(defaultInspector.id);
+  const defaultInspector = inspectors[0] || currentUser;
+  const [inspectorId, setInspectorId] = useState<string>(defaultInspector?.id || "");
 
   const totalDistance = Math.max(0, endMileage - startMileage);
 

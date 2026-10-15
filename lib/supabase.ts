@@ -114,8 +114,21 @@ export function mapMemberToRow(member: Member): any {
   };
 }
 
-const MEMBERS_STORAGE_KEY = "smartmso_members_cache_v2";
-const LEGACY_MEMBERS_STORAGE_KEY = "omnioffice_members_cache_v2";
+const MEMBERS_STORAGE_KEY = "smartmso_members_cache_v3";
+const LEGACY_MEMBERS_STORAGE_KEYS = [
+  "smartmso_members_cache_v2",
+  "omnioffice_members_cache_v2",
+];
+
+/**
+ * Filter out legacy mock user IDs (usr_1 through usr_99)
+ */
+export function isRealMember(m: Member): boolean {
+  if (!m || !m.id) return false;
+  // Match usr_1, usr_2, ..., usr_999 (mock IDs), but keep real syno_*, line_*, or custom IDs
+  if (/^usr_\d+$/.test(m.id)) return false;
+  return true;
+}
 
 /**
  * Get members from local cache or fallback to INITIAL_MEMBERS
@@ -123,12 +136,20 @@ const LEGACY_MEMBERS_STORAGE_KEY = "omnioffice_members_cache_v2";
 export function getLocalMembers(): Member[] {
   if (typeof window === "undefined") return INITIAL_MEMBERS;
   try {
-    const raw =
-      localStorage.getItem(MEMBERS_STORAGE_KEY) ||
-      localStorage.getItem(LEGACY_MEMBERS_STORAGE_KEY);
+    // Purge legacy storage keys that may contain mock data
+    LEGACY_MEMBERS_STORAGE_KEYS.forEach((key) => {
+      try {
+        localStorage.removeItem(key);
+      } catch {}
+    });
+
+    const raw = localStorage.getItem(MEMBERS_STORAGE_KEY);
     if (!raw) return INITIAL_MEMBERS;
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_MEMBERS;
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed.filter(isRealMember);
+    }
+    return INITIAL_MEMBERS;
   } catch {
     return INITIAL_MEMBERS;
   }
@@ -140,7 +161,8 @@ export function getLocalMembers(): Member[] {
 export function saveLocalMembers(members: Member[]) {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(MEMBERS_STORAGE_KEY, JSON.stringify(members));
+    const cleanMembers = members.filter(isRealMember);
+    localStorage.setItem(MEMBERS_STORAGE_KEY, JSON.stringify(cleanMembers));
   } catch (e) {
     console.warn("Could not save members to localStorage:", e);
   }
@@ -150,7 +172,7 @@ export function saveLocalMembers(members: Member[]) {
  * Fetch members from Supabase, with automatic local cache synchronization and fallback
  */
 export async function fetchMembers(): Promise<Member[]> {
-  const localMembers = getLocalMembers();
+  const localMembers = getLocalMembers().filter(isRealMember);
   if (!supabase) return localMembers;
 
   try {
@@ -159,15 +181,19 @@ export async function fetchMembers(): Promise<Member[]> {
       .select("*")
       .order("created_at", { ascending: true });
 
-    if (error || !data || data.length === 0) {
-      console.warn("Supabase fetch members returned empty or error, using cached/initial members:", error);
+    if (error) {
+      console.warn("Supabase fetch members returned error, using cached members:", error);
       return localMembers;
     }
 
-    const liveMembers = data.map(mapRowToMember);
+    if (!data || data.length === 0) {
+      return localMembers;
+    }
+
+    const liveMembers = data.map(mapRowToMember).filter(isRealMember);
     const liveIds = new Set(liveMembers.map((m) => m.id));
-    // Preserve local-only members (e.g. offline created users or local LINE profiles not yet synced)
-    const localOnly = localMembers.filter((m) => !liveIds.has(m.id));
+    // Preserve local-only real members (e.g. offline created users or local LINE profiles not yet synced)
+    const localOnly = localMembers.filter((m) => !liveIds.has(m.id) && isRealMember(m));
     const mergedMembers = [...liveMembers, ...localOnly];
 
     // Keep local cache up-to-date with latest records
@@ -683,10 +709,10 @@ export function mapRowToChatGroup(row: any): ChatGroup {
     icon: row.icon || "💬",
     type: row.type || "division",
     isOfficial: Boolean(row.is_official),
-    memberIds: Array.isArray(row.member_ids) ? row.member_ids : [],
+    memberIds: Array.isArray(row.member_ids) ? row.member_ids.filter((id: string) => !/^usr_\d+$/.test(id)) : [],
     pinnedMessageIds: Array.isArray(row.pinned_message_ids) ? row.pinned_message_ids : [],
     createdAt: row.created_at ? new Date(row.created_at).toLocaleDateString("th-TH") : "วันนี้",
-    createdBy: row.created_by || undefined,
+    createdBy: row.created_by && !/^usr_\d+$/.test(row.created_by) ? row.created_by : undefined,
   };
 }
 
@@ -971,7 +997,7 @@ export function mapRowToTask(row: any): TaskItem {
   const createdBy = richMeta?.createdBy || undefined;
   const createdByName = richMeta?.createdByName || undefined;
   const assigneeName = richMeta?.assigneeName || row.assignee_id || "ผู้รับผิดชอบ";
-  const assigneeId = richMeta?.assigneeId || (typeof row.assignee_id === "string" && row.assignee_id.startsWith("usr_") ? row.assignee_id : undefined);
+  const assigneeId = richMeta?.assigneeId || (typeof row.assignee_id === "string" && row.assignee_id.trim() ? row.assignee_id.trim() : undefined);
   const subtasks: TaskSubtask[] = Array.isArray(richMeta?.subtasks) ? richMeta.subtasks : [];
   const tags: string[] = Array.isArray(richMeta?.tags) ? richMeta.tags : [];
   const reviewNotes = richMeta?.reviewNotes || undefined;

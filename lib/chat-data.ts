@@ -9,9 +9,9 @@ export const DEFAULT_CHAT_GROUPS: ChatGroup[] = [
     icon: "🏢",
     type: "announcement",
     isOfficial: true,
-    memberIds: INITIAL_MEMBERS.map((m) => m.id),
+    memberIds: [],
     createdAt: "1 ต.ค. 2569",
-    createdBy: "usr_2",
+    createdBy: "system",
   },
   {
     id: "ch_executive",
@@ -21,9 +21,9 @@ export const DEFAULT_CHAT_GROUPS: ChatGroup[] = [
     type: "division",
     division: "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร (ผู้บริหาร)",
     isOfficial: true,
-    memberIds: ["usr_2", "usr_3", "usr_4"],
+    memberIds: [],
     createdAt: "1 ต.ค. 2569",
-    createdBy: "usr_2",
+    createdBy: "system",
   },
   {
     id: "ch_general_admin",
@@ -33,9 +33,9 @@ export const DEFAULT_CHAT_GROUPS: ChatGroup[] = [
     type: "division",
     division: "ฝ่ายบริหารทั่วไป",
     isOfficial: true,
-    memberIds: ["usr_2", "usr_8", "usr_9", "usr_10"],
+    memberIds: [],
     createdAt: "1 ต.ค. 2569",
-    createdBy: "usr_2",
+    createdBy: "system",
   },
   {
     id: "ch_policy_planning",
@@ -45,9 +45,9 @@ export const DEFAULT_CHAT_GROUPS: ChatGroup[] = [
     type: "division",
     division: "กลุ่มนโยบายและวิชาการ",
     isOfficial: true,
-    memberIds: ["usr_4", "usr_5"],
+    memberIds: [],
     createdAt: "1 ต.ค. 2569",
-    createdBy: "usr_4",
+    createdBy: "system",
   },
   {
     id: "ch_social_dev",
@@ -57,9 +57,9 @@ export const DEFAULT_CHAT_GROUPS: ChatGroup[] = [
     type: "division",
     division: "กลุ่มการพัฒนาสังคมและสวัสดิการ",
     isOfficial: true,
-    memberIds: ["usr_3", "usr_7"],
+    memberIds: [],
     createdAt: "1 ต.ค. 2569",
-    createdBy: "usr_3",
+    createdBy: "system",
   },
   {
     id: "ch_disability_center",
@@ -69,9 +69,9 @@ export const DEFAULT_CHAT_GROUPS: ChatGroup[] = [
     type: "division",
     division: "ศูนย์บริการคนพิการจังหวัดกำแพงเพชร",
     isOfficial: true,
-    memberIds: ["usr_6"],
+    memberIds: [],
     createdAt: "1 ต.ค. 2569",
-    createdBy: "usr_2",
+    createdBy: "system",
   },
   {
     id: "ch_advisors",
@@ -81,9 +81,9 @@ export const DEFAULT_CHAT_GROUPS: ChatGroup[] = [
     type: "division",
     division: "คณะทำงานที่ปรึกษาและภาคีเครือข่ายภายนอก",
     isOfficial: true,
-    memberIds: ["usr_11", "usr_3"],
+    memberIds: [],
     createdAt: "1 ต.ค. 2569",
-    createdBy: "usr_2",
+    createdBy: "system",
   },
   {
     id: "ch_project_disability_day",
@@ -92,18 +92,28 @@ export const DEFAULT_CHAT_GROUPS: ChatGroup[] = [
     icon: "🌟",
     type: "custom",
     isOfficial: false,
-    memberIds: ["usr_2", "usr_3", "usr_6", "usr_7"],
+    memberIds: [],
     createdAt: "5 ต.ค. 2569",
-    createdBy: "usr_6",
+    createdBy: "system",
   },
 ];
 
 export const INITIAL_CHAT_MESSAGES: ChatMessage[] = [];
 
-const CHAT_GROUPS_STORAGE_KEY = "smartmso_chat_groups_v2";
-const LEGACY_CHAT_GROUPS_STORAGE_KEY = "omnioffice_chat_groups_v2";
+const CHAT_GROUPS_STORAGE_KEY = "smartmso_chat_groups_v3";
+const LEGACY_CHAT_GROUPS_STORAGE_KEYS = [
+  "smartmso_chat_groups_v2",
+  "omnioffice_chat_groups_v2",
+];
 const CHAT_MESSAGES_STORAGE_KEY = "smartmso_chat_messages_v2";
 const LEGACY_CHAT_MESSAGES_STORAGE_KEY = "omnioffice_chat_messages_v2";
+
+/**
+ * Filter out mock usr_ IDs
+ */
+function isNotMockUserId(id: string): boolean {
+  return !/^usr_\d+$/.test(id);
+}
 
 /**
  * Synchronize group members based on members' office division
@@ -112,36 +122,44 @@ export function syncDivisionGroupMembers(
   groups: ChatGroup[],
   allMembers: Member[]
 ): ChatGroup[] {
+  const validMemberIds = new Set(allMembers.filter((m) => isNotMockUserId(m.id)).map((m) => m.id));
+
   return groups.map((group) => {
+    // Sanitize any existing members in the group by removing mock IDs
+    const cleanExisting = (group.memberIds || []).filter((id) => isNotMockUserId(id) && validMemberIds.has(id));
+
     if (group.id === "ch_all_staff") {
       return {
         ...group,
-        memberIds: Array.from(new Set([...allMembers.map((m) => m.id), ...group.memberIds])),
+        memberIds: Array.from(new Set([...Array.from(validMemberIds), ...cleanExisting])),
       };
     }
 
     if (group.id === "ch_executive") {
       const execIds = allMembers
-        .filter((m) => m.role === "admin" || m.role === "manager")
+        .filter((m) => isNotMockUserId(m.id) && (m.role === "admin" || m.role === "manager"))
         .map((m) => m.id);
       return {
         ...group,
-        memberIds: Array.from(new Set([...execIds, ...group.memberIds])),
+        memberIds: Array.from(new Set([...execIds, ...cleanExisting])),
       };
     }
 
     if (group.type === "division" && group.division) {
       const divisionMemberIds = allMembers
-        .filter((m) => m.division === group.division)
+        .filter((m) => isNotMockUserId(m.id) && m.division === group.division)
         .map((m) => m.id);
 
       return {
         ...group,
-        memberIds: Array.from(new Set([...divisionMemberIds, ...group.memberIds])),
+        memberIds: Array.from(new Set([...divisionMemberIds, ...cleanExisting])),
       };
     }
 
-    return group;
+    return {
+      ...group,
+      memberIds: cleanExisting,
+    };
   });
 }
 
@@ -154,9 +172,13 @@ export function loadStoredChatGroups(allMembers: Member[] = INITIAL_MEMBERS): Ch
   }
 
   try {
-    const raw =
-      localStorage.getItem(CHAT_GROUPS_STORAGE_KEY) ||
-      localStorage.getItem(LEGACY_CHAT_GROUPS_STORAGE_KEY);
+    LEGACY_CHAT_GROUPS_STORAGE_KEYS.forEach((k) => {
+      try {
+        localStorage.removeItem(k);
+      } catch {}
+    });
+
+    const raw = localStorage.getItem(CHAT_GROUPS_STORAGE_KEY);
     let loaded: ChatGroup[] = DEFAULT_CHAT_GROUPS;
 
     if (raw) {

@@ -167,7 +167,7 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
         // Find exact match in official directory or use mapped member
         const cleanUserLower = nasUsername.toLowerCase().trim();
         const match = availableMembers.find((m) => {
-          if (cleanUserLower === "admin" && m.role === "admin") return true;
+          if (m.id === data.user.id) return true;
           const emailUser = m.email.toLowerCase().split("@")[0];
           if (emailUser === cleanUserLower) return true;
           if (m.name.toLowerCase() === cleanUserLower) return true;
@@ -815,21 +815,6 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
                   <span>เข้าสู่ระบบผ่าน Synology NAS ➜</span>
                 )}
               </button>
-
-              {/* Quick test buttons */}
-              <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
-                <span>เข้าสู่ระบบด่วน:</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const admin = availableMembers.find((m) => m.role === "admin");
-                    if (admin) onLogin(admin, true);
-                  }}
-                  className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold transition-all cursor-pointer"
-                >
-                  ⚡ เข้าด้วยสิทธิ์ Admin พมจ.
-                </button>
-              </div>
             </form>
           )}
 
