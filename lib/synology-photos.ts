@@ -131,7 +131,7 @@ export async function listSynologyPhotos(params: {
     }
     if (params.folderId) {
       const fId = encodeURIComponent(String(params.folderId));
-      url += `&folder_id=${fId}&id_folder=${fId}`;
+      url += `&folder_id=${fId}`;
     }
 
     const res = await fetch(url, {

@@ -232,6 +232,15 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
       if (res.success && res.items) {
         setItems(res.items);
       } else {
+        // If Shared Space returns Code 120 when loading root items (Custom folder permissions in Synology Photos),
+        // automatically switch to folders view so user can browse their assigned folders!
+        if (space === "shared" && res.code === 120 && !folderId && !albumId) {
+          setActiveTab("folders");
+          loadFolders(sid, space, 0);
+          showToast("ℹ️ บัญชีของคุณได้รับสิทธิ์แบบกำหนดโฟลเดอร์เฉพาะ (Custom Access) ระบบสลับมาที่ '📁 โฟลเดอร์กิจกรรม' ให้อัตโนมัติ");
+          return;
+        }
+
         // If Shared Space returns Code 801 on initial load, auto-fallback to Personal Space
         if (space === "shared" && res.code === 801 && !isAutoFallback) {
           const fallbackRes = await listSynologyPhotos({
@@ -1092,6 +1101,20 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
 
               {/* Action Buttons & Guide Toggle */}
               <div className="pt-2 border-t border-amber-500/20 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab("folders");
+                    setSelectedFolder(null);
+                    setFolderBreadcrumbs([{ id: 0, name: "โฟลเดอร์หลัก" }]);
+                    if (userSid) loadFolders(userSid, currentSpace, 0);
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-cyan-700 hover:bg-cyan-800 text-white font-bold text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span>📁</span>
+                  <span>เปิดดูตาม "โฟลเดอร์กิจกรรม" (Folders)</span>
+                </button>
+
                 {currentSpace === "shared" && (
                   <button
                     type="button"
@@ -1112,7 +1135,7 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                   className="px-3 py-1.5 rounded-xl bg-white/90 hover:bg-white text-slate-700 font-bold text-xs transition-all border border-slate-300 shadow-xs flex items-center gap-1.5 cursor-pointer"
                 >
                   <span>{showSharedSpaceGuide ? "▲" : "📖"}</span>
-                  <span>{showSharedSpaceGuide ? "ซ่อนขั้นตอนการตั้งค่า DSM" : "วิธีเปิดใช้งาน Shared Space บน Synology DSM"}</span>
+                  <span>{showSharedSpaceGuide ? "ซ่อนขั้นตอนการตั้งค่า DSM" : "วิธีตั้งค่าสิทธิ์ Shared Space บน DSM"}</span>
                 </button>
               </div>
 

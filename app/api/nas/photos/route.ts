@@ -32,30 +32,49 @@ export async function GET(req: NextRequest) {
     if (action === "list_items") {
       const apiName = space === "shared" ? "SYNO.FotoTeam.Browse.Item" : "SYNO.Foto.Browse.Item";
       const additionalParam = encodeURIComponent(
-        JSON.stringify(["thumbnail", "resolution", "orientation", "video_meta", "exif", "description", "tag", "address"])
+        JSON.stringify(["thumbnail", "resolution"])
       );
-      let queryUrl = `${cleanUrl}/webapi/entry.cgi?api=${apiName}&version=1&method=list&offset=${offset}&limit=${limit}&additional=${additionalParam}&_sid=${encodeURIComponent(
-        sid
-      )}`;
+
+      const fetchItems = async (extraQuery: string) => {
+        const queryUrl = `${cleanUrl}/webapi/entry.cgi?api=${apiName}&version=1&method=list&offset=${offset}&limit=${limit}&additional=${additionalParam}&_sid=${encodeURIComponent(
+          sid
+        )}${extraQuery}`;
+        const res = await fetch(queryUrl, {
+          method: "GET",
+          signal: AbortSignal.timeout(10000),
+        });
+        return await res.json().catch(() => null);
+      };
+
+      let extraParams = "";
       if (sortBy) {
-        queryUrl += `&sort_by=${encodeURIComponent(sortBy)}&sort_direction=${encodeURIComponent(sortDirection)}`;
-      } else {
-        queryUrl += `&sort_direction=${encodeURIComponent(sortDirection)}`;
+        extraParams += `&sort_by=${encodeURIComponent(sortBy)}&sort_direction=${encodeURIComponent(sortDirection || "desc")}`;
       }
       if (albumId) {
-        queryUrl += `&album_id=${albumId}`;
+        extraParams += `&album_id=${encodeURIComponent(albumId)}`;
       }
-      if (folderId) {
-        queryUrl += `&folder_id=${encodeURIComponent(folderId)}&id_folder=${encodeURIComponent(folderId)}`;
+      if (folderId && folderId !== "0") {
+        extraParams += `&folder_id=${encodeURIComponent(folderId)}`;
       }
 
-      const res = await fetch(queryUrl, {
-        method: "GET",
-        signal: AbortSignal.timeout(10000),
-      });
+      let data = await fetchItems(extraParams);
 
-      const data = await res.json();
-      if (data.success && data.data) {
+      // If failed with 120 (Invalid parameter), retry without extra sorting
+      if (!data?.success && data?.error?.code === 120 && sortBy) {
+        let fallbackExtra = "";
+        if (folderId && folderId !== "0") {
+          fallbackExtra += `&folder_id=${encodeURIComponent(folderId)}`;
+        }
+        if (albumId) {
+          fallbackExtra += `&album_id=${encodeURIComponent(albumId)}`;
+        }
+        const retryData = await fetchItems(fallbackExtra);
+        if (retryData?.success) {
+          data = retryData;
+        }
+      }
+
+      if (data && data.success && data.data) {
         const rawList = data.data.list || [];
         const items = rawList.map((item: any) => ({
           id: item.id,
@@ -75,8 +94,8 @@ export async function GET(req: NextRequest) {
       }
 
       // Friendly Thai diagnostic messages for known Synology Photos error codes
-      let friendlyError = data.error?.message;
-      if (data.error?.code === 801) {
+      let friendlyError = data?.error?.message;
+      if (data?.error?.code === 801) {
         if (space === "shared") {
           friendlyError =
             "ยังไม่ได้เปิดใช้งานพื้นที่ส่วนกลาง (Shared Space) หรือบัญชีนี้ยังไม่ได้รับสิทธิ์เข้าถึงใน Synology Photos (แนะนำ: สลับไปที่ 'พื้นที่ส่วนบุคคล' หรือเปิดใช้งาน Shared Space ในการตั้งค่า Synology Photos บน DSM)";
@@ -84,18 +103,20 @@ export async function GET(req: NextRequest) {
           friendlyError =
             "ไม่มีสิทธิ์เข้าถึงคลังภาพส่วนบุคคล หรืออัลบั้มนี้ต้องใช้รหัสผ่าน (Code 801)";
         }
-      } else if (data.error?.code === 120) {
+      } else if (data?.error?.code === 120) {
         friendlyError =
-          "บัญชีผู้ใช้นี้ได้รับสิทธิ์แบบกำหนดโฟลเดอร์เฉพาะ (Custom Access) ในพื้นที่ส่วนกลาง Synology Photos จึงจำเป็นต้องระบุโฟลเดอร์ หรือให้ผู้ดูแลระบบกำหนดสิทธิ์การเข้าถึงเป็น Full Access ใน Synology Photos (Code 120)";
-      } else if (data.error?.code === 119) {
+          space === "shared"
+            ? "บัญชีผู้ใช้นี้ได้รับสิทธิ์แบบกำหนดโฟลเดอร์เฉพาะ (Custom Access) ในพื้นที่ส่วนกลาง Synology Photos ซึ่งไม่อนุญาตให้เปิดดูภาพรวมที่ Root (แนะนำ: คลิกที่ '📁 โฟลเดอร์กิจกรรม' เพื่อเลือกเปิดดูโฟลเดอร์ที่ได้รับมอบหมาย หรือให้ Admin ปรับสิทธิ์เป็น Full Access)"
+            : "ไม่สามารถเรียกรายการรูปภาพจากพื้นที่ส่วนบุคคลได้ (Code 120: พารามิเตอร์ไม่ถูกต้อง หรือยังไม่ได้เปิดบริการ User Home บน DSM)";
+      } else if (data?.error?.code === 119) {
         friendlyError =
           "เซสชัน Synology หมดอายุหรือไม่ถูกต้อง กรุณายืนยันตัวตนใหม่อีกครั้ง (Code 119)";
       }
 
       return NextResponse.json({
         success: false,
-        error: friendlyError || `ไม่สามารถเรียกรายการรูปภาพจาก Synology Photos ได้ (Code ${data.error?.code})`,
-        code: data.error?.code,
+        error: friendlyError || `ไม่สามารถเรียกรายการรูปภาพจาก Synology Photos ได้ (Code ${data?.error?.code})`,
+        code: data?.error?.code,
       });
     }
 
@@ -158,8 +179,6 @@ export async function GET(req: NextRequest) {
           try {
             const byImportUrl = `${cleanUrl}/webapi/entry.cgi?api=${itemsApiName}&version=1&method=list&offset=0&limit=1&folder_id=${encodeURIComponent(
               String(fId)
-            )}&id_folder=${encodeURIComponent(
-              String(fId)
             )}&sort_by=importtime&sort_direction=desc&additional=${encodeURIComponent(
               JSON.stringify(["thumbnail"])
             )}&_sid=${encodeURIComponent(sid)}`;
@@ -173,8 +192,6 @@ export async function GET(req: NextRequest) {
           // 2. Try sorting by takentime (EXIF captured date)
           try {
             const byTakenUrl = `${cleanUrl}/webapi/entry.cgi?api=${itemsApiName}&version=1&method=list&offset=0&limit=1&folder_id=${encodeURIComponent(
-              String(fId)
-            )}&id_folder=${encodeURIComponent(
               String(fId)
             )}&sort_by=takentime&sort_direction=desc&additional=${encodeURIComponent(
               JSON.stringify(["thumbnail"])
@@ -190,9 +207,7 @@ export async function GET(req: NextRequest) {
           try {
             const defaultUrl = `${cleanUrl}/webapi/entry.cgi?api=${itemsApiName}&version=1&method=list&offset=0&limit=1&folder_id=${encodeURIComponent(
               String(fId)
-            )}&id_folder=${encodeURIComponent(
-              String(fId)
-            )}&sort_direction=desc&additional=${encodeURIComponent(
+            )}&additional=${encodeURIComponent(
               JSON.stringify(["thumbnail"])
             )}&_sid=${encodeURIComponent(sid)}`;
             const r3 = await fetch(defaultUrl, { signal: AbortSignal.timeout(3000) });
