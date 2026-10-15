@@ -78,15 +78,12 @@ export function getClientSynologyConfig(): SynologyConfig {
     const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      // Auto-migrate old local LAN IP to the Cloudflare tunnel domain
+      // Fallback to default URL only if empty or missing
       const latestUrl =
         process.env.NEXT_PUBLIC_SYNOLOGY_NAS_URL ||
         process.env.SYNOLOGY_NAS_URL ||
         "https://nas.smso.site";
-      if (
-        (typeof parsed.nasUrl === "string" && (parsed.nasUrl.includes("192.168.162.21") || parsed.nasUrl.includes("localhost"))) ||
-        !parsed.nasUrl
-      ) {
+      if (!parsed.nasUrl || typeof parsed.nasUrl !== "string" || parsed.nasUrl.trim() === "") {
         parsed.nasUrl = latestUrl;
         localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...DEFAULT_SYNOLOGY_CONFIG, ...parsed }));
       }
@@ -96,6 +93,71 @@ export function getClientSynologyConfig(): SynologyConfig {
     console.warn("Failed to parse Synology config from localStorage:", err);
   }
   return DEFAULT_SYNOLOGY_CONFIG;
+}
+
+/**
+ * Safely parse JSON response from Synology WebAPI or API route proxies.
+ * Handles HTML error pages, Cloudflare Error 530 / 1033, and 502/504 Bad Gateway cleanly.
+ */
+export async function safeParseJsonResponse(res: Response): Promise<any> {
+  let text = "";
+  try {
+    text = await res.text();
+  } catch (err: any) {
+    return {
+      success: false,
+      error: `ไม่สามารถอ่านข้อมูลตอบกลับจากเซิร์ฟเวอร์: ${err?.message || "Stream read error"}`,
+      code: res.status,
+    };
+  }
+
+  if (!text || text.trim() === "") {
+    return {
+      success: false,
+      error: `เซิร์ฟเวอร์ตอบกลับว่างเปล่า (HTTP ${res.status})`,
+      code: res.status,
+    };
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    // Check known reverse proxy and Cloudflare errors
+    if (res.status === 530 || text.includes("error code: 1033")) {
+      return {
+        success: false,
+        error:
+          "ไม่สามารถเชื่อมต่อ Synology NAS ผ่าน Cloudflare Tunnel ได้ (Error 1033 / HTTP 530: สัญญาณ Tunnel ออฟไลน์ กรุณาตรวจสอบโปรแกรม cloudflared บน NAS หรือสลับใช้ IP วงแลน)",
+        code: 1033,
+      };
+    }
+    if (res.status === 502 || text.includes("502 Bad Gateway")) {
+      return {
+        success: false,
+        error: "เซิร์ฟเวอร์ Synology NAS ปลายทางไม่ตอบสนอง (HTTP 502 Bad Gateway)",
+        code: 502,
+      };
+    }
+    if (res.status === 504 || text.includes("504 Gateway Time-out") || text.includes("Gateway Timeout")) {
+      return {
+        success: false,
+        error: "การเชื่อมต่อไปยัง Synology NAS หมดเวลา (HTTP 504 Gateway Timeout)",
+        code: 504,
+      };
+    }
+    if (text.startsWith("<!DOCTYPE") || text.startsWith("<!doctype") || text.startsWith("<html")) {
+      return {
+        success: false,
+        error: `Synology NAS หรือเซิร์ฟเวอร์ส่งกลับหน้าเว็บ HTML แทน JSON (HTTP ${res.status}): อาจเกิดจากการบล็อกของ WAF, เซสชันหมดอายุ, หรือ Cloudflare Tunnel ขัดข้อง`,
+        code: res.status,
+      };
+    }
+    return {
+      success: false,
+      error: `ข้อมูลที่ได้รับจาก NAS ไม่ใช่รูปแบบ JSON (HTTP ${res.status}): ${text.slice(0, 100)}`,
+      code: res.status,
+    };
+  }
 }
 
 /**
@@ -120,14 +182,14 @@ export function saveClientSynologyConfig(config: Partial<SynologyConfig>): Synol
 export async function checkNasHealth(
   nasUrl: string = process.env.NEXT_PUBLIC_SYNOLOGY_NAS_URL ||
     process.env.SYNOLOGY_NAS_URL ||
-    "http://192.168.162.21:5000"
+    "https://nas.smso.site"
 ): Promise<SynologyHealthStatus> {
   const startTime = Date.now();
   try {
     // If running in browser, proxy through server API route to bypass CORS
     if (typeof window !== "undefined") {
       const res = await fetch(`/api/nas/health?url=${encodeURIComponent(nasUrl)}`);
-      const data = await res.json();
+      const data = await safeParseJsonResponse(res);
       if (data.success && data.data) {
         return data.data;
       }
@@ -149,7 +211,7 @@ export async function checkNasHealth(
 
     const latencyMs = Date.now() - startTime;
 
-    if (!res.ok) {
+    if (!res.ok && res.status !== 530) {
       return {
         online: false,
         host: nasUrl,
@@ -159,7 +221,7 @@ export async function checkNasHealth(
       };
     }
 
-    const data = await res.json();
+    const data = await safeParseJsonResponse(res);
     if (data.success && data.data) {
       return {
         online: true,
@@ -175,7 +237,7 @@ export async function checkNasHealth(
       host: nasUrl,
       port: 5000,
       latencyMs,
-      error: "Unexpected response format from Synology API",
+      error: data.error || "Unexpected response format from Synology API",
     };
   } catch (err: any) {
     return {
@@ -208,7 +270,7 @@ export async function loginSynology(
           nasUrl,
         }),
       });
-      const data = await res.json();
+      const data = await safeParseJsonResponse(res);
       if (data.success) {
         return {
           success: true,
@@ -234,7 +296,7 @@ export async function loginSynology(
       signal: AbortSignal.timeout(8000),
     });
 
-    const data = await res.json();
+    const data = await safeParseJsonResponse(res);
 
     if (data.success && data.data?.sid) {
       return {
@@ -362,7 +424,7 @@ export async function listNasShares(
       const res = await fetch(
         `/api/nas/files?sid=${encodeURIComponent(sid)}&action=list_share&url=${encodeURIComponent(nasUrl)}`
       );
-      return await res.json();
+      return await safeParseJsonResponse(res);
     }
 
     const cleanUrl = nasUrl.replace(/\/+$/, "");
@@ -375,7 +437,7 @@ export async function listNasShares(
       signal: AbortSignal.timeout(8000),
     });
 
-    const data = await res.json();
+    const data = await safeParseJsonResponse(res);
     if (data.success && data.data?.shares) {
       const shares: SynologyFileItem[] = data.data.shares.map((s: any) => ({
         path: s.path,
@@ -419,7 +481,7 @@ export async function listNasFiles(
           folderPath
         )}&url=${encodeURIComponent(nasUrl)}`
       );
-      const data = await res.json();
+      const data = await safeParseJsonResponse(res);
       return data;
     }
 
@@ -433,7 +495,7 @@ export async function listNasFiles(
       signal: AbortSignal.timeout(8000),
     });
 
-    const data = await res.json();
+    const data = await safeParseJsonResponse(res);
 
     if (data.success && data.data?.files) {
       return {
@@ -478,7 +540,7 @@ export async function createNasFolder(
           nasUrl,
         }),
       });
-      const data = await res.json();
+      const data = await safeParseJsonResponse(res);
       return data;
     }
 
@@ -492,7 +554,7 @@ export async function createNasFolder(
       signal: AbortSignal.timeout(8000),
     });
 
-    const data = await res.json();
+    const data = await safeParseJsonResponse(res);
     if (data.success) {
       return { success: true, folder: data.data };
     }
@@ -522,7 +584,7 @@ export async function deleteNasFiles(
           nasUrl,
         }),
       });
-      return await res.json();
+      return await safeParseJsonResponse(res);
     }
 
     const cleanUrl = nasUrl.replace(/\/+$/, "");
@@ -536,7 +598,7 @@ export async function deleteNasFiles(
       signal: AbortSignal.timeout(10000),
     });
 
-    const data = await res.json();
+    const data = await safeParseJsonResponse(res);
     if (data.success) {
       return { success: true };
     }
@@ -568,7 +630,7 @@ export async function renameNasFile(
           nasUrl,
         }),
       });
-      return await res.json();
+      return await safeParseJsonResponse(res);
     }
 
     const cleanUrl = nasUrl.replace(/\/+$/, "");
@@ -581,7 +643,7 @@ export async function renameNasFile(
       signal: AbortSignal.timeout(8000),
     });
 
-    const data = await res.json();
+    const data = await safeParseJsonResponse(res);
     if (data.success) {
       return { success: true };
     }

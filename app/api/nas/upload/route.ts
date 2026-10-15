@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { loginSynology } from "@/lib/synology";
+import { loginSynology, safeParseJsonResponse } from "@/lib/synology";
 
 export const dynamic = "force-dynamic";
 
@@ -158,7 +158,7 @@ export async function POST(req: NextRequest) {
         signal: AbortSignal.timeout(30000),
       });
 
-      const data = await nasRes.json().catch(() => null);
+      const data = await safeParseJsonResponse(nasRes);
       return { ok: nasRes.ok, status: nasRes.status, data };
     };
 
@@ -191,8 +191,11 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const errorCode = result.data?.error?.code;
-    const diagnosticMessage = getSynologyUploadErrorMessage(errorCode, cleanFolderPath);
+    const errorCode = result.data?.error?.code || result.data?.code;
+    let diagnosticMessage = result.data?.error;
+    if (typeof diagnosticMessage !== "string" || !diagnosticMessage) {
+      diagnosticMessage = getSynologyUploadErrorMessage(errorCode, cleanFolderPath);
+    }
 
     return NextResponse.json(
       {

@@ -3,7 +3,7 @@
  * Communicates with SYNO.Foto.* (Personal Space) and SYNO.FotoTeam.* (Shared Space) Web APIs.
  */
 
-import { getClientSynologyConfig } from "./synology";
+import { getClientSynologyConfig, safeParseJsonResponse } from "./synology";
 
 export type PhotoSpace = "shared" | "personal";
 
@@ -112,7 +112,7 @@ export async function listSynologyPhotos(params: {
       }
 
       const res = await fetch(`/api/nas/photos?${queryParams.toString()}`);
-      return await res.json();
+      return await safeParseJsonResponse(res);
     }
 
     // Server-side direct request
@@ -139,7 +139,7 @@ export async function listSynologyPhotos(params: {
       signal: AbortSignal.timeout(10000),
     });
 
-    const data = await res.json();
+    const data = await safeParseJsonResponse(res);
     if (data.success && data.data) {
       const rawList = data.data.list || [];
       const items: SynologyPhotoItem[] = rawList.map((item: any) => ({
@@ -215,7 +215,7 @@ export async function listSynologyAlbums(params: {
       });
 
       const res = await fetch(`/api/nas/photos?${queryParams.toString()}`);
-      return await res.json();
+      return await safeParseJsonResponse(res);
     }
 
     // Direct server-side call
@@ -229,7 +229,7 @@ export async function listSynologyAlbums(params: {
       signal: AbortSignal.timeout(10000),
     });
 
-    const data = await res.json();
+    const data = await safeParseJsonResponse(res);
     if (data.success && data.data) {
       const rawList = data.data.list || [];
       const albums: SynologyPhotoAlbum[] = rawList.map((a: any) => ({
@@ -247,8 +247,8 @@ export async function listSynologyAlbums(params: {
 
     return {
       success: false,
-      error: data.error?.message || "ไม่สามารถเรียกอัลบั้มจาก Synology Photos ได้",
-      code: data.error?.code,
+      error: data.error || data.error?.message || "ไม่สามารถเรียกอัลบั้มจาก Synology Photos ได้",
+      code: data.error?.code || data.code,
     };
   } catch (err: any) {
     return {
@@ -293,7 +293,7 @@ export async function listSynologyFolders(params: {
       }
 
       const res = await fetch(`/api/nas/photos?${queryParams.toString()}`);
-      return await res.json();
+      return await safeParseJsonResponse(res);
     }
 
     // Direct server-side call
@@ -315,7 +315,7 @@ export async function listSynologyFolders(params: {
       signal: AbortSignal.timeout(10000),
     });
 
-    const data = await res.json();
+    const data = await safeParseJsonResponse(res);
     if (data.success && data.data) {
       const rawList = data.data.list || [];
       const folders: SynologyPhotoFolder[] = rawList.map((f: any) => ({

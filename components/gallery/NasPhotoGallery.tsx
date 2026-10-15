@@ -8,6 +8,7 @@ import {
   setUserNasSid,
   clearUserNasSid,
   getClientSynologyConfig,
+  saveClientSynologyConfig,
   checkNasHealth,
   loginSynology,
   SynologyHealthStatus,
@@ -1126,6 +1127,35 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                   >
                     <span>👤</span>
                     <span>สลับไปยังพื้นที่ส่วนบุคคล (Personal Space)</span>
+                  </button>
+                )}
+
+                {config.nasUrl.includes("nas.smso.site") ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      saveClientSynologyConfig({ nasUrl: "http://192.168.162.21:5000" });
+                      showToast("🔄 สลับไปใช้ IP วงแลน (http://192.168.162.21:5000) เรียบร้อย");
+                      window.location.reload();
+                    }}
+                    className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                    title="หากอยู่ในวงแลนสำนักงาน และ Cloudflare Tunnel ขัดข้อง สามารถสลับมาใช้ IP ตรงได้"
+                  >
+                    <span>🔄</span>
+                    <span>สลับใช้ IP วงแลน (192.168.162.21:5000)</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      saveClientSynologyConfig({ nasUrl: "https://nas.smso.site" });
+                      showToast("🌐 สลับไปใช้ Cloudflare Tunnel (https://nas.smso.site) เรียบร้อย");
+                      window.location.reload();
+                    }}
+                    className="px-3.5 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white font-bold text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span>🌐</span>
+                    <span>สลับใช้ Cloudflare Tunnel (nas.smso.site)</span>
                   </button>
                 )}
 

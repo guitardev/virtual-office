@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { safeParseJsonResponse } from "@/lib/synology";
 
 export async function GET(req: NextRequest) {
   try {
@@ -43,7 +44,7 @@ export async function GET(req: NextRequest) {
           method: "GET",
           signal: AbortSignal.timeout(10000),
         });
-        return await res.json().catch(() => null);
+        return await safeParseJsonResponse(res);
       };
 
       let extraParams = "";
@@ -131,7 +132,7 @@ export async function GET(req: NextRequest) {
         signal: AbortSignal.timeout(10000),
       });
 
-      const data = await res.json();
+      const data = await safeParseJsonResponse(res);
       if (data.success && data.data) {
         const rawList = data.data.list || [];
         const albums = rawList.map((a: any) => ({
@@ -149,8 +150,8 @@ export async function GET(req: NextRequest) {
 
       return NextResponse.json({
         success: false,
-        error: data.error?.message || "ไม่สามารถเรียกอัลบั้มจาก Synology Photos ได้",
-        code: data.error?.code,
+        error: data.error || data.error?.message || "ไม่สามารถเรียกอัลบั้มจาก Synology Photos ได้",
+        code: data.error?.code || data.code,
       });
     }
 
@@ -159,7 +160,7 @@ export async function GET(req: NextRequest) {
       const apiName = space === "shared" ? "SYNO.FotoTeam.Browse.Folder" : "SYNO.Foto.Browse.Folder";
       const itemsApiName = space === "shared" ? "SYNO.FotoTeam.Browse.Item" : "SYNO.Foto.Browse.Item";
       const folderIdParam = folderId !== null && folderId !== undefined ? `&id=${encodeURIComponent(folderId)}` : `&id=0`;
-      const additionalParam = encodeURIComponent(JSON.stringify(["cover", "thumbnail"]));
+      const additionalParam = encodeURIComponent(JSON.stringify(["thumbnail"]));
       const queryUrl = `${cleanUrl}/webapi/entry.cgi?api=${apiName}&version=1&method=list&offset=${offset}&limit=${limit}${folderIdParam}&additional=${additionalParam}&_sid=${encodeURIComponent(
         sid
       )}`;
@@ -169,7 +170,7 @@ export async function GET(req: NextRequest) {
         signal: AbortSignal.timeout(10000),
       });
 
-      const data = await res.json();
+      const data = await safeParseJsonResponse(res);
       if (data.success && data.data) {
         const rawList = data.data.list || [];
 
@@ -183,7 +184,7 @@ export async function GET(req: NextRequest) {
               JSON.stringify(["thumbnail"])
             )}&_sid=${encodeURIComponent(sid)}`;
             const r1 = await fetch(byImportUrl, { signal: AbortSignal.timeout(4000) });
-            const d1 = await r1.json();
+            const d1 = await safeParseJsonResponse(r1);
             if (d1.success && d1.data?.list?.length > 0) {
               return d1.data.list[0];
             }
@@ -197,7 +198,7 @@ export async function GET(req: NextRequest) {
               JSON.stringify(["thumbnail"])
             )}&_sid=${encodeURIComponent(sid)}`;
             const r2 = await fetch(byTakenUrl, { signal: AbortSignal.timeout(4000) });
-            const d2 = await r2.json();
+            const d2 = await safeParseJsonResponse(r2);
             if (d2.success && d2.data?.list?.length > 0) {
               return d2.data.list[0];
             }
@@ -211,7 +212,7 @@ export async function GET(req: NextRequest) {
               JSON.stringify(["thumbnail"])
             )}&_sid=${encodeURIComponent(sid)}`;
             const r3 = await fetch(defaultUrl, { signal: AbortSignal.timeout(3000) });
-            const d3 = await r3.json();
+            const d3 = await safeParseJsonResponse(r3);
             if (d3.success && d3.data?.list?.length > 0) {
               return d3.data.list[0];
             }
@@ -235,7 +236,7 @@ export async function GET(req: NextRequest) {
                   String(f.id)
                 )}&_sid=${encodeURIComponent(sid)}`;
                 const subRes = await fetch(subfolderUrl, { signal: AbortSignal.timeout(3000) });
-                const subData = await subRes.json();
+                const subData = await safeParseJsonResponse(subRes);
                 const firstSub = subData.data?.list?.[0];
                 if (firstSub) {
                   latestPhoto = await fetchLatestPhotoInFolder(firstSub.id);
