@@ -18,16 +18,35 @@ export async function GET(req: NextRequest) {
     }
 
     const cleanUrl = nasUrl.replace(/\/+$/, "");
+    const cacheKey = searchParams.get("cache_key");
     const apiName = space === "shared" ? "SYNO.FotoTeam.Download" : "SYNO.Foto.Download";
     const unitIdParam = encodeURIComponent(`[${id}]`);
-    const downloadUrl = `${cleanUrl}/webapi/entry.cgi?api=${apiName}&version=1&method=download&unit_id=${unitIdParam}&_sid=${encodeURIComponent(
+
+    let downloadUrl = `${cleanUrl}/webapi/entry.cgi?api=${apiName}&version=1&method=download&unit_id=${unitIdParam}&_sid=${encodeURIComponent(
       sid
     )}`;
+    if (cacheKey) {
+      downloadUrl += `&cache_key=${encodeURIComponent(cacheKey)}`;
+    }
 
-    const res = await fetch(downloadUrl, {
+    let res = await fetch(downloadUrl, {
       method: "GET",
       signal: AbortSignal.timeout(30000),
     });
+
+    // Fallback to version 2 (DSM 7.2+) if version 1 fails
+    if (!res.ok) {
+      const v2Url = `${cleanUrl}/webapi/entry.cgi?api=${apiName}&version=2&method=download&unit_id=${unitIdParam}&_sid=${encodeURIComponent(
+        sid
+      )}${cacheKey ? `&cache_key=${encodeURIComponent(cacheKey)}` : ""}`;
+      const v2Res = await fetch(v2Url, {
+        method: "GET",
+        signal: AbortSignal.timeout(30000),
+      });
+      if (v2Res.ok) {
+        res = v2Res;
+      }
+    }
 
     if (!res.ok) {
       return new NextResponse(`Download error: HTTP ${res.status}`, { status: res.status });

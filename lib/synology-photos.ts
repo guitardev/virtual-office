@@ -61,6 +61,7 @@ export interface SynologyPhotoFolder {
   name: string;
   parent: number;
   item_count: number;
+  path?: string;
   cover?: {
     unit_id?: number;
     cache_key?: string;
@@ -129,7 +130,8 @@ export async function listSynologyPhotos(params: {
       url += `&album_id=${params.albumId}`;
     }
     if (params.folderId) {
-      url += `&id_folder=${encodeURIComponent(String(params.folderId))}`;
+      const fId = encodeURIComponent(String(params.folderId));
+      url += `&folder_id=${fId}&id_folder=${fId}`;
     }
 
     const res = await fetch(url, {
@@ -200,7 +202,7 @@ export async function listSynologyAlbums(params: {
 }> {
   try {
     const space = params.space || "shared";
-    const nasUrl = params.nasUrl || "http://192.168.162.21:5000";
+    const nasUrl = params.nasUrl || getClientSynologyConfig().nasUrl || "https://nas.smso.site";
 
     if (typeof window !== "undefined") {
       const queryParams = new URLSearchParams({

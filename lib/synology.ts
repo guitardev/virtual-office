@@ -191,7 +191,7 @@ export async function checkNasHealth(
 export async function loginSynology(
   account: string,
   passwd: string,
-  nasUrl: string = "http://192.168.162.21:5000"
+  nasUrl: string = DEFAULT_SYNOLOGY_CONFIG.nasUrl
 ): Promise<SynologyAuthResult> {
   try {
     // If running in browser, proxy through server API route
@@ -406,7 +406,7 @@ export async function listNasShares(
 export async function listNasFiles(
   sid: string,
   folderPath: string = "/virtual-office",
-  nasUrl: string = "http://192.168.162.21:5000"
+  nasUrl: string = DEFAULT_SYNOLOGY_CONFIG.nasUrl
 ): Promise<{ success: boolean; files?: SynologyFileItem[]; error?: string; code?: number }> {
   try {
     // If in browser, proxy through /api/nas/files
@@ -459,7 +459,7 @@ export async function createNasFolder(
   sid: string,
   folderPath: string,
   name: string,
-  nasUrl: string = "http://192.168.162.21:5000"
+  nasUrl: string = DEFAULT_SYNOLOGY_CONFIG.nasUrl
 ): Promise<{ success: boolean; folder?: any; error?: string }> {
   try {
     // If in browser, proxy through POST /api/nas/files
@@ -505,7 +505,7 @@ export async function createNasFolder(
 export async function deleteNasFiles(
   sid: string,
   paths: string[],
-  nasUrl: string = "http://192.168.162.21:5000"
+  nasUrl: string = DEFAULT_SYNOLOGY_CONFIG.nasUrl
 ): Promise<{ success: boolean; error?: string }> {
   try {
     if (typeof window !== "undefined") {
@@ -550,7 +550,7 @@ export async function renameNasFile(
   sid: string,
   path: string,
   newName: string,
-  nasUrl: string = "http://192.168.162.21:5000"
+  nasUrl: string = DEFAULT_SYNOLOGY_CONFIG.nasUrl
 ): Promise<{ success: boolean; error?: string }> {
   try {
     if (typeof window !== "undefined") {

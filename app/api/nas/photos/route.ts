@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
         queryUrl += `&album_id=${albumId}`;
       }
       if (folderId) {
-        queryUrl += `&id_folder=${encodeURIComponent(folderId)}`;
+        queryUrl += `&folder_id=${encodeURIComponent(folderId)}&id_folder=${encodeURIComponent(folderId)}`;
       }
 
       const res = await fetch(queryUrl, {
@@ -156,7 +156,9 @@ export async function GET(req: NextRequest) {
         const fetchLatestPhotoInFolder = async (fId: number | string) => {
           // 1. Try sorting by importtime (date added/imported - "จากที่เพิ่มมาล่าสุด")
           try {
-            const byImportUrl = `${cleanUrl}/webapi/entry.cgi?api=${itemsApiName}&version=1&method=list&offset=0&limit=1&id_folder=${encodeURIComponent(
+            const byImportUrl = `${cleanUrl}/webapi/entry.cgi?api=${itemsApiName}&version=1&method=list&offset=0&limit=1&folder_id=${encodeURIComponent(
+              String(fId)
+            )}&id_folder=${encodeURIComponent(
               String(fId)
             )}&sort_by=importtime&sort_direction=desc&additional=${encodeURIComponent(
               JSON.stringify(["thumbnail"])
@@ -170,7 +172,9 @@ export async function GET(req: NextRequest) {
 
           // 2. Try sorting by takentime (EXIF captured date)
           try {
-            const byTakenUrl = `${cleanUrl}/webapi/entry.cgi?api=${itemsApiName}&version=1&method=list&offset=0&limit=1&id_folder=${encodeURIComponent(
+            const byTakenUrl = `${cleanUrl}/webapi/entry.cgi?api=${itemsApiName}&version=1&method=list&offset=0&limit=1&folder_id=${encodeURIComponent(
+              String(fId)
+            )}&id_folder=${encodeURIComponent(
               String(fId)
             )}&sort_by=takentime&sort_direction=desc&additional=${encodeURIComponent(
               JSON.stringify(["thumbnail"])
@@ -184,7 +188,9 @@ export async function GET(req: NextRequest) {
 
           // 3. Fallback to default newest item without explicit sort_by
           try {
-            const defaultUrl = `${cleanUrl}/webapi/entry.cgi?api=${itemsApiName}&version=1&method=list&offset=0&limit=1&id_folder=${encodeURIComponent(
+            const defaultUrl = `${cleanUrl}/webapi/entry.cgi?api=${itemsApiName}&version=1&method=list&offset=0&limit=1&folder_id=${encodeURIComponent(
+              String(fId)
+            )}&id_folder=${encodeURIComponent(
               String(fId)
             )}&sort_direction=desc&additional=${encodeURIComponent(
               JSON.stringify(["thumbnail"])
@@ -239,6 +245,7 @@ export async function GET(req: NextRequest) {
               name: f.name,
               parent: f.parent || 0,
               item_count: f.item_count || 0,
+              path: f.path || f.real_path || null,
               cover: cover || null,
             };
           })

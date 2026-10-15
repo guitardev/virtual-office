@@ -153,8 +153,8 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
 
   // Folder & Album-by-Folder state
   const [folders, setFolders] = useState<SynologyPhotoFolder[]>([]);
-  const [selectedFolder, setSelectedFolder] = useState<{ id: number; name: string; parent?: number } | null>(null);
-  const [folderBreadcrumbs, setFolderBreadcrumbs] = useState<{ id: number; name: string }[]>([
+  const [selectedFolder, setSelectedFolder] = useState<{ id: number; name: string; parent?: number; path?: string } | null>(null);
+  const [folderBreadcrumbs, setFolderBreadcrumbs] = useState<{ id: number; name: string; path?: string }[]>([
     { id: 0, name: "โฟลเดอร์หลัก" },
   ]);
 
@@ -300,8 +300,8 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
   };
 
   const handleSelectFolder = (folder: SynologyPhotoFolder) => {
-    setSelectedFolder({ id: folder.id, name: folder.name, parent: folder.parent });
-    setFolderBreadcrumbs((prev) => [...prev, { id: folder.id, name: folder.name }]);
+    setSelectedFolder({ id: folder.id, name: folder.name, parent: folder.parent, path: folder.path });
+    setFolderBreadcrumbs((prev) => [...prev, { id: folder.id, name: folder.name, path: folder.path }]);
     if (userSid) {
       loadPhotos(userSid, currentSpace, undefined, folder.id);
       loadFolders(userSid, currentSpace, folder.id);
@@ -318,7 +318,7 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
       }
     } else {
       const target = folderBreadcrumbs[index];
-      setSelectedFolder({ id: target.id, name: target.name });
+      setSelectedFolder({ id: target.id, name: target.name, path: target.path });
       setFolderBreadcrumbs((prev) => prev.slice(0, index + 1));
       if (userSid) {
         loadPhotos(userSid, currentSpace, undefined, target.id);
@@ -501,16 +501,22 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
     setIsUploading(true);
     showToast(`⏳ กำลังอัปโหลด ${files.length} ไฟล์เข้าสู่ Synology Photos...`);
 
-    const subPath =
-      folderBreadcrumbs.length > 1
-        ? folderBreadcrumbs
-            .slice(1)
-            .map((b) => b.name)
-            .join("/")
-        : selectedFolder?.name || "";
-
     const basePath = currentSpace === "shared" ? "/photo" : "/home/Photos";
-    const destFolderPath = subPath ? `${basePath}/${subPath}` : basePath;
+    let destFolderPath: string;
+    if (selectedFolder?.path) {
+      destFolderPath = selectedFolder.path.startsWith("/")
+        ? selectedFolder.path
+        : `${basePath}/${selectedFolder.path}`;
+    } else {
+      const subPath =
+        folderBreadcrumbs.length > 1
+          ? folderBreadcrumbs
+              .slice(1)
+              .map((b) => b.name)
+              .join("/")
+          : selectedFolder?.name || "";
+      destFolderPath = subPath ? `${basePath}/${subPath}` : basePath;
+    }
 
     try {
       let successCount = 0;
@@ -675,7 +681,7 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
               </span>
             </div>
             <p className="text-xs text-cyan-100/90 mt-1 max-w-2xl leading-relaxed">
-              จัดเก็บ ค้นหา และเผยแพร่ภาพถ่ายกิจกรรมราชการและสื่อประชาสัมพันธ์ พมจ.กำแพงเพชร ผ่าน Synology Photos (192.168.162.21)
+              จัดเก็บ ค้นหา และเผยแพร่ภาพถ่ายกิจกรรมราชการและสื่อประชาสัมพันธ์ พมจ.กำแพงเพชร ผ่าน Synology Photos ({config.nasUrl.replace(/^https?:\/\//, "")})
             </p>
           </div>
         </div>
@@ -802,6 +808,8 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                   onClick={() => {
                     setActiveTab("timeline");
                     setSelectedAlbumId(null);
+                    setSelectedFolder(null);
+                    setFolderBreadcrumbs([{ id: 0, name: "โฟลเดอร์หลัก" }]);
                   }}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     activeTab === "timeline"
@@ -817,6 +825,8 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                   onClick={() => {
                     setActiveTab("all");
                     setSelectedAlbumId(null);
+                    setSelectedFolder(null);
+                    setFolderBreadcrumbs([{ id: 0, name: "โฟลเดอร์หลัก" }]);
                   }}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     activeTab === "all" && !selectedAlbumId
@@ -832,6 +842,8 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                   onClick={() => {
                     setActiveTab("photos");
                     setSelectedAlbumId(null);
+                    setSelectedFolder(null);
+                    setFolderBreadcrumbs([{ id: 0, name: "โฟลเดอร์หลัก" }]);
                   }}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     activeTab === "photos"
@@ -847,6 +859,8 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                   onClick={() => {
                     setActiveTab("videos");
                     setSelectedAlbumId(null);
+                    setSelectedFolder(null);
+                    setFolderBreadcrumbs([{ id: 0, name: "โฟลเดอร์หลัก" }]);
                   }}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     activeTab === "videos"
