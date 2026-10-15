@@ -26,6 +26,10 @@ import {
   formatPhotoTime,
   groupPhotosByMonth,
   PhotoMonthGroup,
+  deleteSynologyPhotoItems,
+  createSynologyAlbum,
+  createSynologyPhotoFolder,
+  deleteSynologyPhotoFolder,
 } from "@/lib/synology-photos";
 
 interface NasPhotoGalleryProps {
@@ -38,11 +42,13 @@ function FolderCardItem({
   currentSpace,
   userSid,
   onSelect,
+  onDelete,
 }: {
   folder: SynologyPhotoFolder;
   currentSpace: PhotoSpace;
   userSid: string | null;
   onSelect: (folder: SynologyPhotoFolder) => void;
+  onDelete?: (folder: SynologyPhotoFolder) => void;
 }) {
   const [imageError, setImageError] = useState(false);
   const coverId = folder.cover?.unit_id || folder.cover?.id;
@@ -51,7 +57,7 @@ function FolderCardItem({
   return (
     <div
       onClick={() => onSelect(folder)}
-      className="group bg-white rounded-2xl border border-slate-200/90 shadow-xs hover:shadow-lg hover:border-cyan-400 hover:-translate-y-0.5 transition-all duration-300 overflow-hidden cursor-pointer flex flex-col"
+      className="group bg-white rounded-2xl border border-slate-200/90 shadow-xs hover:shadow-lg hover:border-cyan-400 hover:-translate-y-0.5 transition-all duration-300 overflow-hidden cursor-pointer flex flex-col relative"
     >
       <div className="h-44 bg-gradient-to-br from-slate-100 via-cyan-50/40 to-slate-200 flex items-center justify-center relative overflow-hidden">
         {hasValidCover && coverId ? (
@@ -115,8 +121,23 @@ function FolderCardItem({
             )}
           </div>
         </div>
-        <div className="w-7 h-7 rounded-full bg-slate-50 group-hover:bg-cyan-50 text-slate-400 group-hover:text-cyan-600 flex items-center justify-center text-xs transition-colors shrink-0 shadow-2xs">
-          ➔
+        <div className="flex items-center gap-1 shrink-0">
+          {onDelete && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(folder);
+              }}
+              title="ลบโฟลเดอร์นี้ (ตามสิทธิ์ NAS)"
+              className="w-7 h-7 rounded-full bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 flex items-center justify-center text-xs transition-colors shadow-2xs cursor-pointer opacity-0 group-hover:opacity-100"
+            >
+              🗑️
+            </button>
+          )}
+          <div className="w-7 h-7 rounded-full bg-slate-50 group-hover:bg-cyan-50 text-slate-400 group-hover:text-cyan-600 flex items-center justify-center text-xs transition-colors shadow-2xs">
+            ➔
+          </div>
         </div>
       </div>
     </div>
@@ -173,6 +194,20 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
   const [photoRotation, setPhotoRotation] = useState<number>(0);
   const [photoZoom, setPhotoZoom] = useState<number>(1);
   const [isSlideshow, setIsSlideshow] = useState(false);
+
+  // New Action States according to NAS permissions
+  const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+
+  const [showCreateAlbumModal, setShowCreateAlbumModal] = useState(false);
+  const [newAlbumName, setNewAlbumName] = useState("");
+  const [isCreatingAlbum, setIsCreatingAlbum] = useState(false);
+
+  const [deleteConfirmItem, setDeleteConfirmItem] = useState<SynologyPhotoItem | null>(null);
+  const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
+  const [deleteConfirmFolder, setDeleteConfirmFolder] = useState<SynologyPhotoFolder | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Hydrate session on client mount
   useEffect(() => {
@@ -503,6 +538,183 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
     });
   };
 
+  // Single download handler
+  const handleSingleDownload = (item: SynologyPhotoItem, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!userSid) return;
+    const a = document.createElement("a");
+    a.href = `/api/nas/photos/download?id=${item.id}&filename=${encodeURIComponent(
+      item.filename
+    )}&space=${item.space}&sid=${encodeURIComponent(userSid)}&nasUrl=${encodeURIComponent(config.nasUrl)}`;
+    a.download = item.filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showToast(`📥 เริ่มดาวน์โหลด "${item.filename}"...`);
+  };
+
+  // Copy share link handler
+  const handleCopyShareLink = (item: SynologyPhotoItem, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const link = `${window.location.origin}/api/nas/photos/download?id=${item.id}&filename=${encodeURIComponent(
+      item.filename
+    )}&space=${item.space}&sid=${encodeURIComponent(userSid || "")}`;
+    navigator.clipboard.writeText(link);
+    showToast(`📋 คัดลอกลิงก์ดาวน์โหลดรูปภาพ "${item.filename}" แล้ว`);
+  };
+
+  // Create photo folder handler
+  const handleCreateFolder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newFolderName.trim() || !userSid) return;
+
+    setIsCreatingFolder(true);
+    const basePath = currentSpace === "shared" ? "/photo" : "/home/Photos";
+    let targetParentPath: string;
+    if (selectedFolder?.path) {
+      targetParentPath = selectedFolder.path.startsWith("/")
+        ? selectedFolder.path
+        : `${basePath}/${selectedFolder.path}`;
+    } else {
+      const subPath =
+        folderBreadcrumbs.length > 1
+          ? folderBreadcrumbs
+              .slice(1)
+              .map((b) => b.name)
+              .join("/")
+          : selectedFolder?.name || "";
+      targetParentPath = subPath ? `${basePath}/${subPath}` : basePath;
+    }
+
+    try {
+      const res = await createSynologyPhotoFolder({
+        space: currentSpace,
+        folderPath: targetParentPath,
+        folderName: newFolderName.trim(),
+        sid: userSid,
+        nasUrl: config.nasUrl,
+      });
+
+      if (res.success) {
+        showToast(`📁 สร้างโฟลเดอร์ "${newFolderName.trim()}" ใน Synology Photos สำเร็จ`);
+        setNewFolderName("");
+        setShowCreateFolderModal(false);
+        loadFolders(userSid, currentSpace, selectedFolder?.id || 0);
+      } else {
+        showToast(`❌ สร้างโฟลเดอร์ไม่สำเร็จ: ${res.error || "สิทธิ์ NAS ปฏิเสธการสร้างโฟลเดอร์"}`);
+      }
+    } catch (err: any) {
+      showToast(`❌ เกิดข้อผิดพลาด: ${err?.message}`);
+    } finally {
+      setIsCreatingFolder(false);
+    }
+  };
+
+  // Create album handler
+  const handleCreateAlbum = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAlbumName.trim() || !userSid) return;
+
+    setIsCreatingAlbum(true);
+    try {
+      const res = await createSynologyAlbum({
+        name: newAlbumName.trim(),
+        itemIds: selectedItemIds.length > 0 ? selectedItemIds : undefined,
+        sid: userSid,
+        nasUrl: config.nasUrl,
+      });
+
+      if (res.success) {
+        showToast(
+          `🏷️ สร้างอัลบั้ม "${newAlbumName.trim()}" สำเร็จ (${
+            selectedItemIds.length > 0 ? `เพิ่ม ${selectedItemIds.length} รูป` : "อัลบั้มเปล่า"
+          })`
+        );
+        setNewAlbumName("");
+        setShowCreateAlbumModal(false);
+        setSelectedItemIds([]);
+        setIsSelecting(false);
+        loadAlbums(userSid, currentSpace);
+      } else {
+        showToast(`❌ สร้างอัลบั้มไม่สำเร็จ: ${res.error}`);
+      }
+    } catch (err: any) {
+      showToast(`❌ เกิดข้อผิดพลาด: ${err?.message}`);
+    } finally {
+      setIsCreatingAlbum(false);
+    }
+  };
+
+  // Delete items handler
+  const handleDeleteItems = async (itemIds: number[]) => {
+    if (!itemIds || itemIds.length === 0 || !userSid) return;
+
+    setIsDeleting(true);
+    try {
+      const res = await deleteSynologyPhotoItems({
+        space: currentSpace,
+        itemIds,
+        sid: userSid,
+        nasUrl: config.nasUrl,
+      });
+
+      if (res.success) {
+        showToast(`🗑️ ลบ ${itemIds.length} รายการจาก Synology Photos สำเร็จ`);
+        setItems((prev) => prev.filter((it) => !itemIds.includes(it.id)));
+        setSelectedItemIds((prev) => prev.filter((id) => !itemIds.includes(id)));
+        setDeleteConfirmItem(null);
+        setShowBatchDeleteConfirm(false);
+
+        if (activeLightboxItem && itemIds.includes(activeLightboxItem.id)) {
+          setLightboxIndex(null);
+        }
+
+        if (selectedFolder) {
+          loadFolders(userSid, currentSpace, selectedFolder.parent || 0);
+        }
+      } else {
+        showToast(`❌ ลบรายการไม่สำเร็จ: ${res.error}`);
+      }
+    } catch (err: any) {
+      showToast(`❌ เกิดข้อผิดพลาดในการลบ: ${err?.message}`);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Delete folder handler
+  const handleDeleteFolder = async (folder: SynologyPhotoFolder) => {
+    if (!folder || !userSid) return;
+
+    const basePath = currentSpace === "shared" ? "/photo" : "/home/Photos";
+    const targetPath = folder.path || `${basePath}/${folder.name}`;
+
+    setIsDeleting(true);
+    try {
+      const res = await deleteSynologyPhotoFolder({
+        folderPath: targetPath,
+        sid: userSid,
+        nasUrl: config.nasUrl,
+      });
+
+      if (res.success) {
+        showToast(`🗑️ ลบโฟลเดอร์ "${folder.name}" สำเร็จ`);
+        setDeleteConfirmFolder(null);
+        if (selectedFolder?.id === folder.id) {
+          handleGoBackFolder();
+        } else {
+          loadFolders(userSid, currentSpace, selectedFolder?.id || 0);
+        }
+      } else {
+        showToast(`❌ ไม่สามารถลบโฟลเดอร์ได้: ${res.error || "สิทธิ์ NAS ไม่อนุญาต"}`);
+      }
+    } catch (err: any) {
+      showToast(`❌ เกิดข้อผิดพลาด: ${err?.message}`);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   // Direct media upload handler to NAS
   const handleUploadFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -645,14 +857,45 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
 
               {/* Video Badge */}
               {item.type === "video" && (
-                <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded-full bg-black/70 text-white text-[10px] font-bold backdrop-blur-xs flex items-center gap-1">
+                <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded-full bg-black/70 text-white text-[10px] font-bold backdrop-blur-xs flex items-center gap-1 group-hover:opacity-0 transition-opacity">
                   <span>▶</span>
                   <span>วิดีโอ</span>
                 </div>
               )}
 
+              {/* Card Hover Action Buttons (Single Download, Share Link, Delete) */}
+              <div className="absolute top-2 right-2 z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  type="button"
+                  onClick={(e) => handleSingleDownload(item, e)}
+                  title="ดาวน์โหลดภาพนี้"
+                  className="w-7 h-7 rounded-lg bg-black/60 hover:bg-cyan-600 text-white flex items-center justify-center text-xs backdrop-blur-md transition-all shadow-md cursor-pointer"
+                >
+                  📥
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => handleCopyShareLink(item, e)}
+                  title="คัดลอกลิงก์ดาวน์โหลด"
+                  className="w-7 h-7 rounded-lg bg-black/60 hover:bg-cyan-600 text-white flex items-center justify-center text-xs backdrop-blur-md transition-all shadow-md cursor-pointer"
+                >
+                  📋
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeleteConfirmItem(item);
+                  }}
+                  title="ลบภาพนี้ (ตามสิทธิ์ NAS)"
+                  className="w-7 h-7 rounded-lg bg-black/60 hover:bg-rose-600 text-white flex items-center justify-center text-xs backdrop-blur-md transition-all shadow-md cursor-pointer"
+                >
+                  🗑️
+                </button>
+              </div>
+
               {/* Hover Info Overlay */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-2.5 flex flex-col justify-end text-white">
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-2.5 flex flex-col justify-end text-white pointer-events-none">
                 <div className="text-xs font-bold truncate leading-tight drop-shadow-xs">{item.filename}</div>
                 <div className="text-[10px] text-slate-300 mt-0.5 flex items-center justify-between">
                   <span>{formatPhotoTime(item.time).split(" ")[0]}</span>
@@ -934,6 +1177,28 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                 >
                   <span>{isUploading ? "⏳" : "📤"}</span>
                   <span>{isUploading ? "กำลังอัปโหลด..." : "อัปโหลดภาพ"}</span>
+                </button>
+
+                {/* Create Folder Button (Synology Photos directory) */}
+                <button
+                  type="button"
+                  onClick={() => setShowCreateFolderModal(true)}
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-cyan-50 hover:text-cyan-800 hover:border-cyan-200 border border-slate-200 text-slate-700 text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  title="สร้างโฟลเดอร์กิจกรรมใหม่ใน Synology Photos"
+                >
+                  <span className="text-cyan-600 font-bold">📁+</span>
+                  <span>สร้างโฟลเดอร์</span>
+                </button>
+
+                {/* Create Album Button (Synology Photos album) */}
+                <button
+                  type="button"
+                  onClick={() => setShowCreateAlbumModal(true)}
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-cyan-50 hover:text-cyan-800 hover:border-cyan-200 border border-slate-200 text-slate-700 text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  title="สร้างอัลบั้มภาพใหม่ใน Synology Photos"
+                >
+                  <span className="text-cyan-600 font-bold">🏷️+</span>
+                  <span>สร้างอัลบั้ม</span>
                 </button>
 
                 {/* Multi-Selection Mode Toggle */}
@@ -1257,23 +1522,54 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={handleGoBackFolder}
-                    className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-cyan-900 font-bold text-xs border border-cyan-200 shadow-xs flex items-center gap-1.5 cursor-pointer transition-all"
-                  >
-                    <span>⬅️</span>
-                    <span>ย้อนกลับ</span>
-                  </button>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateFolderModal(true)}
+                      className="px-3.5 py-1.5 rounded-xl bg-cyan-700 hover:bg-cyan-800 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 cursor-pointer transition-all"
+                      title="สร้างโฟลเดอร์ย่อยในโฟลเดอร์นี้"
+                    >
+                      <span>📁+</span>
+                      <span>โฟลเดอร์ย่อยใหม่</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setDeleteConfirmFolder(selectedFolder as any)}
+                      className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-rose-50 text-rose-600 hover:text-rose-700 font-bold text-xs border border-rose-200 shadow-xs flex items-center gap-1.5 cursor-pointer transition-all"
+                      title="ลบโฟลเดอร์นี้และไฟล์ข้างในออกจาก NAS"
+                    >
+                      <span>🗑️</span>
+                      <span>ลบโฟลเดอร์นี้</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleGoBackFolder}
+                      className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-cyan-900 font-bold text-xs border border-cyan-200 shadow-xs flex items-center gap-1.5 cursor-pointer transition-all"
+                    >
+                      <span>⬅️</span>
+                      <span>ย้อนกลับ</span>
+                    </button>
+                  </div>
                 </div>
               )}
 
               {/* Subfolders Grid if any */}
               {folders.length > 0 && (
                 <div className="space-y-3">
-                  <div className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                    <span>📁</span>
-                    <span>โฟลเดอร์กิจกรรม ({folders.length})</span>
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                      <span>📁</span>
+                      <span>โฟลเดอร์กิจกรรม ({folders.length})</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateFolderModal(true)}
+                      className="text-xs font-bold text-cyan-700 hover:text-cyan-900 flex items-center gap-1 cursor-pointer px-2.5 py-1 rounded-lg hover:bg-cyan-50 transition-colors"
+                    >
+                      <span>+ สร้างโฟลเดอร์ใหม่</span>
+                    </button>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -1284,6 +1580,7 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                         currentSpace={currentSpace}
                         userSid={userSid}
                         onSelect={handleSelectFolder}
+                        onDelete={(f) => setDeleteConfirmFolder(f)}
                       />
                     ))}
                   </div>
@@ -1389,14 +1686,37 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
             </div>
           ) : activeTab === "albums" ? (
             /* ─── ALBUMS VIEW ─── */
-            <div>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <span>🏷️</span>
+                  <span>อัลบั้มภาพกิจกรรม ({albums.length})</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateAlbumModal(true)}
+                  className="px-3.5 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 cursor-pointer transition-all"
+                >
+                  <span>🏷️+</span>
+                  <span>สร้างอัลบั้มใหม่</span>
+                </button>
+              </div>
+
               {albums.length === 0 ? (
-                <div className="py-20 text-center space-y-2 p-8 rounded-3xl bg-white border border-slate-200">
+                <div className="py-20 text-center space-y-3 p-8 rounded-3xl bg-white border border-slate-200">
                   <div className="text-4xl">📁</div>
                   <div className="text-sm font-bold text-slate-700">ไม่พบอัลบั้มภาพในระบบ</div>
                   <div className="text-xs text-slate-400 max-w-sm mx-auto">
-                    ท่านสามารถสร้างอัลบั้มและจัดกลุ่มรูปภาพกิจกรรมได้โดยตรงผ่านแอปพลิเคชัน Synology Photos บน DSM
+                    ท่านสามารถสร้างอัลบั้มภาพใหม่และรวบรวมภาพถ่ายกิจกรรมราชการได้ทันที
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateAlbumModal(true)}
+                    className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white font-bold text-xs shadow-xs cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <span>🏷️+</span>
+                    <span>สร้างอัลบั้มแรก</span>
+                  </button>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -1495,6 +1815,26 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
               >
                 <span>📥</span>
                 <span>ดาวน์โหลดที่เลือก</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowCreateAlbumModal(true)}
+                className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+                title="สร้างอัลบั้มใหม่จากภาพที่เลือก"
+              >
+                <span>🏷️</span>
+                <span>สร้างอัลบั้ม ({selectedItemIds.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowBatchDeleteConfirm(true)}
+                className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+                title="ลบรูปภาพที่เลือกออกจาก Synology Photos (ตามสิทธิ์ NAS)"
+              >
+                <span>🗑️</span>
+                <span>ลบที่เลือก ({selectedItemIds.length})</span>
               </button>
             </div>
 
@@ -1604,8 +1944,19 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                 title="ดาวน์โหลดไฟล์ต้นฉบับ"
               >
                 <span>⬇️</span>
-                <span className="hidden sm:inline">ดาวน์โหลดต้นฉบับ</span>
+                <span className="hidden sm:inline">ดาวน์โหลด</span>
               </a>
+
+              {/* Delete button (NAS permissions) */}
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmItem(activeLightboxItem)}
+                className="px-3 py-1.5 rounded-xl bg-rose-600/80 hover:bg-rose-600 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                title="ลบภาพนี้ออกจาก Synology Photos (ตามสิทธิ์ NAS)"
+              >
+                <span>🗑️</span>
+                <span className="hidden sm:inline">ลบภาพ</span>
+              </button>
 
               {/* Close button */}
               <button
@@ -1922,6 +2273,368 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── CREATE FOLDER MODAL ─── */}
+      {showCreateFolderModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-scaleUp">
+            <div className="p-6 bg-gradient-to-r from-cyan-600 to-teal-600 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">📁</span>
+                <div>
+                  <h3 className="font-bold text-base">สร้างโฟลเดอร์กิจกรรมใหม่</h3>
+                  <p className="text-[11px] text-cyan-100">
+                    Synology Photos · {currentSpace === "shared" ? "พื้นที่ส่วนกลาง (/photo)" : "พื้นที่ส่วนบุคคล (/home/Photos)"}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCreateFolderModal(false);
+                  setNewFolderName("");
+                }}
+                className="text-white/80 hover:text-white p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateFolder} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  ตำแหน่งปลายทาง (Parent Folder)
+                </label>
+                <div className="px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 font-mono flex items-center gap-1.5 truncate">
+                  <span className="text-cyan-700 font-bold">📂</span>
+                  <span className="truncate">
+                    {selectedFolder?.path ||
+                      (currentSpace === "shared"
+                        ? folderBreadcrumbs.length > 1
+                          ? `/photo/${folderBreadcrumbs.slice(1).map((b) => b.name).join("/")}`
+                          : "/photo"
+                        : folderBreadcrumbs.length > 1
+                        ? `/home/Photos/${folderBreadcrumbs.slice(1).map((b) => b.name).join("/")}`
+                        : "/home/Photos")}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  ชื่อโฟลเดอร์กิจกรรมใหม่ *
+                </label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  placeholder="เช่น 2569-กิจกรรมมอบถุงยังชีพ หรือ งานสัมมนา"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  💡 ระบบจะสร้างโฟลเดอร์บน Synology NAS ตามสิทธิ์ผู้ใช้ DSM ของคุณ และจัดดัชนีรูปภาพให้ทันที
+                </p>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCreateFolderModal(false);
+                    setNewFolderName("");
+                  }}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingFolder || !newFolderName.trim()}
+                  className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold transition-all shadow-md cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <span>{isCreatingFolder ? "⏳" : "📁+"}</span>
+                  <span>{isCreatingFolder ? "กำลังสร้าง..." : "สร้างโฟลเดอร์"}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── CREATE ALBUM MODAL ─── */}
+      {showCreateAlbumModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-scaleUp">
+            <div className="p-6 bg-gradient-to-r from-indigo-600 to-purple-600 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">🏷️</span>
+                <div>
+                  <h3 className="font-bold text-base">สร้างอัลบั้มภาพใหม่</h3>
+                  <p className="text-[11px] text-indigo-100">
+                    Synology Photos Album
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCreateAlbumModal(false);
+                  setNewAlbumName("");
+                }}
+                className="text-white/80 hover:text-white p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateAlbum} className="p-6 space-y-4">
+              {selectedItemIds.length > 0 && (
+                <div className="p-3 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-900 text-xs flex items-center gap-2">
+                  <span>✨</span>
+                  <span>
+                    จะนำภาพและวิดีโอที่เลือก <strong>{selectedItemIds.length} รายการ</strong> เพิ่มเข้าสู่อัลบั้มนี้โดยอัตโนมัติ
+                  </span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  ชื่ออัลบั้ม *
+                </label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  value={newAlbumName}
+                  onChange={(e) => setNewAlbumName(e.target.value)}
+                  placeholder="เช่น ภาพเด่นกิจกรรม พมจ. 2569 หรือ สื่อประชาสัมพันธ์"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCreateAlbumModal(false);
+                    setNewAlbumName("");
+                  }}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingAlbum || !newAlbumName.trim()}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-md cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <span>{isCreatingAlbum ? "⏳" : "🏷️+"}</span>
+                  <span>{isCreatingAlbum ? "กำลังสร้าง..." : "สร้างอัลบั้ม"}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── CONFIRM DELETE ITEM MODAL (Single) ─── */}
+      {deleteConfirmItem && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-scaleUp">
+            <div className="p-6 bg-gradient-to-r from-rose-600 to-red-600 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">🗑️</span>
+                <div>
+                  <h3 className="font-bold text-base">ยืนยันการลบรูปภาพ</h3>
+                  <p className="text-[11px] text-rose-100">
+                    Synology Photos · {currentSpace === "shared" ? "พื้นที่ส่วนกลาง" : "พื้นที่ส่วนบุคคล"}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmItem(null)}
+                className="text-white/80 hover:text-white p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="flex items-center gap-3.5 p-3 rounded-2xl bg-slate-50 border border-slate-200">
+                <img
+                  src={getPhotoThumbnailUrl(
+                    deleteConfirmItem.id,
+                    "sm",
+                    deleteConfirmItem.thumbnail?.cache_key,
+                    currentSpace,
+                    userSid
+                  )}
+                  alt={deleteConfirmItem.filename}
+                  className="w-14 h-14 object-cover rounded-xl shrink-0"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold text-xs text-slate-800 truncate">
+                    {deleteConfirmItem.filename}
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    {formatBytes(deleteConfirmItem.filesize)} · {formatPhotoTime(deleteConfirmItem.time)}
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs leading-relaxed">
+                ⚠️ ท่านต้องการลบไฟล์นี้ออกจาก Synology Photos ใช่หรือไม่? (การลบจะดำเนินการตามสิทธิ์บัญชีผู้ใช้ DSM ของท่าน)
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setDeleteConfirmItem(null)}
+                  disabled={isDeleting}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteItems([deleteConfirmItem.id])}
+                  disabled={isDeleting}
+                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-md cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <span>{isDeleting ? "⏳" : "🗑️"}</span>
+                  <span>{isDeleting ? "กำลังลบ..." : "ยืนยันลบไฟล์นี้"}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── CONFIRM BATCH DELETE MODAL ─── */}
+      {showBatchDeleteConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-scaleUp">
+            <div className="p-6 bg-gradient-to-r from-rose-600 to-red-600 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">🗑️</span>
+                <div>
+                  <h3 className="font-bold text-base">ยืนยันการลบ {selectedItemIds.length} รายการ</h3>
+                  <p className="text-[11px] text-rose-100">
+                    Synology Photos · การลบหลายรายการพร้อมกัน
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBatchDeleteConfirm(false)}
+                className="text-white/80 hover:text-white p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-slate-700 leading-relaxed">
+                ท่านต้องการลบรูปภาพและสื่อที่เลือกไว้ทั้งหมด{" "}
+                <strong className="text-rose-600">{selectedItemIds.length} รายการ</strong> ออกจาก Synology Photos ใช่หรือไม่?
+              </p>
+
+              <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs leading-relaxed">
+                ⚠️ การลบจะดำเนินการผ่าน WebAPI ตามสิทธิ์บัญชีผู้ใช้ DSM ของท่าน หากไม่มีสิทธิ์แก้ไขหรือลบในโฟลเดอร์นั้น ระบบ NAS จะแจ้งเตือนปฏิเสธ
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowBatchDeleteConfirm(false)}
+                  disabled={isDeleting}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteItems(selectedItemIds)}
+                  disabled={isDeleting}
+                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-md cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <span>{isDeleting ? "⏳" : "🗑️"}</span>
+                  <span>{isDeleting ? "กำลังลบ..." : `ยืนยันลบทั้ง ${selectedItemIds.length} รายการ`}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── CONFIRM DELETE FOLDER MODAL ─── */}
+      {deleteConfirmFolder && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-scaleUp">
+            <div className="p-6 bg-gradient-to-r from-rose-600 to-red-600 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">📁</span>
+                <div>
+                  <h3 className="font-bold text-base">ยืนยันการลบโฟลเดอร์กิจกรรม</h3>
+                  <p className="text-[11px] text-rose-100">
+                    Synology Photos Storage
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmFolder(null)}
+                className="text-white/80 hover:text-white p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center text-xl shrink-0">
+                  📁
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold text-sm text-slate-800 truncate">
+                    {deleteConfirmFolder.name}
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5 truncate">
+                    {deleteConfirmFolder.item_count} ไฟล์สื่อในโฟลเดอร์นี้
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs leading-relaxed">
+                ⚠️ <strong>ข้อควรระวัง:</strong> โฟลเดอร์นี้และไฟล์ภาพทั้งหมดที่อยู่ภายในจะถูกลบออกจาก Synology NAS ถาวรตามสิทธิ์บัญชีผู้ใช้ DSM ของท่าน
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setDeleteConfirmFolder(null)}
+                  disabled={isDeleting}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteFolder(deleteConfirmFolder)}
+                  disabled={isDeleting}
+                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-md cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <span>{isDeleting ? "⏳" : "🗑️"}</span>
+                  <span>{isDeleting ? "กำลังลบ..." : "ยืนยันลบโฟลเดอร์นี้"}</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

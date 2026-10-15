@@ -432,3 +432,145 @@ export function groupPhotosByMonth(items: SynologyPhotoItem[]): PhotoMonthGroup[
     }));
 }
 
+/**
+ * Delete one or more photo/video items from Synology Photos
+ */
+export async function deleteSynologyPhotoItems(params: {
+  space: PhotoSpace;
+  itemIds: number[];
+  sid: string;
+  nasUrl?: string;
+}): Promise<{
+  success: boolean;
+  deletedCount?: number;
+  message?: string;
+  error?: string;
+  code?: number;
+}> {
+  try {
+    const res = await fetch("/api/nas/photos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "delete_items",
+        space: params.space,
+        itemIds: params.itemIds,
+        sid: params.sid,
+        nasUrl: params.nasUrl || getClientSynologyConfig().nasUrl,
+      }),
+    });
+    return await safeParseJsonResponse(res);
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || "ไม่สามารถเชื่อมต่อเพื่อลบรูปภาพจาก Synology Photos ได้",
+    };
+  }
+}
+
+/**
+ * Create a new album in Synology Photos
+ */
+export async function createSynologyAlbum(params: {
+  name: string;
+  itemIds?: number[];
+  sid: string;
+  nasUrl?: string;
+}): Promise<{
+  success: boolean;
+  album?: SynologyPhotoAlbum;
+  message?: string;
+  error?: string;
+  code?: number;
+}> {
+  try {
+    const res = await fetch("/api/nas/photos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "create_album",
+        name: params.name,
+        itemIds: params.itemIds || [],
+        sid: params.sid,
+        nasUrl: params.nasUrl || getClientSynologyConfig().nasUrl,
+      }),
+    });
+    return await safeParseJsonResponse(res);
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || "ไม่สามารถเชื่อมต่อเพื่อสร้างอัลบั้มบน Synology Photos ได้",
+    };
+  }
+}
+
+/**
+ * Create a new photo directory / activity folder under /photo or /home/Photos
+ */
+export async function createSynologyPhotoFolder(params: {
+  space: PhotoSpace;
+  folderPath?: string;
+  folderName: string;
+  sid: string;
+  nasUrl?: string;
+}): Promise<{
+  success: boolean;
+  folder?: any;
+  error?: string;
+  code?: number;
+}> {
+  try {
+    const res = await fetch("/api/nas/photos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "create_folder",
+        space: params.space,
+        folderPath: params.folderPath,
+        folderName: params.folderName,
+        sid: params.sid,
+        nasUrl: params.nasUrl || getClientSynologyConfig().nasUrl,
+      }),
+    });
+    return await safeParseJsonResponse(res);
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || "ไม่สามารถเชื่อมต่อเพื่อสร้างโฟลเดอร์ภาพบน Synology NAS ได้",
+    };
+  }
+}
+
+/**
+ * Delete a photo directory / activity folder from NAS storage
+ */
+export async function deleteSynologyPhotoFolder(params: {
+  folderPath: string;
+  sid: string;
+  nasUrl?: string;
+}): Promise<{
+  success: boolean;
+  error?: string;
+  code?: number;
+}> {
+  try {
+    const res = await fetch("/api/nas/photos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "delete_folder",
+        folderPath: params.folderPath,
+        sid: params.sid,
+        nasUrl: params.nasUrl || getClientSynologyConfig().nasUrl,
+      }),
+    });
+    return await safeParseJsonResponse(res);
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || "ไม่สามารถเชื่อมต่อเพื่อลบโฟลเดอร์จาก Synology NAS ได้",
+    };
+  }
+}
+
+

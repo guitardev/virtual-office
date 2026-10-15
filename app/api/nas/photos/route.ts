@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { safeParseJsonResponse } from "@/lib/synology";
+import { safeParseJsonResponse, createNasFolder, deleteNasFiles } from "@/lib/synology";
 
 export async function GET(req: NextRequest) {
   try {
@@ -285,6 +285,165 @@ export async function GET(req: NextRequest) {
   } catch (err: any) {
     return NextResponse.json(
       { success: false, error: err?.message || "Internal server error in photos API route" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json().catch(() => ({}));
+    const action = body.action || "delete_items";
+    const space = body.space || "shared";
+    const sid = body.sid;
+    const nasUrl =
+      body.nasUrl ||
+      process.env.SYNOLOGY_NAS_URL ||
+      process.env.NEXT_PUBLIC_SYNOLOGY_NAS_URL ||
+      "https://nas.smso.site";
+
+    if (!sid) {
+      return NextResponse.json(
+        { success: false, error: "กรุณาระบุเซสชัน DSM (sid)", code: 119 },
+        { status: 401 }
+      );
+    }
+
+    const cleanUrl = nasUrl.replace(/\/+$/, "");
+
+    // ─── ACTION 1: DELETE PHOTO / VIDEO ITEMS ───
+    if (action === "delete_items") {
+      const itemIds = body.itemIds || body.item_ids || (body.id ? [body.id] : []);
+      if (!Array.isArray(itemIds) || itemIds.length === 0) {
+        return NextResponse.json(
+          { success: false, error: "กรุณาระบุรายการภาพหรือวิดีโอที่ต้องการลบ (itemIds)" },
+          { status: 400 }
+        );
+      }
+
+      const apiName = space === "shared" ? "SYNO.FotoTeam.Browse.Item" : "SYNO.Foto.Browse.Item";
+
+      // Attempt 1: Standard DSM 7 Photos JSON-array ID format id=[1,2]
+      const url1 = `${cleanUrl}/webapi/entry.cgi?api=${apiName}&version=1&method=delete&id=${encodeURIComponent(
+        JSON.stringify(itemIds)
+      )}&_sid=${encodeURIComponent(sid)}`;
+
+      let res = await fetch(url1, {
+        method: "GET",
+        signal: AbortSignal.timeout(10000),
+      });
+      let data = await safeParseJsonResponse(res);
+
+      // Attempt 2: If code 101/120, try item_id=[1,2]
+      if (!data.success && (data.error?.code === 101 || data.error?.code === 120)) {
+        const url2 = `${cleanUrl}/webapi/entry.cgi?api=${apiName}&version=1&method=delete&item_id=${encodeURIComponent(
+          JSON.stringify(itemIds)
+        )}&_sid=${encodeURIComponent(sid)}`;
+        res = await fetch(url2, { method: "GET", signal: AbortSignal.timeout(10000) });
+        data = await safeParseJsonResponse(res);
+      }
+
+      // Attempt 3: If still failing, try comma-separated id=1,2
+      if (!data.success && (data.error?.code === 101 || data.error?.code === 120)) {
+        const url3 = `${cleanUrl}/webapi/entry.cgi?api=${apiName}&version=1&method=delete&id=${encodeURIComponent(
+          itemIds.join(",")
+        )}&_sid=${encodeURIComponent(sid)}`;
+        res = await fetch(url3, { method: "GET", signal: AbortSignal.timeout(10000) });
+        data = await safeParseJsonResponse(res);
+      }
+
+      if (data.success) {
+        return NextResponse.json({
+          success: true,
+          deletedCount: itemIds.length,
+          message: `ลบ ${itemIds.length} รายการจาก Synology Photos เรียบร้อยแล้ว`,
+        });
+      }
+
+      const errorCode = data.error?.code || data.code;
+      let friendlyError = data.error?.message;
+      if (errorCode === 105 || errorCode === 403) {
+        friendlyError = "บัญชี Synology NAS ของท่านไม่มีสิทธิ์ลบไฟล์ในพื้นที่นี้ (ต้องการสิทธิ์แก้ไข/จัดการ)";
+      } else if (errorCode === 119) {
+        friendlyError = "เซสชัน Synology หมดอายุหรือไม่ถูกต้อง กรุณายืนยันตัวตนใหม่อีกครั้ง (Code 119)";
+      } else if (errorCode === 801) {
+        friendlyError = "ไม่มีสิทธิ์เข้าถึงคลังภาพดังกล่าว (Code 801)";
+      }
+
+      return NextResponse.json({
+        success: false,
+        error: friendlyError || `ไม่สามารถลบรายการภาพได้ (Synology Error Code: ${errorCode || "Unknown"})`,
+        code: errorCode,
+      });
+    }
+
+    // ─── ACTION 2: CREATE ALBUM ───
+    if (action === "create_album") {
+      const name = (body.name || "").trim();
+      if (!name) {
+        return NextResponse.json({ success: false, error: "กรุณาระบุชื่ออัลบั้ม" }, { status: 400 });
+      }
+
+      const itemIds = body.itemIds || body.item_ids || [];
+      let itemParam = "";
+      if (Array.isArray(itemIds) && itemIds.length > 0) {
+        itemParam = `&item_id=${encodeURIComponent(JSON.stringify(itemIds))}`;
+      }
+
+      const createUrl = `${cleanUrl}/webapi/entry.cgi?api=SYNO.Foto.Browse.Album&version=1&method=create&name=${encodeURIComponent(
+        name
+      )}${itemParam}&_sid=${encodeURIComponent(sid)}`;
+
+      const res = await fetch(createUrl, { method: "GET", signal: AbortSignal.timeout(10000) });
+      const data = await safeParseJsonResponse(res);
+
+      if (data.success) {
+        return NextResponse.json({
+          success: true,
+          album: data.data?.album || data.data,
+          message: `สร้างอัลบั้ม "${name}" เรียบร้อยแล้ว`,
+        });
+      }
+
+      return NextResponse.json({
+        success: false,
+        error: data.error?.message || "ไม่สามารถสร้างอัลบั้มบน Synology Photos ได้",
+        code: data.error?.code,
+      });
+    }
+
+    // ─── ACTION 3: CREATE FOLDER IN PHOTO STORAGE ───
+    if (action === "create_folder") {
+      const folderPath = body.folderPath || body.folder_path;
+      const folderName = (body.folderName || body.folder_name || "").trim();
+      if (!folderName) {
+        return NextResponse.json({ success: false, error: "กรุณาระบุชื่อโฟลเดอร์" }, { status: 400 });
+      }
+
+      // If no folderPath provided, default to root of selected space
+      const targetPath = folderPath || (space === "shared" ? "/photo" : "/home/Photos");
+      const result = await createNasFolder(sid, targetPath, folderName, cleanUrl);
+      return NextResponse.json(result);
+    }
+
+    // ─── ACTION 4: DELETE FOLDER IN PHOTO STORAGE ───
+    if (action === "delete_folder") {
+      const folderPath = body.folderPath || body.folder_path;
+      if (!folderPath || folderPath === "/photo" || folderPath === "/home/Photos" || folderPath === "/") {
+        return NextResponse.json(
+          { success: false, error: "ไม่สามารถลบโฟลเดอร์ราก (Root Folder) ของระบบได้" },
+          { status: 400 }
+        );
+      }
+
+      const result = await deleteNasFiles(sid, [folderPath], cleanUrl);
+      return NextResponse.json(result);
+    }
+
+    return NextResponse.json({ success: false, error: `Invalid action: ${action}` }, { status: 400 });
+  } catch (err: any) {
+    return NextResponse.json(
+      { success: false, error: err?.message || "Internal server error in photos API route POST" },
       { status: 500 }
     );
   }
