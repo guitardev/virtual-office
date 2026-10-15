@@ -83,7 +83,10 @@ export function getClientSynologyConfig(): SynologyConfig {
         process.env.NEXT_PUBLIC_SYNOLOGY_NAS_URL ||
         process.env.SYNOLOGY_NAS_URL ||
         "https://nas.smso.site";
-      if (parsed.nasUrl === "http://192.168.162.21:5000" && latestUrl !== "http://192.168.162.21:5000") {
+      if (
+        (typeof parsed.nasUrl === "string" && (parsed.nasUrl.includes("192.168.162.21") || parsed.nasUrl.includes("localhost"))) ||
+        !parsed.nasUrl
+      ) {
         parsed.nasUrl = latestUrl;
         localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...DEFAULT_SYNOLOGY_CONFIG, ...parsed }));
       }

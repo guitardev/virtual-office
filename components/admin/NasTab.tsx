@@ -9,8 +9,13 @@ import {
   checkNasHealth,
   loginSynology,
   listNasFiles,
+  listNasShares,
   createNasFolder,
   deleteNasFiles,
+  getUserNasSid,
+  getUserNasAccount,
+  setUserNasSid,
+  clearUserNasSid,
   SynologyHealthStatus,
   SynologyFileItem,
 } from "@/lib/synology";
@@ -26,7 +31,8 @@ export function NasTab({ showToast }: NasTabProps) {
   const [isSaving, setIsSaving] = useState(false);
 
   // File Station Explorer state
-  const [serviceSid, setServiceSid] = useState<string | null>(null);
+  const [serviceSid, setServiceSid] = useState<string | null>(() => getUserNasSid());
+  const [sessionAccount, setSessionAccount] = useState<string | null>(() => getUserNasAccount());
   const [currentFolder, setCurrentFolder] = useState<string>("/virtual-office");
   const [files, setFiles] = useState<SynologyFileItem[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
@@ -35,11 +41,24 @@ export function NasTab({ showToast }: NasTabProps) {
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Inline login state
+  const [loginUser, setLoginUser] = useState(config.serviceAccount || "admin");
+  const [loginPass, setLoginPass] = useState("");
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
   // Load config on mount & test health
   useEffect(() => {
     const loaded = getClientSynologyConfig();
     setConfig(loaded);
     runHealthCheck(loaded.nasUrl);
+
+    const storedSid = getUserNasSid();
+    const storedAccount = getUserNasAccount();
+    if (storedSid) {
+      setServiceSid(storedSid);
+      setSessionAccount(storedAccount);
+      loadFiles(storedSid, currentFolder, loaded.nasUrl);
+    }
   }, []);
 
   const runHealthCheck = async (url: string) => {
@@ -80,39 +99,79 @@ export function NasTab({ showToast }: NasTabProps) {
     }
   };
 
-  // Connect Service Account to browse files
-  const handleConnectServiceAccount = async () => {
-    if (!config.serviceAccount || !config.servicePassword) {
-      showToast("⚠️ กรุณาระบุรหัสผ่านของบัญชีระบบ (Service Account)");
+  const handleSwitchToCloudflare = () => {
+    const defaultUrl = process.env.NEXT_PUBLIC_SYNOLOGY_NAS_URL || "https://nas.smso.site";
+    const updated = saveClientSynologyConfig({ ...config, nasUrl: defaultUrl });
+    setConfig(updated);
+    runHealthCheck(defaultUrl);
+    showToast(`🌐 สลับโฮสต์เป็น ${defaultUrl} เรียบร้อยแล้ว`);
+  };
+
+  // Login handler
+  const handleLoginNas = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginUser.trim() || !loginPass) {
+      showToast("⚠️ กรุณาระบุชื่อผู้ใช้และรหัสผ่าน Synology DSM");
       return;
     }
-    setIsLoadingFiles(true);
+    setIsLoggingIn(true);
     try {
-      const auth = await loginSynology(config.serviceAccount, config.servicePassword, config.nasUrl);
+      const auth = await loginSynology(loginUser.trim(), loginPass, config.nasUrl);
       if (auth.success && auth.sid) {
+        setUserNasSid(auth.sid, auth.account || loginUser.trim());
         setServiceSid(auth.sid);
-        showToast("🔑 ยืนยันตัวตน Service Account สำเร็จ");
-        // Load files
-        loadFiles(auth.sid, currentFolder);
+        setSessionAccount(auth.account || loginUser.trim());
+        setLoginPass("");
+        showToast(`🔑 เข้าสู่ระบบ Synology NAS สำเร็จ (${auth.account || loginUser})`);
+        loadFiles(auth.sid, currentFolder, config.nasUrl);
       } else {
-        showToast(`❌ เข้าสู่ระบบ File Station ไม่สำเร็จ: ${auth.error}`);
-        setIsLoadingFiles(false);
+        showToast(`❌ เข้าสู่ระบบ File Station ไม่สำเร็จ: ${auth.error || "รหัสผ่านไม่ถูกต้อง"}`);
       }
     } catch (err: any) {
       showToast(`❌ ไม่สามารถเชื่อมต่อ File Station: ${err?.message}`);
-      setIsLoadingFiles(false);
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
-  const loadFiles = async (sid: string, folder: string) => {
+  const handleDisconnectNas = () => {
+    clearUserNasSid();
+    setServiceSid(null);
+    setSessionAccount(null);
+    setFiles([]);
+    showToast("🔒 ออกจากเซสชัน Synology DSM เรียบร้อยแล้ว");
+  };
+
+  const loadFiles = async (sid: string, folder: string, nasUrlOverride?: string) => {
     setIsLoadingFiles(true);
+    const targetUrl = nasUrlOverride || config.nasUrl;
     try {
-      const res = await listNasFiles(sid, folder, config.nasUrl);
-      if (res.success && res.files) {
-        setFiles(res.files);
+      if (!folder || folder === "root" || folder === "/") {
+        const res = await listNasShares(sid, targetUrl);
+        if (res.success && res.shares) {
+          setFiles(res.shares);
+        } else {
+          setFiles([]);
+          if (res.code === 119) {
+            handleDisconnectNas();
+            showToast("ℹ️ เซสชัน Synology หมดอายุ กรุณาเข้าสู่ระบบใหม่อีกครั้ง");
+          } else {
+            showToast(`ℹ️ ${res.error || "ไม่สามารถดึงรายการแชร์จาก NAS ได้"}`);
+          }
+        }
       } else {
-        setFiles([]);
-        showToast(`ℹ️ ${res.error || "ไม่พบไฟล์ หรือยังไม่ได้สร้างโฟลเดอร์นี้บน NAS"}`);
+        const res = await listNasFiles(sid, folder, targetUrl);
+        if (res.success && res.files) {
+          setFiles(res.files);
+        } else {
+          setFiles([]);
+          if (res.code === 119) {
+            handleDisconnectNas();
+            showToast("ℹ️ เซสชัน Synology หมดอายุ กรุณาเข้าสู่ระบบใหม่อีกครั้ง");
+          } else {
+            showToast(`ℹ️ ${res.error || `ไม่พบไฟล์ใน "${folder}" หรือยังไม่ได้สร้างโฟลเดอร์นี้บน NAS`}`);
+          }
+        }
       }
     } catch (err: any) {
       showToast(`❌ เกิดข้อผิดพลาดในการอ่านไฟล์: ${err?.message}`);
@@ -124,6 +183,10 @@ export function NasTab({ showToast }: NasTabProps) {
   const handleCreateFolder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newFolderName.trim() || !serviceSid) return;
+    if (!currentFolder || currentFolder === "/" || currentFolder === "root") {
+      showToast("⚠️ ไม่สามารถสร้างโฟลเดอร์ที่ Root ได้โดยตรง กรุณาเลือก Shared Folder ก่อน");
+      return;
+    }
     try {
       const res = await createNasFolder(serviceSid, currentFolder, newFolderName.trim(), config.nasUrl);
       if (res.success) {
@@ -147,11 +210,16 @@ export function NasTab({ showToast }: NasTabProps) {
   };
 
   const handleNavigateUp = () => {
-    if (currentFolder === config.sharedFolder || currentFolder === "/virtual-office") return;
+    if (!currentFolder || currentFolder === "/" || currentFolder === "root") return;
     const parts = currentFolder.split("/").filter(Boolean);
+    if (parts.length <= 1) {
+      // At top of a share (e.g. /virtual-office), go to root shares list
+      handleNavigateFolder("");
+      return;
+    }
     parts.pop();
     const parent = "/" + parts.join("/");
-    handleNavigateFolder(parent || config.sharedFolder || "/virtual-office");
+    handleNavigateFolder(parent);
   };
 
   const handleDownloadFile = (filePath: string) => {
@@ -165,6 +233,11 @@ export function NasTab({ showToast }: NasTabProps) {
   const handleUploadFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !serviceSid) return;
+    if (!currentFolder || currentFolder === "/" || currentFolder === "root") {
+      showToast("⚠️ กรุณาคลิกเลือกโฟลเดอร์แชร์ปลายทางก่อนทำการอัปโหลดไฟล์ (เช่น /virtual-office หรือ /photo)");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
     setIsUploading(true);
     try {
       const formData = new FormData();
@@ -212,8 +285,34 @@ export function NasTab({ showToast }: NasTabProps) {
     }
   };
 
+  const isLocalLanIp = config.nasUrl.includes("192.168.162.21") || config.nasUrl.includes("localhost");
+
   return (
     <div className="space-y-6">
+      {/* ─── LOCAL LAN WARNING (If still using 192.168.162.21) ─── */}
+      {isLocalLanIp && (
+        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-start gap-2.5">
+            <span className="text-xl">⚠️</span>
+            <div>
+              <div className="font-bold text-xs">
+                ตรวจพบว่าระบบกำลังเชื่อมต่อผ่าน IP ภายใน ({config.nasUrl})
+              </div>
+              <div className="text-[11px] text-amber-800/80 mt-0.5 leading-relaxed">
+                หากท่านเข้าใช้งานระบบจากภายนอกสำนักงานหรือผ่าน Vercel จะไม่สามารถเชื่อมต่อไปยัง IP วงแลนได้ แนะนำให้สลับใช้โดเมน Cloudflare Tunnel
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleSwitchToCloudflare}
+            className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-all shadow-xs shrink-0 cursor-pointer"
+          >
+            🌐 สลับใช้ https://nas.smso.site
+          </button>
+        </div>
+      )}
+
       {/* ─── HEADER BANNER ─── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white border border-indigo-500/30 shadow-lg">
         <div className="flex items-center gap-3.5">
@@ -283,7 +382,7 @@ export function NasTab({ showToast }: NasTabProps) {
           <div className="text-lg font-bold font-heading text-emerald-600 mt-1">
             {health?.latencyMs !== undefined ? `${health.latencyMs} ms` : "-"}
           </div>
-          <div className="text-[11px] text-slate-400 mt-0.5">เครือข่าย Local LAN</div>
+          <div className="text-[11px] text-slate-400 mt-0.5">Cloudflare Tunnel / LAN</div>
         </div>
 
         <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs">
@@ -295,11 +394,13 @@ export function NasTab({ showToast }: NasTabProps) {
         </div>
 
         <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs">
-          <div className="text-xs text-slate-500 font-medium">ระบบยืนยันตัวตนหลัก</div>
-          <div className="text-lg font-bold font-heading text-teal-600 mt-1">
-            {config.primaryAuthEnabled ? "เปิดใช้งาน (Active)" : "ปิดชั่วคราว"}
+          <div className="text-xs text-slate-500 font-medium">เซสชันผู้ใช้งานปัจจุบัน</div>
+          <div className="text-lg font-bold font-heading text-teal-600 mt-1 truncate">
+            {serviceSid ? (sessionAccount || "เข้าสู่ระบบแล้ว") : "ยังไม่เชื่อมต่อ"}
           </div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Synology DSM Accounts</div>
+          <div className="text-[11px] text-slate-400 mt-0.5">
+            {serviceSid ? "🔑 Active Session" : "🔒 Disconnected"}
+          </div>
         </div>
       </div>
 
@@ -325,9 +426,16 @@ export function NasTab({ showToast }: NasTabProps) {
                 required
                 value={config.nasUrl}
                 onChange={(e) => setConfig({ ...config, nasUrl: e.target.value })}
-                placeholder="http://192.168.162.21:5000"
+                placeholder="https://nas.smso.site"
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 text-xs font-mono text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
               />
+              <button
+                type="button"
+                onClick={handleSwitchToCloudflare}
+                className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold cursor-pointer flex items-center gap-1 mt-1.5"
+              >
+                <span>🌐 รีเซ็ตเป็นโดเมน Cloudflare Tunnel (https://nas.smso.site)</span>
+              </button>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -339,7 +447,10 @@ export function NasTab({ showToast }: NasTabProps) {
                   type="text"
                   required
                   value={config.serviceAccount}
-                  onChange={(e) => setConfig({ ...config, serviceAccount: e.target.value })}
+                  onChange={(e) => {
+                    setConfig({ ...config, serviceAccount: e.target.value });
+                    setLoginUser(e.target.value);
+                  }}
                   placeholder="admin"
                   className="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50/50 text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                 />
@@ -352,7 +463,10 @@ export function NasTab({ showToast }: NasTabProps) {
                 <input
                   type="password"
                   value={config.servicePassword || ""}
-                  onChange={(e) => setConfig({ ...config, servicePassword: e.target.value })}
+                  onChange={(e) => {
+                    setConfig({ ...config, servicePassword: e.target.value });
+                    setLoginPass(e.target.value);
+                  }}
                   placeholder="ระบุรหัสผ่าน DSM"
                   className="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50/50 text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                 />
@@ -440,7 +554,7 @@ export function NasTab({ showToast }: NasTabProps) {
         {/* ─── RIGHT: FILE STATION DMS EXPLORER ─── */}
         <div className="lg:col-span-7 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-4">
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
               <div>
                 <h3 className="text-base font-bold font-heading text-slate-900">
                   📁 ระบบสำรวจไฟล์เอกสาร (File Station DMS Explorer)
@@ -452,6 +566,11 @@ export function NasTab({ showToast }: NasTabProps) {
 
               {serviceSid ? (
                 <div className="flex items-center gap-2">
+                  <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-bold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>{sessionAccount || config.serviceAccount}</span>
+                  </div>
+
                   <input
                     type="file"
                     ref={fileInputRef}
@@ -479,61 +598,136 @@ export function NasTab({ showToast }: NasTabProps) {
                     onClick={() => loadFiles(serviceSid, currentFolder)}
                     className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer"
                   >
-                    🔄 รีเฟรช
+                    🔄
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDisconnectNas}
+                    title="ออกจากเซสชัน Synology"
+                    className="px-2 py-1.5 rounded-lg bg-slate-100 hover:bg-red-50 text-slate-500 hover:text-red-600 text-xs transition-all cursor-pointer"
+                  >
+                    🔓
                   </button>
                 </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleConnectServiceAccount}
-                  disabled={isLoadingFiles}
-                  className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50"
-                >
-                  {isLoadingFiles ? "⏳ กำลังเชื่อมต่อ..." : "🔑 เชื่อมต่อ File Station"}
-                </button>
-              )}
+              ) : null}
             </div>
 
             {/* Folder Breadcrumb */}
             <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-slate-50 border border-slate-200/70 text-xs font-mono text-slate-600">
               <div className="flex items-center gap-2 truncate">
                 <span>📍 เส้นทาง:</span>
-                <span className="font-bold text-indigo-600 truncate">{currentFolder}</span>
+                <span className="font-bold text-indigo-600 truncate">
+                  {currentFolder || "โฟลเดอร์แชร์ทั้งหมด (Root)"}
+                </span>
               </div>
-              {currentFolder !== (config.sharedFolder || "/virtual-office") && (
-                <button
-                  type="button"
-                  onClick={handleNavigateUp}
-                  className="px-2 py-0.5 rounded bg-white hover:bg-slate-200 text-slate-700 border border-slate-300 font-sans text-[11px] font-bold shrink-0 cursor-pointer"
-                >
-                  ⬆️ ขึ้น 1 ระดับ
-                </button>
-              )}
+              <div className="flex items-center gap-1.5 shrink-0">
+                {currentFolder && currentFolder !== "/" && currentFolder !== "root" && (
+                  <button
+                    type="button"
+                    onClick={handleNavigateUp}
+                    className="px-2 py-0.5 rounded bg-white hover:bg-slate-200 text-slate-700 border border-slate-300 font-sans text-[11px] font-bold cursor-pointer"
+                  >
+                    ⬆️ ขึ้น 1 ระดับ
+                  </button>
+                )}
+                {currentFolder !== "" && (
+                  <button
+                    type="button"
+                    onClick={() => handleNavigateFolder("")}
+                    className="px-2 py-0.5 rounded bg-white hover:bg-slate-200 text-slate-700 border border-slate-300 font-sans text-[11px] font-bold cursor-pointer"
+                  >
+                    📂 ดูแชร์ทั้งหมด
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Files List / Table */}
-            <div className="border border-slate-200 rounded-xl overflow-hidden min-h-[260px] max-h-[360px] overflow-y-auto">
+            <div className="border border-slate-200 rounded-xl overflow-hidden min-h-[260px] max-h-[380px] overflow-y-auto">
               {isLoadingFiles ? (
                 <div className="py-16 text-center text-xs text-slate-400">
                   <div className="text-2xl animate-spin mb-2">⏳</div>
                   กำลังดึงข้อมูลไฟล์จาก Synology NAS...
                 </div>
               ) : !serviceSid ? (
-                <div className="py-16 text-center space-y-2">
-                  <div className="text-3xl">🔒</div>
-                  <div className="text-xs font-bold text-slate-700">
-                    ต้องเชื่อมต่อ Service Account ก่อนเปิดดูไฟล์
+                /* ─── INLINE LOGIN CARD ─── */
+                <div className="py-8 px-6 max-w-md mx-auto text-center space-y-4">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-2xl mx-auto text-indigo-600">
+                    🔐
                   </div>
-                  <div className="text-[11px] text-slate-400 max-w-sm mx-auto">
-                    กรุณากรอกรหัสผ่านของบัญชีระบบในแบบฟอร์มด้านซ้าย แล้วกดปุ่ม &quot;เชื่อมต่อ File Station&quot;
+                  <div>
+                    <div className="text-sm font-bold text-slate-800 font-heading">
+                      เชื่อมต่อบัญชี Synology DSM เพื่อเปิดดูไฟล์
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      เข้าถึง File Station เพื่อจัดการเอกสารราชการและโฟลเดอร์บน NAS
+                    </div>
                   </div>
+
+                  <form onSubmit={handleLoginNas} className="space-y-3 text-left">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        ชื่อบัญชีผู้ใช้ Synology DSM
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={loginUser}
+                        onChange={(e) => setLoginUser(e.target.value)}
+                        placeholder="admin"
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        รหัสผ่าน Synology DSM
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        value={loginPass}
+                        onChange={(e) => setLoginPass(e.target.value)}
+                        placeholder="ระบุรหัสผ่านของคุณ"
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={isLoggingIn}
+                      className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-md shadow-indigo-600/20 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+                    >
+                      <span>{isLoggingIn ? "⏳ กำลังเชื่อมต่อ..." : "🔑 เข้าสู่ระบบและเปิด File Station"}</span>
+                    </button>
+                  </form>
                 </div>
               ) : files.length === 0 ? (
-                <div className="py-16 text-center space-y-2">
+                <div className="py-14 text-center space-y-3 px-4">
                   <div className="text-3xl">📂</div>
-                  <div className="text-xs font-bold text-slate-700">โฟลเดอร์นี้ยังไม่มีไฟล์</div>
-                  <div className="text-[11px] text-slate-400">
-                    กดปุ่ม &quot;📤 อัปโหลดไฟล์&quot; หรือ &quot;+ สร้างโฟลเดอร์&quot; เพื่อเริ่มต้นจัดเก็บเอกสาร
+                  <div>
+                    <div className="text-xs font-bold text-slate-700">
+                      {!currentFolder ? "ไม่พบโฟลเดอร์แชร์บน NAS" : `โฟลเดอร์ "${currentFolder}" ยังไม่มีไฟล์หรือยังไม่ได้สร้าง`}
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">
+                      ท่านสามารถกดปุ่มสร้างโฟลเดอร์ หรือเลือกสลับไปดูโฟลเดอร์แชร์อื่น ๆ บน NAS ได้
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-center gap-2 pt-1">
+                    {currentFolder && currentFolder !== "" && (
+                      <button
+                        type="button"
+                        onClick={() => setShowNewFolderModal(true)}
+                        className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold cursor-pointer"
+                      >
+                        + สร้างโฟลเดอร์นี้
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleNavigateFolder("")}
+                      className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer"
+                    >
+                      📂 ดูโฟลเดอร์แชร์ทั้งหมด
+                    </button>
                   </div>
                 </div>
               ) : (
@@ -596,7 +790,7 @@ export function NasTab({ showToast }: NasTabProps) {
           <div className="p-3 rounded-xl bg-indigo-50/60 border border-indigo-100 text-[11px] text-indigo-900 flex items-center gap-2">
             <span>🛡️</span>
             <span>
-              <strong>มาตรฐานความปลอดภัย:</strong> เอกสารราชการจะถูกจัดเก็บภายใน Local NAS ตามระเบียบสำนักนายกรัฐมนตรีว่าด้วยงานสารบรรณ พ.ศ. 2564
+              <strong>มาตรฐานความปลอดภัย:</strong> เอกสารราชการจะถูกจัดเก็บภายใน Synology NAS ตามระเบียบสำนักนายกรัฐมนตรีว่าด้วยงานสารบรรณ พ.ศ. 2564
             </span>
           </div>
         </div>
@@ -609,6 +803,9 @@ export function NasTab({ showToast }: NasTabProps) {
             <h4 className="text-sm font-bold font-heading text-slate-900">
               📁 สร้างโฟลเดอร์ใหม่บน Synology NAS
             </h4>
+            <div className="text-[11px] text-slate-500">
+              สร้างโฟลเดอร์ย่อยใน: <code className="font-mono text-indigo-600">{currentFolder}</code>
+            </div>
             <form onSubmit={handleCreateFolder} className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">

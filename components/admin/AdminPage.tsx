@@ -157,7 +157,7 @@ export function AdminPage({
             },
             { id: "matrix", label: "🔒 ตารางกำหนดสิทธิ์รายโมดูล (RBAC Matrix)" },
             { id: "audit", label: "📜 ประวัติการเข้าถึง (Audit Logs)", count: auditLogs.length },
-            { id: "nas", label: "💾 Synology NAS (192.168.162.21)" },
+            { id: "nas", label: "💾 ศูนย์จัดการ Synology NAS" },
           ].map((tab) => (
             <button
               key={tab.id}
