@@ -11,7 +11,8 @@ export async function GET(req: NextRequest) {
     const nasUrl =
       searchParams.get("url") ||
       process.env.SYNOLOGY_NAS_URL ||
-      "http://192.168.162.21:5000";
+      process.env.NEXT_PUBLIC_SYNOLOGY_NAS_URL ||
+      "https://nas.smso.site";
 
     const effectiveSid = sid || process.env.SYNOLOGY_SERVICE_SID || "system_chat_session";
 

@@ -4,7 +4,11 @@ import { checkNasHealth } from "@/lib/synology";
 export async function GET(req: NextRequest) {
   try {
     const searchParams = req.nextUrl.searchParams;
-    const nasUrl = searchParams.get("url") || process.env.SYNOLOGY_NAS_URL || "http://192.168.162.21:5000";
+    const nasUrl =
+      searchParams.get("url") ||
+      process.env.SYNOLOGY_NAS_URL ||
+      process.env.NEXT_PUBLIC_SYNOLOGY_NAS_URL ||
+      "https://nas.smso.site";
 
     const status = await checkNasHealth(nasUrl);
 

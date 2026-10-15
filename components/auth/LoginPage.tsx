@@ -14,7 +14,7 @@ import {
   isSupabaseConfigured,
   saveMember,
 } from "@/lib/supabase";
-import { setUserNasSid } from "@/lib/synology";
+import { setUserNasSid, getClientSynologyConfig } from "@/lib/synology";
 import { TurnstileWidget } from "./TurnstileWidget";
 
 interface LoginPageProps {
@@ -33,6 +33,7 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
   const [nasPassword, setNasPassword] = useState("");
   const [showNasPassword, setShowNasPassword] = useState(false);
   const [nasOnline, setNasOnline] = useState(true);
+  const [nasHostLabel, setNasHostLabel] = useState("nas.smso.site");
 
   // Sign In state
   const [email, setEmail] = useState("");
@@ -88,7 +89,20 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
 
   // Test Synology NAS connection on mount
   React.useEffect(() => {
-    fetch("/api/nas/health")
+    const config = getClientSynologyConfig();
+    const targetUrl =
+      config.nasUrl ||
+      process.env.NEXT_PUBLIC_SYNOLOGY_NAS_URL ||
+      "https://nas.smso.site";
+
+    try {
+      const parsedHost = new URL(targetUrl).host;
+      setNasHostLabel(parsedHost);
+    } catch {
+      setNasHostLabel("nas.smso.site");
+    }
+
+    fetch(`/api/nas/health?url=${encodeURIComponent(targetUrl)}`)
       .then((r) => r.json())
       .then((data) => {
         if (data.success && data.data?.online) {
@@ -130,12 +144,19 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
     }
 
     try {
+      const config = getClientSynologyConfig();
+      const targetUrl =
+        config.nasUrl ||
+        process.env.NEXT_PUBLIC_SYNOLOGY_NAS_URL ||
+        "https://nas.smso.site";
+
       const res = await fetch("/api/nas/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           username: nasUsername.trim(),
           password: nasPassword,
+          nasUrl: targetUrl,
         }),
       });
 
@@ -710,7 +731,7 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
                   </span>
                 </div>
                 <span className="font-mono text-[11px] text-indigo-700 bg-white px-2 py-0.5 rounded-md border border-slate-200 font-bold">
-                  192.168.162.21
+                  {nasHostLabel}
                 </span>
               </div>
 

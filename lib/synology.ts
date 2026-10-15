@@ -55,7 +55,7 @@ export const DEFAULT_SYNOLOGY_CONFIG: SynologyConfig = {
   nasUrl:
     process.env.NEXT_PUBLIC_SYNOLOGY_NAS_URL ||
     process.env.SYNOLOGY_NAS_URL ||
-    "http://192.168.162.21:5000",
+    "https://nas.smso.site",
   serviceAccount: "admin",
   sharedFolder: "/virtual-office",
   primaryAuthEnabled: true,
@@ -77,7 +77,17 @@ export function getClientSynologyConfig(): SynologyConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
     if (raw) {
-      return { ...DEFAULT_SYNOLOGY_CONFIG, ...JSON.parse(raw) };
+      const parsed = JSON.parse(raw);
+      // Auto-migrate old local LAN IP to the Cloudflare tunnel domain
+      const latestUrl =
+        process.env.NEXT_PUBLIC_SYNOLOGY_NAS_URL ||
+        process.env.SYNOLOGY_NAS_URL ||
+        "https://nas.smso.site";
+      if (parsed.nasUrl === "http://192.168.162.21:5000" && latestUrl !== "http://192.168.162.21:5000") {
+        parsed.nasUrl = latestUrl;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...DEFAULT_SYNOLOGY_CONFIG, ...parsed }));
+      }
+      return { ...DEFAULT_SYNOLOGY_CONFIG, ...parsed };
     }
   } catch (err) {
     console.warn("Failed to parse Synology config from localStorage:", err);
@@ -342,7 +352,7 @@ export function getUserNasAccount(): string | null {
  */
 export async function listNasShares(
   sid: string,
-  nasUrl: string = "http://192.168.162.21:5000"
+  nasUrl: string = process.env.NEXT_PUBLIC_SYNOLOGY_NAS_URL || "https://nas.smso.site"
 ): Promise<{ success: boolean; shares?: SynologyFileItem[]; error?: string; code?: number }> {
   try {
     if (typeof window !== "undefined") {

@@ -12,7 +12,8 @@ export async function POST(req: NextRequest) {
     const nasUrl =
       (formData.get("url") as string) ||
       process.env.SYNOLOGY_NAS_URL ||
-      "http://192.168.162.21:5000";
+      process.env.NEXT_PUBLIC_SYNOLOGY_NAS_URL ||
+      "https://nas.smso.site";
 
     const serviceAccount =
       (formData.get("service_account") as string) ||

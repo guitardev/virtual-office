@@ -8,7 +8,11 @@ export async function GET(req: NextRequest) {
     const cacheKey = searchParams.get("cache_key");
     const space = searchParams.get("space") || "shared";
     const sid = searchParams.get("sid");
-    const nasUrl = searchParams.get("nasUrl") || process.env.SYNOLOGY_NAS_URL || "http://192.168.162.21:5000";
+    const nasUrl =
+      searchParams.get("nasUrl") ||
+      process.env.SYNOLOGY_NAS_URL ||
+      process.env.NEXT_PUBLIC_SYNOLOGY_NAS_URL ||
+      "https://nas.smso.site";
 
     if (!id || !sid) {
       return new NextResponse("Missing item id or sid", { status: 400 });

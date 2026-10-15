@@ -7,7 +7,11 @@ export async function GET(req: NextRequest) {
     const filename = searchParams.get("filename") || `photo_${id}.jpg`;
     const space = searchParams.get("space") || "shared";
     const sid = searchParams.get("sid");
-    const nasUrl = searchParams.get("nasUrl") || process.env.SYNOLOGY_NAS_URL || "http://192.168.162.21:5000";
+    const nasUrl =
+      searchParams.get("nasUrl") ||
+      process.env.SYNOLOGY_NAS_URL ||
+      process.env.NEXT_PUBLIC_SYNOLOGY_NAS_URL ||
+      "https://nas.smso.site";
 
     if (!id || !sid) {
       return new NextResponse("Missing id or sid", { status: 400 });

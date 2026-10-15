@@ -9,7 +9,11 @@ export async function GET(req: NextRequest) {
     const action = searchParams.get("action");
     const folderPath = searchParams.get("folder_path") || "/virtual-office";
     const sid = searchParams.get("sid");
-    const nasUrl = searchParams.get("url") || process.env.SYNOLOGY_NAS_URL || "http://192.168.162.21:5000";
+    const nasUrl =
+      searchParams.get("url") ||
+      process.env.SYNOLOGY_NAS_URL ||
+      process.env.NEXT_PUBLIC_SYNOLOGY_NAS_URL ||
+      "https://nas.smso.site";
 
     if (!sid) {
       return NextResponse.json(
@@ -38,7 +42,11 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { action, sid, folderPath, folderName, paths, path, newName, nasUrl } = body;
-    const targetUrl = nasUrl || process.env.SYNOLOGY_NAS_URL || "http://192.168.162.21:5000";
+    const targetUrl =
+      nasUrl ||
+      process.env.SYNOLOGY_NAS_URL ||
+      process.env.NEXT_PUBLIC_SYNOLOGY_NAS_URL ||
+      "https://nas.smso.site";
 
     if (!sid) {
       return NextResponse.json(

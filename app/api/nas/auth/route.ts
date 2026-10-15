@@ -14,7 +14,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const targetUrl = nasUrl || process.env.SYNOLOGY_NAS_URL || "http://192.168.162.21:5000";
+    const targetUrl =
+      nasUrl ||
+      process.env.SYNOLOGY_NAS_URL ||
+      process.env.NEXT_PUBLIC_SYNOLOGY_NAS_URL ||
+      "https://nas.smso.site";
 
     // 1. Authenticate against Synology DSM Web API
     const authResult = await loginSynology(username, password, targetUrl);
