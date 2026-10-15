@@ -32,6 +32,96 @@ interface NasPhotoGalleryProps {
   showToast: (msg: string) => void;
 }
 
+function FolderCardItem({
+  folder,
+  currentSpace,
+  userSid,
+  onSelect,
+}: {
+  folder: SynologyPhotoFolder;
+  currentSpace: PhotoSpace;
+  userSid: string | null;
+  onSelect: (folder: SynologyPhotoFolder) => void;
+}) {
+  const [imageError, setImageError] = useState(false);
+  const coverId = folder.cover?.unit_id || folder.cover?.id;
+  const hasValidCover = Boolean(coverId && coverId > 0 && !imageError);
+
+  return (
+    <div
+      onClick={() => onSelect(folder)}
+      className="group bg-white rounded-2xl border border-slate-200/90 shadow-xs hover:shadow-lg hover:border-cyan-400 hover:-translate-y-0.5 transition-all duration-300 overflow-hidden cursor-pointer flex flex-col"
+    >
+      <div className="h-44 bg-gradient-to-br from-slate-100 via-cyan-50/40 to-slate-200 flex items-center justify-center relative overflow-hidden">
+        {hasValidCover && coverId ? (
+          <>
+            <img
+              src={getPhotoThumbnailUrl(
+                coverId,
+                "m",
+                folder.cover?.cache_key,
+                currentSpace,
+                userSid
+              )}
+              alt={folder.name}
+              onError={() => setImageError(true)}
+              className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-500 ease-out"
+              loading="lazy"
+            />
+            {/* Dark gradient overlay for contrast */}
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/20 to-transparent pointer-events-none" />
+
+            {/* Folder badge at top-left */}
+            <div className="absolute top-2.5 left-2.5 px-2.5 py-1 rounded-lg bg-slate-900/75 backdrop-blur-md text-white text-[11px] font-semibold flex items-center gap-1.5 shadow-xs border border-white/15 z-10">
+              <span className="text-cyan-400 text-xs">📁</span>
+              <span>โฟลเดอร์</span>
+            </div>
+
+            {/* Latest Photo Pill at bottom-left */}
+            <div className="absolute bottom-2.5 left-2.5 px-2 py-0.5 rounded-md bg-cyan-600/90 backdrop-blur-md text-white text-[10px] font-medium flex items-center gap-1.5 shadow-xs border border-cyan-400/30 z-10">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-pulse" />
+              <span>ภาพล่าสุด</span>
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col items-center justify-center gap-2 p-4 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-cyan-100/80 text-cyan-700 flex items-center justify-center text-3xl shadow-xs group-hover:scale-110 group-hover:bg-cyan-200/80 transition-all duration-300">
+              📁
+            </div>
+            <span className="text-[11px] text-slate-400 font-medium">โฟลเดอร์กิจกรรม</span>
+          </div>
+        )}
+
+        {/* Item count badge at bottom-right */}
+        <span className="absolute bottom-2.5 right-2.5 px-2.5 py-0.5 rounded-full bg-slate-900/80 text-white text-[10px] font-bold backdrop-blur-md shadow-xs border border-white/15 z-10">
+          {folder.item_count} รายการ
+        </span>
+      </div>
+
+      <div className="p-3.5 flex items-center justify-between gap-2.5 bg-white">
+        <div className="min-w-0 flex-1">
+          <div className="font-bold text-sm text-slate-800 truncate group-hover:text-cyan-700 transition-colors font-heading">
+            {folder.name}
+          </div>
+          <div className="text-[11px] text-slate-400 mt-0.5 truncate flex items-center gap-1">
+            {folder.cover?.filename ? (
+              <>
+                <span className="text-cyan-600 text-[10px]">🖼️</span>
+                <span className="truncate">{folder.cover.filename}</span>
+              </>
+            ) : (
+              <span>คลิกเพื่อเปิดโฟลเดอร์นี้ →</span>
+            )}
+          </div>
+        </div>
+        <div className="w-7 h-7 rounded-full bg-slate-50 group-hover:bg-cyan-50 text-slate-400 group-hover:text-cyan-600 flex items-center justify-center text-xs transition-colors shrink-0 shadow-2xs">
+          ➔
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps) {
   const config = getClientSynologyConfig();
   const [health, setHealth] = useState<SynologyHealthStatus | null>(null);
@@ -1080,48 +1170,13 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                     {folders.map((folder) => (
-                      <div
+                      <FolderCardItem
                         key={folder.id}
-                        onClick={() => handleSelectFolder(folder)}
-                        className="group bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md hover:border-cyan-400 transition-all overflow-hidden cursor-pointer flex flex-col"
-                      >
-                        <div className="h-36 bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center relative overflow-hidden">
-                          {folder.cover ? (
-                            <img
-                              src={getPhotoThumbnailUrl(
-                                folder.cover.unit_id || folder.cover.id || 0,
-                                "m",
-                                folder.cover.cache_key,
-                                currentSpace,
-                                userSid
-                              )}
-                              alt={folder.name}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                              loading="lazy"
-                            />
-                          ) : (
-                            <div className="text-5xl text-cyan-600/60 group-hover:scale-110 transition-transform">
-                              📁
-                            </div>
-                          )}
-                          <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-full bg-slate-900/70 text-white text-[10px] font-bold backdrop-blur-xs">
-                            {folder.item_count} รายการ
-                          </span>
-                        </div>
-                        <div className="p-3.5 flex items-center justify-between gap-2">
-                          <div className="min-w-0">
-                            <div className="font-bold text-sm text-slate-800 truncate group-hover:text-cyan-700 transition-colors">
-                              {folder.name}
-                            </div>
-                            <div className="text-[11px] text-slate-400 mt-0.5">
-                              คลิกเพื่อเปิดโฟลเดอร์นี้ →
-                            </div>
-                          </div>
-                          <span className="text-slate-300 group-hover:text-cyan-600 text-sm transition-colors">
-                            ➔
-                          </span>
-                        </div>
-                      </div>
+                        folder={folder}
+                        currentSpace={currentSpace}
+                        userSid={userSid}
+                        onSelect={handleSelectFolder}
+                      />
                     ))}
                   </div>
                 </div>

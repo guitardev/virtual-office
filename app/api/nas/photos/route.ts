@@ -25,6 +25,9 @@ export async function GET(req: NextRequest) {
 
     const cleanUrl = nasUrl.replace(/\/+$/, "");
 
+    const sortBy = searchParams.get("sort_by");
+    const sortDirection = searchParams.get("sort_direction") || "desc";
+
     // ─── ACTION 1: LIST PHOTO / VIDEO ITEMS ───
     if (action === "list_items") {
       const apiName = space === "shared" ? "SYNO.FotoTeam.Browse.Item" : "SYNO.Foto.Browse.Item";
@@ -34,6 +37,11 @@ export async function GET(req: NextRequest) {
       let queryUrl = `${cleanUrl}/webapi/entry.cgi?api=${apiName}&version=1&method=list&offset=${offset}&limit=${limit}&additional=${additionalParam}&_sid=${encodeURIComponent(
         sid
       )}`;
+      if (sortBy) {
+        queryUrl += `&sort_by=${encodeURIComponent(sortBy)}&sort_direction=${encodeURIComponent(sortDirection)}`;
+      } else {
+        queryUrl += `&sort_direction=${encodeURIComponent(sortDirection)}`;
+      }
       if (albumId) {
         queryUrl += `&album_id=${albumId}`;
       }
@@ -128,8 +136,9 @@ export async function GET(req: NextRequest) {
     // ─── ACTION 3: LIST FOLDERS (ALBUMS BY DIRECTORY) ───
     if (action === "list_folders") {
       const apiName = space === "shared" ? "SYNO.FotoTeam.Browse.Folder" : "SYNO.Foto.Browse.Folder";
+      const itemsApiName = space === "shared" ? "SYNO.FotoTeam.Browse.Item" : "SYNO.Foto.Browse.Item";
       const folderIdParam = folderId !== null && folderId !== undefined ? `&id=${encodeURIComponent(folderId)}` : `&id=0`;
-      const additionalParam = encodeURIComponent(JSON.stringify(["thumbnail"]));
+      const additionalParam = encodeURIComponent(JSON.stringify(["cover", "thumbnail"]));
       const queryUrl = `${cleanUrl}/webapi/entry.cgi?api=${apiName}&version=1&method=list&offset=${offset}&limit=${limit}${folderIdParam}&additional=${additionalParam}&_sid=${encodeURIComponent(
         sid
       )}`;
@@ -142,13 +151,99 @@ export async function GET(req: NextRequest) {
       const data = await res.json();
       if (data.success && data.data) {
         const rawList = data.data.list || [];
-        const folders = rawList.map((f: any) => ({
-          id: f.id,
-          name: f.name,
-          parent: f.parent || 0,
-          item_count: f.item_count || 0,
-          cover: f.additional?.thumbnail || f.cover,
-        }));
+
+        // Helper: Fetch latest photo inside a given folder ID
+        const fetchLatestPhotoInFolder = async (fId: number | string) => {
+          // 1. Try sorting by importtime (date added/imported - "จากที่เพิ่มมาล่าสุด")
+          try {
+            const byImportUrl = `${cleanUrl}/webapi/entry.cgi?api=${itemsApiName}&version=1&method=list&offset=0&limit=1&id_folder=${encodeURIComponent(
+              String(fId)
+            )}&sort_by=importtime&sort_direction=desc&additional=${encodeURIComponent(
+              JSON.stringify(["thumbnail"])
+            )}&_sid=${encodeURIComponent(sid)}`;
+            const r1 = await fetch(byImportUrl, { signal: AbortSignal.timeout(4000) });
+            const d1 = await r1.json();
+            if (d1.success && d1.data?.list?.length > 0) {
+              return d1.data.list[0];
+            }
+          } catch {}
+
+          // 2. Try sorting by takentime (EXIF captured date)
+          try {
+            const byTakenUrl = `${cleanUrl}/webapi/entry.cgi?api=${itemsApiName}&version=1&method=list&offset=0&limit=1&id_folder=${encodeURIComponent(
+              String(fId)
+            )}&sort_by=takentime&sort_direction=desc&additional=${encodeURIComponent(
+              JSON.stringify(["thumbnail"])
+            )}&_sid=${encodeURIComponent(sid)}`;
+            const r2 = await fetch(byTakenUrl, { signal: AbortSignal.timeout(4000) });
+            const d2 = await r2.json();
+            if (d2.success && d2.data?.list?.length > 0) {
+              return d2.data.list[0];
+            }
+          } catch {}
+
+          // 3. Fallback to default newest item without explicit sort_by
+          try {
+            const defaultUrl = `${cleanUrl}/webapi/entry.cgi?api=${itemsApiName}&version=1&method=list&offset=0&limit=1&id_folder=${encodeURIComponent(
+              String(fId)
+            )}&sort_direction=desc&additional=${encodeURIComponent(
+              JSON.stringify(["thumbnail"])
+            )}&_sid=${encodeURIComponent(sid)}`;
+            const r3 = await fetch(defaultUrl, { signal: AbortSignal.timeout(3000) });
+            const d3 = await r3.json();
+            if (d3.success && d3.data?.list?.length > 0) {
+              return d3.data.list[0];
+            }
+          } catch {}
+
+          return null;
+        };
+
+        // Enrich folders in parallel to provide the latest added photo thumbnail
+        const folders = await Promise.all(
+          rawList.map(async (f: any) => {
+            let cover = f.additional?.thumbnail || f.cover;
+
+            // Fetch the latest photo in this folder to ensure preview is from the latest added image
+            let latestPhoto = await fetchLatestPhotoInFolder(f.id);
+
+            // If the folder has no direct photos, check if its first subfolder has photos
+            if (!latestPhoto) {
+              try {
+                const subfolderUrl = `${cleanUrl}/webapi/entry.cgi?api=${apiName}&version=1&method=list&offset=0&limit=1&id=${encodeURIComponent(
+                  String(f.id)
+                )}&_sid=${encodeURIComponent(sid)}`;
+                const subRes = await fetch(subfolderUrl, { signal: AbortSignal.timeout(3000) });
+                const subData = await subRes.json();
+                const firstSub = subData.data?.list?.[0];
+                if (firstSub) {
+                  latestPhoto = await fetchLatestPhotoInFolder(firstSub.id);
+                }
+              } catch {}
+            }
+
+            if (latestPhoto) {
+              cover = {
+                id: latestPhoto.id,
+                unit_id: latestPhoto.id,
+                cache_key: latestPhoto.additional?.thumbnail?.cache_key || latestPhoto.thumbnail?.cache_key,
+                filename: latestPhoto.filename,
+                sm: latestPhoto.additional?.thumbnail?.sm || latestPhoto.thumbnail?.sm,
+                m: latestPhoto.additional?.thumbnail?.m || latestPhoto.thumbnail?.m,
+                xl: latestPhoto.additional?.thumbnail?.xl || latestPhoto.thumbnail?.xl,
+              };
+            }
+
+            return {
+              id: f.id,
+              name: f.name,
+              parent: f.parent || 0,
+              item_count: f.item_count || 0,
+              cover: cover || null,
+            };
+          })
+        );
+
         return NextResponse.json({
           success: true,
           folders,

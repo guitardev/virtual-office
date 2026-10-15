@@ -28,10 +28,24 @@ export async function GET(req: NextRequest) {
       queryUrl += `&cache_key=${encodeURIComponent(cacheKey)}`;
     }
 
-    const res = await fetch(queryUrl, {
+    let res = await fetch(queryUrl, {
       method: "GET",
       signal: AbortSignal.timeout(12000),
     });
+
+    // Fallback to version 1 if version 2 fails
+    if (!res.ok) {
+      const v1Url = `${cleanUrl}/webapi/entry.cgi?api=${apiName}&version=1&method=get&id=${id}&size=${size}&type=unit&_sid=${encodeURIComponent(
+        sid
+      )}${cacheKey ? `&cache_key=${encodeURIComponent(cacheKey)}` : ""}`;
+      const v1Res = await fetch(v1Url, {
+        method: "GET",
+        signal: AbortSignal.timeout(10000),
+      });
+      if (v1Res.ok) {
+        res = v1Res;
+      }
+    }
 
     if (!res.ok) {
       return new NextResponse(`Thumbnail fetch error: HTTP ${res.status}`, { status: res.status });

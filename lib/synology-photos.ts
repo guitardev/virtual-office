@@ -65,6 +65,10 @@ export interface SynologyPhotoFolder {
     unit_id?: number;
     cache_key?: string;
     id?: number;
+    filename?: string;
+    sm?: string;
+    m?: string;
+    xl?: string;
   };
 }
 
@@ -88,7 +92,7 @@ export async function listSynologyPhotos(params: {
 }> {
   try {
     const space = params.space || "shared";
-    const nasUrl = params.nasUrl || "http://192.168.162.21:5000";
+    const nasUrl = params.nasUrl || getClientSynologyConfig().nasUrl || "https://nas.smso.site";
 
     if (typeof window !== "undefined") {
       const queryParams = new URLSearchParams({
@@ -271,7 +275,7 @@ export async function listSynologyFolders(params: {
 }> {
   try {
     const space = params.space || "shared";
-    const nasUrl = params.nasUrl || "http://192.168.162.21:5000";
+    const nasUrl = params.nasUrl || getClientSynologyConfig().nasUrl || "https://nas.smso.site";
 
     if (typeof window !== "undefined") {
       const queryParams = new URLSearchParams({
