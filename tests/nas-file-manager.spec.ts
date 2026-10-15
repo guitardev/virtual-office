@@ -80,6 +80,10 @@ test.describe("ระบบคลังเอกสาร Synology NAS (NAS File
 
     // กำหนดเซสชัน NAS ใน localStorage/sessionStorage ก่อนเปิดโมดูล
     await page.evaluate(() => {
+      localStorage.setItem("smartmso_nas_user_sid", "mock_valid_dsm_sid");
+      localStorage.setItem("smartmso_nas_user_account", "itadmin");
+      sessionStorage.setItem("smartmso_nas_user_sid", "mock_valid_dsm_sid");
+      sessionStorage.setItem("smartmso_nas_user_account", "itadmin");
       localStorage.setItem("omnioffice_nas_user_sid", "mock_valid_dsm_sid");
       localStorage.setItem("omnioffice_nas_user_account", "itadmin");
       sessionStorage.setItem("omnioffice_nas_user_sid", "mock_valid_dsm_sid");

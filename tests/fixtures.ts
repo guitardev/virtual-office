@@ -23,14 +23,13 @@ export const test = base.extend({
         avatarUrl: "",
         avatarText: "สพ",
       };
-      localStorage.setItem(
-        "omnioffice_auth_session",
-        JSON.stringify({
-          user: adminUser,
-          loginTime: "09:00 น.",
-          rememberMe: true,
-        })
-      );
+      const sessionData = JSON.stringify({
+        user: adminUser,
+        loginTime: "09:00 น.",
+        rememberMe: true,
+      });
+      localStorage.setItem("smartmso_auth_session", sessionData);
+      localStorage.setItem("omnioffice_auth_session", sessionData);
     });
 
     await use(page);

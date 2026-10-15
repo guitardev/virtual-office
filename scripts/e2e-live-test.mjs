@@ -85,11 +85,13 @@ async function runLiveTest() {
       avatarUrl: "https://kamphaengphet.m-society.go.th/wp-content/uploads/2024/10/S__2457668.jpg",
       avatarText: "มล",
     };
-    localStorage.setItem("omnioffice_auth_session", JSON.stringify({
+    const sessionData = JSON.stringify({
       user: adminUser,
       loginTime: "09:00 น.",
       rememberMe: true,
-    }));
+    });
+    localStorage.setItem("smartmso_auth_session", sessionData);
+    localStorage.setItem("omnioffice_auth_session", sessionData);
   });
 
   const page = await context.newPage();
@@ -99,10 +101,10 @@ async function runLiveTest() {
     bringChromeToForeground();
 
     // ─── Step 1: Open Virtual Office ───
-    console.log("📍 Step 1: Opening OmniOffice Workspace at http://localhost:3000");
+    console.log("📍 Step 1: Opening Smart MSO Workspace at http://localhost:3000");
     await page.goto("http://localhost:3000", { waitUntil: "networkidle" });
     bringChromeToForeground();
-    await updateLiveBanner(page, "ขั้นตอนที่ 1: เข้าสู่ระบบสำนักงานเสมือน (OmniOffice)");
+    await updateLiveBanner(page, "ขั้นตอนที่ 1: เข้าสู่ระบบสำนักงานเสมือน (Smart MSO)");
     await page.waitForTimeout(2000);
 
     // ─── Step 2: Test User Profile & Fullscreen Modal ───

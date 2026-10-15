@@ -1,5 +1,5 @@
 -- =========================================================================
--- OmniOffice — Database Schema & Initial Seed (Supabase PostgreSQL)
+-- Smart MSO — Database Schema & Initial Seed (Supabase PostgreSQL)
 -- Version: v1.4.5 (Phase 11 Compatible - Fleet, RBAC, Realtime & Live Sync)
 -- =========================================================================
 

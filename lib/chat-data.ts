@@ -100,8 +100,10 @@ export const DEFAULT_CHAT_GROUPS: ChatGroup[] = [
 
 export const INITIAL_CHAT_MESSAGES: ChatMessage[] = [];
 
-const CHAT_GROUPS_STORAGE_KEY = "omnioffice_chat_groups_v2";
-const CHAT_MESSAGES_STORAGE_KEY = "omnioffice_chat_messages_v2";
+const CHAT_GROUPS_STORAGE_KEY = "smartmso_chat_groups_v2";
+const LEGACY_CHAT_GROUPS_STORAGE_KEY = "omnioffice_chat_groups_v2";
+const CHAT_MESSAGES_STORAGE_KEY = "smartmso_chat_messages_v2";
+const LEGACY_CHAT_MESSAGES_STORAGE_KEY = "omnioffice_chat_messages_v2";
 
 /**
  * Synchronize group members based on members' office division
@@ -152,7 +154,9 @@ export function loadStoredChatGroups(allMembers: Member[] = INITIAL_MEMBERS): Ch
   }
 
   try {
-    const raw = localStorage.getItem(CHAT_GROUPS_STORAGE_KEY);
+    const raw =
+      localStorage.getItem(CHAT_GROUPS_STORAGE_KEY) ||
+      localStorage.getItem(LEGACY_CHAT_GROUPS_STORAGE_KEY);
     let loaded: ChatGroup[] = DEFAULT_CHAT_GROUPS;
 
     if (raw) {
@@ -192,7 +196,9 @@ export function loadStoredChatMessages(): ChatMessage[] {
   if (typeof window === "undefined") return [];
 
   try {
-    const raw = localStorage.getItem(CHAT_MESSAGES_STORAGE_KEY);
+    const raw =
+      localStorage.getItem(CHAT_MESSAGES_STORAGE_KEY) ||
+      localStorage.getItem(LEGACY_CHAT_MESSAGES_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];

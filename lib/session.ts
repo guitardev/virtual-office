@@ -23,9 +23,10 @@ export interface ParsedDeviceInfo {
   icon: string;
 }
 
-const STORAGE_KEY_PREFIX = "omnioffice_active_sessions_";
-const CURRENT_SESSION_ID_KEY = "omnioffice_current_session_id";
-const CHANNEL_NAME = "omnioffice_sessions_channel";
+const STORAGE_KEY_PREFIX = "smartmso_active_sessions_";
+const LEGACY_STORAGE_KEY_PREFIX = "omnioffice_active_sessions_";
+const CURRENT_SESSION_ID_KEY = "smartmso_current_session_id";
+const CHANNEL_NAME = "smartmso_sessions_channel";
 
 /**
  * Accurately parses user agent and screen resolution into clean device info
@@ -127,7 +128,9 @@ export function getActiveSessions(userId: string): ActiveSession[] {
 
   const currentId = getCurrentSessionId();
   try {
-    const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${userId}`);
+    const raw =
+      localStorage.getItem(`${STORAGE_KEY_PREFIX}${userId}`) ||
+      localStorage.getItem(`${LEGACY_STORAGE_KEY_PREFIX}${userId}`);
     if (!raw) return [];
 
     const sessions: ActiveSession[] = JSON.parse(raw);
@@ -155,7 +158,7 @@ export function saveActiveSessions(userId: string, sessions: ActiveSession[]) {
       JSON.stringify(sessions)
     );
     window.dispatchEvent(
-      new CustomEvent("omnioffice-sessions-updated", { detail: { userId } })
+      new CustomEvent("smartmso-sessions-updated", { detail: { userId } })
     );
   } catch (e) {
     console.error("Error saving active sessions:", e);
@@ -411,12 +414,14 @@ export function listenSessionRevocation(
   const handleCustomEvent = () => {
     if (onSessionsChange) onSessionsChange();
   };
+  window.addEventListener("smartmso-sessions-updated", handleCustomEvent);
   window.addEventListener("omnioffice-sessions-updated", handleCustomEvent);
 
   return () => {
     if (channel) {
       channel.close();
     }
+    window.removeEventListener("smartmso-sessions-updated", handleCustomEvent);
     window.removeEventListener("omnioffice-sessions-updated", handleCustomEvent);
   };
 }

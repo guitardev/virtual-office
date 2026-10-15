@@ -1,5 +1,5 @@
 /**
- * Synology NAS Integration Engine for OmniOffice / Virtual Office
+ * Synology NAS Integration Engine for Smart MSO / Virtual Office
  * Connects directly to Synology DSM Web API at http://192.168.162.21:5000
  * Handles Authentication (SYNO.API.Auth) and File Station DMS (SYNO.FileStation.*)
  */
@@ -52,7 +52,10 @@ export interface SynologyHealthStatus {
 }
 
 export const DEFAULT_SYNOLOGY_CONFIG: SynologyConfig = {
-  nasUrl: "http://192.168.162.21:5000",
+  nasUrl:
+    process.env.NEXT_PUBLIC_SYNOLOGY_NAS_URL ||
+    process.env.SYNOLOGY_NAS_URL ||
+    "http://192.168.162.21:5000",
   serviceAccount: "admin",
   sharedFolder: "/virtual-office",
   primaryAuthEnabled: true,
@@ -61,7 +64,8 @@ export const DEFAULT_SYNOLOGY_CONFIG: SynologyConfig = {
   updatedAt: new Date().toISOString(),
 };
 
-const STORAGE_KEY = "omnioffice_synology_config";
+const STORAGE_KEY = "smartmso_synology_config";
+const LEGACY_STORAGE_KEY = "omnioffice_synology_config";
 
 /**
  * Retrieve current Synology configuration (client-side)
@@ -71,7 +75,7 @@ export function getClientSynologyConfig(): SynologyConfig {
     return DEFAULT_SYNOLOGY_CONFIG;
   }
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
     if (raw) {
       return { ...DEFAULT_SYNOLOGY_CONFIG, ...JSON.parse(raw) };
     }
@@ -100,7 +104,11 @@ export function saveClientSynologyConfig(config: Partial<SynologyConfig>): Synol
 /**
  * Health check for Synology NAS Web API
  */
-export async function checkNasHealth(nasUrl: string = "http://192.168.162.21:5000"): Promise<SynologyHealthStatus> {
+export async function checkNasHealth(
+  nasUrl: string = process.env.NEXT_PUBLIC_SYNOLOGY_NAS_URL ||
+    process.env.SYNOLOGY_NAS_URL ||
+    "http://192.168.162.21:5000"
+): Promise<SynologyHealthStatus> {
   const startTime = Date.now();
   try {
     // If running in browser, proxy through server API route to bypass CORS
@@ -266,15 +274,22 @@ export function mapFileStationError(code?: number, defaultMsg?: string): string 
   }
 }
 
-const USER_NAS_SID_KEY = "omnioffice_nas_user_sid";
-const USER_NAS_ACCOUNT_KEY = "omnioffice_nas_user_account";
+const USER_NAS_SID_KEY = "smartmso_nas_user_sid";
+const LEGACY_USER_NAS_SID_KEY = "omnioffice_nas_user_sid";
+const USER_NAS_ACCOUNT_KEY = "smartmso_nas_user_account";
+const LEGACY_USER_NAS_ACCOUNT_KEY = "omnioffice_nas_user_account";
 
 /**
  * Retrieve current logged-in user's personal Synology NAS session ID
  */
 export function getUserNasSid(): string | null {
   if (typeof window === "undefined") return null;
-  return sessionStorage.getItem(USER_NAS_SID_KEY) || localStorage.getItem(USER_NAS_SID_KEY);
+  return (
+    sessionStorage.getItem(USER_NAS_SID_KEY) ||
+    localStorage.getItem(USER_NAS_SID_KEY) ||
+    sessionStorage.getItem(LEGACY_USER_NAS_SID_KEY) ||
+    localStorage.getItem(LEGACY_USER_NAS_SID_KEY)
+  );
 }
 
 /**
@@ -284,9 +299,13 @@ export function setUserNasSid(sid: string, account?: string): void {
   if (typeof window === "undefined") return;
   sessionStorage.setItem(USER_NAS_SID_KEY, sid);
   localStorage.setItem(USER_NAS_SID_KEY, sid);
+  sessionStorage.setItem(LEGACY_USER_NAS_SID_KEY, sid);
+  localStorage.setItem(LEGACY_USER_NAS_SID_KEY, sid);
   if (account) {
     sessionStorage.setItem(USER_NAS_ACCOUNT_KEY, account);
     localStorage.setItem(USER_NAS_ACCOUNT_KEY, account);
+    sessionStorage.setItem(LEGACY_USER_NAS_ACCOUNT_KEY, account);
+    localStorage.setItem(LEGACY_USER_NAS_ACCOUNT_KEY, account);
   }
 }
 
@@ -297,8 +316,12 @@ export function clearUserNasSid(): void {
   if (typeof window === "undefined") return;
   sessionStorage.removeItem(USER_NAS_SID_KEY);
   localStorage.removeItem(USER_NAS_SID_KEY);
+  sessionStorage.removeItem(LEGACY_USER_NAS_SID_KEY);
+  localStorage.removeItem(LEGACY_USER_NAS_SID_KEY);
   sessionStorage.removeItem(USER_NAS_ACCOUNT_KEY);
   localStorage.removeItem(USER_NAS_ACCOUNT_KEY);
+  sessionStorage.removeItem(LEGACY_USER_NAS_ACCOUNT_KEY);
+  localStorage.removeItem(LEGACY_USER_NAS_ACCOUNT_KEY);
 }
 
 /**
@@ -306,7 +329,12 @@ export function clearUserNasSid(): void {
  */
 export function getUserNasAccount(): string | null {
   if (typeof window === "undefined") return null;
-  return sessionStorage.getItem(USER_NAS_ACCOUNT_KEY) || localStorage.getItem(USER_NAS_ACCOUNT_KEY);
+  return (
+    sessionStorage.getItem(USER_NAS_ACCOUNT_KEY) ||
+    localStorage.getItem(USER_NAS_ACCOUNT_KEY) ||
+    sessionStorage.getItem(LEGACY_USER_NAS_ACCOUNT_KEY) ||
+    localStorage.getItem(LEGACY_USER_NAS_ACCOUNT_KEY)
+  );
 }
 
 /**

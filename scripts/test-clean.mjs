@@ -24,11 +24,13 @@ async function testCleanKanban() {
       avatarUrl: "https://kamphaengphet.m-society.go.th/wp-content/uploads/2024/10/S__2457668.jpg",
       avatarText: "มล",
     };
-    localStorage.setItem("omnioffice_auth_session", JSON.stringify({
+    const sessionData = JSON.stringify({
       user: adminUser,
       loginTime: "09:00 น.",
       rememberMe: true,
-    }));
+    });
+    localStorage.setItem("smartmso_auth_session", sessionData);
+    localStorage.setItem("omnioffice_auth_session", sessionData);
   });
 
   const page = await context.newPage();

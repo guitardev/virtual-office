@@ -1,7 +1,7 @@
-# 🔍 System Analysis Log — OmniOffice Virtual Office
+# 🔍 System Analysis Log — Smart MSO Virtual Office
 
 > **วันที่จัดทำบันทึก:** 8 ตุลาคม 2569  
-> **ระบบ:** OmniOffice (Virtual Office Management System)  
+> **ระบบ:** Smart MSO (Virtual Office Management System)  
 > **เวอร์ชัน/สถานะ:** Next.js 16 (App Router) + Supabase Hybrid Architecture  
 > **สถานะปัจจุบัน:** Phase 10 Complete (Production-Ready พร้อมประเด็นที่ต้องเก็บตก)
 
@@ -408,7 +408,7 @@ on conflict (id) do update set
 | **Git Status** | Uncommitted | Committed & Pushed to `main` | ซิงก์ขึ้น GitHub เรียบร้อย |
 
 ---
-*บันทึกรายงานนี้จัดทำขึ้นเพื่อใช้เป็นแนวทางมาตรฐานในการพัฒนาและปรับปรุงระบบ OmniOffice Virtual Office*
+*บันทึกรายงานนี้จัดทำขึ้นเพื่อใช้เป็นแนวทางมาตรฐานในการพัฒนาและปรับปรุงระบบ Smart MSO Virtual Office*
 
 ---
 
@@ -416,7 +416,7 @@ on conflict (id) do update set
 
 > **วันที่ทำการวิเคราะห์:** 12 ตุลาคม 2569  
 > **เครื่องมือ:** GitHub MCP Server (Search Repositories & Code Search)  
-> **เป้าหมาย:** สังเคราะห์จุดแข็งของ Open-Source Projects ชั้นนำระดับโลก เพื่อนำมาประยุกต์และปิดช่องว่าง (Gap Analysis) ในการพัฒนาระบบ OmniOffice Virtual Office ให้มีประสิทธิภาพสูงสุด
+> **เป้าหมาย:** สังเคราะห์จุดแข็งของ Open-Source Projects ชั้นนำระดับโลก เพื่อนำมาประยุกต์และปิดช่องว่าง (Gap Analysis) ในการพัฒนาระบบ Smart MSO Virtual Office ให้มีประสิทธิภาพสูงสุด
 
 ---
 
@@ -442,7 +442,7 @@ on conflict (id) do update set
 
 ### 10.2 ตารางเปรียบเทียบความสามารถของระบบ (Comparative Capability Matrix)
 
-| มิติการทำงาน / คุณสมบัติ | OmniOffice (ปัจจุบัน) | โครงการสากลทั่วไป (Benchmark) | ทิศทางการปรับปรุงของ OmniOffice |
+| มิติการทำงาน / คุณสมบัติ | Smart MSO (ปัจจุบัน) | โครงการสากลทั่วไป (Benchmark) | ทิศทางการปรับปรุงของ Smart MSO |
 | :--- | :---: | :---: | :--- |
 | **ความสอดคล้องกับระเบียบราชการไทย (Gov Compliance)** | ⭐️⭐️⭐️⭐️⭐️ (100%) | ⭐️ (0%) | **คงไว้เป็นจุดเด่นหลัก:** รูปแบบตราครุฑ, ลำดับการอนุมัติ 3 ระดับ, ทำเนียบบุคลากรจริง พมจ. |
 | **ระบบสิทธิ์และความปลอดภัย (RBAC & Safeguards)** | ⭐️⭐️⭐️⭐️⭐️ (4 Roles) | ⭐️⭐️⭐️⭐️ (Standard) | มี Root Admin Safeguard และ Session Persistence ครบถ้วน |
@@ -457,12 +457,12 @@ on conflict (id) do update set
 
 ### 10.3 ข้อสรุปเชิงยุทธศาสตร์ (Strategic Positioning)
 
-1. **ไม่เปลี่ยน OmniOffice เป็นเกม RPG 2D:**
+1. **ไม่เปลี่ยน Smart MSO เป็นเกม RPG 2D:**
    * การเลียนแบบ WorkAdventure ในลักษณะเกมเดิน 2D ไม่ตอบโจทย์ระเบียบราชการไทยและผู้บริหารระดับจังหวัดที่ต้องการความรวดเร็วและเป็นทางการ
-   * OmniOffice จะเน้น **Operational Ergonomics** คือ หน้าจอที่สะอาด ชัดเจน โหลดเร็ว พร้อมแถบ **Live Presence Status Bar** ที่บอกสถานะจริงของข้าราชการ 11 ท่าน
+   * Smart MSO จะเน้น **Operational Ergonomics** คือ หน้าจอที่สะอาด ชัดเจน โหลดเร็ว พร้อมแถบ **Live Presence Status Bar** ที่บอกสถานะจริงของข้าราชการ 11 ท่าน
 2. **ชูจุดเด่นด้าน 3-Tier Government Workflow & Audit Readiness:**
    * โมเดลการอนุมัติ 3 ชั้น (ผู้ขอ ➔ หน.ฝ่าย ➔ พมจ.) และแบบฟอร์มตราครุฑ (พมจ.กพ 02/1) เป็นคุณค่าที่ไม่สามารถหาได้จากซอฟต์แวร์สากลตัวใดในโลก
-   * การเพิ่มระบบ Fleet Conflict Guard และการส่งออกข้อมูล Excel สำหรับ สตง. จะทำให้ OmniOffice เป็นแพลตฟอร์มสำนักงานเสมือนภาครัฐที่สมบูรณ์แบบที่สุด
+   * การเพิ่มระบบ Fleet Conflict Guard และการส่งออกข้อมูล Excel สำหรับ สตง. จะทำให้ Smart MSO เป็นแพลตฟอร์มสำนักงานเสมือนภาครัฐที่สมบูรณ์แบบที่สุด
 
 ---
 
@@ -592,7 +592,7 @@ on conflict (id) do update set
 [ เจ้าหน้าที่ / ข้าราชการ พมจ. ]
               │ (HTTPS / HTTP)
               ▼
-   [ OmniOffice Next.js App ]
+   [ Smart MSO Next.js App ]
       │ (Server-Side Proxy - Zero CORS)
       ├─────────────────────────────────────────────────┐
       ▼                                                 ▼
@@ -895,7 +895,7 @@ on conflict (id) do update set
 ### 17.5 การเชื่อมต่อระบบยืนยันตัวตน Synology DSM Session และสิทธิ์ Service Account เพื่อบันทึกไฟล์จริงลงฮาร์ดดิสก์ `/chat_attachments` (DSM Session & Service Account Auto-Upload Architecture)
 
 1. **การวิเคราะห์หาสาเหตุที่มองไม่เห็นไฟล์ใน `/chat_attachments` บนหน้าต่าง DSM File Station (Root Cause Analysis):**
-   - **Cross-Origin Session Boundary:** ผู้ใช้งานล็อกอินเข้าสู่ระบบ Virtual Office (OmniOffice) ที่ `http://localhost:3000` ผ่านระบบ Supabase, LINE หรือ Demo Login ซึ่งทำงานแยกขาดจากระบบรักษาความปลอดภัยของ Synology DSM ที่ `http://192.168.162.21:5000`
+   - **Cross-Origin Session Boundary:** ผู้ใช้งานล็อกอินเข้าสู่ระบบ Virtual Office (Smart MSO) ที่ `http://localhost:3000` ผ่านระบบ Supabase, LINE หรือ Demo Login ซึ่งทำงานแยกขาดจากระบบรักษาความปลอดภัยของ Synology DSM ที่ `http://192.168.162.21:5000`
    - **File Station Permission Requirements:** Synology File Station API (`SYNO.FileStation.Upload`) ไม่อนุญาตให้บุคคลภายนอกเขียนไฟล์ลงฮาร์ดดิสก์จริงของเครื่อง NAS โดยไม่มีเซสชันที่ผ่านการยืนยันตัวตน (DSM `_sid` หรือ Service Account)
    - **Silent Simulation Mode:** ในโค้ดเดิมของ `/api/nas/upload` เมื่อไม่มี DSM Session ID ส่งมา ระบบใช้รหัสเซสชันสำรอง `system_chat_session` ซึ่งไปเข้าเงื่อนไขโหมดจำลอง (Mock Bypass) ส่งค่า `{ success: true, simulated: true }` กลับไป ทำให้หน้าจอแชทคิดว่าบันทึกสำเร็จ แต่ไบต์ของไฟล์ไม่เคยถูกส่งผ่าน Web API เข้าไปเขียนบนดิสก์จริงในโฟลเดอร์ `/chat_attachments`
 

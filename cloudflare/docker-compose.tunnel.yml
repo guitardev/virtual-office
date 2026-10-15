@@ -1,0 +1,23 @@
+version: "3.8"
+
+services:
+  # Cloudflare Tunnel Daemon
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: smartmso-cloudflared
+    restart: unless-stopped
+    # โหมดที่ 1: รันผ่าน Cloudflare Zero Trust Dashboard Token (แนะนำ - ติดตั้งง่ายที่สุด)
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    # โหมดที่ 2: รันผ่านไฟล์ config.yml (หากต้องการตั้งค่า Ingress Rules แบบ local file)
+    # command: tunnel --config /etc/cloudflared/config.yml run
+    # volumes:
+    #   - ./config.yml:/etc/cloudflared/config.yml:ro
+    #   - ./credentials.json:/etc/cloudflared/credentials.json:ro
+    network_mode: "host" # เพื่อให้สามารถเรียก localhost:3000 และ 192.168.162.21:5000 ได้โดยตรง
+    environment:
+      - TUNNEL_METRICS=0.0.0.0:2000
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

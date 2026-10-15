@@ -247,7 +247,7 @@ export default function PrivacyPolicyPage() {
             <div><strong>หน่วยงาน:</strong> สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร (พมจ. กำแพงเพชร)</div>
             <div><strong>ที่อยู่:</strong> ศาลากลางจังหวัดกำแพงเพชร ถนนพหลโยธิน ตำบลหนองปลิง อำเภอเมือง จังหวัดกำแพงเพชร 62000</div>
             <div><strong>โทรศัพท์:</strong> 055-705031 ต่อ 101, 112, 115</div>
-            <div><strong>อีเมล DPO:</strong> <a href="mailto:dpo@m-society.go.th" className="text-indigo-400 hover:underline">dpo@m-society.go.th</a> หรือ <a href="mailto:privacy@omnioffice.internal" className="text-indigo-400 hover:underline">privacy@omnioffice.internal</a></div>
+            <div><strong>อีเมล DPO:</strong> <a href="mailto:dpo@m-society.go.th" className="text-indigo-400 hover:underline">dpo@m-society.go.th</a> หรือ <a href="mailto:privacy@smartmso.internal" className="text-indigo-400 hover:underline">privacy@smartmso.internal</a></div>
           </div>
         </section>
 

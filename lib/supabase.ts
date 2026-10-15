@@ -114,7 +114,8 @@ export function mapMemberToRow(member: Member): any {
   };
 }
 
-const MEMBERS_STORAGE_KEY = "omnioffice_members_cache_v2";
+const MEMBERS_STORAGE_KEY = "smartmso_members_cache_v2";
+const LEGACY_MEMBERS_STORAGE_KEY = "omnioffice_members_cache_v2";
 
 /**
  * Get members from local cache or fallback to INITIAL_MEMBERS
@@ -122,7 +123,9 @@ const MEMBERS_STORAGE_KEY = "omnioffice_members_cache_v2";
 export function getLocalMembers(): Member[] {
   if (typeof window === "undefined") return INITIAL_MEMBERS;
   try {
-    const raw = localStorage.getItem(MEMBERS_STORAGE_KEY);
+    const raw =
+      localStorage.getItem(MEMBERS_STORAGE_KEY) ||
+      localStorage.getItem(LEGACY_MEMBERS_STORAGE_KEY);
     if (!raw) return INITIAL_MEMBERS;
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_MEMBERS;
@@ -302,15 +305,17 @@ export function mapRowToAccessRequest(row: any): AccessRequest {
   };
 }
 
-export const ACCESS_REQUESTS_STORAGE_KEY = "omnioffice_access_requests_cache_v1";
-export const LEGACY_ACCESS_REQUESTS_STORAGE_KEY = "omnioffice_access_requests";
+export const ACCESS_REQUESTS_STORAGE_KEY = "smartmso_access_requests_cache_v1";
+export const LEGACY_ACCESS_REQUESTS_STORAGE_KEY = "smartmso_access_requests";
+export const PREV_LEGACY_ACCESS_REQUESTS_STORAGE_KEY = "omnioffice_access_requests";
 
 export function getLocalAccessRequests(): AccessRequest[] {
   if (typeof window === "undefined") return INITIAL_ACCESS_REQUESTS;
   try {
     const raw =
       localStorage.getItem(ACCESS_REQUESTS_STORAGE_KEY) ||
-      localStorage.getItem(LEGACY_ACCESS_REQUESTS_STORAGE_KEY);
+      localStorage.getItem(LEGACY_ACCESS_REQUESTS_STORAGE_KEY) ||
+      localStorage.getItem(PREV_LEGACY_ACCESS_REQUESTS_STORAGE_KEY);
     if (!raw) return INITIAL_ACCESS_REQUESTS;
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_ACCESS_REQUESTS;
@@ -326,6 +331,7 @@ export function saveLocalAccessRequests(requests: AccessRequest[]) {
     // Persist to both standard key and legacy key for backward compatibility
     localStorage.setItem(ACCESS_REQUESTS_STORAGE_KEY, serialized);
     localStorage.setItem(LEGACY_ACCESS_REQUESTS_STORAGE_KEY, serialized);
+    localStorage.setItem(PREV_LEGACY_ACCESS_REQUESTS_STORAGE_KEY, serialized);
   } catch (e) {
     console.warn("Could not save access requests to localStorage:", e);
   }

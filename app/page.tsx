@@ -95,7 +95,7 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 
-export default function OmniOfficeApp() {
+export default function SmartMSOApp() {
   // ─── AUTH & SESSION STATE ───
   const [currentUser, setCurrentUser] = useState<Member | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
@@ -229,7 +229,9 @@ export default function OmniOfficeApp() {
         setMembers(cachedMembers);
       }
 
-      const savedSession = localStorage.getItem("omnioffice_auth_session");
+      const savedSession =
+        localStorage.getItem("smartmso_auth_session") ||
+        localStorage.getItem("omnioffice_auth_session");
       if (savedSession) {
         const parsed = JSON.parse(savedSession);
         if (parsed?.user) {
@@ -306,7 +308,11 @@ export default function OmniOfficeApp() {
 
               // Fetch freshest pool of members to check for existing record
               const allCurrentMembers = await fetchMembers();
-              const savedLineUserId = typeof window !== "undefined" ? localStorage.getItem("omnioffice_last_line_user_id") : null;
+              const savedLineUserId =
+                typeof window !== "undefined"
+                  ? localStorage.getItem("smartmso_last_line_user_id") ||
+                    localStorage.getItem("omnioffice_last_line_user_id")
+                  : null;
 
               // Match existing member by:
               // 1. Expected LINE ID (usr_line_...) or exact LINE userId
@@ -367,7 +373,7 @@ export default function OmniOfficeApp() {
                   : [memberToLogin, ...prev];
               });
               if (typeof window !== "undefined") {
-                localStorage.setItem("omnioffice_last_line_user_id", memberToLogin.id);
+                localStorage.setItem("smartmso_last_line_user_id", memberToLogin.id);
               }
 
               handleLogin(memberToLogin, true);
@@ -510,6 +516,7 @@ export default function OmniOfficeApp() {
       // Remote session revocation triggered for this device
       if (typeof window !== "undefined") {
         try {
+          localStorage.removeItem("smartmso_auth_session");
           localStorage.removeItem("omnioffice_auth_session");
         } catch (e) {}
       }
@@ -569,7 +576,7 @@ export default function OmniOfficeApp() {
     if (rememberMe && typeof window !== "undefined") {
       try {
         localStorage.setItem(
-          "omnioffice_auth_session",
+          "smartmso_auth_session",
           JSON.stringify({
             user: member,
             loginTime: timeStr,
@@ -608,6 +615,7 @@ export default function OmniOfficeApp() {
     }
     if (typeof window !== "undefined") {
       try {
+        localStorage.removeItem("smartmso_auth_session");
         localStorage.removeItem("omnioffice_auth_session");
       } catch (e) {}
     }
@@ -790,11 +798,13 @@ export default function OmniOfficeApp() {
       setCurrentUserRole(updatedMember.role);
       if (typeof window !== "undefined") {
         try {
-          const savedSession = localStorage.getItem("omnioffice_auth_session");
+          const savedSession =
+            localStorage.getItem("smartmso_auth_session") ||
+            localStorage.getItem("omnioffice_auth_session");
           if (savedSession) {
             const parsed = JSON.parse(savedSession);
             localStorage.setItem(
-              "omnioffice_auth_session",
+              "smartmso_auth_session",
               JSON.stringify({ ...parsed, user: updatedMember })
             );
           }
@@ -1129,11 +1139,13 @@ export default function OmniOfficeApp() {
 
     if (typeof window !== "undefined") {
       try {
-        const savedSession = localStorage.getItem("omnioffice_auth_session");
+        const savedSession =
+          localStorage.getItem("smartmso_auth_session") ||
+          localStorage.getItem("omnioffice_auth_session");
         if (savedSession) {
           const parsed = JSON.parse(savedSession);
           localStorage.setItem(
-            "omnioffice_auth_session",
+            "smartmso_auth_session",
             JSON.stringify({ ...parsed, user: updatedUser })
           );
         }
@@ -1210,7 +1222,11 @@ export default function OmniOfficeApp() {
 
   const handleContinueWithLineProfile = async () => {
     const allCurrentMembers = await fetchMembers();
-    const savedLineUserId = typeof window !== "undefined" ? localStorage.getItem("omnioffice_last_line_user_id") : null;
+    const savedLineUserId =
+      typeof window !== "undefined"
+        ? localStorage.getItem("smartmso_last_line_user_id") ||
+          localStorage.getItem("omnioffice_last_line_user_id")
+        : null;
 
     const existingMember = allCurrentMembers.find((m) => {
       if (savedLineUserId && m.id === savedLineUserId) return true;
@@ -1248,7 +1264,7 @@ export default function OmniOfficeApp() {
     }
 
     if (typeof window !== "undefined") {
-      localStorage.setItem("omnioffice_last_line_user_id", memberToLogin.id);
+      localStorage.setItem("smartmso_last_line_user_id", memberToLogin.id);
     }
     setLineModalNotice(null);
     handleLogin(memberToLogin, true);

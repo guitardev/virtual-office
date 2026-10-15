@@ -1,4 +1,4 @@
-# 🏢 OmniOffice — ระบบออฟฟิศเสมือนสำหรับหน่วยงานภาครัฐและองค์กร (Virtual Office)
+# 🏢 Smart MSO — ระบบออฟฟิศเสมือนสำหรับหน่วยงานภาครัฐและองค์กร (Virtual Office)
 
 ระบบสื่อสาร ทำงานร่วมกัน และบริหารจัดการทรัพยากรภายในองค์กรและหน่วยงานราชการ พัฒนาด้วย **Next.js 16 (App Router)**, **React 19**, **TypeScript** และ **Tailwind CSS v4** พร้อมสถาปัตยกรรมการจัดการสิทธิ์ขั้นสูง (**Granular Role-Based Access Control - RBAC**), ระบบควบคุมวงจรชีวิตโมดูล (Module Lifecycle Management) และโครงสร้างข้อมูลบุคลากรตามระเบียบงานสารบรรณภาครัฐ
 
@@ -27,7 +27,7 @@
 
 ## 🌟 ภาพรวมของระบบและจุดเด่น (Key Highlights)
 
-OmniOffice ได้รับการออกแบบขึ้นเพื่อตอบสนองต่อการทำงานยุคดิจิทัลของหน่วยงานภาครัฐ โดยจำลองสภาพแวดล้อมสำนักงานเสมือน (Virtual Workplace) รวมทั้งโมดูลสื่อสาร งานโครงการ การประชุม และการบริหารยานพาหนะราชการเข้าไว้ในที่เดียว:
+Smart MSO ได้รับการออกแบบขึ้นเพื่อตอบสนองต่อการทำงานยุคดิจิทัลของหน่วยงานภาครัฐ โดยจำลองสภาพแวดล้อมสำนักงานเสมือน (Virtual Workplace) รวมทั้งโมดูลสื่อสาร งานโครงการ การประชุม และการบริหารยานพาหนะราชการเข้าไว้ในที่เดียว:
 
 - 🏛️ **Government-Tailored Schema:** โครงสร้างข้อมูลสอดคล้องกับระเบียบข้าราชการไทย มีคำนำหน้า ชื่อ นามสกุล ชื่อเล่น (`nickname`) ตำแหน่ง กลุ่ม/ฝ่าย เบอร์โต๊ะทำงาน และ Line ID
 - 👥 **Real Personnel Dataset:** ข้อมูลตั้งต้นอ้างอิงจากทำเนียบบุคลากรจริงของ **สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร (พมจ.กำแพงเพชร)**
@@ -193,7 +193,7 @@ virtual-office/
 
 ## 🎛️ ระบบควบคุมและเปิด/ปิดโมดูลระบบ (System Module Controls)
 
-ผู้ดูแลระบบสามารถควบคุมการทำงานของแต่ละโมดูลในระบบ OmniOffice ได้อย่างอิสระ:
+ผู้ดูแลระบบสามารถควบคุมการทำงานของแต่ละโมดูลในระบบ Smart MSO ได้อย่างอิสระ:
 
 ### 1. สวิตช์เปิด/ปิดโมดูลระดับระบบ (System-wide Module Toggling)
 - สลับสถานะเปิดใช้งาน (**Active**) หรือปิดปรับปรุง (**Maintenance**) ของทั้ง 8 โมดูลได้ในคลิกเดียว
@@ -226,7 +226,7 @@ virtual-office/
    - หน้าต่าง **ลืมรหัสผ่าน (Forgot Password Modal)**
    - หน้าต่าง **ขอสิทธิ์เข้าใช้งานใหม่ (Request Access Modal)** รองรับเลือกกลุ่ม/ฝ่ายจริง
 2. **Session Persistence (LocalStorage):**
-   - บันทึกสถานะผู้ใช้งานใน `omnioffice_auth_session`
+   - บันทึกสถานะผู้ใช้งานใน `smartmso_auth_session` (พร้อมรองรับ `omnioffice_auth_session` เดิม)
    - กู้คืนสถานะอัตโนมัติเมื่อเปิดเว็บใหม่หรือกด Refresh
    - มีกลไกป้องกัน SSR Hydration Mismatch
 3. **Logout Confirmation Dialog (`components/auth/LogoutConfirmModal.tsx`):**
@@ -238,7 +238,7 @@ virtual-office/
 ## 🏛️ โครงสร้างข้อมูลบุคลากรภาครัฐ & ทำเนียบจริง (พมจ.กำแพงเพชร)
 
 ### ประเภทบุคลากรภาครัฐ (Personnel Types):
-OmniOffice รองรับการจัดประเภทการจ้างงานและสถานะบุคลากรภาครัฐ 6 กลุ่มหลัก พร้อมระบบ Badge และชุดสีระบุสถานะชัดเจน:
+Smart MSO รองรับการจัดประเภทการจ้างงานและสถานะบุคลากรภาครัฐ 6 กลุ่มหลัก พร้อมระบบ Badge และชุดสีระบุสถานะชัดเจน:
 1. 🏛️ **ข้าราชการ** (`ข้าราชการ`) — ข้าราชการพลเรือนสามัญ
 2. 💼 **ลูกจ้างประจำ** (`ลูกจ้างประจำ`) — ลูกจ้างประจำตามระเบียบกระทรวงการคลัง
 3. 📑 **พนักงานราชการ** (`พนักงานราชการ`) — พนักงานราชการตามกรอบ ก.พ.ร.
@@ -283,7 +283,7 @@ interface Member {
 
 ## 🗄️ ฐานข้อมูลและการเชื่อมต่อสด (Supabase Live & Vercel Marketplace Integration)
 
-ระบบ OmniOffice รองรับการเชื่อมต่อฐานข้อมูลจริงผ่าน **Vercel Marketplace (Integrations > Supabase)** โดยอัตโนมัติ พร้อมระบบ Smart Fallback:
+ระบบ Smart MSO รองรับการเชื่อมต่อฐานข้อมูลจริงผ่าน **Vercel Marketplace (Integrations > Supabase)** โดยอัตโนมัติ พร้อมระบบ Smart Fallback:
 
 ### 1. วิธีเชื่อมต่อผ่าน Vercel Marketplace (1-Click Integration):
 1. **Import Git Project:** ไปที่ [vercel.com/new](https://vercel.com/new) แล้ว Import Repository `guitardev/virtual-office`
@@ -302,7 +302,7 @@ interface Member {
 
 ## 🗺️ แผนผังการพัฒนาต่อเนื่อง (Comprehensive Roadmap - 17 Phases)
 
-แผนการพัฒนาระบบ OmniOffice ถูกออกแบบไว้เป็น 17 ช่วงการทำงาน (Phases) เพื่อยกระดับสู่ระบบปฏิบัติการภาครัฐเสมือนจริงระดับกระทรวง:
+แผนการพัฒนาระบบ Smart MSO ถูกออกแบบไว้เป็น 17 ช่วงการทำงาน (Phases) เพื่อยกระดับสู่ระบบปฏิบัติการภาครัฐเสมือนจริงระดับกระทรวง:
 
 | เฟส (Phase) | ชื่อเฟสและขอบเขตงาน | รายละเอียดทางเทคนิค & คุณสมบัติสำคัญ | สถานะปัจจุบัน |
 |:---:|---|---|:---:|
@@ -328,7 +328,7 @@ interface Member {
 
 ## 🎯 แผนงานในอนาคตจากการวิเคราะห์โครงการสากล (Future Roadmap & GitHub Benchmark)
 
-จากการวิเคราะห์เปรียบเทียบสถาปัตยกรรมของโครงการระบบสำนักงานเสมือนและการจัดสรรทรัพยากรชั้นนำบน GitHub (*makeplane/plane, calcom/cal.com, effective-dev-opensource/Effective-Office, workadventure/workadventure, JittoJoseph/TinyFloor, twentyhq/twenty*) ได้กำหนดแนวทางการยกระดับโครงการ OmniOffice 5 มิติหลัก:
+จากการวิเคราะห์เปรียบเทียบสถาปัตยกรรมของโครงการระบบสำนักงานเสมือนและการจัดสรรทรัพยากรชั้นนำบน GitHub (*makeplane/plane, calcom/cal.com, effective-dev-opensource/Effective-Office, workadventure/workadventure, JittoJoseph/TinyFloor, twentyhq/twenty*) ได้กำหนดแนวทางการยกระดับโครงการ Smart MSO 5 มิติหลัก:
 
 ```mermaid
 graph TD
@@ -339,7 +339,7 @@ graph TD
         B4["Twenty CRM<br/>Advanced Filtering & Audit Export"]
     end
 
-    subgraph OmniOfficeFuture ["แผนงานยกระดับ OmniOffice (Phases 12-17)"]
+    subgraph SmartMSOFuture ["แผนงานยกระดับ Smart MSO (Phases 12-17)"]
         F1["Phase 12: Fleet Smart Scheduling<br/>& Conflict Guard + Gantt View"]
         F2["Phase 13: Live Staff Presence<br/>& Telepresence Status Bar"]
         F3["Phase 14: Executive Analytics<br/>& Audit Export Suite (สตง. Excel)"]
@@ -545,7 +545,7 @@ npx tsc --noEmit
 ### **v1.4.3 (2026-10-11) — Responsive Viewport & Flex-Centering Optimization**
 - 🛡️ **แก้ไขปัญหา Modal ล้นหน้าจอบน PC (Fix Flex-Centering Viewport Overflow):** ปรับปรุงโครงสร้าง CSS ของหน้าต่าง Modal ทั้ง 14 ตัวทั่วระบบ
 - 📜 **แยกส่วนการเลื่อนเนื้อหาอย่างอิสระ:** ล็อกแถบ Header และ Footer ของทุก Modal ให้คงที่ และกำหนด `overflow-y-auto` ที่ตัวเนื้อหาฟอร์ม
-- 💾 **ระบบแคชข้อมูลบุคลากรแบบ Persistent Local Cache (`omnioffice_members_cache_v1`):** บันทึกการแก้ไขข้อมูลสมาชิกลง LocalStorage อัตโนมัติ ป้องกันข้อมูลสูญหายแม้ทำงานในโหมด Offline / In-Memory
+- 💾 **ระบบแคชข้อมูลบุคลากรแบบ Persistent Local Cache (`smartmso_members_cache_v2`):** บันทึกการแก้ไขข้อมูลสมาชิกลง LocalStorage อัตโนมัติ ป้องกันข้อมูลสูญหายแม้ทำงานในโหมด Offline / In-Memory
 
 ### **v1.4.0 (2026-10-11) — Realistic Automotive Fuel Gauge & Vehicle Image System**
 - ⛽ **หน้าปัดเกจน้ำมันเสมือนจริง (Realistic Fuel Gauge UI):** หน้าปัดคลัสเตอร์รถยนต์ มีเข็มวัดองศาจริง, สเกล E-F, โซนแดงเตือน, และไฟเตือนน้ำมันใกล้หมด (Low Fuel Amber LED ⚠️) ตอบสนองแบบ Interactive
@@ -583,5 +583,5 @@ npx tsc --noEmit
 
 - 💻 **Lead Architect & Developer:** GuitarDev
 - 🏛️ **หน่วยงานต้นแบบการออกแบบ:** สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร (พมจ.กำแพงเพชร)
-- 🌐 **ระบบ:** OmniOffice — Next-Generation Virtual Office Platform
+- 🌐 **ระบบ:** Smart MSO — Next-Generation Virtual Office Platform
 - 🔒 **มาตรฐานความปลอดภัย:** Enterprise Role-Based Access Control & Thai Government Electronic Workflow Compliant

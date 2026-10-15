@@ -213,13 +213,17 @@ export const GOVERNMENT_DRIVERS = [
 
 export const INITIAL_BOOKING_REQUESTS: CarBookingRequest[] = [];
 
-const CAR_STORAGE_KEY = "omnioffice_car_bookings_v2";
-const VEHICLES_STORAGE_KEY = "omnioffice_vehicles_v2";
+const CAR_STORAGE_KEY = "smartmso_car_bookings_v2";
+const LEGACY_CAR_STORAGE_KEY = "omnioffice_car_bookings_v2";
+const VEHICLES_STORAGE_KEY = "smartmso_vehicles_v2";
+const LEGACY_VEHICLES_STORAGE_KEY = "omnioffice_vehicles_v2";
 
 export function loadStoredBookings(): CarBookingRequest[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(CAR_STORAGE_KEY);
+    const raw =
+      localStorage.getItem(CAR_STORAGE_KEY) ||
+      localStorage.getItem(LEGACY_CAR_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
@@ -241,7 +245,9 @@ export function saveStoredBookings(bookings: CarBookingRequest[]) {
 export function loadStoredVehicles(): Vehicle[] {
   if (typeof window === "undefined") return INITIAL_VEHICLES;
   try {
-    const raw = localStorage.getItem(VEHICLES_STORAGE_KEY);
+    const raw =
+      localStorage.getItem(VEHICLES_STORAGE_KEY) ||
+      localStorage.getItem(LEGACY_VEHICLES_STORAGE_KEY);
     if (!raw) {
       localStorage.setItem(VEHICLES_STORAGE_KEY, JSON.stringify(INITIAL_VEHICLES));
       return INITIAL_VEHICLES;

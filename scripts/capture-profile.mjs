@@ -5,7 +5,7 @@ async function captureProfile() {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
 
   await context.addInitScript(() => {
-    localStorage.setItem('omnioffice_auth_session', JSON.stringify({
+    const sessionObj = JSON.stringify({
       user: {
         id: 'usr_1',
         prefix: 'นางสาว',
@@ -27,7 +27,9 @@ async function captureProfile() {
       },
       loginTime: '09:00 น.',
       rememberMe: true,
-    }));
+    });
+    localStorage.setItem('smartmso_auth_session', sessionObj);
+    localStorage.setItem('omnioffice_auth_session', sessionObj);
   });
 
   const page = await context.newPage();

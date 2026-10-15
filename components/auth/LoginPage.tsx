@@ -15,6 +15,7 @@ import {
   saveMember,
 } from "@/lib/supabase";
 import { setUserNasSid } from "@/lib/synology";
+import { TurnstileWidget } from "./TurnstileWidget";
 
 interface LoginPageProps {
   onLogin: (member: Member, rememberMe: boolean) => void;
@@ -25,6 +26,7 @@ interface LoginPageProps {
 export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginPageProps) {
   // Auth mode: Synology NAS (Default / Primary) vs Supabase Sign In vs Sign Up
   const [authMode, setAuthMode] = useState<"nas" | "signin" | "signup">("nas");
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   // Synology NAS Sign In state
   const [nasUsername, setNasUsername] = useState("admin");
@@ -106,6 +108,27 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
     setMatchedDirectoryUser(null);
     setIsLoading(true);
 
+    // Verify Cloudflare Turnstile token if available
+    if (turnstileToken) {
+      try {
+        const verifyRes = await fetch("/api/auth/turnstile/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: turnstileToken }),
+        });
+        const verifyData = await verifyRes.json();
+        if (!verifyData.success) {
+          setIsLoading(false);
+          setErrorMessage(
+            "การตรวจสอบความปลอดภัยด้วย Cloudflare Turnstile ไม่ผ่าน กรุณาลองใหม่อีกครั้ง"
+          );
+          return;
+        }
+      } catch (err) {
+        // Fallback gracefully on network error
+      }
+    }
+
     try {
       const res = await fetch("/api/nas/auth", {
         method: "POST",
@@ -159,6 +182,27 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
     setSuccessMessage(null);
     setMatchedDirectoryUser(null);
     setIsLoading(true);
+
+    // Verify Cloudflare Turnstile token if available
+    if (turnstileToken) {
+      try {
+        const verifyRes = await fetch("/api/auth/turnstile/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: turnstileToken }),
+        });
+        const verifyData = await verifyRes.json();
+        if (!verifyData.success) {
+          setIsLoading(false);
+          setErrorMessage(
+            "การตรวจสอบความปลอดภัยด้วย Cloudflare Turnstile ไม่ผ่าน กรุณาลองใหม่อีกครั้ง"
+          );
+          return;
+        }
+      } catch (err) {
+        // Fallback gracefully on network error
+      }
+    }
 
     try {
       const res = await signInWithEmail(email, password);
@@ -730,6 +774,12 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
                 </span>
               </div>
 
+              {/* Cloudflare Turnstile Bot Protection */}
+              <TurnstileWidget
+                onVerify={(tok) => setTurnstileToken(tok)}
+                onExpire={() => setTurnstileToken(null)}
+              />
+
               <button
                 type="submit"
                 disabled={isLoading}
@@ -829,6 +879,12 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
                   <span>⚡</span> Supabase Auth API
                 </span>
               </div>
+
+              {/* Cloudflare Turnstile Bot Protection */}
+              <TurnstileWidget
+                onVerify={(tok) => setTurnstileToken(tok)}
+                onExpire={() => setTurnstileToken(null)}
+              />
 
               <button
                 type="submit"

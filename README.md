@@ -1,4 +1,4 @@
-# 🏢 OmniOffice — ระบบออฟฟิศเสมือนสำหรับหน่วยงานภาครัฐและองค์กร (Virtual Office)
+# 🏢 Smart MSO — ระบบออฟฟิศเสมือนสำหรับหน่วยงานภาครัฐและองค์กร (Virtual Office)
 
 ระบบสื่อสาร ทำงานร่วมกัน และบริหารจัดการทรัพยากรภายในองค์กรและหน่วยงานราชการ พัฒนาด้วย **Next.js 16 (App Router)**, **React 19**, **TypeScript** และ **Tailwind CSS v4** เชื่อมต่อฐานข้อมูลคลาวด์สด **Supabase PostgreSQL & Supabase Auth** พร้อมระบบยืนยันตัวตนผ่าน **Google OAuth** และ **LINE Login SSO**, สถาปัตยกรรมการจัดการสิทธิ์ขั้นสูง (**Granular Role-Based Access Control - RBAC**), ระบบบริหารคำขอสิทธิ์เข้าใช้งานใหม่ (Access Requests E-Workflow) และโครงสร้างข้อมูลบุคลากรตามระเบียบงานสารบรรณภาครัฐ
 
@@ -83,7 +83,7 @@ graph TD
 
 ## 🎯 แผนงานในอนาคตจากการวิเคราะห์โครงการสากล (Future Roadmap & GitHub Benchmark)
 
-จากการวิเคราะห์สถาปัตยกรรมโครงการชั้นนำบน GitHub (อาทิ *Plane, Cal.com, Effective-Office, WorkAdventure, TinyFloor*) ได้กำหนดทิศทางการยกระดับโครงการ OmniOffice ดังนี้:
+จากการวิเคราะห์สถาปัตยกรรมโครงการชั้นนำบน GitHub (อาทิ *Plane, Cal.com, Effective-Office, WorkAdventure, TinyFloor*) ได้กำหนดทิศทางการยกระดับโครงการ Smart MSO ดังนี้:
 
 ### 1. ระบบตรวจจับเวลาจองซ้อนทับและปฏิทินตารางการใช้รถ (Fleet Smart Scheduling & Conflict Guard)
 - **Automatic Overlap Conflict Guard:** ตรวจสอบช่วงเวลา (`departureTime` ถึง `returnTime`) ของรถยนต์แต่ละคัน หากมีคำขอที่ได้รับอนุมัติหรืออยู่ระหว่างตรวจสอบทับซ้อนกัน ระบบจะบล็อกหรือแจ้งเตือนทันทีก่อนส่งคำขอ
