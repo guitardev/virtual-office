@@ -538,6 +538,38 @@ export async function listNasFiles(
 }
 
 /**
+ * Map error code from SYNO.FileStation.CreateFolder to Thai description
+ */
+export function mapCreateFolderError(code?: number, folderPath?: string, name?: string): string | null {
+  switch (code) {
+    case 101:
+      return "พารามิเตอร์ของระบบ Synology ไม่ถูกต้อง (Code 101: Invalid parameter)";
+    case 119:
+      return "เซสชัน Synology หมดอายุหรือไม่ถูกต้อง กรุณาเข้าสู่ระบบใหม่ (Code 119)";
+    case 400:
+      return "ไม่พบโฟลเดอร์แม่ หรือพารามิเตอร์ไม่ถูกต้อง (Code 400)";
+    case 408:
+      return `ไม่มีสิทธิ์สร้างโฟลเดอร์ใน "${folderPath}" (Permission Denied ตามสิทธิ์บัญชี DSM ของคุณ)`;
+    case 414:
+      return `มีโฟลเดอร์หรือไฟล์ชื่อ "${name}" อยู่แล้วในตำแหน่งนี้ (Code 414)`;
+    case 418:
+      return "ไม่มีสิทธิ์สร้างโฟลเดอร์ (Permission Denied: สิทธิ์บัญชีไม่เพียงพอใน DSM Control Panel)";
+    case 1000:
+      return `การสร้างโฟลเดอร์ล้มเหลว (Code 1000: กรุณาตรวจสอบว่ามีสิทธิ์เขียนในโฟลเดอร์ "${folderPath}")`;
+    case 1001:
+      return `ชื่อโฟลเดอร์ "${name}" ซ้ำกับโฟลเดอร์ที่มีอยู่แล้ว`;
+    case 1002:
+      return "ไม่สามารถสร้างโฟลเดอร์ในตำแหน่งนี้ได้ (ตำแหน่งนี้ไม่อนุญาตให้แก้ไข)";
+    case 1003:
+      return "ชื่อโฟลเดอร์ยาวเกินกว่าที่ระบบรองรับ";
+    case 1004:
+      return "ชื่อโฟลเดอร์มีอักขระพิเศษที่ไม่ได้รับอนุญาต (ห้ามมีเครื่องหมาย : หรือ /)";
+    default:
+      return null;
+  }
+}
+
+/**
  * Create a new directory inside Synology File Station
  */
 export async function createNasFolder(
@@ -545,8 +577,19 @@ export async function createNasFolder(
   folderPath: string,
   name: string,
   nasUrl: string = DEFAULT_SYNOLOGY_CONFIG.nasUrl
-): Promise<{ success: boolean; folder?: any; error?: string }> {
+): Promise<{ success: boolean; folder?: any; error?: string; code?: number }> {
   try {
+    if (!folderPath || folderPath === "/" || folderPath === "root") {
+      return {
+        success: false,
+        error: "ไม่สามารถสร้างโฟลเดอร์ที่ตำแหน่ง Root ได้ กรุณาเข้าไปใน Shared Folder (เช่น /virtual-office, /photo, หรือ /home) ก่อนสร้างโฟลเดอร์",
+        code: 408,
+      };
+    }
+
+    const cleanName = name.trim();
+    const cleanFolderPath = folderPath.replace(/\/+$/, "");
+
     // If in browser, proxy through POST /api/nas/files
     if (typeof window !== "undefined") {
       const res = await fetch("/api/nas/files", {
@@ -555,8 +598,8 @@ export async function createNasFolder(
         body: JSON.stringify({
           action: "create_folder",
           sid,
-          folderPath,
-          folderName: name,
+          folderPath: cleanFolderPath,
+          folderName: cleanName,
           nasUrl,
         }),
       });
@@ -565,22 +608,52 @@ export async function createNasFolder(
     }
 
     const cleanUrl = nasUrl.replace(/\/+$/, "");
-    const url = `${cleanUrl}/webapi/entry.cgi?api=SYNO.FileStation.CreateFolder&version=2&method=create&folder_path=${encodeURIComponent(
-      folderPath
-    )}&name=${encodeURIComponent(name)}&_sid=${encodeURIComponent(sid)}`;
 
-    const res = await fetch(url, {
-      method: "GET",
-      signal: AbortSignal.timeout(8000),
-    });
+    // Helper to send CreateFolder request
+    const sendCreateRequest = async (asJsonArray: boolean) => {
+      const folderParam = asJsonArray ? JSON.stringify([cleanFolderPath]) : cleanFolderPath;
+      const nameParam = asJsonArray ? JSON.stringify([cleanName]) : cleanName;
+      const url = `${cleanUrl}/webapi/entry.cgi?api=SYNO.FileStation.CreateFolder&version=2&method=create&folder_path=${encodeURIComponent(
+        folderParam
+      )}&name=${encodeURIComponent(nameParam)}&force_parent=true&_sid=${encodeURIComponent(sid)}`;
 
-    const data = await safeParseJsonResponse(res);
-    if (data.success) {
-      return { success: true, folder: data.data };
+      const res = await fetch(url, {
+        method: "GET",
+        signal: AbortSignal.timeout(8000),
+      });
+
+      return await safeParseJsonResponse(res);
+    };
+
+    // Attempt 1: Standard DSM 7 JSON-array format (folder_path=["/path"]&name=["folder"])
+    let data = await sendCreateRequest(true);
+
+    // Fallback: If Code 101 (Invalid parameter), retry with plain string format
+    if (!data.success && (data.error?.code === 101 || data.code === 101)) {
+      data = await sendCreateRequest(false);
     }
-    return { success: false, error: data.error?.message || "ไม่สามารถสร้างโฟลเดอร์บน NAS ได้" };
+
+    if (data.success) {
+      const createdFolder = data.data?.folders?.[0] || data.data;
+      return { success: true, folder: createdFolder };
+    }
+
+    const errorCode = (typeof data.error === "object" ? data.error?.code : data.code) || 0;
+    const errorMsg =
+      mapCreateFolderError(errorCode, cleanFolderPath, cleanName) ||
+      (typeof data.error === "string" ? data.error : data.error?.message) ||
+      "ไม่สามารถสร้างโฟลเดอร์บน Synology NAS ได้";
+
+    return {
+      success: false,
+      error: errorMsg,
+      code: errorCode,
+    };
   } catch (err: any) {
-    return { success: false, error: err?.message };
+    return {
+      success: false,
+      error: err?.message || "เกิดข้อผิดพลาดในการเชื่อมต่อเพื่อสร้างโฟลเดอร์",
+    };
   }
 }
 

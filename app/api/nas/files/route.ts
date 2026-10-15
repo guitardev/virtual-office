@@ -56,13 +56,22 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === "create_folder") {
-      if (!folderName) {
+      if (!folderName || !folderName.trim()) {
         return NextResponse.json(
-          { success: false, error: "Folder name is required" },
+          { success: false, error: "กรุณาระบุชื่อโฟลเดอร์ที่ต้องการสร้าง" },
           { status: 400 }
         );
       }
-      const res = await createNasFolder(sid, folderPath || "/virtual-office", folderName, targetUrl);
+      if (!folderPath || folderPath === "/" || folderPath === "root") {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "ไม่สามารถสร้างโฟลเดอร์ที่ตำแหน่ง Root (/) ได้ กรุณาเข้าไปในโฟลเดอร์แชร์ (เช่น /virtual-office, /photo, หรือ /home) ก่อนสร้างโฟลเดอร์",
+          },
+          { status: 400 }
+        );
+      }
+      const res = await createNasFolder(sid, folderPath, folderName.trim(), targetUrl);
       return NextResponse.json(res);
     }
 
