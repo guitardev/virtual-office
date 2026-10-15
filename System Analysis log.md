@@ -1131,3 +1131,31 @@ on conflict (id) do update set
 - **Production Build:** รัน `npm run build` ผ่านสมบูรณ์ 100% (0 errors, Type check สำเร็จ)
 - **Automated Browser Visual Test:** ทดสอบบันทึกภาพหน้าจอจริงผ่าน Playwright Browser พบว่าหน้าจอแสดงผลเฉพาะสถานะ `🟢 ออนไลน์ (Online)` อย่างสวยงาม ไร้ข้อมูล URL/IP รั่วไหล 100%
 - **End-to-End Test Suite:** อัปเดตชุดทดสอบ `nas-file-manager.spec.ts` และ `nas-photo-gallery.spec.ts` รองรับการทำงานแบบ Endpoint Masking ผ่านฉลุย
+
+---
+
+## 23. การพัฒนาระบบ Drag & Drop File Upload สำหรับคลังเอกสารและคลังภาพและสื่อ (Native Drag & Drop Integration)
+> **สถานะปัจจุบัน:** ✅ **ดำเนินการเสร็จสิ้นสมบูรณ์ 100% (Fully Functional & Tested)**  
+> **วันเวลาที่ดำเนินการ:** 15 ตุลาคม 2569 เวลา 17:30 น.
+
+### 23.1 ความสามารถและสถาปัตยกรรมการทำงาน (Feature Architecture)
+รองรับการลากไฟล์จากเครื่องคอมพิวเตอร์ (Windows File Explorer, macOS Finder) มาปล่อย (Drop) ลงบนหน้าจอเว็บเพื่ออัปโหลดตรงขึ้นสู่ **Synology NAS (File Station & Synology Photos)** ได้ทันทีโดยไม่ต้องเปิดกล่องเลือกไฟล์:
+
+1. **คลังเอกสารราชการ ([NasFileManager.tsx](file:///c:/Users/GuitarDev/virtual-office/components/dms/NasFileManager.tsx)):**
+   - **Full-zone Drag Detection:** ตรวจจับเมื่อผู้ใช้ลากไฟล์เข้ามายังพื้นที่ File Explorer พร้อมกลไก `dragCounter` ป้องกันอาการกระพริบเมื่อเมาส์เลื่อนผ่าน Child Elements
+   - **Interactive Visual Overlay:** แสดงกรอบ Dash Border สีคราม และไอคอนกล่องรับไฟล์แอนิเมชัน `📥` พร้อมระบุชื่อโฟลเดอร์ปลายทางที่กำลังจะจัดเก็บอย่างชัดเจน
+   - **Batch Multi-file Upload:** รองรับการลากไฟล์มาปล่อยพร้อมกันหลายไฟล์ ระบบจะส่งคำขออัปโหลดไปยัง `/api/nas/upload` พร้อมแสดงแจ้งเตือน Toast สรุปจำนวนไฟล์ที่สำเร็จ
+   - **Guard Protection:** หากผู้ใช้อยู่ที่หน้าหลัก (Root) โดยยังไม่ได้เปิดโฟลเดอร์แชร์ ระบบจะแจ้งเตือนให้คลิกเลือกโฟลเดอร์ปลายทางก่อน เพื่อป้องกันไฟล์ตกหล่น
+   - **File Picker Enhancement:** เพิ่มแอตทริบิวต์ `multiple` ในปุ่มเลือกไฟล์ปกติให้รองรับการเลือกหลายไฟล์พร้อมกันเช่นเดียวกัน
+
+2. **คลังภาพและสื่อราชการ ([NasPhotoGallery.tsx](file:///c:/Users/GuitarDev/virtual-office/components/gallery/NasPhotoGallery.tsx)):**
+   - **Window-wide Drop Overlay:** เมื่อลากไฟล์รูปภาพหรือวิดีโอเข้ามายังหน้าต่างคลังภาพ จะปรากฏ Overlay แสงสีฟ้า-ครามสุดพรีเมียม `📸` ลอยขึ้นมาครอบคลุมหน้าจอ พร้อมระบุปลายทางระหว่าง `Shared Space (/photo)` หรือ `Personal Space (/home/Photos)` และโฟลเดอร์ย่อยที่เปิดอยู่
+   - **Media Format Filtering:** คัดกรองและยอมรับเฉพาะไฟล์ภาพถ่ายและวิดีโอที่ Synology Photos รองรับ (JPG, JPEG, PNG, WEBP, GIF, SVG, BMP, MP4, MOV, AVI, MKV, HEIC) หากลากไฟล์ประเภทอื่นมาวาง ระบบจะแจ้งเตือนแนะนำอย่างสุภาพ
+   - **Auto-Refresh Gallery & Albums:** เมื่ออัปโหลดเสร็จสิ้น ระบบจะโหลดคลังภาพใหม่ทันทีแบบไร้รอยต่อ
+
+### 23.2 ผลการทดสอบ (Verification & Testing)
+- **Turbopack Production Build:** ผ่านสมบูรณ์ `100% (Compiled in 1219ms, 0 errors)`
+- **Playwright Automated Test Suite:**
+  - รัน `npx playwright test tests/nas-file-manager.spec.ts tests/nas-photo-gallery.spec.ts`
+  - ผลลัพธ์: **ผ่านครบทั้ง 7 การทดสอบ 100% (7 passed, 18.9s)**
+

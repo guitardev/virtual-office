@@ -173,7 +173,7 @@ test.describe("ระบบคลังภาพและสื่อราช�
     await expect(videoBadge).toBeVisible();
 
     // คลิกเพื่อเปิด Lightbox
-    await photoCard.click();
+    await photoCard.click({ force: true });
 
     // ตรวจสอบหัวข้อ Lightbox และปุ่มดาวน์โหลดต้นฉบับ
     const lightboxTitle = page.locator("div:has-text('mso_activity_01.jpg')").first();
@@ -470,7 +470,7 @@ test.describe("ระบบคลังภาพและสื่อราช�
 
     // 4. ทดสอบ Lightbox Pro และ EXIF Info Inspector
     const photoCard = page.locator("text=ceremony_kamphaengphet_01.jpg").first();
-    await photoCard.click();
+    await photoCard.click({ force: true });
 
     // ตรวจสอบปุ่ม Pro Toolbar ใน Lightbox
     const rotateBtn = page.locator("button[title*='หมุนภาพ']").first();

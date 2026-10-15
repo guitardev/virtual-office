@@ -171,6 +171,8 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
 
   // Direct NAS media upload
   const [isUploading, setIsUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounter = React.useRef(0);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   // Folder & Album-by-Folder state
@@ -715,13 +717,26 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
     }
   };
 
-  // Direct media upload handler to NAS
-  const handleUploadFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0 || !userSid) return;
+  // ─── DIRECT MEDIA UPLOAD & DRAG-AND-DROP TO NAS ───
+  const uploadFileList = async (fileList: FileList | File[]) => {
+    if (!fileList || fileList.length === 0 || !userSid) return;
+    const fileArray = Array.from(fileList);
+
+    // Filter valid image and video formats
+    const validMedia = fileArray.filter(
+      (f) =>
+        f.type.startsWith("image/") ||
+        f.type.startsWith("video/") ||
+        /\.(jpe?g|png|gif|webp|svg|bmp|mp4|mov|avi|mkv|heic)$/i.test(f.name)
+    );
+
+    if (validMedia.length === 0) {
+      showToast("⚠️ กรุณาเลือกหรือวางเฉพาะไฟล์ภาพหรือวิดีโอ (JPG, PNG, WEBP, MP4, ฯลฯ)");
+      return;
+    }
 
     setIsUploading(true);
-    showToast(`⏳ กำลังอัปโหลด ${files.length} ไฟล์เข้าสู่ Synology Photos...`);
+    showToast(`⏳ กำลังอัปโหลด ${validMedia.length} ไฟล์เข้าสู่ Synology Photos...`);
 
     const basePath = currentSpace === "shared" ? "/photo" : "/home/Photos";
     let destFolderPath: string;
@@ -743,8 +758,8 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
     try {
       let successCount = 0;
       let lastErrorMessage = "";
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+      for (let i = 0; i < validMedia.length; i++) {
+        const file = validMedia[i];
         const formData = new FormData();
         formData.append("file", file);
         formData.append("folder_path", destFolderPath);
@@ -763,10 +778,10 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
         }
       }
 
-      if (successCount === files.length) {
+      if (successCount === validMedia.length) {
         showToast(`✅ อัปโหลดสำเร็จทั้ง ${successCount} ไฟล์ เข้าสู่ "${destFolderPath}"`);
       } else if (successCount > 0) {
-        showToast(`⚠️ อัปโหลดสำเร็จ ${successCount}/${files.length} ไฟล์ (${lastErrorMessage})`);
+        showToast(`⚠️ อัปโหลดสำเร็จ ${successCount}/${validMedia.length} ไฟล์ (${lastErrorMessage})`);
       } else {
         showToast(`❌ อัปโหลดไฟล์ล้มเหลว: ${lastErrorMessage || "Synology NAS ปฏิเสธการเขียนไฟล์"}`);
       }
@@ -781,6 +796,48 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleUploadFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      await uploadFileList(e.target.files);
+    }
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current++;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current--;
+    if (dragCounter.current <= 0) {
+      setIsDragging(false);
+      dragCounter.current = 0;
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "copy";
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounter.current = 0;
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      await uploadFileList(e.dataTransfer.files);
     }
   };
 
@@ -895,7 +952,7 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
               </div>
 
               {/* Hover Info Overlay */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-2.5 flex flex-col justify-end text-white pointer-events-none">
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-2.5 flex flex-col justify-end text-white">
                 <div className="text-xs font-bold truncate leading-tight drop-shadow-xs">{item.filename}</div>
                 <div className="text-[10px] text-slate-300 mt-0.5 flex items-center justify-between">
                   <span>{formatPhotoTime(item.time).split(" ")[0]}</span>
@@ -996,7 +1053,37 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
         </div>
       ) : (
         /* ─── MAIN GALLERY INTERFACE ─── */
-        <div className="space-y-5">
+        <div
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+          className={`relative space-y-5 rounded-3xl transition-all ${
+            isDragging ? "ring-2 ring-cyan-500/50" : ""
+          }`}
+        >
+          {/* Drag & Drop Visual Overlay */}
+          {isDragging && (
+            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex flex-col items-center justify-center p-6 text-center animate-fadeIn pointer-events-none">
+              <div className="w-24 h-24 rounded-3xl bg-gradient-to-tr from-cyan-500 to-indigo-600 text-white flex items-center justify-center text-5xl shadow-2xl animate-bounce mb-4">
+                📸
+              </div>
+              <h3 className="text-xl font-bold text-white font-heading">
+                ปล่อยไฟล์ภาพหรือวิดีโอที่นี่เพื่ออัปโหลด
+              </h3>
+              <p className="text-sm text-cyan-200 mt-1 max-w-lg">
+                กำลังอัปโหลดเข้าสู่:{" "}
+                <span className="font-bold underline text-white">
+                  {currentSpace === "shared" ? "พื้นที่ส่วนกลาง (Shared Space)" : "พื้นที่ส่วนตัว (Personal Space)"}
+                  {selectedFolder ? ` > ${selectedFolder.name}` : ""}
+                </span>
+              </p>
+              <div className="mt-4 px-4 py-1.5 rounded-full bg-white/20 border border-white/30 text-xs font-semibold text-white shadow-lg">
+                รองรับไฟล์ภาพถ่ายและวิดีโอทุกประเภท (JPG, PNG, WEBP, GIF, MP4, MOV, HEIC ฯลฯ)
+              </div>
+            </div>
+          )}
+
           {/* Controls Bar: Space Selector, Filter Tabs, Batch & Tools */}
           <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-3.5">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -1173,7 +1260,7 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isUploading}
                   className="px-3.5 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  title="อัปโหลดภาพหรือวิดีโอตรงเข้าสู่ Synology Photos"
+                  title="คลิกเพื่อเลือกไฟล์ หรือลากภาพ/วิดีโอมาวางบนหน้านี้ได้โดยตรง (Drag & Drop Supported)"
                 >
                   <span>{isUploading ? "⏳" : "📤"}</span>
                   <span>{isUploading ? "กำลังอัปโหลด..." : "อัปโหลดภาพ"}</span>
@@ -1431,7 +1518,7 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                   className="px-3 py-1.5 rounded-xl bg-white/90 hover:bg-white text-slate-700 font-bold text-xs transition-all border border-slate-300 shadow-xs flex items-center gap-1.5 cursor-pointer"
                 >
                   <span>{showSharedSpaceGuide ? "▲" : "📖"}</span>
-                  <span>{showSharedSpaceGuide ? "ซ่อนขั้นตอนการตั้งค่า DSM" : "วิธีตั้งค่าสิทธิ์ Shared Space บน DSM"}</span>
+                  <span>{showSharedSpaceGuide ? "ซ่อนขั้นตอนการตั้งค่า DSM" : "วิธีเปิดใช้งาน Shared Space บน Synology DSM"}</span>
                 </button>
               </div>
 
@@ -1440,7 +1527,7 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                 <div className="mt-3 p-3.5 rounded-xl bg-white/95 border border-amber-200 text-slate-700 text-xs space-y-2">
                   <div className="font-bold text-slate-800 flex items-center gap-1.5">
                     <span>💡</span>
-                    <span>คู่มือการตั้งค่าสิทธิ์ Synology Photos &amp; พื้นที่จัดเก็บบน DSM:</span>
+                    <span>ขั้นตอนการเปิดใช้งาน Shared Space สำหรับผู้ดูแลระบบ Synology (DSM)</span>
                   </div>
 
                   <div className="space-y-3 text-slate-600 pl-1 leading-relaxed">
@@ -1945,7 +2032,7 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                 title="ดาวน์โหลดไฟล์ต้นฉบับ"
               >
                 <span>⬇️</span>
-                <span className="hidden sm:inline">ดาวน์โหลด</span>
+                <span className="hidden sm:inline">ดาวน์โหลดต้นฉบับ</span>
               </a>
 
               {/* Delete button (NAS permissions) */}

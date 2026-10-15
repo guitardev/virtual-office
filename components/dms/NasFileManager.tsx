@@ -53,6 +53,8 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
   // Upload state
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounter = useRef(0);
 
   // Preview state
   const [previewFile, setPreviewFile] = useState<SynologyFileItem | null>(null);
@@ -191,34 +193,50 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
     setCurrentPath("");
   };
 
-  // ─── FILE OPERATIONS ───
-  const handleUploadFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !userSid) return;
+  // ─── FILE OPERATIONS & DRAG-AND-DROP UPLOAD ───
+  const uploadFileList = async (fileList: FileList | File[]) => {
+    if (!fileList || fileList.length === 0 || !userSid) return;
     if (!currentPath) {
-      showToast("⚠️ กรุณาเลือกโฟลเดอร์แชร์ปลายทางก่อนอัปโหลดไฟล์");
+      showToast("⚠️ กรุณาคลิกเลือกโฟลเดอร์แชร์ปลายทางก่อนอัปโหลดไฟล์");
       return;
     }
 
+    const filesToUpload = Array.from(fileList);
     setIsUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("folder_path", currentPath);
-      formData.append("sid", userSid);
-      formData.append("url", config.nasUrl);
+    showToast(`⏳ กำลังอัปโหลด ${filesToUpload.length} ไฟล์ไปยัง Synology NAS...`);
 
-      const res = await fetch("/api/nas/upload", {
-        method: "POST",
-        body: formData,
-      });
-      const data = await safeParseJsonResponse(res);
-      if (data.success) {
-        showToast(`📤 อัปโหลด "${file.name}" ไปยัง Synology NAS สำเร็จ`);
-        loadFolderContents(userSid, currentPath);
-      } else {
-        showToast(`❌ อัปโหลดไฟล์ล้มเหลว: ${data.error}`);
+    let successCount = 0;
+    let lastError = "";
+
+    try {
+      for (let i = 0; i < filesToUpload.length; i++) {
+        const file = filesToUpload[i];
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("folder_path", currentPath);
+        formData.append("sid", userSid);
+        formData.append("url", config.nasUrl);
+
+        const res = await fetch("/api/nas/upload", {
+          method: "POST",
+          body: formData,
+        });
+        const data = await safeParseJsonResponse(res);
+        if (data.success) {
+          successCount++;
+        } else {
+          lastError = data.error || "Synology NAS ปฏิเสธการอัปโหลด";
+        }
       }
+
+      if (successCount === filesToUpload.length) {
+        showToast(`📤 อัปโหลดสำเร็จทั้ง ${successCount} ไฟล์ เข้าสู่ "${currentPath}"`);
+      } else if (successCount > 0) {
+        showToast(`⚠️ อัปโหลดสำเร็จ ${successCount}/${filesToUpload.length} ไฟล์ (${lastError})`);
+      } else {
+        showToast(`❌ อัปโหลดไฟล์ล้มเหลว: ${lastError || "Synology NAS ปฏิเสธการเขียนไฟล์"}`);
+      }
+      loadFolderContents(userSid, currentPath);
     } catch (err: any) {
       showToast(`❌ เกิดข้อผิดพลาดในการอัปโหลด: ${err?.message}`);
     } finally {
@@ -226,6 +244,52 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
+    }
+  };
+
+  const handleUploadFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      await uploadFileList(e.target.files);
+    }
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current++;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current--;
+    if (dragCounter.current <= 0) {
+      setIsDragging(false);
+      dragCounter.current = 0;
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "copy";
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounter.current = 0;
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      if (!currentPath) {
+        showToast("⚠️ กรุณาคลิกเลือกโฟลเดอร์แชร์ปลายทางก่อนวางไฟล์เพื่ออัปโหลด");
+        return;
+      }
+      await uploadFileList(e.dataTransfer.files);
     }
   };
 
@@ -386,7 +450,37 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
         </div>
       ) : (
         /* ─── MAIN FILE EXPLORER ─── */
-        <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4">
+        <div
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+          className={`relative p-5 rounded-2xl bg-white border shadow-sm space-y-4 transition-all ${
+            isDragging
+              ? "border-indigo-500 ring-2 ring-indigo-500/20 bg-indigo-50/10"
+              : "border-slate-200"
+          }`}
+        >
+          {/* Drag & Drop Visual Overlay */}
+          {isDragging && (
+            <div className="absolute inset-0 z-30 rounded-2xl bg-white/95 backdrop-blur-xs border-2 border-dashed border-indigo-500 flex flex-col items-center justify-center p-6 text-center animate-fadeIn pointer-events-none">
+              <div className="w-16 h-16 rounded-2xl bg-indigo-600 text-white flex items-center justify-center text-3xl shadow-lg animate-bounce mb-2">
+                📥
+              </div>
+              <h3 className="text-base font-bold text-indigo-950 font-heading">
+                ปล่อยไฟล์ที่นี่เพื่ออัปโหลดไปยัง Synology NAS
+              </h3>
+              <p className="text-xs text-indigo-700 mt-1 max-w-md">
+                {currentPath
+                  ? `ระบบจะจัดเก็บไฟล์ลงในโฟลเดอร์: ${currentPath}`
+                  : "กรุณาคลิกเปิดโฟลเดอร์แชร์ปลายทางก่อนวางไฟล์"}
+              </p>
+              <div className="mt-3 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-200 text-[11px] font-semibold text-indigo-800 shadow-xs">
+                รองรับไฟล์ PDF, Word, Excel, รูปภาพ และเอกสารราชการทุกประเภท (อัปโหลดพร้อมกันได้หลายไฟล์)
+              </div>
+            </div>
+          )}
+
           {/* Top Bar: Navigation, Breadcrumbs & Actions */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
             {/* Breadcrumb Navigation */}
@@ -443,6 +537,7 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
                     type="file"
                     ref={fileInputRef}
                     onChange={handleUploadFile}
+                    multiple
                     className="hidden"
                   />
                   <button
@@ -450,6 +545,7 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isUploading}
                     className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                    title="คลิกเพื่อเลือกไฟล์ หรือลากไฟล์มาวางบนหน้านี้ได้โดยตรง (Drag & Drop)"
                   >
                     <span>{isUploading ? "⏳" : "📤"}</span>
                     <span>{isUploading ? "กำลังอัปโหลด..." : "อัปโหลดไฟล์"}</span>
@@ -552,7 +648,7 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
                   <div className="text-3xl">📂</div>
                   <div className="text-xs font-bold text-slate-700">โฟลเดอร์นี้ยังไม่มีไฟล์หรือโฟลเดอร์ย่อย</div>
                   <div className="text-[11px] text-slate-400">
-                    กดปุ่ม &quot;📤 อัปโหลดไฟล์&quot; หรือ &quot;+ สร้างโฟลเดอร์&quot; เพื่อเริ่มต้นจัดเก็บเอกสาร
+                    กดปุ่ม &quot;📤 อัปโหลดไฟล์&quot; หรือลากไฟล์มาวางบนหน้านี้ (Drag & Drop) เพื่อเริ่มต้นจัดเก็บเอกสาร
                   </div>
                 </div>
               ) : (
