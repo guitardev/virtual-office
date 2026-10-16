@@ -512,6 +512,76 @@ test.describe("ระบบคลังภาพและสื่อราช�
     await closeBtn.click();
     await expect(inspectorTitle).toBeHidden();
   });
+
+  test("ระบบความปลอดภัยการอัปโหลดภาพ: เมื่ออยู่โฟลเดอร์หลัก ควรกำหนดให้เลือกโฟลเดอร์ปลายทางก่อนอัปโหลด ป้องกันข้อผิดพลาด Code 407", async ({
+    page,
+  }) => {
+    // Mock Folders list
+    await page.route("**/api/nas/photos?*", async (route) => {
+      const url = new URL(route.request().url());
+      const action = url.searchParams.get("action");
+
+      if (action === "list_folders") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            folders: [
+              {
+                id: 10,
+                name: "งานวันเด็กแห่งชาติ 2569",
+                item_count: 5,
+                parent: 0,
+              },
+            ],
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ success: true, items: [], total: 0 }),
+        });
+      }
+    });
+
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    await page.evaluate(() => {
+      localStorage.setItem("omnioffice_nas_user_sid", "mock_valid_photos_sid");
+      localStorage.setItem("omnioffice_nas_user_account", "itadmin");
+      sessionStorage.setItem("omnioffice_nas_user_sid", "mock_valid_photos_sid");
+      sessionStorage.setItem("omnioffice_nas_user_account", "itadmin");
+    });
+
+    const galleryNav = page
+      .locator("aside button:has-text('คลังภาพและสื่อ'), nav button:has-text('คลังภาพและสื่อ')")
+      .first();
+    await galleryNav.click();
+
+    // 1. กดปุ่ม 'อัปโหลดภาพ' ขณะที่ยังไม่ได้เลือกโฟลเดอร์
+    const uploadBtn = page.locator("button:has-text('อัปโหลดภาพ')").first();
+    await expect(uploadBtn).toBeVisible();
+    await uploadBtn.click();
+
+    // 2. ตรวจสอบว่าเปิด Modal 'เลือกโฟลเดอร์สำหรับจัดเก็บภาพ'
+    const modalTitle = page.locator("h3:has-text('เลือกโฟลเดอร์สำหรับจัดเก็บภาพ')").first();
+    await expect(modalTitle).toBeVisible();
+
+    // 3. ตรวจสอบว่ามีโฟลเดอร์ให้เลือก
+    const folderChoice = page.locator("button:has-text('งานวันเด็กแห่งชาติ 2569')").first();
+    await expect(folderChoice).toBeVisible();
+
+    // 4. คลิกเลือกโฟลเดอร์
+    await folderChoice.click();
+    await expect(modalTitle).toBeHidden();
+
+    // 5. ตรวจสอบว่าเข้าไปอยู่ในโฟลเดอร์นั้น และมีปุ่ม 'อัปโหลดภาพเข้าโฟลเดอร์นี้'
+    const folderUploadBtn = page.locator("button:has-text('อัปโหลดภาพเข้าโฟลเดอร์นี้')").first();
+    await expect(folderUploadBtn).toBeVisible();
+  });
 });
 
 

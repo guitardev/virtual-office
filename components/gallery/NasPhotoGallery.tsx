@@ -204,6 +204,7 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  const [showSelectFolderUploadModal, setShowSelectFolderUploadModal] = useState(false);
 
   const [showCreateAlbumModal, setShowCreateAlbumModal] = useState(false);
   const [newAlbumName, setNewAlbumName] = useState("");
@@ -747,31 +748,24 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
       return;
     }
 
+    // Ensure a target folder is selected (identical to NasFileManager requirement)
+    if (!selectedFolder) {
+      showToast("⚠️ กรุณาคลิกเลือกโฟลเดอร์กิจกรรมปลายทางก่อนอัปโหลดภาพ");
+      if (folders.length > 0) {
+        setShowSelectFolderUploadModal(true);
+      } else {
+        setShowCreateFolderModal(true);
+      }
+      return;
+    }
+
     setIsUploading(true);
     showToast(`⏳ กำลังอัปโหลด ${validMedia.length} ไฟล์เข้าสู่ Synology Photos...`);
 
     const basePath = currentSpace === "shared" ? "/photo" : "/home/Photos";
-    let destFolderPath: string;
-    if (selectedFolder?.path) {
-      destFolderPath = selectedFolder.path.startsWith("/")
-        ? selectedFolder.path
-        : `${basePath}/${selectedFolder.path}`;
-    } else {
-      const subPath =
-        folderBreadcrumbs.length > 1
-          ? folderBreadcrumbs
-              .slice(1)
-              .map((b) => b.name)
-              .join("/")
-          : selectedFolder?.name || "";
-      destFolderPath = subPath ? `${basePath}/${subPath}` : basePath;
-    }
-
-    // DSM 7 Synology Photos: writing files directly to root /photo is forbidden by DSM ACL (Code 407).
-    // Automatically route loose uploads in Shared Space root to /photo/General.
-    if (currentSpace === "shared" && (destFolderPath === "/photo" || destFolderPath === "/photo/")) {
-      destFolderPath = "/photo/General";
-    }
+    const destFolderPath = selectedFolder.path?.startsWith("/")
+      ? selectedFolder.path
+      : `${basePath}/${selectedFolder.name}`;
 
     try {
       let successCount = 0;
@@ -888,6 +882,15 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
       if (!activeSid) {
         showToast("⚠️ กรุณายืนยันตัวตนหรือเข้าสู่ระบบ Synology NAS ก่อนวางไฟล์เพื่ออัปโหลด");
         setShowConnectModal(true);
+        return;
+      }
+      if (!selectedFolder) {
+        showToast("⚠️ กรุณาคลิกเลือกโฟลเดอร์กิจกรรมปลายทางก่อนวางไฟล์เพื่ออัปโหลด");
+        if (folders.length > 0) {
+          setShowSelectFolderUploadModal(true);
+        } else {
+          setShowCreateFolderModal(true);
+        }
         return;
       }
       await uploadFileList(e.dataTransfer.files);
@@ -1310,13 +1313,32 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                 />
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => {
+                    if (selectedFolder) {
+                      fileInputRef.current?.click();
+                    } else if (folders.length > 0) {
+                      setShowSelectFolderUploadModal(true);
+                    } else {
+                      showToast("⚠️ กรุณาสร้างโฟลเดอร์กิจกรรมก่อนอัปโหลดภาพ");
+                      setShowCreateFolderModal(true);
+                    }
+                  }}
                   disabled={isUploading}
                   className="px-3.5 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  title="คลิกเพื่อเลือกไฟล์ หรือลากภาพ/วิดีโอมาวางบนหน้านี้ได้โดยตรง (Drag & Drop Supported)"
+                  title={
+                    selectedFolder
+                      ? `อัปโหลดภาพเข้าสู่โฟลเดอร์ "${selectedFolder.name}"`
+                      : "คลิกเพื่อเลือกโฟลเดอร์กิจกรรมและอัปโหลดภาพ"
+                  }
                 >
                   <span>{isUploading ? "⏳" : "📤"}</span>
-                  <span>{isUploading ? "กำลังอัปโหลด..." : "อัปโหลดภาพ"}</span>
+                  <span>
+                    {isUploading
+                      ? "กำลังอัปโหลด..."
+                      : selectedFolder
+                      ? `อัปโหลดภาพเข้า (${selectedFolder.name})`
+                      : "อัปโหลดภาพ"}
+                  </span>
                 </button>
 
                 {/* Create Folder Button (Synology Photos directory) */}
@@ -1664,6 +1686,17 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                   </div>
 
                   <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading}
+                      className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 cursor-pointer transition-all disabled:opacity-50"
+                      title={`อัปโหลดภาพเข้าสู่โฟลเดอร์ "${selectedFolder.name}"`}
+                    >
+                      <span>{isUploading ? "⏳" : "📤"}</span>
+                      <span>{isUploading ? "กำลังอัปโหลด..." : "อัปโหลดภาพเข้าโฟลเดอร์นี้"}</span>
+                    </button>
+
                     <button
                       type="button"
                       onClick={() => setShowCreateFolderModal(true)}
@@ -2414,6 +2447,98 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── SELECT DESTINATION FOLDER MODAL ─── */}
+      {showSelectFolderUploadModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-scaleUp">
+            <div className="p-6 bg-gradient-to-r from-cyan-600 to-indigo-600 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">📁</span>
+                <div>
+                  <h3 className="font-bold text-base">เลือกโฟลเดอร์สำหรับจัดเก็บภาพ</h3>
+                  <p className="text-[11px] text-cyan-100">
+                    Synology Photos · {currentSpace === "shared" ? "พื้นที่ส่วนกลาง (/photo)" : "พื้นที่ส่วนบุคคล (/home/Photos)"}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSelectFolderUploadModal(false)}
+                className="text-white/80 hover:text-white p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-slate-600">
+                กรุณาคลิกเลือกโฟลเดอร์กิจกรรมปลายทางที่ต้องการจัดเก็บภาพ (ระบบไม่สามารถวางไฟล์ลงในโฟลเดอร์รากได้โดยตรง):
+              </p>
+
+              <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
+                {folders.length === 0 ? (
+                  <div className="p-6 text-center rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-500">
+                    ยังไม่มีโฟลเดอร์กิจกรรมในพื้นที่นี้ กรุณากดสร้างโฟลเดอร์ใหม่ด้านล่าง
+                  </div>
+                ) : (
+                  folders.map((folder) => (
+                    <button
+                      key={folder.id}
+                      type="button"
+                      onClick={() => {
+                        setShowSelectFolderUploadModal(false);
+                        handleSelectFolder(folder);
+                        setTimeout(() => {
+                          fileInputRef.current?.click();
+                        }, 150);
+                      }}
+                      className="w-full p-3.5 rounded-2xl border border-slate-200 hover:border-cyan-500 hover:bg-cyan-50/50 flex items-center justify-between transition-all group text-left cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl group-hover:scale-110 transition-transform">📁</span>
+                        <div>
+                          <div className="font-bold text-xs text-slate-800 group-hover:text-cyan-900">
+                            {folder.name}
+                          </div>
+                          <div className="text-[11px] text-slate-400">
+                            {folder.item_count ? `${folder.item_count} ไฟล์` : "โฟลเดอร์ว่าง"}
+                          </div>
+                        </div>
+                      </div>
+                      <span className="text-xs text-cyan-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">
+                        เลือกโฟลเดอร์นี้ ➜
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSelectFolderUploadModal(false);
+                    setShowCreateFolderModal(true);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-cyan-50 hover:text-cyan-800 text-slate-700 font-bold text-xs border border-slate-200 transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>📁+</span>
+                  <span>สร้างโฟลเดอร์ใหม่</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowSelectFolderUploadModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs transition-all cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
