@@ -14,6 +14,7 @@ export type PersonnelType =
 export type ModuleId =
   | "dashboard"
   | "chat"
+  | "circular"
   | "task"
   | "meetings"
   | "carbooking"
@@ -384,4 +385,53 @@ export interface ChatMessage {
   attachmentUrl?: string;
   attachments?: ChatAttachment[];
   tag?: string;
+}
+
+// ─── GOVERNMENT CIRCULAR & E-ACKNOWLEDGMENT TYPES ───
+export type CircularUrgency = "normal" | "urgent" | "very_urgent" | "most_urgent";
+export type CircularSecretLevel = "normal" | "confidential" | "top_secret";
+
+export interface CircularTargetCriteria {
+  scope: "all" | "custom";
+  divisions?: string[];
+  personnelTypes?: PersonnelType[];
+  specificMemberIds?: string[];
+}
+
+export interface CircularRecipientStatus {
+  memberId: string;
+  memberName: string;
+  division: string;
+  personnelType: PersonnelType;
+  position: string;
+  isAcknowledged: boolean;
+  acknowledgedAt?: string;
+  signatureUrl?: string; // PNG Base64 Data URL
+  endorsementNote?: string;
+  ipAddress?: string;
+}
+
+export interface CircularDocument {
+  id: string;
+  docNumber: string;
+  title: string;
+  issuedDate: string;
+  senderOrg: string;
+  urgency: CircularUrgency;
+  secretLevel: CircularSecretLevel;
+  summary?: string;
+  fileUrl: string;
+  fileName: string;
+  fileSize: number;
+  totalPages?: number;
+  scannedPages?: string[];
+  createdBy: string;
+  createdByName: string;
+  createdAt: string;
+  deadline?: string;
+  targetCriteria: CircularTargetCriteria;
+  recipients: CircularRecipientStatus[];
+  totalCount: number;
+  acknowledgedCount: number;
+  status: "active" | "closed" | "archived";
 }

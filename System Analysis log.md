@@ -1373,3 +1373,82 @@ on conflict (id) do update set
 * **การป้องกันข้อมูล Backend ([app/api/nas/auth/route.ts](file:///c:/Users/GuitarDev/virtual-office/app/api/nas/auth/route.ts)):**
   - ปรับข้อความ Error Response และ Success Message ไม่ให้มีข้อความอ้างอิง Synology NAS เพื่อความปลอดภัยและภาพลักษณ์ระบบที่เป็นทางการ
 
+---
+
+## 29. ระบบเวียนหนังสือราชการอิเล็กทรอนิกส์และการลงนามรับทราบดิจิทัล (Government Circular Document & E-Acknowledgment System)
+
+> **วันที่บันทึก:** 16 ตุลาคม 2569  
+> **เวอร์ชัน:** v1.8.0 (Government Circular & Digital Signature Workflow)  
+> **โมดูล ID:** `circular` ("เวียนหนังสือราชการ" 📜)  
+> **สถานะภาพรวม:** พัฒนาระบบเวียนหนังสือราชการอิเล็กทรอนิกส์ตามระเบียบงานสารบรรณสมบูรณ์แบบ 100% ครอบคลุม 4 คุณสมบัติหลักตามข้อกำหนด
+
+---
+
+### 29.1 สรุปคุณสมบัติเด่นของระบบ (Core Feature Highlights)
+
+1. **ระบบคัดกรองและกระจายหนังสือตามกลุ่มเป้าหมาย (Multi-tier Target Audience Routing):**
+   - **เวียนทุกคนในสำนักงาน (Everyone):** คำนวณผู้รับจากรายชื่อบุคลากรทั้งหมดในองค์กร
+   - **เวียนตามกลุ่ม/ฝ่ายงาน (Divisions):** รองรับการเลือกกลุ่มงานเป้าหมายจาก `GOVERNMENT_DIVISIONS` (เช่น ฝ่ายบริหารทั่วไป, กลุ่มงานพัฒนาสังคม, ฯลฯ)
+   - **เวียนตามประเภทบุคลากร (Personnel Types):** ข้าราชการ, พนักงานราชการ, ลูกจ้างประจำ, จ้างเหมาบริการ
+   - **อัลกอริทึมคำนวณผู้รับอัตโนมัติ (`resolveTargetRecipients`):** แปลงเงื่อนไขเป็นรายชื่อผู้รับจริง พร้อมสร้างสถานะการรับทราบแบบรายบุคคล
+
+2. **ระบบตรวจอ่านและลงนามดิจิทัล (Document Viewer & Digital Signature Pad):**
+   - **HTML5 Canvas Touch/Mouse Drawing Pad:** รองรับการลงลายมือชื่อบนหน้าจอคอมพิวเตอร์และแท็บเล็ต/สมาร์ตโฟน พร้อมปุ่มยกเลิก/ล้างลายเซ็น และเลือกหมึกสีน้ำเงิน/ดำ
+   - **ข้อสั่งการมาตรฐานสารบรรณ (Quick Endorsement Presets):** เช่น *"รับทราบและถือปฏิบัติตามระเบียบ"*, *"ทราบ มอบฝ่ายงานที่เกี่ยวข้องดำเนินการ"*, ฯลฯ
+   - **ตราประทับดิจิทัลราชการ (Official E-Stamp Badge):** สร้างตราประทับพร้อมระบุชื่อผู้ลงนาม วันที่และเวลาประทับตราแบบเรียลไทม์
+   - **ปุ่มรับทราบด่วน (⚡ รับทราบ):** สำหรับกรณีหนังสือประชาสัมพันธ์ทั่วไปที่ไม่จำเป็นต้องวาดลายมือชื่อ
+
+3. **ระบบสแกนเอกสารเข้าสู่ระบบด้วยกล้องสด (Live Camera A4 Document Scanner):**
+   - **Live WebRTC Camera Stream:** รองรับการเปิดกล้องเว็บแคมหรือกล้องหลังสมาร์ตโฟน/แท็บเล็ต
+   - **A4 Alignment Guide Overlay:** กรอบจำลองขนาดกระดาษ A4 สัดส่วน 1:1.414 สำหรับจัดวางเอกสารให้อยู่ในตำแหน่งมาตรฐาน
+   - **Document Enhancement Image Processing:** ฟิลเตอร์ปรับความคมชัดขาวดำ/ปรับคอนทราสต์ให้เหมือนสแกนเนอร์สำนักงาน (`doc`, `grayscale`, `color`)
+   - **Multi-page Scanning Queue:** สแกนสะสมทีละหน้า (1, 2, 3, ...) นำเข้าสู่เอกสารเวียนฉบับเดียว พร้อมระบบสำรองให้อัปโหลดไฟล์ PDF/รูปภาพได้
+
+4. **รายงานผลและใบปะหน้าเวียนราชการ (Realtime Tracking Matrix & Printable Circulation Slip):**
+   - **ตราครุฑและแบบฟอร์มหนังสือราชการไทย:** พิมพ์ใบปะหน้าเวียนหนังสือพร้อมหัวครุฑและตารางลงนาม
+   - **Realtime Progress Tracking:** คำนวณร้อยละการรับทราบ (`acknowledgedCount / totalCount`) แสดงแถบสีแยกสถานะชัดเจน
+   - **ตารางแยกสถานะ:** รายนามผู้ลงนามรับทราบแล้ว (พร้อมรูปภาพลายมือชื่อและเวลา) และรายชื่อผู้ที่ยังไม่ได้รับทราบ
+   - **Print Optimization (`@media print`):** ซ่อนปุ่มควบคุมและหน้าจอเบราว์เซอร์ เหลือเฉพาะแผ่นเอกสารทางการพร้อมสั่งพิมพ์หรือบันทึกเป็น PDF ได้ทันที
+
+---
+
+### 29.2 สถาปัตยกรรมและโครงสร้างไฟล์ (Component Architecture)
+
+* **ประเภทข้อมูลหลัก ([lib/types.ts](file:///c:/Users/GuitarDev/virtual-office/lib/types.ts)):**
+  - `CircularUrgency`: ระดับความเร่งด่วน (`normal`, `urgent`, `very_urgent`, `most_urgent`)
+  - `CircularSecretLevel`: ชั้นความลับ (`normal`, `confidential`, `top_secret`)
+  - `CircularTargetCriteria`: เกณฑ์การเวียน (`scope`, `divisions`, `personnelTypes`, `specificMemberIds`)
+  - `CircularRecipientStatus`: สถานะผู้รับรายบุคคล (ลายมือชื่อ, ตราประทับ, ข้อสั่งการ, วันเวลาที่รับทราบ)
+  - `CircularDocument`: เอนทิตีเอกสารเวียนราชการฉบับสมบูรณ์
+* **โมเดลสิทธิ์และรายชื่อโมดูล ([lib/rbac.ts](file:///c:/Users/GuitarDev/virtual-office/lib/rbac.ts)):**
+  - เพิ่ม `circular: "เวียนหนังสือราชการ"` ใน `MODULE_NAMES`, `INITIAL_SYSTEM_MODULES`, และ `INITIAL_ROLE_PERMISSIONS`
+* **ข้อมูลตั้งต้นและฟังก์ชันประมวลผล ([lib/circular-data.ts](file:///c:/Users/GuitarDev/virtual-office/lib/circular-data.ts)):**
+  - ฟังก์ชัน `resolveTargetRecipients()`
+  - ฟังก์ชัน `loadStoredCircularDocs()` และ `saveStoredCircularDocs()`
+  - ชุดข้อมูลตั้งต้นหนังสือราชการ พมจ.กำแพงเพชร (พม ๐๕๐๖/ว, กพ ๐๐๓๒/ว)
+* **คอมโพเนนต์ส่วนติดต่อผู้ใช้ (`components/circular/`):**
+  - [`CircularPage.tsx`](file:///c:/Users/GuitarDev/virtual-office/components/circular/CircularPage.tsx): หน้าแดชบอร์ดหลัก รายการหนังสือ ตัวกรอง ค้นหา และสถิติ
+  - [`NewCircularModal.tsx`](file:///c:/Users/GuitarDev/virtual-office/components/circular/NewCircularModal.tsx): ฟอร์มออกหนังสือเวียนใหม่และกำหนดกลุ่มเป้าหมาย
+  - [`CircularViewerModal.tsx`](file:///c:/Users/GuitarDev/virtual-office/components/circular/CircularViewerModal.tsx): หน้าต่างอ่านหนังสือเวียนและตรวจสอบความคืบหน้า
+  - [`DigitalSignaturePad.tsx`](file:///c:/Users/GuitarDev/virtual-office/components/circular/DigitalSignaturePad.tsx): ระบบวาดลายเซ็นดิจิทัลและบันทึกข้อสั่งการ
+  - [`DocumentScannerModal.tsx`](file:///c:/Users/GuitarDev/virtual-office/components/circular/DocumentScannerModal.tsx): ระบบกล้องสดสแกนหนังสือราชการ A4
+  - [`CirculationPrintSlip.tsx`](file:///c:/Users/GuitarDev/virtual-office/components/circular/CirculationPrintSlip.tsx): ใบสรุปผลการเวียนหนังสือราชการพร้อมตราครุฑ
+
+---
+
+### 29.3 ผลการทดสอบและการตรวจสอบคุณภาพ (Verification Results)
+
+1. **TypeScript Type Check:**
+   - รัน `npx tsc --noEmit` ผ่านสมบูรณ์ `0 errors`
+2. **Production Build (Next.js 16 Turbopack):**
+   - รัน `npm run build` ผ่านสมบูรณ์ `100% (Compiled in 1860ms, Static export 14/14, 0 errors)`
+3. **Automated End-to-End Test Suite ([tests/circular-workflow.spec.ts](file:///c:/Users/GuitarDev/virtual-office/tests/circular-workflow.spec.ts)):**
+   - **ผลการทดสอบ: ผ่าน 100% ครบทั้ง 4 กรณีทดสอบ (4 passed, 12.8s)**
+     - `should navigate to Circular module and display dashboard metrics`
+     - `should open document viewer and trigger digital signature`
+     - `should open and display official printable circulation slip`
+     - `should open new circular modal and toggle target audience settings`
+4. **Regression Tests:**
+   - `tests/admin-dossier-rbac.spec.ts` และ `tests/auth-login-exclusive-nas.spec.ts`: **ผ่าน 100% (2 passed, 4.3s)**
+
+

@@ -38,6 +38,8 @@ import { AdminPage } from "@/components/admin/AdminPage";
 import { AdminModals } from "@/components/admin/AdminModals";
 import { NasFileManager } from "@/components/dms/NasFileManager";
 import { NasPhotoGallery } from "@/components/gallery/NasPhotoGallery";
+import { CircularPage } from "@/components/circular/CircularPage";
+import { loadStoredCircularDocs } from "@/lib/circular-data";
 import {
   isSupabaseConfigured,
   fetchMembers,
@@ -88,6 +90,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "task", label: "งานและโปรเจกต์", icon: "📋" },
   { id: "meetings", label: "การประชุม", icon: "📹" },
   { id: "carbooking", label: "รถยนต์สำนักงาน", icon: "🚗" },
+  { id: "circular", label: "เวียนหนังสือราชการ", icon: "📜" },
   { id: "files", label: "คลังเอกสาร NAS", icon: "📁" },
   { id: "gallery", label: "คลังภาพและสื่อ", icon: "📸" },
   { id: "reports", label: "รายงานและสถิติ", icon: "📈" },
@@ -1304,12 +1307,26 @@ export default function SmartMSOApp() {
       ).length;
     }
 
+    let pendingCircularCount = 0;
+    try {
+      const cDocs = loadStoredCircularDocs();
+      if (currentUser) {
+        pendingCircularCount = cDocs.filter((d) => {
+          const r = d.recipients.find((rec) => rec.memberId === currentUser.id);
+          return r && !r.isAcknowledged;
+        }).length;
+      }
+    } catch {
+      // fallback
+    }
+
     return {
       dashboard: 0,
       chat: 2,
       task: taskCount,
       meetings: meetingCount,
       carbooking: carCount,
+      circular: pendingCircularCount,
       files: 0,
       gallery: 0,
       reports: 0,
@@ -2114,6 +2131,14 @@ export default function SmartMSOApp() {
                   currentUser={currentUser}
                   showToast={showToast}
                   members={members}
+                />
+              )}
+
+              {currentPage === "circular" && (
+                <CircularPage
+                  currentUser={currentUser}
+                  members={members}
+                  showToast={showToast}
                 />
               )}
 

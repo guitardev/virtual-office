@@ -34,6 +34,7 @@ export const ROLE_CONFIG: Record<Role, RoleInfo> = {
 export const MODULE_NAMES: Record<ModuleId, { name: string; icon: string; desc: string }> = {
   dashboard: { name: "หน้าแรก (Dashboard)", icon: "📊", desc: "ภาพรวมสำนักงาน สถิติ และงานเร่งด่วน" },
   chat: { name: "แชททีม (Chat)", icon: "💬", desc: "การสื่อสารระหว่างสมาชิกและห้องแชทองค์กร" },
+  circular: { name: "เวียนหนังสือราชการ (Circular)", icon: "📜", desc: "ระบบเวียนหนังสือราชการ รับทราบ และลงนามดิจิทัล" },
   task: { name: "งานและโปรเจกต์ (Tasks)", icon: "📋", desc: "กระดานติดตามงานแบบ Kanban" },
   meetings: { name: "การประชุม (Meetings)", icon: "📹", desc: "ตารางประชุมและห้องสนทนาออนไลน์" },
   carbooking: { name: "รถยนต์สำนักงาน (Car Booking)", icon: "🚗", desc: "ระบบจองยานพาหนะส่วนกลาง" },
@@ -60,6 +61,14 @@ export const INITIAL_SYSTEM_MODULES: Record<ModuleId, SystemModule> = {
     desc: "การสื่อสารระหว่างสมาชิกและห้องแชทองค์กร",
     enabled: true,
     maintenanceNotice: "ระบบแชททีมเปิดให้บริการปกติ",
+  },
+  circular: {
+    id: "circular",
+    name: "เวียนหนังสือราชการ (Circular)",
+    icon: "📜",
+    desc: "ระบบเวียนหนังสือราชการ รับทราบ และลงนามดิจิทัล",
+    enabled: true,
+    maintenanceNotice: "ระบบเวียนหนังสือราชการเปิดให้บริการปกติ",
   },
   task: {
     id: "task",
@@ -132,6 +141,7 @@ export const INITIAL_ROLE_PERMISSIONS: Record<Role, Record<ModuleId, boolean>> =
   admin: {
     dashboard: true,
     chat: true,
+    circular: true,
     task: true,
     meetings: true,
     carbooking: true,
@@ -144,6 +154,7 @@ export const INITIAL_ROLE_PERMISSIONS: Record<Role, Record<ModuleId, boolean>> =
   manager: {
     dashboard: true,
     chat: true,
+    circular: true,
     task: true,
     meetings: true,
     carbooking: true,
@@ -156,6 +167,7 @@ export const INITIAL_ROLE_PERMISSIONS: Record<Role, Record<ModuleId, boolean>> =
   member: {
     dashboard: true,
     chat: true,
+    circular: true,
     task: true,
     meetings: true,
     carbooking: true,
@@ -168,6 +180,7 @@ export const INITIAL_ROLE_PERMISSIONS: Record<Role, Record<ModuleId, boolean>> =
   guest: {
     dashboard: false, // Guests cannot view internal dashboard
     chat: true, // Can chat in public channels
+    circular: false,
     task: false, // Cannot access internal tasks
     meetings: true, // Can join invited meetings
     carbooking: false, // Cannot book company cars
