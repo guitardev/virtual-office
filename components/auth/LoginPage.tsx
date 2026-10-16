@@ -489,7 +489,7 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
         <div className="relative z-10 my-10 lg:my-0 space-y-6 max-w-lg">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 text-xs font-semibold">
             <span>✨ ระบบจัดการสำนักงานเสมือนยุคใหม่</span>
-            <span>· Supabase Auth Live</span>
+            <span>· Synology NAS Auth</span>
           </div>
 
           <h1 className="text-3xl lg:text-5xl font-black font-heading text-white leading-tight">
@@ -498,15 +498,15 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
 
           <p className="text-slate-300 text-sm lg:text-base leading-relaxed">
             ระบบสื่อสาร วางแผนงานกระดาน Kanban จัดการห้องประชุม และจองรถยนต์ส่วนกลาง
-            พร้อมระบบยืนยันตัวตนจริงผ่าน <strong>Supabase Auth</strong> และการควบคุมสิทธิ์ RBAC 4 ระดับบทบาท
+            พร้อมระบบยืนยันตัวตน On-Premise ผ่าน <strong>Synology DSM WebAPI</strong> และการควบคุมสิทธิ์ RBAC 4 ระดับบทบาท
           </p>
 
           {/* Feature Highlights Grid */}
           <div className="grid grid-cols-2 gap-4 pt-3">
             <div className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
-              <div className="text-2xl mb-1.5">🔐</div>
-              <div className="font-bold text-sm text-white">Supabase Auth</div>
-              <div className="text-xs text-slate-400 mt-0.5">Email/Password & OAuth SSO</div>
+              <div className="text-2xl mb-1.5">💾</div>
+              <div className="font-bold text-sm text-white">Synology NAS DSM</div>
+              <div className="text-xs text-slate-400 mt-0.5">ระบบยืนยันตัวตน On-Premise</div>
             </div>
             <div className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
               <div className="text-2xl mb-1.5">🛡️</div>
@@ -540,7 +540,7 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
           </div>
           <span className="flex items-center gap-1.5 text-emerald-400 font-semibold">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            Supabase Live Connected
+            Synology NAS WebAPI Live
           </span>
         </div>
       </div>
@@ -551,9 +551,9 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
           {/* Header & Status Indicator */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>Supabase Auth {isLive ? "Live" : "Ready"}</span>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                <span className={`w-2 h-2 rounded-full ${nasOnline ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
+                <span>Synology DSM WebAPI {nasOnline ? "(Online)" : "(Standby)"}</span>
               </div>
               <span className="text-[11px] font-semibold text-slate-400">
                 SSL 256-Bit Encrypted
@@ -561,68 +561,25 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
             </div>
 
             <h2 className="text-2xl lg:text-3xl font-black font-heading text-slate-900">
-              {authMode === "nas"
-                ? "เข้าสู่ระบบด้วย Synology NAS"
-                : authMode === "signin"
-                ? "เข้าสู่ระบบ (Supabase Auth)"
-                : "ลงทะเบียนใหม่ (Sign Up)"}
+              เข้าสู่ระบบด้วย Synology NAS
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              {authMode === "nas"
-                ? "ยืนยันตัวตนด้วยบัญชีและรหัสผ่าน Synology DSM ประจำสำนักงาน พมจ.กำแพงเพชร"
-                : authMode === "signin"
-                ? "ยืนยันตัวตนด้วยอีเมลและรหัสผ่านบน Supabase Auth"
-                : "สร้างบัญชีผู้ใช้งานใหม่บนระบบสำนักงานเสมือน"}
+              ยืนยันตัวตนด้วยบัญชีและรหัสผ่าน Synology DSM ประจำสำนักงาน พมจ.กำแพงเพชร
             </p>
           </div>
 
-          {/* Mode Switcher Tabs */}
-          <div className="grid grid-cols-3 p-1 rounded-2xl bg-slate-200/80 border border-slate-300/60 text-[11px] font-bold">
-            <button
-              type="button"
-              onClick={() => {
-                setAuthMode("nas");
-                setErrorMessage(null);
-                setSuccessMessage(null);
-              }}
-              className={`py-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 ${
-                authMode === "nas"
-                  ? "bg-white text-indigo-700 shadow-sm"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <span>💾 Synology NAS</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setAuthMode("signin");
-                setErrorMessage(null);
-                setSuccessMessage(null);
-              }}
-              className={`py-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 ${
-                authMode === "signin"
-                  ? "bg-white text-indigo-700 shadow-sm"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <span>✉️ อีเมล</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setAuthMode("signup");
-                setErrorMessage(null);
-                setSuccessMessage(null);
-              }}
-              className={`py-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 ${
-                authMode === "signup"
-                  ? "bg-white text-indigo-700 shadow-sm"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <span>✍️ ลงทะเบียน</span>
-            </button>
+          {/* Active Authentication System Indicator */}
+          <div className="p-3 rounded-2xl bg-indigo-50/80 border border-indigo-200/80 flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2.5 text-indigo-950 font-semibold">
+              <span className="text-base">💾</span>
+              <div>
+                <div className="font-bold text-slate-800">ระบบยืนยันตัวตนหลัก: Synology DSM WebAPI</div>
+                <div className="text-[11px] text-indigo-600 font-normal">ระบบอื่นปิดไว้ชั่วคราว เพื่อรอการพัฒนาให้สมบูรณ์</div>
+              </div>
+            </div>
+            <span className="text-[10px] bg-indigo-600 text-white font-bold px-2 py-0.5 rounded-md shadow-2xs shrink-0">
+              ใช้งานอยู่
+            </span>
           </div>
 
           {/* Error & Success Messages */}
@@ -657,430 +614,128 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
             </div>
           )}
 
-          {/* OAuth SSO Buttons */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-              <span>เข้าสู่ระบบด่วนด้วย OAuth SSO (Google / LINE)</span>
-              <button
-                type="button"
-                onClick={() => setShowLineModal(true)}
-                className="text-[#06C755] hover:text-[#05b34c] hover:underline font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
-                title="ดูคำแนะนำ Callback URL และ Channel ID"
-              >
-                <span>⚙️ ตั้งค่า LINE</span>
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-2.5">
-              <button
-                type="button"
-                disabled={isLoading}
-                onClick={() => handleOAuthLogin("google")}
-                className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50/80 text-xs font-bold text-slate-700 transition-all shadow-2xs cursor-pointer disabled:opacity-50"
-              >
-                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                  <path
-                    fill="#4285F4"
-                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                  />
-                </svg>
-                <span>Google</span>
-              </button>
-
-              <button
-                type="button"
-                disabled={isLoading}
-                onClick={() => handleOAuthLogin("line")}
-                className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-[#06C755] hover:bg-[#05b34c] text-white text-xs font-bold transition-all shadow-2xs cursor-pointer disabled:opacity-50"
-              >
-                <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24">
-                  <path d="M24 10.304c0-5.369-5.383-9.738-12-9.738-6.616 0-12 4.369-12 9.738 0 4.814 4.269 8.846 10.019 9.572.39.084.922.258 1.057.592.121.303.079.778.039 1.085l-.171 1.027c-.053.303-.242 1.186 1.039.647 1.281-.54 6.911-4.069 9.428-6.967 1.739-1.907 2.589-3.864 2.589-5.956zm-14.771 2.458h-2.193c-.328 0-.594-.266-.594-.594v-3.729c0-.328.266-.594.594-.594s.594.266.594.594v3.135h1.599c.328 0 .594.266.594.594s-.266.594-.594.594zm2.145-.594c0 .328-.266.594-.594.594s-.594-.266-.594-.594v-3.729c0-.328.266-.594.594-.594s.594.266.594.594v3.729zm4.275 0c0 .248-.153.468-.382.553-.069.026-.142.041-.212.041-.167 0-.33-.07-.442-.198l-1.924-2.589v2.193c0 .328-.266.594-.594.594s-.594-.266-.594-.594v-3.729c0-.248.153-.468.382-.553.069-.026.142-.041-.212-.041.167 0 .33.07.442.198l1.924 2.589v-2.193c0-.328.266-.594.594-.594s.594.266.594.594v3.729zm3.504-2.541h-1.599v.76h1.599c.328 0 .594.266.594.594s-.266.594-.594.594h-2.193c-.328 0-.594-.266-.594-.594v-3.729c0-.328.266-.594.594-.594h2.193c.328 0 .594.266.594.594s-.266.594-.594.594h-1.599v.787h1.599c.328 0 .594.266.594.594s-.266.594-.594.594z" />
-                </svg>
-                <span>LINE</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="flex items-center my-3">
-            <div className="flex-1 border-t border-slate-200" />
-            <span className="px-3 text-[11px] text-slate-400 font-semibold uppercase tracking-wider">
-              {authMode === "signin"
-                ? "หรือเข้าสู่ระบบด้วยอีเมล"
-                : "หรือกรอกข้อมูลลงทะเบียน"}
-            </span>
-            <div className="flex-1 border-t border-slate-200" />
-          </div>
-
-          {/* ─── TAB 0: SYNOLOGY NAS FORM (PRIMARY / DEFAULT) ─── */}
-          {authMode === "nas" && (
-            <form onSubmit={handleNasSubmit} className="space-y-4">
-              {/* Connection Status Badge */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-100/90 border border-slate-200 text-xs">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`w-2.5 h-2.5 rounded-full ${
-                      nasOnline ? "bg-emerald-500 animate-pulse" : "bg-red-500"
-                    }`}
-                  />
-                  <span className="font-bold text-slate-800">
-                    {nasOnline ? "Synology NAS พร้อมใช้งาน" : "Synology NAS ไม่ตอบสนอง"}
-                  </span>
-                </div>
+          {/* ─── SYNOLOGY NAS FORM (EXCLUSIVE AUTHENTICATION) ─── */}
+          <form onSubmit={handleNasSubmit} className="space-y-4">
+            {/* Connection Status Badge */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-100/90 border border-slate-200 text-xs">
+              <div className="flex items-center gap-2">
                 <span
-                  className={`px-2.5 py-0.5 rounded-md border font-semibold text-[11px] flex items-center gap-1.5 ${
-                    nasOnline
-                      ? "text-emerald-700 bg-emerald-50 border-emerald-200"
-                      : "text-rose-700 bg-rose-50 border-rose-200"
+                  className={`w-2.5 h-2.5 rounded-full ${
+                    nasOnline ? "bg-emerald-500 animate-pulse" : "bg-red-500"
                   }`}
-                >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full ${
-                      nasOnline ? "bg-emerald-500" : "bg-rose-500"
-                    }`}
-                  />
-                  <span>{nasOnline ? "ออนไลน์ (Online)" : "ออฟไลน์ (Offline)"}</span>
-                </span>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  ชื่อบัญชีผู้ใช้ Synology (Username)
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    required
-                    placeholder="เช่น admin หรือชื่อผู้ใช้บน NAS"
-                    value={nasUsername}
-                    onChange={(e) => setNasUsername(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-800 focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/20 transition-all font-mono"
-                  />
-                  <span className="absolute left-3.5 top-2.5 text-slate-400 text-sm">👤</span>
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-bold text-slate-700">
-                    รหัสผ่าน Synology (DSM Password)
-                  </label>
-                  <span className="text-[11px] text-slate-400 font-mono">SYNO.API.Auth</span>
-                </div>
-                <div className="relative">
-                  <input
-                    type={showNasPassword ? "text" : "password"}
-                    required
-                    placeholder="ระบุรหัสผ่านบัญชี Synology DSM"
-                    value={nasPassword}
-                    onChange={(e) => setNasPassword(e.target.value)}
-                    className="w-full pl-10 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-800 focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/20 transition-all"
-                  />
-                  <span className="absolute left-3.5 top-2.5 text-slate-400 text-sm">🔒</span>
-                  <button
-                    type="button"
-                    onClick={() => setShowNasPassword(!showNasPassword)}
-                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 text-xs font-medium cursor-pointer"
-                    title={showNasPassword ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
-                  >
-                    {showNasPassword ? "🙈" : "👁️"}
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between text-xs">
-                <label className="flex items-center space-x-2 cursor-pointer text-slate-600">
-                  <input
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                    className="w-4 h-4 accent-[#4F46E5] rounded"
-                  />
-                  <span>จดจำการเข้าสู่ระบบไว้</span>
-                </label>
-                <span className="text-emerald-700 font-bold text-[11px] flex items-center gap-1">
-                  <span>🛡️</span> On-Premise Auth
-                </span>
-              </div>
-
-              {/* Cloudflare Turnstile Bot Protection */}
-              <TurnstileWidget
-                onVerify={(tok) => setTurnstileToken(tok)}
-                onExpire={() => setTurnstileToken(null)}
-              />
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full py-3 bg-gradient-to-r from-slate-900 via-indigo-900 to-indigo-700 text-white rounded-xl text-sm font-bold shadow-md shadow-indigo-600/25 hover:opacity-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
-              >
-                {isLoading ? (
-                  <>
-                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>กำลังยืนยันตัวตนกับ Synology NAS...</span>
-                  </>
-                ) : (
-                  <span>เข้าสู่ระบบผ่าน Synology NAS ➜</span>
-                )}
-              </button>
-            </form>
-          )}
-
-          {/* ─── TAB 1: SIGN IN FORM ─── */}
-          {authMode === "signin" && (
-            <form onSubmit={handleManualSubmit} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  อีเมล (Email)
-                </label>
-                <div className="relative">
-                  <input
-                    type="email"
-                    required
-                    placeholder="เช่น maliwan.s@m-society.go.th"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-800 focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/20 transition-all placeholder-slate-400"
-                  />
-                  <span className="absolute left-3.5 top-2.5 text-slate-400 text-sm">✉️</span>
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-bold text-slate-700">
-                    รหัสผ่าน (Password)
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setShowForgotPasswordModal(true)}
-                    className="text-xs text-indigo-600 font-semibold hover:underline cursor-pointer"
-                  >
-                    ลืมรหัสผ่าน?
-                  </button>
-                </div>
-                <div className="relative">
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-10 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-800 focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/20 transition-all"
-                  />
-                  <span className="absolute left-3.5 top-2.5 text-slate-400 text-sm">🔒</span>
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 text-xs font-medium cursor-pointer"
-                    title={showPassword ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
-                  >
-                    {showPassword ? "🙈" : "👁️"}
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between text-xs">
-                <label className="flex items-center space-x-2 cursor-pointer text-slate-600">
-                  <input
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                    className="w-4 h-4 accent-[#4F46E5] rounded"
-                  />
-                  <span>จดจำการเข้าสู่ระบบไว้</span>
-                </label>
-                <span className="text-slate-400 flex items-center gap-1 text-[11px]">
-                  <span>⚡</span> Supabase Auth API
-                </span>
-              </div>
-
-              {/* Cloudflare Turnstile Bot Protection */}
-              <TurnstileWidget
-                onVerify={(tok) => setTurnstileToken(tok)}
-                onExpire={() => setTurnstileToken(null)}
-              />
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full py-3 bg-gradient-to-r from-[#4F46E5] to-[#6366F1] text-white rounded-xl text-sm font-bold shadow-md shadow-indigo-600/25 hover:from-[#4338CA] hover:to-[#4F46E5] transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
-              >
-                {isLoading ? (
-                  <>
-                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>กำลังยืนยันตัวตนกับ Supabase...</span>
-                  </>
-                ) : (
-                  <span>เข้าสู่ระบบผ่าน Supabase Auth ➜</span>
-                )}
-              </button>
-            </form>
-          )}
-
-          {/* ─── TAB 2: SIGN UP FORM ─── */}
-          {authMode === "signup" && (
-            <form onSubmit={handleSignUpSubmit} className="space-y-3 max-h-[62vh] overflow-y-auto pr-1">
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    คำนำหน้า
-                  </label>
-                  <select
-                    value={signupForm.prefix}
-                    onChange={(e) => setSignupForm({ ...signupForm, prefix: e.target.value })}
-                    className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800"
-                  >
-                    <option value="นาย">นาย</option>
-                    <option value="นาง">นาง</option>
-                    <option value="นางสาว">นางสาว</option>
-                    <option value="ดร.">ดร.</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    ชื่อ
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="เช่น ศรัญญู"
-                    value={signupForm.firstName}
-                    onChange={(e) => setSignupForm({ ...signupForm, firstName: e.target.value })}
-                    className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    นามสกุล
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="เช่น วงศ์ศิริ"
-                    value={signupForm.lastName}
-                    onChange={(e) => setSignupForm({ ...signupForm, lastName: e.target.value })}
-                    className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    กลุ่มงาน/ฝ่าย
-                  </label>
-                  <select
-                    value={signupForm.division}
-                    onChange={(e) => setSignupForm({ ...signupForm, division: e.target.value })}
-                    className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 truncate"
-                  >
-                    {GOVERNMENT_DIVISIONS.map((div) => (
-                      <option key={div} value={div}>
-                        {div}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    ตำแหน่ง
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="เช่น นักวิชาการคอมพิวเตอร์"
-                    value={signupForm.position}
-                    onChange={(e) => setSignupForm({ ...signupForm, position: e.target.value })}
-                    className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  อีเมล (สำหรับเข้าใช้งาน Supabase Auth)
-                </label>
-                <input
-                  type="email"
-                  required
-                  placeholder="เช่น saranyu.w@m-society.go.th"
-                  value={signupForm.email}
-                  onChange={(e) => setSignupForm({ ...signupForm, email: e.target.value })}
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800"
                 />
+                <span className="font-bold text-slate-800">
+                  {nasOnline ? "Synology NAS พร้อมใช้งาน" : "Synology NAS ไม่ตอบสนอง"}
+                </span>
               </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    รหัสผ่าน (อย่างน้อย 6 ตัว)
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showSignupPassword ? "text" : "password"}
-                      required
-                      placeholder="••••••••"
-                      value={signupForm.password}
-                      onChange={(e) => setSignupForm({ ...signupForm, password: e.target.value })}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    ยืนยันรหัสผ่าน
-                  </label>
-                  <input
-                    type={showSignupPassword ? "text" : "password"}
-                    required
-                    placeholder="••••••••"
-                    value={signupForm.confirmPassword}
-                    onChange={(e) =>
-                      setSignupForm({ ...signupForm, confirmPassword: e.target.value })
-                    }
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full mt-2 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl text-xs font-bold shadow-md shadow-teal-600/25 hover:from-emerald-700 hover:to-teal-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+              <span
+                className={`px-2.5 py-0.5 rounded-md border font-semibold text-[11px] flex items-center gap-1.5 ${
+                  nasOnline
+                    ? "text-emerald-700 bg-emerald-50 border-emerald-200"
+                    : "text-rose-700 bg-rose-50 border-rose-200"
+                }`}
               >
-                {isLoading ? (
-                  <>
-                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>กำลังลงทะเบียนบน Supabase...</span>
-                  </>
-                ) : (
-                  <span>ลงทะเบียนบัญชี Supabase Auth ➜</span>
-                )}
-              </button>
-            </form>
-          )}
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    nasOnline ? "bg-emerald-500" : "bg-rose-500"
+                  }`}
+                />
+                <span>{nasOnline ? "ออนไลน์ (Online)" : "ออฟไลน์ (Offline)"}</span>
+              </span>
+            </div>
 
-          {/* Registration / Request Access link */}
-          <div className="pt-1 flex items-center justify-between text-xs text-slate-500">
-            <span>ต้องการขออนุมัติสิทธิ์ราชการ?</span>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                ชื่อบัญชีผู้ใช้ Synology (Username)
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  required
+                  placeholder="เช่น admin หรือชื่อผู้ใช้บน NAS"
+                  value={nasUsername}
+                  onChange={(e) => setNasUsername(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-800 focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/20 transition-all font-mono"
+                />
+                <span className="absolute left-3.5 top-2.5 text-slate-400 text-sm">👤</span>
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-bold text-slate-700">
+                  รหัสผ่าน Synology (DSM Password)
+                </label>
+                <span className="text-[11px] text-slate-400 font-mono">SYNO.API.Auth</span>
+              </div>
+              <div className="relative">
+                <input
+                  type={showNasPassword ? "text" : "password"}
+                  required
+                  placeholder="ระบุรหัสผ่านบัญชี Synology DSM"
+                  value={nasPassword}
+                  onChange={(e) => setNasPassword(e.target.value)}
+                  className="w-full pl-10 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-800 focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/20 transition-all"
+                />
+                <span className="absolute left-3.5 top-2.5 text-slate-400 text-sm">🔒</span>
+                <button
+                  type="button"
+                  onClick={() => setShowNasPassword(!showNasPassword)}
+                  className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 text-xs font-medium cursor-pointer"
+                  title={showNasPassword ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
+                >
+                  {showNasPassword ? "🙈" : "👁️"}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between text-xs">
+              <label className="flex items-center space-x-2 cursor-pointer text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="w-4 h-4 accent-[#4F46E5] rounded"
+                />
+                <span>จดจำการเข้าสู่ระบบไว้</span>
+              </label>
+              <span className="text-emerald-700 font-bold text-[11px] flex items-center gap-1">
+                <span>🛡️</span> On-Premise Auth
+              </span>
+            </div>
+
+            {/* Cloudflare Turnstile Bot Protection */}
+            <TurnstileWidget
+              onVerify={(tok) => setTurnstileToken(tok)}
+              onExpire={() => setTurnstileToken(null)}
+            />
+
             <button
-              type="button"
-              onClick={() => setShowRequestAccessModal(true)}
-              className="font-bold text-indigo-600 hover:underline cursor-pointer"
+              type="submit"
+              disabled={isLoading}
+              className="w-full py-3 bg-gradient-to-r from-slate-900 via-indigo-900 to-indigo-700 text-white rounded-xl text-sm font-bold shadow-md shadow-indigo-600/25 hover:opacity-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
             >
-              ขอสิทธิ์เข้าใช้งานใหม่ (Request Access) →
+              {isLoading ? (
+                <>
+                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>กำลังยืนยันตัวตนกับ Synology NAS...</span>
+                </>
+              ) : (
+                <span>เข้าสู่ระบบผ่าน Synology NAS ➜</span>
+              )}
             </button>
+          </form>
+
+          {/* Development Status Notice */}
+          <div className="pt-2 text-center text-xs text-slate-400 space-y-1">
+            <p className="text-[11px] text-slate-500 font-medium">
+              * ระบบล็อกอินอื่น (Supabase Email, Google SSO, LINE SSO) ปิดชั่วคราวเพื่อรอการพัฒนาให้สมบูรณ์
+            </p>
+            <p className="text-[10px] text-slate-400">
+              ติดต่อผู้ดูแลระบบเครือข่าย พมจ.กำแพงเพชร หากต้องการจัดการสิทธิ์บัญชี Synology
+            </p>
           </div>
+
           {/* Legal Links Footer */}
           <div className="pt-3 border-t border-slate-200/80 flex items-center justify-between text-[11px] text-slate-400">
             <div className="flex items-center gap-2">
@@ -1092,7 +747,7 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
                 ข้อกำหนดการใช้งาน
               </Link>
             </div>
-            <span>v2.4 Live</span>
+            <span>v2.4 Live (NAS Edition)</span>
           </div>
         </div>
       </div>

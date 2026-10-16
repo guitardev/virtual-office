@@ -1325,6 +1325,44 @@ on conflict (id) do update set
      - ทดสอบการเลือกโฟลเดอร์ปลายทางแล้วเปิดปุ่มอัปโหลดเข้าสู่โฟลเดอร์นั้นโดยตรง
      - ทดสอบความเข้ากันได้กับระบบคลังเอกสารราชการ DMS ทุกฟังก์ชัน
 
+---
+
+## 28. ปรับระบบยืนยันตัวตนหลัก: ใช้ระบบ Login ด้วย Synology NAS WebAPI เพียงอย่างเดียว (Exclusive NAS Authentication)
+
+### 28.1 วัตถุประสงค์และความต้องการ (User Requirement & Objectives)
+* **ความต้องการ:** ใช้ระบบยืนยันตัวตนเข้าสู่ระบบด้วย Synology NAS API (`/api/nas/auth` ผ่าน Synology DSM `SYNO.API.Auth`) เพียงช่องทางเดียว
+* **การจัดการส่วนอื่น:** ปิด/ซ่อนช่องทางล็อกอินอื่น ๆ ชั่วคราว (Supabase Email/Password, Google OAuth, LINE Login, การลงทะเบียนใหม่, และปุ่มขอสิทธิ์) โดยคงโค้ดและ Handler ที่จำเป็นไว้สำหรับการพัฒนาต่อในอนาคต เพื่อให้หน้าจอเข้าสู่ระบบเรียบร้อย เข้าใจง่าย และป้องกันความสับสนของผู้ใช้งานจริงในองค์กร
+
+### 28.2 รายละเอียดการปรับปรุง (Implementation Details)
+1. **หน้าเข้าสู่ระบบ ([components/auth/LoginPage.tsx](file:///c:/Users/GuitarDev/virtual-office/components/auth/LoginPage.tsx)):**
+   - **ล็อคโหมดเป็น Synology NAS:** ตั้งค่าให้แสดงเฉพาะฟอร์มเข้าสู่ระบบด้วยบัญชี Synology DSM
+   - **ซ่อน Mode Switcher Tabs:** ถอดแท็บสลับโหมด 3 ช่อง (`💾 Synology NAS`, `✉️ อีเมล`, `✍️ ลงทะเบียน`) ออก และแทนที่ด้วยแถบสถานะระบุชัดเจน:
+     - `"ระบบยืนยันตัวตนหลัก: Synology DSM WebAPI"` (พร้อมแท็ก `ใช้งานอยู่`)
+     - มีข้อความกำกับ: `"ระบบอื่นปิดไว้ชั่วคราว เพื่อรอการพัฒนาให้สมบูรณ์"`
+   - **ซ่อนช่องทาง OAuth SSO & ฟอร์มอื่น:**
+     - ปิดการแสดงผลปุ่ม Google SSO และ LINE Login
+     - ปิดการแสดงผลฟอร์มล็อกอินด้วยอีเมล และฟอร์มลงทะเบียนสมาชิกใหม่
+     - ปิดการแสดงผลลิงก์ขอสิทธิ์เข้าใช้งานใหม่ (Request Access)
+   - **ปรับปรุงข้อความและแบนเนอร์ฝั่งซ้าย:**
+     - ปรับข้อความและไอคอนนำเสนอของระบบให้ชูจุดเด่นด้าน On-Premise Authentication ผ่าน Synology DSM WebAPI และ RBAC 4 ระดับบทบาท
+     - เปลี่ยนป้ายสถานะเป็น `Synology NAS WebAPI Live`
+   - **คงความปลอดภัยและความต่อเนื่อง:**
+     - ระบบตรวจสอบความปลอดภัยบอท Cloudflare Turnstile ยังคงทำงานเต็มประสิทธิภาพ
+     - ระบบตรวจจับสถานะ NAS Online/Offline แบบเรียลไทม์
+     - ระบบจัดเก็บเซสชัน `smartmso_auth_session` และ `userNasSid` บันทึกสมบูรณ์
+     - โค้ด Modal และ Handlers ของ Supabase/LINE ถูกเก็บรักษาไว้ ไม่สูญหาย พร้อมเปิดใช้งานได้ทันทีเมื่อพัฒนาระบบเสริมเสร็จสิ้น
+
+### 28.3 ผลการทดสอบ (Verification & Test Results)
+1. **Production Build:**
+   - รัน `npm run build` ผ่านสมบูรณ์ `100% (Compiled in 1118ms, TypeScript finished in 414ms, 0 errors)`
+2. **Automated Playwright Test Suite:**
+   - สร้างชุดทดสอบใหม่ [`tests/auth-login-exclusive-nas.spec.ts`](file:///c:/Users/GuitarDev/virtual-office/tests/auth-login-exclusive-nas.spec.ts)
+   - ทดสอบว่าหน้าแรกแสดงฟอร์มเข้าสู่ระบบ Synology NAS ทันที
+   - ตรวจสอบว่าช่องทางอื่น (แท็บอีเมล, ลงทะเบียน, Google, LINE, ขอสิทธิ์) ถูกซ่อนทั้งหมด
+   - **ผลการทดสอบ: ผ่าน 100% (1 passed)**
+3. **Regression Tests:**
+   - ทดสอบ `tests/nas-photo-gallery.spec.ts` และ `tests/nas-file-manager.spec.ts`: **ผ่านครบทั้ง 8 ข้อ (8 passed, 24.1s)**
+
 
 
 
