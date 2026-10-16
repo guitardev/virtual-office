@@ -11,6 +11,7 @@ import {
 } from "@/lib/types";
 import { GOVERNMENT_DIVISIONS, GOVERNMENT_PERSONNEL_TYPES } from "@/lib/rbac";
 import { resolveTargetRecipients } from "@/lib/circular-data";
+import { getUserNasSid, getClientSynologyConfig } from "@/lib/synology";
 import { DocumentScannerModal } from "./DocumentScannerModal";
 
 interface NewCircularModalProps {
@@ -59,6 +60,7 @@ export function NewCircularModal({
   const [showScannerModal, setShowScannerModal] = useState<boolean>(false);
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [selectedFileObj, setSelectedFileObj] = useState<File | null>(null);
 
   // Calculate recipients dynamically
   const targetCriteria: CircularTargetCriteria = useMemo(() => {
@@ -106,6 +108,7 @@ export function NewCircularModal({
     setFileName(file.name);
     setFileSize(file.size);
     setFileType(file.type);
+    setSelectedFileObj(file);
 
     const isImage = file.type.startsWith("image/") || /\.(jpe?g|png|webp|gif|bmp)$/i.test(file.name);
 
@@ -169,6 +172,7 @@ export function NewCircularModal({
     setFileSize(0);
     setFileType("");
     setScannedPages([]);
+    setSelectedFileObj(null);
     setUploadError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -205,6 +209,33 @@ export function NewCircularModal({
     };
 
     onSave(newDoc);
+
+    // Background sync attached file to Synology NAS /virtual-office/circular_docs
+    if (selectedFileObj) {
+      try {
+        const sid = getUserNasSid();
+        const config = getClientSynologyConfig();
+        const formData = new FormData();
+        formData.append("file", selectedFileObj);
+        formData.append("folder_path", "/virtual-office/circular_docs");
+        if (sid) formData.append("sid", sid);
+        formData.append("url", config.nasUrl);
+
+        fetch("/api/nas/upload", {
+          method: "POST",
+          body: formData,
+        })
+          .then((r) => r.json())
+          .then((res) => {
+            if (res.success && res.file) {
+              console.log("[Circular] Synced file to NAS:", res.file.path);
+            }
+          })
+          .catch((err) => console.warn("[Circular] NAS background sync failed:", err));
+      } catch (err) {
+        console.warn("[Circular] NAS sync error:", err);
+      }
+    }
   };
 
   return (
