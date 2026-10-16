@@ -23,7 +23,7 @@ test.describe("Government Circular Document & E-Acknowledgment Workflow", () => 
     await expect(page.locator("p", { hasText: "อัตราการรับทราบเฉลี่ย" }).first()).toBeVisible();
   });
 
-  test("should open document viewer and trigger digital signature", async ({ page }) => {
+  test("should open document viewer in-page and trigger digital signature", async ({ page }) => {
     const circularNav = page.locator("button", { hasText: "เวียนหนังสือราชการ" }).first();
     await circularNav.click();
 
@@ -36,27 +36,28 @@ test.describe("Government Circular Document & E-Acknowledgment Workflow", () => 
     await expect(openDocBtn).toBeVisible();
     await openDocBtn.click();
 
-    // Verify document viewer modal is open
-    const modalBackdrop = page.locator("div.fixed.z-50");
-    await expect(modalBackdrop).toBeVisible();
+    // Verify document viewer is open IN-PAGE (not a fixed popup modal)
+    const inPageView = page.locator("[data-testid='circular-viewer-view']");
+    await expect(inPageView).toBeVisible();
+    await expect(page.locator("div.fixed.z-50.backdrop-blur-md")).not.toBeVisible();
 
     // If "ลงนามดิจิทัลรับทราบ" is visible, test opening signature pad
-    const signBtn = modalBackdrop.locator("button", { hasText: "ลงนามดิจิทัลรับทราบ" });
+    const signBtn = inPageView.locator("button", { hasText: "ลงนามดิจิทัลรับทราบ" });
     if (await signBtn.isVisible()) {
       await signBtn.click();
       // Verify digital signature pad
-      await expect(page.locator("text=ลงลายมือชื่อดิจิทัลและบันทึกข้อสั่งการ")).toBeVisible();
+      await expect(page.locator("text=ลงนามรับทราบหนังสือเวียนราชการ")).toBeVisible();
       // Close signature pad
-      await page.locator("button", { hasText: "ยกเลิก" }).click();
+      await page.locator("button", { hasText: "✕" }).last().click();
     }
 
-    // Close document viewer with close X button
-    const closeViewerBtn = modalBackdrop.locator("button:has-text('✕')").first();
-    await closeViewerBtn.click();
-    await expect(modalBackdrop).not.toBeVisible();
+    // Close document viewer with back button
+    const backBtn = inPageView.locator("button", { hasText: /ย้อนกลับ|ปิดหน้าเอกสาร/ }).first();
+    await backBtn.click();
+    await expect(inPageView).not.toBeVisible();
   });
 
-  test("should open and display official printable circulation slip", async ({ page }) => {
+  test("should open and display official printable circulation slip in-page", async ({ page }) => {
     const circularNav = page.locator("button", { hasText: "เวียนหนังสือราชการ" }).first();
     await circularNav.click();
 
@@ -68,20 +69,22 @@ test.describe("Government Circular Document & E-Acknowledgment Workflow", () => 
     await expect(printBtn).toBeVisible();
     await printBtn.click();
 
-    const modalBackdrop = page.locator("div.fixed.z-50");
-    await expect(modalBackdrop).toBeVisible();
+    // Verify print slip is open IN-PAGE
+    const printView = page.locator("[data-testid='circulation-print-view']");
+    await expect(printView).toBeVisible();
+    await expect(page.locator("div.fixed.z-50.backdrop-blur-md")).not.toBeVisible();
 
-    // Verify print slip modal contains Garuda crest and official title
-    await expect(modalBackdrop.locator("text=ใบสรุปผลการเวียนหนังสือราชการและบัญชีลงนามรับทราบ")).toBeVisible();
-    await expect(modalBackdrop.locator("text=บันทึกผลการเวียนหนังสือราชการและหลักฐานการรับทราบ")).toBeVisible();
+    // Verify print slip contains Garuda crest and official title
+    await expect(printView.locator("text=ใบสรุปผลการเวียนหนังสือราชการและบัญชีลงนามรับทราบ")).toBeVisible();
+    await expect(printView.locator("text=บันทึกผลการเวียนหนังสือราชการและหลักฐานการรับทราบ")).toBeVisible();
 
-    // Close print slip
-    const closeBtn = modalBackdrop.locator("button:has-text('✕')").first();
-    await closeBtn.click();
-    await expect(modalBackdrop).not.toBeVisible();
+    // Return back to list
+    const backBtn = printView.locator("button", { hasText: /ย้อนกลับ|✕ ปิด/ }).first();
+    await backBtn.click();
+    await expect(printView).not.toBeVisible();
   });
 
-  test("should open new circular modal and toggle target audience settings", async ({ page }) => {
+  test("should open new circular form in-page and toggle target audience settings", async ({ page }) => {
     const circularNav = page.locator("button", { hasText: "เวียนหนังสือราชการ" }).first();
     await circularNav.click();
 
@@ -90,27 +93,29 @@ test.describe("Government Circular Document & E-Acknowledgment Workflow", () => 
     await expect(newDocBtn).toBeVisible();
     await newDocBtn.click();
 
-    const modalBackdrop = page.locator("div.fixed.z-50");
-    await expect(modalBackdrop).toBeVisible();
+    // Verify form renders IN-PAGE
+    const newFormView = page.locator("[data-testid='new-circular-view']");
+    await expect(newFormView).toBeVisible();
+    await expect(page.locator("div.fixed.z-50.backdrop-blur-md")).not.toBeVisible();
 
-    // Modal title verification
-    await expect(modalBackdrop.locator("h3", { hasText: "สร้างหนังสือเวียนราชการใหม่" })).toBeVisible();
+    // Title verification
+    await expect(newFormView.locator("h3", { hasText: "สร้างหนังสือเวียนราชการใหม่" })).toBeVisible();
 
     // Select custom targeting option label
-    const customOption = modalBackdrop.locator("label:has-text('กำหนดกลุ่มเป้าหมายเฉพาะ')");
+    const customOption = newFormView.locator("label:has-text('กำหนดกลุ่มเป้าหมายเฉพาะ')");
     await expect(customOption).toBeVisible();
     await customOption.click();
 
     // Check that division selection is visible
-    await expect(modalBackdrop.locator("text=เลือกกลุ่ม / ฝ่ายงานเป้าหมาย")).toBeVisible();
-    await expect(modalBackdrop.locator("text=ฝ่ายบริหารทั่วไป")).toBeVisible();
+    await expect(newFormView.locator("text=เลือกกลุ่ม / ฝ่ายงานเป้าหมาย")).toBeVisible();
+    await expect(newFormView.locator("text=ฝ่ายบริหารทั่วไป")).toBeVisible();
 
-    // Close modal
-    await modalBackdrop.locator("button:has-text('ยกเลิก')").click();
-    await expect(modalBackdrop).not.toBeVisible();
+    // Cancel and return to list
+    await newFormView.locator("button:has-text('ยกเลิก')").first().click();
+    await expect(newFormView).not.toBeVisible();
   });
 
-  test("should attach a file and show active attachment card with file details", async ({ page }) => {
+  test("should attach a file and show active attachment card with file details in-page", async ({ page }) => {
     const circularNav = page.locator("button", { hasText: "เวียนหนังสือราชการ" }).first();
     await circularNav.click();
 
@@ -118,25 +123,25 @@ test.describe("Government Circular Document & E-Acknowledgment Workflow", () => 
     const newDocBtn = page.locator("button", { hasText: "ออกหนังสือเวียนใหม่" });
     await newDocBtn.click();
 
-    const modalBackdrop = page.locator("div.fixed.z-50");
-    await expect(modalBackdrop).toBeVisible();
+    const newFormView = page.locator("[data-testid='new-circular-view']");
+    await expect(newFormView).toBeVisible();
 
     // Attach sample PDF file
-    const fileInput = modalBackdrop.locator("input[type='file']").last();
+    const fileInput = newFormView.locator("input[type='file']").last();
     await fileInput.setInputFiles({
       name: "ระเบียบสำนักนายกรัฐมนตรี_๒๕๖๙.pdf",
       mimeType: "application/pdf",
       buffer: Buffer.from("%PDF-1.4 test government circular file content"),
     });
 
-    // Verify attachment card displays
-    await expect(modalBackdrop.locator("text=แนบไฟล์เรียบร้อย")).toBeVisible();
-    await expect(modalBackdrop.locator("text=ระเบียบสำนักนายกรัฐมนตรี_๒๕๖๙.pdf")).toBeVisible();
-    await expect(modalBackdrop.locator("button:has-text('เปลี่ยนไฟล์')")).toBeVisible();
+    // Verify attachment card displays in-page
+    await expect(newFormView.locator("text=แนบไฟล์เรียบร้อย")).toBeVisible();
+    await expect(newFormView.locator("text=ระเบียบสำนักนายกรัฐมนตรี_๒๕๖๙.pdf")).toBeVisible();
+    await expect(newFormView.locator("button:has-text('เปลี่ยนไฟล์')")).toBeVisible();
 
-    // Close modal
-    await modalBackdrop.locator("button:has-text('ยกเลิก')").click();
-    await expect(modalBackdrop).not.toBeVisible();
+    // Cancel and return to list
+    await newFormView.locator("button:has-text('ยกเลิก')").first().click();
+    await expect(newFormView).not.toBeVisible();
   });
 });
 

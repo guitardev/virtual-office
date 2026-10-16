@@ -5,9 +5,14 @@ import React, { useRef, useState, useEffect } from "react";
 interface DocumentScannerModalProps {
   onPagesCaptured: (scannedPages: string[], fileName: string) => void;
   onClose: () => void;
+  inPage?: boolean;
 }
 
-export function DocumentScannerModal({ onPagesCaptured, onClose }: DocumentScannerModalProps) {
+export function DocumentScannerModal({
+  onPagesCaptured,
+  onClose,
+  inPage = true,
+}: DocumentScannerModalProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [cameraActive, setCameraActive] = useState<boolean>(false);
@@ -130,35 +135,10 @@ export function DocumentScannerModal({ onPagesCaptured, onClose }: DocumentScann
     onPagesCaptured(scannedPages, docTitle);
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-900/80 backdrop-blur-md animate-fade-in text-slate-800">
-      <div className="w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
-        {/* Header */}
-        <div className="px-6 py-4 bg-gradient-to-r from-slate-900 to-indigo-950 text-white flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-xl">
-              📷
-            </div>
-            <div>
-              <h3 className="text-base font-bold font-heading text-white">
-                ระบบสแกนหนังสือราชการเข้าระบบ (Live Document Scanner)
-              </h3>
-              <p className="text-xs text-indigo-200">
-                สแกนเอกสารจริงผ่านกล้อง หรืออัปโหลดไฟล์ภาพ เพื่อรวมเล่มเป็นหนังสือเวียนอิเล็กทรอนิกส์
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/80 hover:text-white text-sm cursor-pointer transition-all"
-          >
-            ✕
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="p-6 overflow-y-auto flex-1 min-h-0 bg-[#F8FAFC] grid grid-cols-1 lg:grid-cols-12 gap-6">
+  const scannerBodyAndFooter = (
+    <>
+      {/* Body */}
+      <div className="p-6 overflow-y-auto flex-1 min-h-0 bg-[#F8FAFC] grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left Column: Live Camera / Ingestion Viewfinder */}
           <div className="lg:col-span-7 space-y-4">
             <div className="relative rounded-2xl bg-black overflow-hidden aspect-[4/3] flex items-center justify-center border border-slate-800 shadow-lg">
@@ -350,6 +330,82 @@ export function DocumentScannerModal({ onPagesCaptured, onClose }: DocumentScann
             <span>นำเข้าหนังสือเวียน ({scannedPages.length} หน้า) ➜</span>
           </button>
         </div>
+    </>
+  );
+
+  if (inPage) {
+    return (
+      <div data-testid="document-scanner-view" className="w-full max-w-4xl mx-auto space-y-6 animate-fade-in text-slate-800 pb-12">
+        {/* In-page Header */}
+        <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex items-center gap-2 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium text-xs sm:text-sm transition-colors cursor-pointer"
+            >
+              <span>←</span>
+              <span>ย้อนกลับไปรายการหนังสือเวียน</span>
+            </button>
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center text-xl">
+              📷
+            </div>
+            <div>
+              <h3 className="text-base sm:text-lg font-bold font-heading text-slate-800">
+                ระบบสแกนหนังสือราชการเข้าระบบ (Live Document Scanner)
+              </h3>
+              <p className="text-xs text-slate-500">
+                สแกนเอกสารจริงผ่านกล้อง หรืออัปโหลดไฟล์ภาพ เพื่อรวมเล่มเป็นหนังสือเวียนอิเล็กทรอนิกส์
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 text-xs font-semibold transition-all cursor-pointer"
+            >
+              ยกเลิก
+            </button>
+          </div>
+        </div>
+
+        {/* In-page Content Container */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          {scannerBodyAndFooter}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-900/80 backdrop-blur-md animate-fade-in text-slate-800">
+      <div className="w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+        {/* Header */}
+        <div className="px-6 py-4 bg-gradient-to-r from-slate-900 to-indigo-950 text-white flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-xl">
+              📷
+            </div>
+            <div>
+              <h3 className="text-base font-bold font-heading text-white">
+                ระบบสแกนหนังสือราชการเข้าระบบ (Live Document Scanner)
+              </h3>
+              <p className="text-xs text-indigo-200">
+                สแกนเอกสารจริงผ่านกล้อง หรืออัปโหลดไฟล์ภาพ เพื่อรวมเล่มเป็นหนังสือเวียนอิเล็กทรอนิกส์
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/80 hover:text-white text-sm cursor-pointer transition-all"
+          >
+            ✕
+          </button>
+        </div>
+
+        {scannerBodyAndFooter}
       </div>
     </div>
   );

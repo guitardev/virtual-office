@@ -19,6 +19,8 @@ interface NewCircularModalProps {
   availableMembers: Member[];
   onSave: (doc: CircularDocument) => void;
   onClose: () => void;
+  initialScannedPages?: string[];
+  inPage?: boolean;
 }
 
 export function NewCircularModal({
@@ -26,6 +28,8 @@ export function NewCircularModal({
   availableMembers,
   onSave,
   onClose,
+  initialScannedPages = [],
+  inPage = true,
 }: NewCircularModalProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -56,7 +60,7 @@ export function NewCircularModal({
   const [fileUrl, setFileUrl] = useState<string>("");
   const [fileSize, setFileSize] = useState<number>(0);
   const [fileType, setFileType] = useState<string>("");
-  const [scannedPages, setScannedPages] = useState<string[]>([]);
+  const [scannedPages, setScannedPages] = useState<string[]>(initialScannedPages);
   const [showScannerModal, setShowScannerModal] = useState<boolean>(false);
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -238,37 +242,10 @@ export function NewCircularModal({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-900/80 backdrop-blur-md animate-fade-in text-slate-800">
-      <div className="w-full max-w-3xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
-        {/* Header */}
-        <div className="px-6 py-4 bg-gradient-to-r from-slate-900 to-indigo-950 text-white flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-xl">
-              📜
-            </div>
-            <div>
-              <h3 className="text-base font-bold font-heading text-white">
-                สร้างหนังสือเวียนราชการใหม่ (New Circular Document)
-              </h3>
-              <p className="text-xs text-indigo-200">
-                ออกหนังสือเวียน กำหนดกลุ่มเป้าหมาย และระบบลงนามรับทราบตามระเบียบสารบรรณ
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/80 hover:text-white text-sm cursor-pointer transition-all"
-          >
-            ✕
-          </button>
-        </div>
-
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6 bg-[#F8FAFC]">
-          {/* Section 1: Official Header & Urgency */}
-          <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-3">
+  const formInner = (
+    <>
+      {/* Section 1: Official Header & Urgency */}
+      <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-3">
             <div className="text-xs font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-2">
               <span>๑. ข้อมูลหนังสือราชการ</span>
               <span className="text-[10px] text-indigo-600 font-mono">ระเบียบงานสารบรรณ</span>
@@ -714,12 +691,99 @@ export function NewCircularModal({
               <span>({resolvedRecipients.length} ท่าน)</span>
             </button>
           </div>
+    </>
+  );
+
+  if (inPage) {
+    return (
+      <div data-testid="new-circular-view" className="w-full max-w-4xl mx-auto space-y-6 animate-fade-in text-slate-800 pb-12">
+        {/* In-page Header Bar */}
+        <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex items-center gap-2 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium text-xs sm:text-sm transition-colors cursor-pointer"
+            >
+              <span>←</span>
+              <span>ย้อนกลับไปรายการหนังสือเวียน</span>
+            </button>
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center text-xl">
+              📜
+            </div>
+            <div>
+              <h3 className="text-base sm:text-lg font-bold font-heading text-slate-800">
+                สร้างหนังสือเวียนราชการใหม่ (New Circular Document)
+              </h3>
+              <p className="text-xs text-slate-500">
+                ออกหนังสือเวียน กำหนดกลุ่มเป้าหมาย และระบบลงนามรับทราบตามระเบียบสารบรรณ
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 text-xs font-semibold transition-all cursor-pointer"
+            >
+              ยกเลิก
+            </button>
+          </div>
+        </div>
+
+        {/* Form Body */}
+        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8 space-y-6">
+          {formInner}
+        </form>
+
+        {/* Submodal for Document Scanner */}
+        {showScannerModal && (
+          <DocumentScannerModal
+            inPage={false}
+            onClose={() => setShowScannerModal(false)}
+            onPagesCaptured={handleScannerFinished}
+          />
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-900/80 backdrop-blur-md animate-fade-in text-slate-800">
+      <div className="w-full max-w-3xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+        {/* Header */}
+        <div className="px-6 py-4 bg-gradient-to-r from-slate-900 to-indigo-950 text-white flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-xl">
+              📜
+            </div>
+            <div>
+              <h3 className="text-base font-bold font-heading text-white">
+                สร้างหนังสือเวียนราชการใหม่ (New Circular Document)
+              </h3>
+              <p className="text-xs text-indigo-200">
+                ออกหนังสือเวียน กำหนดกลุ่มเป้าหมาย และระบบลงนามรับทราบตามระเบียบสารบรรณ
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/80 hover:text-white text-sm cursor-pointer transition-all"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Form Body */}
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6 bg-[#F8FAFC]">
+          {formInner}
         </form>
       </div>
 
-      {/* Submodal for Document Scanner */}
       {showScannerModal && (
         <DocumentScannerModal
+          inPage={false}
           onClose={() => setShowScannerModal(false)}
           onPagesCaptured={handleScannerFinished}
         />

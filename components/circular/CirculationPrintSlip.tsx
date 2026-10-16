@@ -6,9 +6,14 @@ import { CircularDocument } from "@/lib/types";
 interface CirculationPrintSlipProps {
   document: CircularDocument;
   onClose: () => void;
+  inPage?: boolean;
 }
 
-export function CirculationPrintSlip({ document: doc, onClose }: CirculationPrintSlipProps) {
+export function CirculationPrintSlip({
+  document: doc,
+  onClose,
+  inPage = true,
+}: CirculationPrintSlipProps) {
   const handlePrint = () => {
     window.print();
   };
@@ -25,39 +30,10 @@ export function CirculationPrintSlip({ document: doc, onClose }: CirculationPrin
     minute: "2-digit",
   });
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-900/80 backdrop-blur-md animate-fade-in text-slate-800">
-      <div className="w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[94vh]">
-        {/* Top Control Bar (Hidden when printing) */}
-        <div className="px-6 py-3.5 bg-slate-900 text-white flex items-center justify-between print:hidden">
-          <div className="flex items-center gap-2 text-xs font-bold">
-            <span>🖨️ ใบสรุปผลการเวียนหนังสือราชการและบัญชีลงนามรับทราบ</span>
-            <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono">
-              ความคืบหน้า: {percent}%
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer transition-all flex items-center gap-1.5"
-            >
-              <span>🖨️ สั่งพิมพ์เอกสาร / บันทึกเป็น PDF</span>
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/80 hover:text-white text-xs cursor-pointer transition-all"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-
-        {/* Printable Official Paper Area */}
-        <div className="p-8 sm:p-12 overflow-y-auto flex-1 bg-white print:p-0 print:overflow-visible">
-          {/* Government Emblem / Garuda Header */}
-          <div className="text-center space-y-2 mb-6 border-b-2 border-slate-900 pb-5">
+  const paperContent = (
+    <>
+      {/* Government Emblem / Garuda Header */}
+      <div className="text-center space-y-2 mb-6 border-b-2 border-slate-900 pb-5">
             <div className="text-4xl mx-auto select-none">🦅</div>
             <h1 className="text-xl font-bold font-heading text-slate-900 tracking-wide">
               บันทึกผลการเวียนหนังสือราชการและหลักฐานการรับทราบ
@@ -227,6 +203,94 @@ export function CirculationPrintSlip({ document: doc, onClose }: CirculationPrin
               <div className="text-[10px] text-slate-500 mt-1">({doc.createdByName})</div>
             </div>
           </div>
+    </>
+  );
+
+  if (inPage) {
+    return (
+      <div data-testid="circulation-print-view" className="w-full max-w-4xl mx-auto space-y-6 animate-fade-in text-slate-800 pb-12">
+        {/* Top Control Bar (Hidden when printing) */}
+        <div className="bg-slate-900 text-white p-4 sm:p-5 rounded-2xl shadow-sm flex flex-wrap items-center justify-between gap-4 print:hidden">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium text-xs sm:text-sm transition-colors cursor-pointer border border-slate-700"
+            >
+              <span>←</span>
+              <span>ย้อนกลับ</span>
+            </button>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold">🖨️ ใบสรุปผลการเวียนหนังสือราชการและบัญชีลงนามรับทราบ</span>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono">
+                  ความคืบหน้า: {percent}%
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5 font-mono">
+                เลขที่ {doc.docNumber} · ออกรายงานเมื่อ {printDate}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow cursor-pointer transition-all flex items-center gap-2"
+            >
+              <span>🖨️ สั่งพิมพ์เอกสาร / บันทึกเป็น PDF</span>
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold rounded-xl border border-slate-700 transition-all cursor-pointer"
+            >
+              ✕ ปิด
+            </button>
+          </div>
+        </div>
+
+        {/* Printable Paper Area */}
+        <div className="bg-white p-8 sm:p-12 rounded-2xl shadow-sm border border-slate-200 print:shadow-none print:border-none print:p-0">
+          {paperContent}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-900/80 backdrop-blur-md animate-fade-in text-slate-800">
+      <div className="w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[94vh]">
+        {/* Top Control Bar (Hidden when printing) */}
+        <div className="px-6 py-3.5 bg-slate-900 text-white flex items-center justify-between print:hidden">
+          <div className="flex items-center gap-2 text-xs font-bold">
+            <span>🖨️ ใบสรุปผลการเวียนหนังสือราชการและบัญชีลงนามรับทราบ</span>
+            <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono">
+              ความคืบหน้า: {percent}%
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer transition-all flex items-center gap-1.5"
+            >
+              <span>🖨️ สั่งพิมพ์เอกสาร / บันทึกเป็น PDF</span>
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/80 hover:text-white text-xs cursor-pointer transition-all"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        {/* Printable Official Paper Area */}
+        <div className="p-8 sm:p-12 overflow-y-auto flex-1 bg-white print:p-0 print:overflow-visible">
+          {paperContent}
         </div>
       </div>
     </div>

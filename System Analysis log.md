@@ -1501,6 +1501,25 @@ on conflict (id) do update set
   - แสดงป้ายสถานะ **`Database Cloud Live`** (พร้อมจุดสีเขียวกระพริบ) เมื่อเชื่อมต่อฐานข้อมูล Supabase สำเร็จ
   - รองรับการกดลงนามรับทราบ การออกหนังสือใหม่ และการลบหนังสือ โดยจะซิงก์ข้อมูลลงฐานข้อมูล Supabase ทันที พร้อมอัปเดตสถานะแบบเรียลไทม์ข้ามเครื่อง
 
+---
+
+### 29.6 ปรับเปลี่ยนการออกแบบ UI จาก Modal/Popup เป็นระบบ In-Page เต็มรูปแบบ (In-Page Navigation Architecture)
+
+* **วัตถุประสงค์ (Objectives):**
+  - ยกเลิกการแสดงผลแบบหน้าต่างป๊อปอัป (Popup / Modal Dialog) ที่บดบังหน้าจอและมีพื้นที่ใช้งานจำกัด
+  - เปลี่ยนเป็นการแสดงผลแบบ **In-Page Sub-views** ภายในหน้าหลักอย่างกลมกลืน ช่วยให้การอ่านหนังสือราชการ การดูไฟล์แนบ PDF และการลงนามดิจิทัลมีพื้นที่กว้างขวาง สบายตา และเป็นธรรมชาติ
+* **โครงสร้าง In-Page Navigation ([CircularPage.tsx](file:///c:/Users/GuitarDev/virtual-office/components/circular/CircularPage.tsx)):**
+  - `viewMode: "list" | "create" | "viewer" | "scanner" | "print"`
+  - **List View (`list`):** หน้าแดชบอร์ดหลัก แสดงสถิติ ค้นหา ตัวกรองแท็บ และตารางรายการหนังสือเวียน
+  - **Create View (`create` - [NewCircularModal.tsx](file:///c:/Users/GuitarDev/virtual-office/components/circular/NewCircularModal.tsx)):** ฟอร์มออกหนังสือเวียนใหม่แบบ In-Page พร้อมแถบนำทางด้านบน ปุ่ม `← ย้อนกลับไปรายการหนังสือเวียน` พื้นที่ลากวางไฟล์แนบ และตัวเลือกกลุ่มเป้าหมายขนาดเต็มจอ
+  - **Viewer View (`viewer` - [CircularViewerModal.tsx](file:///c:/Users/GuitarDev/virtual-office/components/circular/CircularViewerModal.tsx)):** พื้นที่ตรวจอ่านหนังสือราชการ ตรวจดู PDF แบบเต็มหน้าต่าง บัญชีรายชื่อผู้รับทราบ และระบบลงนามดิจิทัลในหน้าเดียว
+  - **Scanner View (`scanner` - [DocumentScannerModal.tsx](file:///c:/Users/GuitarDev/virtual-office/components/circular/DocumentScannerModal.tsx)):** หน้าจอเปิดกล้องสแกนเอกสารจริงและเลือกไฟล์สแกนแบบ In-Page
+  - **Print View (`print` - [CirculationPrintSlip.tsx](file:///c:/Users/GuitarDev/virtual-office/components/circular/CirculationPrintSlip.tsx)):** แสดงใบสรุปผลการเวียนหนังสือตราครุฑเต็มหน้ากระดาษ พร้อมแถบปุ่มสั่งพิมพ์และปุ่มย้อนกลับ
+* **ผลการทดสอบ (Verification & Testing):**
+  - Next.js Production Build: ผ่านสมบูรณ์ `100% (Compiled in 1894ms, TypeScript 465ms, 0 errors)`
+  - Automated Playwright Suite ([tests/circular-workflow.spec.ts](file:///c:/Users/GuitarDev/virtual-office/tests/circular-workflow.spec.ts)): ผ่านครบทั้ง 5 การทดสอบ `(5 passed, 17.1s)` โดยตรวจสอบว่าไม่มี `div.fixed.z-50.backdrop-blur-md` ปรากฏขึ้นมารบกวนผู้ใช้งาน
+
+
 
 
 

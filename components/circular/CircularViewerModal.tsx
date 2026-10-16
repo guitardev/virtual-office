@@ -10,6 +10,8 @@ interface CircularViewerModalProps {
   currentUser: Member;
   onAcknowledge: (docId: string, signatureUrl?: string, endorsementNote?: string) => void;
   onClose: () => void;
+  onPrintSlip?: () => void;
+  inPage?: boolean;
 }
 
 export function CircularViewerModal({
@@ -17,6 +19,8 @@ export function CircularViewerModal({
   currentUser,
   onAcknowledge,
   onClose,
+  onPrintSlip,
+  inPage = true,
 }: CircularViewerModalProps) {
   const [activeTab, setActiveTab] = useState<"doc" | "tracking">("doc");
   const [currentPageIndex, setCurrentPageIndex] = useState<number>(0);
@@ -39,63 +43,11 @@ export function CircularViewerModal({
 
   const percent = Math.round((doc.acknowledgedCount / Math.max(1, doc.totalCount)) * 100);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-900/80 backdrop-blur-md animate-fade-in text-slate-800">
-      <div className="w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[94vh]">
-        {/* Header */}
-        <div className="px-6 py-4 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-xl">
-              📜
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-xs font-bold text-indigo-300">{doc.docNumber}</span>
-                {doc.urgency === "urgent" && (
-                  <span className="px-2 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-bold">
-                    ⚡ ด่วน
-                  </span>
-                )}
-                {doc.urgency === "very_urgent" && (
-                  <span className="px-2 py-0.5 rounded-full bg-orange-600 text-white text-[10px] font-bold">
-                    ⚡⚡ ด่วนมาก
-                  </span>
-                )}
-                {doc.urgency === "most_urgent" && (
-                  <span className="px-2 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-bold animate-pulse">
-                    🚨 ด่วนที่สุด
-                  </span>
-                )}
-              </div>
-              <h3 className="text-base font-bold font-heading text-white truncate max-w-xl">
-                {doc.title}
-              </h3>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowPrintSlip(true)}
-              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all"
-              title="พิมพ์ใบสรุปผลการเวียนหนังสือราชการ"
-            >
-              <span>🖨️</span>
-              <span className="hidden sm:inline">พิมพ์รายงาน</span>
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/80 hover:text-white text-sm cursor-pointer transition-all"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-
-        {/* Tab Switcher & Status Bar */}
-        <div className="px-6 py-2 bg-slate-100 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-1">
+  const viewerBodyAndFooter = (
+    <>
+      {/* Tab Switcher & Status Bar */}
+      <div className="px-6 py-2.5 bg-slate-100 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-1">
             <button
               type="button"
               onClick={() => setActiveTab("doc")}
@@ -433,6 +385,141 @@ export function CircularViewerModal({
             </div>
           )}
         </div>
+    </>
+  );
+
+  const urgencyBadge = (
+    <>
+      {doc.urgency === "urgent" && (
+        <span className="px-2 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-bold">⚡ ด่วน</span>
+      )}
+      {doc.urgency === "very_urgent" && (
+        <span className="px-2 py-0.5 rounded-full bg-orange-600 text-white text-[10px] font-bold">⚡⚡ ด่วนมาก</span>
+      )}
+      {doc.urgency === "most_urgent" && (
+        <span className="px-2 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-bold animate-pulse">🚨 ด่วนที่สุด</span>
+      )}
+    </>
+  );
+
+  if (inPage) {
+    return (
+      <div data-testid="circular-viewer-view" className="w-full max-w-5xl mx-auto space-y-6 animate-fade-in text-slate-800 pb-12">
+        {/* In-page Header Navigation */}
+        <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex items-center gap-2 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium text-xs sm:text-sm transition-colors cursor-pointer"
+            >
+              <span>←</span>
+              <span>ย้อนกลับไปรายการหนังสือเวียน</span>
+            </button>
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center text-xl">
+              📜
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                  {doc.docNumber}
+                </span>
+                {urgencyBadge}
+              </div>
+              <h3 className="text-base sm:text-lg font-bold font-heading text-slate-800 mt-1 line-clamp-1">
+                {doc.title}
+              </h3>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (onPrintSlip) onPrintSlip();
+                else setShowPrintSlip(true);
+              }}
+              className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5 border border-slate-200 cursor-pointer transition-all"
+              title="พิมพ์ใบสรุปผลการเวียนหนังสือราชการ"
+            >
+              <span>🖨️</span>
+              <span>พิมพ์รายงานผล</span>
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 text-xs font-semibold transition-all cursor-pointer"
+            >
+              ✕ ปิดหน้าเอกสาร
+            </button>
+          </div>
+        </div>
+
+        {/* Viewer Content Container */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          {viewerBodyAndFooter}
+        </div>
+
+        {/* Signature Pad Submodal */}
+        {showSignaturePad && (
+          <DigitalSignaturePad
+            currentUser={currentUser}
+            docNumber={doc.docNumber}
+            docTitle={doc.title}
+            onConfirm={handleSignatureConfirmed}
+            onCancel={() => setShowSignaturePad(false)}
+          />
+        )}
+
+        {/* Print Slip Submodal */}
+        {showPrintSlip && (
+          <CirculationPrintSlip document={doc} onClose={() => setShowPrintSlip(false)} />
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-900/80 backdrop-blur-md animate-fade-in text-slate-800">
+      <div className="w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[94vh]">
+        {/* Header */}
+        <div className="px-6 py-4 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-xl">
+              📜
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-xs font-bold text-indigo-300">{doc.docNumber}</span>
+                {urgencyBadge}
+              </div>
+              <h3 className="text-base font-bold font-heading text-white truncate max-w-xl">
+                {doc.title}
+              </h3>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowPrintSlip(true)}
+              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all"
+              title="พิมพ์ใบสรุปผลการเวียนหนังสือราชการ"
+            >
+              <span>🖨️</span>
+              <span className="hidden sm:inline">พิมพ์รายงาน</span>
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/80 hover:text-white text-sm cursor-pointer transition-all"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        {viewerBodyAndFooter}
       </div>
 
       {/* Signature Pad Submodal */}

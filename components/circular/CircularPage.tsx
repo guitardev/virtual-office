@@ -45,11 +45,11 @@ export const CircularPage: React.FC<CircularPageProps> = ({
   const [divisionFilter, setDivisionFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "completed">("all");
 
-  // Modals state
-  const [showNewModal, setShowNewModal] = useState(false);
-  const [showScannerModal, setShowScannerModal] = useState(false);
+  // In-page navigation state
+  const [viewMode, setViewMode] = useState<"list" | "create" | "viewer" | "scanner" | "print">("list");
   const [viewingDoc, setViewingDoc] = useState<CircularDocument | null>(null);
   const [printingDoc, setPrintingDoc] = useState<CircularDocument | null>(null);
+  const [scannedPagesForNewDoc, setScannedPagesForNewDoc] = useState<string[]>([]);
 
   // Load documents on mount from Supabase Live with Local Storage fallback
   const loadData = async () => {
@@ -228,6 +228,85 @@ export const CircularPage: React.FC<CircularPageProps> = ({
     }
   };
 
+  // Helpers for In-Page navigation
+  const handleOpenViewer = (doc: CircularDocument) => {
+    setViewingDoc(doc);
+    setViewMode("viewer");
+  };
+
+  const handleOpenPrint = (doc: CircularDocument, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setPrintingDoc(doc);
+    setViewMode("print");
+  };
+
+  // ─── IN-PAGE SUB-VIEWS (NO POPUP MODALS) ───
+  if (viewMode === "create" && currentUser) {
+    return (
+      <NewCircularModal
+        currentUser={currentUser}
+        availableMembers={members}
+        initialScannedPages={scannedPagesForNewDoc}
+        onClose={() => {
+          setScannedPagesForNewDoc([]);
+          setViewMode("list");
+        }}
+        onSave={(newDoc) => {
+          setScannedPagesForNewDoc([]);
+          handleCreateDocument(newDoc);
+          setViewMode("list");
+        }}
+        inPage={true}
+      />
+    );
+  }
+
+  if (viewMode === "scanner") {
+    return (
+      <DocumentScannerModal
+        inPage={true}
+        onClose={() => setViewMode("list")}
+        onPagesCaptured={(scannedPages) => {
+          setScannedPagesForNewDoc(scannedPages);
+          showToast(`สแกนเอกสารเสร็จสมบูรณ์ (${scannedPages.length} หน้า) นำไปสร้างหนังสือเวียนได้ทันที`);
+          setViewMode("create");
+        }}
+      />
+    );
+  }
+
+  if (viewMode === "viewer" && viewingDoc && currentUser) {
+    return (
+      <CircularViewerModal
+        document={viewingDoc}
+        currentUser={currentUser}
+        inPage={true}
+        onClose={() => {
+          setViewingDoc(null);
+          setViewMode("list");
+        }}
+        onAcknowledge={handleAcknowledgeDoc}
+        onPrintSlip={() => {
+          setPrintingDoc(viewingDoc);
+          setViewMode("print");
+        }}
+      />
+    );
+  }
+
+  if (viewMode === "print" && printingDoc) {
+    return (
+      <CirculationPrintSlip
+        document={printingDoc}
+        inPage={true}
+        onClose={() => {
+          setPrintingDoc(null);
+          setViewMode(viewingDoc ? "viewer" : "list");
+        }}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       {/* ─── HEADER & PRIMARY ACTIONS ─── */}
@@ -257,7 +336,7 @@ export const CircularPage: React.FC<CircularPageProps> = ({
 
         <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => setShowScannerModal(true)}
+            onClick={() => setViewMode("scanner")}
             className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium text-sm transition-colors border border-slate-200 cursor-pointer"
             title="เปิดกล้องสแกนเอกสารกระดาษเป็นไฟล์ดิจิทัล"
           >
@@ -266,7 +345,7 @@ export const CircularPage: React.FC<CircularPageProps> = ({
           </button>
 
           <button
-            onClick={() => setShowNewModal(true)}
+            onClick={() => setViewMode("create")}
             className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium text-sm transition-shadow shadow-sm hover:shadow cursor-pointer"
           >
             <span>➕</span>
@@ -465,7 +544,7 @@ export const CircularPage: React.FC<CircularPageProps> = ({
                 return (
                   <div
                     key={doc.id}
-                    onClick={() => setViewingDoc(doc)}
+                    onClick={() => handleOpenViewer(doc)}
                     className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-4 group hover:border-indigo-300"
                   >
                     {/* Left: Doc Info */}
@@ -547,10 +626,7 @@ export const CircularPage: React.FC<CircularPageProps> = ({
 
                       <div className="flex items-center gap-1.5">
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPrintingDoc(doc);
-                          }}
+                          onClick={(e) => handleOpenPrint(doc, e)}
                           className="px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
                           title="พิมพ์ใบปะหน้าเวียน / รายงานผล"
                         >
@@ -561,7 +637,7 @@ export const CircularPage: React.FC<CircularPageProps> = ({
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            setViewingDoc(doc);
+                            handleOpenViewer(doc);
                           }}
                           className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-1 cursor-pointer ${
                             isTargeted && !isSigned
@@ -674,14 +750,14 @@ export const CircularPage: React.FC<CircularPageProps> = ({
                         <td className="py-3 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
                             <button
-                              onClick={() => setPrintingDoc(doc)}
+                              onClick={() => handleOpenPrint(doc)}
                               className="px-2.5 py-1 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors cursor-pointer"
                               title="พิมพ์รายงานสรุป"
                             >
                               🖨️ พิมพ์
                             </button>
                             <button
-                              onClick={() => setViewingDoc(doc)}
+                              onClick={() => handleOpenViewer(doc)}
                               className="px-2.5 py-1 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors cursor-pointer"
                             >
                               รายละเอียด
@@ -698,42 +774,6 @@ export const CircularPage: React.FC<CircularPageProps> = ({
         </div>
       )}
 
-      {/* ─── MODALS ─── */}
-      {showNewModal && currentUser && (
-        <NewCircularModal
-          currentUser={currentUser}
-          availableMembers={members}
-          onClose={() => setShowNewModal(false)}
-          onSave={handleCreateDocument}
-        />
-      )}
-
-      {showScannerModal && (
-        <DocumentScannerModal
-          onClose={() => setShowScannerModal(false)}
-          onPagesCaptured={(scannedPages, fileName) => {
-            setShowScannerModal(false);
-            showToast(`สแกนเอกสารเสร็จสมบูรณ์ (${scannedPages.length} หน้า) นำไปสร้างหนังสือเวียนได้ทันที`);
-            setShowNewModal(true);
-          }}
-        />
-      )}
-
-      {viewingDoc && currentUser && (
-        <CircularViewerModal
-          document={viewingDoc}
-          currentUser={currentUser}
-          onClose={() => setViewingDoc(null)}
-          onAcknowledge={handleAcknowledgeDoc}
-        />
-      )}
-
-      {printingDoc && (
-        <CirculationPrintSlip
-          document={printingDoc}
-          onClose={() => setPrintingDoc(null)}
-        />
-      )}
     </div>
   );
 };
