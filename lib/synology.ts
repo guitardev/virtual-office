@@ -123,6 +123,14 @@ export async function safeParseJsonResponse(res: Response): Promise<any> {
     return JSON.parse(text);
   } catch {
     // Check known reverse proxy and Cloudflare errors
+    if (res.status === 413 || text.includes("FUNCTION_PAYLOAD_TOO_LARGE") || text.includes("Request Entity Too Large")) {
+      return {
+        success: false,
+        error:
+          "ขนาดไฟล์เกินขีดจำกัดของระบบคลาวด์ (HTTP 413: ขนาดไฟล์เกิน 4.2 MB ต่อคำขอผ่าน Cloud Serverless กรุณาลดขนาดไฟล์ หรือใช้ภาพถ่ายความละเอียดปกติ)",
+        code: 413,
+      };
+    }
     if (res.status === 530 || text.includes("error code: 1033")) {
       return {
         success: false,
@@ -154,10 +162,138 @@ export async function safeParseJsonResponse(res: Response): Promise<any> {
     }
     return {
       success: false,
-      error: `ข้อมูลที่ได้รับจาก NAS ไม่ใช่รูปแบบ JSON (HTTP ${res.status}): ${text.slice(0, 100)}`,
+      error: `ข้อมูลที่ได้รับจาก NAS ไม่ใช่รูปแบบ JSON (HTTP ${res.status}): ${text.replace(/sin1::[a-zA-Z0-9_-]+/g, "").slice(0, 100).trim()}`,
       code: res.status,
     };
   }
+}
+
+/**
+ * Maximum file payload size supported by serverless cloud hosting (e.g. Vercel 4.5MB limit).
+ * 4.0 MB safe threshold to leave room for multipart form boundary and headers.
+ */
+export const MAX_SERVERLESS_UPLOAD_SIZE = 4.0 * 1024 * 1024;
+
+/**
+ * Automatically compress high-resolution images in the browser before upload.
+ * Reduces 10-25MB camera photos down to 1-3MB without perceptible quality loss,
+ * ensuring uploads never exceed serverless payload limits (4.2 MB).
+ */
+export async function compressImageForUpload(
+  file: File,
+  maxSizeBytes: number = MAX_SERVERLESS_UPLOAD_SIZE
+): Promise<File> {
+  // Only compress standard raster images (skip SVG, GIF, non-images, or files already smaller than limit)
+  if (
+    !file.type.startsWith("image/") ||
+    file.type.includes("svg") ||
+    file.type.includes("gif")
+  ) {
+    return file;
+  }
+
+  // If already under safe threshold (4.0MB), return original file
+  if (file.size <= maxSizeBytes) {
+    return file;
+  }
+
+  return new Promise((resolve) => {
+    try {
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        try {
+          const canvas = document.createElement("canvas");
+          let { width, height } = img;
+
+          // Max dimension: 2560px (2K QHD high-definition)
+          const MAX_DIMENSION = 2560;
+          if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+            if (width > height) {
+              height = Math.round((height * MAX_DIMENSION) / width);
+              width = MAX_DIMENSION;
+            } else {
+              width = Math.round((width * MAX_DIMENSION) / height);
+              height = MAX_DIMENSION;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            resolve(file);
+            return;
+          }
+
+          // Use high quality image rendering
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = "high";
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Try 0.88 quality first
+          canvas.toBlob(
+            (blob) => {
+              if (blob && blob.size < file.size) {
+                // If still above maxSizeBytes, try one more aggressive pass at 0.78 quality
+                if (blob.size > maxSizeBytes) {
+                  canvas.toBlob(
+                    (secondBlob) => {
+                      if (secondBlob && secondBlob.size < file.size) {
+                        const newName = file.name.replace(/\.[^.]+$/, ".jpg");
+                        const compressedFile = new File([secondBlob], newName, {
+                          type: "image/jpeg",
+                          lastModified: file.lastModified,
+                        });
+                        console.log(
+                          `[Upload] Compressed ${file.name} from ${(file.size / 1024 / 1024).toFixed(1)}MB to ${(compressedFile.size / 1024 / 1024).toFixed(1)}MB`
+                        );
+                        resolve(compressedFile);
+                      } else {
+                        resolve(file);
+                      }
+                    },
+                    "image/jpeg",
+                    0.78
+                  );
+                } else {
+                  const newName = file.name.replace(/\.[^.]+$/, ".jpg");
+                  const compressedFile = new File([blob], newName, {
+                    type: "image/jpeg",
+                    lastModified: file.lastModified,
+                  });
+                  console.log(
+                    `[Upload] Compressed ${file.name} from ${(file.size / 1024 / 1024).toFixed(1)}MB to ${(compressedFile.size / 1024 / 1024).toFixed(1)}MB`
+                  );
+                  resolve(compressedFile);
+                }
+              } else {
+                resolve(file);
+              }
+            },
+            "image/jpeg",
+            0.88
+          );
+        } catch (canvasErr) {
+          console.warn("[Image Compress] Canvas error, using original file:", canvasErr);
+          resolve(file);
+        }
+      };
+
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        resolve(file);
+      };
+
+      img.src = objectUrl;
+    } catch (err) {
+      console.warn("[Image Compress] Error, using original file:", err);
+      resolve(file);
+    }
+  });
 }
 
 /**

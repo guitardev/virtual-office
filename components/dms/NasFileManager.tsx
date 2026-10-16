@@ -16,6 +16,8 @@ import {
   loginSynology,
   SynologyHealthStatus,
   safeParseJsonResponse,
+  compressImageForUpload,
+  MAX_SERVERLESS_UPLOAD_SIZE,
 } from "@/lib/synology";
 import { Member } from "@/lib/types";
 
@@ -219,7 +221,22 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
 
     try {
       for (let i = 0; i < filesToUpload.length; i++) {
-        const file = filesToUpload[i];
+        const rawFile = filesToUpload[i];
+
+        // Optimize/compress images if larger than 3.5MB to fit within Serverless limits
+        let file = rawFile;
+        if (rawFile.type.startsWith("image/") && rawFile.size > 3.5 * 1024 * 1024) {
+          showToast(`⚙️ กำลังปรับขนาดภาพ "${rawFile.name}" เพื่อส่งผ่านคลาวด์...`);
+          file = await compressImageForUpload(rawFile);
+        }
+
+        // Pre-flight check: ensure file doesn't exceed Serverless limit
+        if (file.size > MAX_SERVERLESS_UPLOAD_SIZE) {
+          const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+          lastError = `ไฟล์ "${file.name}" มีขนาดใหญ่เกินไป (${sizeMb} MB > สูงสุด 4.0 MB ต่อไฟล์ผ่านคลาวด์) กรุณาลดขนาดไฟล์ หรือใช้งานผ่านวง LAN สำนักงาน`;
+          continue;
+        }
+
         const formData = new FormData();
         formData.append("file", file);
         formData.append("folder_path", currentPath);

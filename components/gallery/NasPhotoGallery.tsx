@@ -13,6 +13,8 @@ import {
   loginSynology,
   SynologyHealthStatus,
   safeParseJsonResponse,
+  compressImageForUpload,
+  MAX_SERVERLESS_UPLOAD_SIZE,
 } from "@/lib/synology";
 import {
   PhotoSpace,
@@ -771,7 +773,22 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
       let requiresReauth = false;
 
       for (let i = 0; i < validMedia.length; i++) {
-        const file = validMedia[i];
+        const rawFile = validMedia[i];
+
+        // Automatically optimize/compress large camera images client-side to fit within Serverless limits
+        let file = rawFile;
+        if (rawFile.type.startsWith("image/") && rawFile.size > 3.5 * 1024 * 1024) {
+          showToast(`⚙️ กำลังปรับขนาดภาพ "${rawFile.name}" เพื่อรองรับการส่งผ่านคลาวด์...`);
+          file = await compressImageForUpload(rawFile);
+        }
+
+        // Pre-flight check: ensure file doesn't exceed Serverless Cloud limit
+        if (file.size > MAX_SERVERLESS_UPLOAD_SIZE) {
+          const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+          lastErrorMessage = `ไฟล์ "${file.name}" มีขนาดใหญ่เกินไป (${sizeMb} MB > สูงสุด 4.0 MB ต่อไฟล์ผ่านคลาวด์) กรุณาลดขนาดไฟล์ หรืออัปโหลดผ่าน Synology Photos App หรือใช้งานผ่านวง LAN สำนักงาน`;
+          continue;
+        }
+
         const formData = new FormData();
         formData.append("file", file);
         formData.append("folder_path", destFolderPath);

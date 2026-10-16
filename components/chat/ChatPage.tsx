@@ -33,6 +33,8 @@ import {
   saveClientSynologyConfig,
   loginSynology,
   safeParseJsonResponse,
+  compressImageForUpload,
+  MAX_SERVERLESS_UPLOAD_SIZE,
 } from "@/lib/synology";
 
 interface ChatPageProps {
@@ -290,9 +292,23 @@ export function ChatPage({
 
   // ─── SYNOLOGY NAS UPLOAD PROXY ───
   const uploadAttachmentToNas = async (
-    file: File
+    rawFile: File
   ): Promise<{ success: boolean; path?: string; error?: string }> => {
     try {
+      // Auto compress image if larger than 3.5MB to fit within Serverless limits
+      let file = rawFile;
+      if (rawFile.type.startsWith("image/") && rawFile.size > 3.5 * 1024 * 1024) {
+        file = await compressImageForUpload(rawFile);
+      }
+
+      if (file.size > MAX_SERVERLESS_UPLOAD_SIZE) {
+        const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+        return {
+          success: false,
+          error: `ไฟล์ "${file.name}" มีขนาดใหญ่เกินไป (${sizeMb} MB > สูงสุด 4.0 MB ต่อไฟล์ผ่านคลาวด์) กรุณาลดขนาดไฟล์ก่อนส่ง`,
+        };
+      }
+
       const config = getClientSynologyConfig();
       const sid = nasSid || getUserNasSid() || "system_chat_session";
       const formData = new FormData();

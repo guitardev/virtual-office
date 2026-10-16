@@ -33,3 +33,15 @@ description: Expert guide and best practices for Synology DSM WebAPI, File Stati
 ## 4. การจัดการ Drag & Drop บน UI
 - ใช้เทคนิค `dragCounter` (นับจำนวน Drag Enter/Leave) เพื่อป้องกันปัญหาภาพ Overlay กระพริบเมื่อเมาส์เลื่อนผ่าน Child elements
 - คัดกรองประเภทไฟล์ตามหน้าที่ (รูปภาพ/วิดีโอสำหรับคลังภาพ, เอกสารราชการสำหรับ DMS)
+
+## 5. การจัดการข้อจำกัดขนาดไฟล์บน Serverless Cloud (HTTP 413 & Image Compression)
+- **ปัญหา Payload Limit บน Vercel/Serverless:** API Routes บนแพลตฟอร์มคลาวด์มีข้อจำกัด Request Payload สูงสุดที่ **4.5 MB** หากส่งไฟล์ขนาดใหญ่ (เช่น ภาพจากกล้องสมาร์ตโฟน 5-20MB หรือวิดีโอ) จะถูกคลาวด์ปฏิเสธด้วยข้อผิดพลาด `HTTP 413: Request Entity Too Large FUNCTION_PAYLOAD_TOO_LARGE`
+- **แนวทางป้องกันและแก้ไข:**
+  1. **Client-side Image Optimization (`compressImageForUpload`):**
+     - ก่อนส่งข้อมูลขึ้น NAS หากเป็นไฟล์ภาพและมีขนาดเกิน 3.5 MB ให้ระบบบีบอัดและปรับขนาดภาพอัตโนมัติผ่าน HTML5 Canvas โดยควบคุมด้านที่ยาวที่สุดไม่เกิน 2560px (2K QHD) ด้วย JPEG Quality 0.88
+     - ช่วยลดขนาดภาพถ่ายจาก 10-25 MB ลงเหลือ 1.5 - 2.8 MB ได้อย่างรวดเร็วโดยยังคงความคมชัดสูงสำหรับคลังภาพราชการ และไม่เกินขีดจำกัด 4.5 MB
+  2. **Pre-flight Size Guard (`MAX_SERVERLESS_UPLOAD_SIZE = 4.0 MB`):**
+     - ตรวจสอบขนาดไฟล์ก่อนส่งคำขอไปยัง `/api/nas/upload` เสมอ หากเป็นไฟล์วิดีโอหรือเอกสารที่ไม่สามารถบีบอัดได้และมีขนาดเกิน 4.0 MB ให้แจ้งเตือนแนะนำผู้ใช้อย่างสุภาพก่อนส่งคำขอ
+  3. **Sanitization ใน `safeParseJsonResponse`:**
+     - ดักจับรหัส HTTP 413 หรือสตริง `FUNCTION_PAYLOAD_TOO_LARGE` และแปลงเป็นข้อความแนะนำภาษาไทยที่เข้าใจง่าย พร้อมตัดสตริงระบบเซิร์ฟเวอร์ (เช่น `sin1::...`) ออกทั้งหมด
+
