@@ -2,6 +2,7 @@
 
 import React from "react";
 import { CarBookingRequest } from "@/lib/types";
+import { PaperlessDispatchQRCode } from "./PaperlessDispatchQRCode";
 
 interface CarBookingDocumentModalProps {
   booking: CarBookingRequest;
@@ -67,16 +68,32 @@ export function CarBookingDocumentModal({
 
         {/* Official Document Sheet - Scrollable */}
         <div className="p-6 sm:p-10 text-slate-900 font-body print:p-6 print:text-black leading-relaxed overflow-y-auto flex-1 min-h-0 print:overflow-visible print:h-auto">
-          {/* Garuda / Header */}
-          <div className="text-center space-y-1 mb-8">
-            <div className="text-4xl select-none mb-1">🦅</div>
-            <h1 className="text-xl font-bold font-heading text-slate-900 print:text-black">
-              แบบขออนุญาตใช้รถยนต์ส่วนกลาง
-            </h1>
-            <p className="text-sm font-semibold text-slate-700 print:text-black">
-              สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร
-            </p>
-            <div className="flex justify-between items-center text-xs text-slate-500 pt-3 border-b border-slate-200 pb-3">
+          {/* Garuda / Header with QR Dispatch verification */}
+          <div className="relative mb-8 pb-3 border-b border-slate-200">
+            {/* Paperless Dispatch QR in top right corner */}
+            <div className="absolute right-0 top-0 hidden sm:block print:block">
+              <PaperlessDispatchQRCode
+                booking={booking}
+                size={84}
+                showDetails={false}
+                className="p-1.5 rounded-xl border-slate-300 shadow-none bg-white"
+              />
+              <div className="text-[8px] font-mono text-center text-slate-500 mt-0.5 print:text-black">
+                ตรวจรับกุญแจรถ
+              </div>
+            </div>
+
+            <div className="text-center space-y-1">
+              <div className="text-4xl select-none mb-1">🦅</div>
+              <h1 className="text-xl font-bold font-heading text-slate-900 print:text-black">
+                แบบขออนุญาตใช้รถยนต์ส่วนกลาง
+              </h1>
+              <p className="text-sm font-semibold text-slate-700 print:text-black">
+                สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร
+              </p>
+            </div>
+
+            <div className="flex justify-between items-center text-xs text-slate-500 pt-3">
               <span>เลขที่คำขอ: <strong className="text-slate-800 font-mono">{booking.requestNo}</strong></span>
               <span>วันที่ยื่นคำขอ: <strong>{booking.createdAt}</strong></span>
             </div>

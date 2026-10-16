@@ -16,6 +16,8 @@ import {
   saveStoredBookings,
   loadStoredVehicles,
   saveStoredVehicles,
+  getConflictingBookings,
+  findAvailableVehiclesForPeriod,
 } from "@/lib/carbooking-data";
 import {
   fetchVehicles,
@@ -35,6 +37,8 @@ import { VehicleFormModal } from "./VehicleFormModal";
 import { VehicleDetailModal } from "./VehicleDetailModal";
 import { NotificationLogsModal } from "./NotificationLogsModal";
 import { RealisticFuelGauge } from "./RealisticFuelGauge";
+import { FleetGanttView } from "./FleetGanttView";
+import { PaperlessDispatchQRCode } from "./PaperlessDispatchQRCode";
 
 interface CarBookingPageProps {
   currentUser: Member;
@@ -47,7 +51,7 @@ export function CarBookingPage({
   showToast,
   members = [],
 }: CarBookingPageProps) {
-  const [activeTab, setActiveTab] = useState<"fleet" | "requests" | "new_request">("requests");
+  const [activeTab, setActiveTab] = useState<"fleet" | "requests" | "timeline" | "new_request">("requests");
   const [vehicles, setVehicles] = useState<Vehicle[]>(() => loadStoredVehicles());
   const [bookings, setBookings] = useState<CarBookingRequest[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -78,6 +82,31 @@ export function CarBookingPage({
   const [formFuelBudgetRequested, setFormFuelBudgetRequested] = useState<boolean>(false);
   const [formFuelBudgetAmount, setFormFuelBudgetAmount] = useState<number>(1000);
   const [formFuelBudgetSource, setFormFuelBudgetSource] = useState<string>("งบดำเนินงานสำนักงาน");
+
+  // Real-time Conflict Guard calculations
+  const conflictDetails = useMemo(() => {
+    return getConflictingBookings(
+      formVehicleId,
+      formDepartureTime,
+      formReturnTime,
+      bookings
+    );
+  }, [formVehicleId, formDepartureTime, formReturnTime, bookings]);
+
+  const recommendedAlternativeVehicles = useMemo(() => {
+    if (!conflictDetails.hasConflict) return [];
+    const selectedVeh = vehicles.find((v) => v.id === formVehicleId);
+    return findAvailableVehiclesForPeriod(
+      vehicles,
+      formDepartureTime,
+      formReturnTime,
+      bookings,
+      {
+        excludeVehicleId: formVehicleId,
+        preferredCategory: selectedVeh?.category,
+      }
+    );
+  }, [conflictDetails.hasConflict, formVehicleId, formDepartureTime, formReturnTime, vehicles, bookings]);
 
   // Load data from storage & sync with Supabase on mount
   useEffect(() => {
@@ -205,6 +234,17 @@ export function CarBookingPage({
     if (!formDepartureTime || !formReturnTime) {
       showToast("⚠️ กรุณาระบุวันและเวลาเดินทาง");
       return;
+    }
+
+    if (conflictDetails.hasHardConflict) {
+      const firstConf = conflictDetails.conflictingBookings[0];
+      if (
+        !confirm(
+          `⚠️ คำเตือนการจองซ้อนทับ: รถยนต์คันนี้ได้รับการอนุมัติภารกิจอื่นแล้ว (${firstConf.requestNo}: ${firstConf.destination}) ในช่วงเวลาดังกล่าว\n\nคุณยังคงต้องการยืนยันการยื่นคำขอเพื่อรอการพิจารณาหรือไม่?`
+        )
+      ) {
+        return;
+      }
     }
 
     const selectedVeh = vehicles.find((v) => v.id === formVehicleId) || vehicles[0];
@@ -855,6 +895,19 @@ export function CarBookingPage({
 
         <button
           type="button"
+          onClick={() => setActiveTab("timeline")}
+          className={`pb-3.5 px-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors cursor-pointer ${
+            activeTab === "timeline"
+              ? "border-teal-600 text-teal-700"
+              : "border-transparent text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <span>📅</span>
+          <span>ตารางไทม์ไลน์ภารกิจ (Gantt View)</span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab("fleet")}
           className={`pb-3.5 px-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors cursor-pointer ${
             activeTab === "fleet"
@@ -879,6 +932,31 @@ export function CarBookingPage({
           <span>ยื่นคำขอใหม่ (พร้อมค่าน้ำมัน)</span>
         </button>
       </div>
+
+      {/* ─── TAB: FLEET GANTT TIMELINE ─── */}
+      {activeTab === "timeline" && (
+        <FleetGanttView
+          vehicles={vehicles}
+          bookings={bookings}
+          onSelectBooking={(b) => setSelectedDocBooking(b)}
+          onRequestVehicle={(vehId, initialDate) => {
+            setFormVehicleId(vehId);
+            if (initialDate) {
+              const dt = initialDate.includes("T") ? initialDate : `${initialDate}T08:30`;
+              setFormDepartureTime(dt);
+              const depDate = new Date(dt);
+              depDate.setHours(depDate.getHours() + 8);
+              const retY = depDate.getFullYear();
+              const retM = String(depDate.getMonth() + 1).padStart(2, "0");
+              const retD = String(depDate.getDate()).padStart(2, "0");
+              const retH = String(depDate.getHours()).padStart(2, "0");
+              const retMin = String(depDate.getMinutes()).padStart(2, "0");
+              setFormReturnTime(`${retY}-${retM}-${retD}T${retH}:${retMin}`);
+            }
+            setActiveTab("new_request");
+          }}
+        />
+      )}
 
       {/* ─── TAB 1: FLEET OVERVIEW & MANAGEMENT ─── */}
       {activeTab === "fleet" && (
@@ -1399,6 +1477,16 @@ export function CarBookingPage({
                           <span>แบบขออนุญาตใช้รถ (พิมพ์/PDF)</span>
                         </button>
 
+                        {/* Paperless Dispatch QR Code (Direct scan button) */}
+                        {b.status === "approved" && (
+                          <PaperlessDispatchQRCode
+                            booking={b}
+                            size={32}
+                            showDetails={false}
+                            className="p-1 rounded-xl border-emerald-300 hover:border-emerald-500 bg-white shadow-2xs"
+                          />
+                        )}
+
                         {/* View Return Report Document if completed */}
                         {b.returnReport && (
                           <button
@@ -1678,6 +1766,106 @@ export function CarBookingPage({
                   />
                 </div>
               </div>
+
+              {/* Conflict Guard Warning Banner & Intelligent Recommendation */}
+              {conflictDetails.hasConflict && (
+                <div
+                  className={`p-4 rounded-2xl border-2 space-y-3 ${
+                    conflictDetails.hasHardConflict
+                      ? "bg-rose-50/90 border-rose-300 text-rose-950"
+                      : "bg-amber-50/90 border-amber-300 text-amber-950"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-2xl">
+                        {conflictDetails.hasHardConflict ? "🚨" : "⚠️"}
+                      </span>
+                      <div>
+                        <h4 className="text-xs font-bold font-heading">
+                          {conflictDetails.hasHardConflict
+                            ? "พบการจองซ้อนทับกับภารกิจที่ได้รับการอนุมัติแล้ว!"
+                            : "พบการจองซ้อนทับกับคำขอที่อยู่ระหว่างรอตรวจสอบ"}
+                        </h4>
+                        <p className="text-[11px] opacity-90">
+                          ยานพาหนะคันนี้มีภารกิจอื่นในช่วงวันและเวลาดังกล่าว ({conflictDetails.conflictingBookings.length} คำขอ)
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/90 border border-current shrink-0">
+                      {conflictDetails.hasHardConflict ? "จองซ้อน (อนุมัติแล้ว)" : "จองซ้อน (รอพิจารณา)"}
+                    </span>
+                  </div>
+
+                  {/* Conflicting bookings list */}
+                  <div className="space-y-1.5 pt-1">
+                    {conflictDetails.conflictingBookings.map((cb) => (
+                      <div
+                        key={cb.id}
+                        className="p-2.5 bg-white/90 rounded-xl border border-rose-200/60 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                      >
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-[11px] text-teal-800 bg-teal-50 px-1.5 py-0.5 rounded">
+                              {cb.requestNo}
+                            </span>
+                            <strong className="text-slate-800">{cb.destination}</strong>
+                            <span className="text-[10px] text-slate-500">โดย {cb.requesterName}</span>
+                          </div>
+                          <div className="text-[11px] text-slate-500 font-mono mt-0.5">
+                            ช่วงเวลา: {cb.departureTime.replace("T", " ")} ➜ {cb.returnTime.replace("T", " ")}
+                          </div>
+                        </div>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded shrink-0 ${
+                            cb.status === "approved"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-amber-100 text-amber-800"
+                          }`}
+                        >
+                          {cb.status === "approved" ? "อนุมัติแล้ว" : "รอตรวจสอบ"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Recommended Alternative Vehicles */}
+                  {recommendedAlternativeVehicles.length > 0 && (
+                    <div className="pt-2 border-t border-rose-200/60">
+                      <div className="text-xs font-bold text-slate-800 mb-2 flex items-center gap-1.5">
+                        <span>💡</span>
+                        <span>แนะนำยานพาหนะคันอื่นที่ว่างในช่วงเวลานี้ (คลิกเพื่อสลับคัน):</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                        {recommendedAlternativeVehicles.slice(0, 3).map((altCar) => (
+                          <button
+                            key={altCar.id}
+                            type="button"
+                            onClick={() => {
+                              setFormVehicleId(altCar.id);
+                              showToast(`สลับไปใช้รถ ${altCar.name} [${altCar.licensePlate}] แล้ว`);
+                            }}
+                            className="p-2 bg-white hover:bg-teal-50 border border-teal-200 rounded-xl text-left flex items-center gap-2 text-xs transition-all cursor-pointer shadow-2xs group"
+                          >
+                            <span className="text-base">🚗</span>
+                            <div className="min-w-0 flex-1">
+                              <div className="font-bold text-slate-800 truncate group-hover:text-teal-800">
+                                {altCar.name}
+                              </div>
+                              <div className="font-mono text-[10px] text-teal-700 font-bold">
+                                {altCar.licensePlate} • {altCar.category}
+                              </div>
+                            </div>
+                            <span className="text-[10px] font-bold text-teal-700 shrink-0">
+                              เลือกคันนี้ ➜
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>

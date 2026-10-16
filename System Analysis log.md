@@ -280,10 +280,10 @@ on conflict (id) do update set
 - [x] ปรับปรุงฐานข้อมูลยานพาหนะราชการ 10 คัน และขยาย Constraint `vehicles_category_check` รองรับรถจักรยานยนต์ *(ดำเนินการแล้ว 100% ทั้งบน Supabase Live DB และซอร์สโค้ด)*
 
 ### 🟠 ความสำคัญสูง (Next Sprint - Phases 12 & 13)
-- [ ] พัฒนาฟังก์ชัน `hasCarBookingOverlap` ตรวจจับเวลาจองซ้อนทับใน [lib/carbooking-data.ts](file:///c:/Users/GuitarDev/virtual-office/lib/carbooking-data.ts)
-- [ ] สร้างคอมโพเนนต์ Fleet Timeline & Gantt Schedule View แสดงสถานะภารกิจรถ 10 คัน
-- [ ] เพิ่ม Dynamic QR Code สำหรับตรวจรับกุญแจและลงเวลาเดินทาง
-- [ ] เพิ่มฟิลด์ `presence_status` ในตาราง `users` และแสดง Live Presence Status Bar บน Header/Sidebar
+- [x] พัฒนาฟังก์ชัน `hasCarBookingOverlap` และ `getConflictingBookings` ตรวจจับเวลาจองซ้อนทับใน [lib/carbooking-data.ts](file:///c:/Users/GuitarDev/virtual-office/lib/carbooking-data.ts) *(ดำเนินการเสร็จสิ้น 100%)*
+- [x] สร้างคอมโพเนนต์ Fleet Timeline & Gantt Schedule View แสดงสถานะภารกิจรถ 10 คัน ทั้งแบบรายวันและรายสัปดาห์ [components/carbooking/FleetGanttView.tsx](file:///c:/Users/GuitarDev/virtual-office/components/carbooking/FleetGanttView.tsx) *(ดำเนินการเสร็จสิ้น 100%)*
+- [x] เพิ่ม Dynamic QR Code สำหรับตรวจรับกุญแจและลงเวลาเดินทาง [components/carbooking/PaperlessDispatchQRCode.tsx](file:///c:/Users/GuitarDev/virtual-office/components/carbooking/PaperlessDispatchQRCode.tsx) *(ดำเนินการเสร็จสิ้น 100%)*
+- [ ] เพิ่มฟิลด์ `presence_status` ในตาราง `users` และแสดง Live Presence Status Bar บน Header/Sidebar (Phase 13)
 - [ ] รันคำสั่ง SQL สร้างตาราง `audit_logs` และบันทึกกิจกรรมลงระบบจริง
 
 ### 🟡 แผนพัฒนาระยะยาว (Future Phases 14–17)
@@ -1207,4 +1207,52 @@ on conflict (id) do update set
 3. **End-to-End Automated Tests:**
    - รัน Playwright Test Suite ครบทั้ง 7 การทดสอบใน `nas-file-manager.spec.ts` และ `nas-photo-gallery.spec.ts`
    - ผลลัพธ์: **ผ่านฉลุยครบทั้ง 7 การทดสอบ (7 passed, 22.5s)**
+
+---
+
+## 25. บันทึกการพัฒนาระบบตรวจสอบการจองรถซ้อนทับอัจฉริยะ ตารางไทม์ไลน์ภารกิจ และ Dynamic QR Code ตรวจรับกุญแจรถ (Phase 12: Fleet Smart Scheduling & Conflict Guard)
+> **สถานะปัจจุบัน:** ✅ **ดำเนินการเสร็จสิ้นสมบูรณ์ 100% (Implemented, Built & Verified)**  
+> **วันเวลาที่ดำเนินการ:** 16 ตุลาคม 2569
+
+### 25.1 สถาปัตยกรรมและฟังก์ชันตรวจสอบการจองซ้อนทับ (Automatic Overlap Conflict Guard)
+* **กลไกการคำนวณช่วงเวลาใน [lib/carbooking-data.ts](file:///c:/Users/GuitarDev/virtual-office/lib/carbooking-data.ts):**
+  - พัฒนาฟังก์ชัน `isTimeRangeOverlap(startA, endA, startB, endB)` คำนวณความทับซ้อนตามหลักคณิตศาสตร์ช่วงเวลา (`startA < endB && endA > startB`)
+  - ฟังก์ชัน `getConflictingBookings(vehicleId, departureTime, returnTime, bookings, excludeBookingId)`: แยกแยะความรุนแรงของการซ้อนทับ:
+    - **Hard Conflict:** ชนกับคำขอที่ได้รับ "อนุมัติแล้ว (approved)"
+    - **Pending Conflict:** ชนกับคำขอที่อยู่ระหว่าง "รอหัวหน้าฝ่ายตรวจสอบ (pending_review)" หรือ "รอ พมจ. อนุมัติ (endorsed)"
+  - ฟังก์ชัน `findAvailableVehiclesForPeriod(vehicles, departureTime, returnTime, bookings, options)`: ค้นหายานพาหนะทางเลือกที่ว่างในช่วงเวลาดังกล่าว พร้อมคัดกรองตามหมวดหมู่รถยนต์หรือจำนวนที่นั่ง
+* **การตอบสนองบน UI ฟอร์มยื่นคำขอ ([CarBookingPage.tsx](file:///c:/Users/GuitarDev/virtual-office/components/carbooking/CarBookingPage.tsx)):**
+  - **Live Conflict Warning Banner:** เมื่อผู้ใช้ระบุวันเวลาเดินทางและเลือกรถที่มีการจองซ้อนทับ ระบบจะแสดงแถบแจ้งเตือนสีแดง/ส้ม พร้อมระบุเลขที่คำขอ, สถานที่, และผู้จองเดิมทันที
+  - **One-Click Vehicle Reassignment:** นำเสนอการ์ดรถยนต์คันอื่นที่ว่างในช่วงเวลาดังกล่าว พร้อมปุ่ม "เลือกคันนี้ ➜" เพื่อให้ผู้ขอคลิกเปลี่ยนไปใช้รถที่ว่างได้ในคลิกเดียว
+  - **Submission Safety Guard:** ในขั้นตอนกดบันทึกคำขอ หากมีคำขอที่อนุมัติแล้วซ้อนทับอยู่ ระบบจะแสดงกล่องยืนยันเตือนความเสี่ยงก่อนส่งคำขอเสมอ
+
+### 25.2 คอมโพเนนต์ปฏิทินไทม์ไลน์ภารกิจยานพาหนะ ([FleetGanttView.tsx](file:///c:/Users/GuitarDev/virtual-office/components/carbooking/FleetGanttView.tsx))
+* เพิ่มแท็บใหม่ในระบบจองรถยนต์: `activeTab === "timeline"` ("📅 ตารางไทม์ไลน์ภารกิจ (Gantt View)")
+* **โหมดการแสดงผล 2 รูปแบบ:**
+  1. **มุมมองรายวัน (Day Timeline - 24 ชม.):** แบ่งสเกลเวลาละเอียดระดับชั่วโมง (06:00 - 20:00 น.) พร้อมเส้นสีแดงแสดงเวลาปัจจุบัน (Current Time Marker)
+  2. **มุมมองรายสัปดาห์ (Week Timeline - 7 วัน):** แสดงภารกิจของรถยนต์ราชการทั้ง 10 คันในรอบสัปดาห์ทำงาน (จันทร์ - อาทิตย์)
+* **แถบภารกิจตามสถานะ (Color-coded Booking Blocks):**
+  - 🟢 สีเขียว: อนุมัติแล้ว (Approved)
+  - 🟡 สีส้ม: รอการเห็นชอบ/อนุมัติ (Pending / Endorsed)
+  - ⚪ สีเทา/ฟ้า: ส่งคืนแล้ว (Completed)
+* **แถบสรุปสถิติความหนาแน่น (Fleet Utilization Metric):**
+  - คำนวณอัตราการใช้งานยานพาหนะ (% Utilization Rate)
+  - จำนวนภารกิจในวัน/สัปดาห์ และจำนวนรถที่พร้อมใช้งาน/ติดภารกิจ
+* **Interactive Tooltip & Popover:** ชี้เมาส์เหนือแถบเพื่อดูรายละเอียดคำขอ และคลิกเพื่อเปิดแบบคำขอฉบับเต็มได้ทันที รวมถึงสามารถคลิกที่ช่องว่างของรถคันใดก็ได้เพื่อเริ่มยื่นคำขอจองคันนั้นในเวลานั้นได้โดยอัตโนมัติ
+
+### 25.3 Dynamic QR Code ตรวจรับกุญแจรถราชการ ([PaperlessDispatchQRCode.tsx](file:///c:/Users/GuitarDev/virtual-office/components/carbooking/PaperlessDispatchQRCode.tsx))
+* สร้าง dynamic QR code สำหรับตรวจสอบความถูกต้องของภารกิจผ่านแพ็กเกจ `qrcode`
+* เข้ารหัสข้อมูลสรุปคำขอ: เลขที่คำขอ, ทะเบียนรถ, ผู้ขอ, คนขับ, ช่วงเวลา, ผู้อนุมัติ, และ Checksum ประจำคำขอ
+* **การติดตั้งและแสดงผล:**
+  1. **บนเอกสารราชการ ([CarBookingDocumentModal.tsx](file:///c:/Users/GuitarDev/virtual-office/components/carbooking/CarBookingDocumentModal.tsx)):** จัดวางที่มุมขวาบนของเอกสารคู่กับตราครุฑ พร้อมสำหรับการพิมพ์ลงกระดาษจริงหรือส่งออกเป็น PDF
+  2. **บนการ์ดรายการคำขอ ([CarBookingPage.tsx](file:///c:/Users/GuitarDev/virtual-office/components/carbooking/CarBookingPage.tsx)):** แสดงปุ่ม QR Code ขนาดเล็กสำหรับคำขอที่ได้รับอนุมัติแล้ว
+  3. **Verification Inspection Modal:** เมื่อคลิกที่ QR Code จะเปิดหน้าต่างตรวจสอบความถูกต้องสำหรับพนักงานขับรถ, เจ้าหน้าที่พัสดุ และ รปภ. เพื่อตรวจรับกุญแจรถราชการ
+
+### 25.4 ผลการทดสอบ (Verification & Test Results)
+1. **Production Build:**
+   - รัน `npm run build` ผ่านสมบูรณ์ `100% (Compiled in 7.2s, TypeScript passed in 778ms, 0 errors)`
+2. **Automated Playwright Test Suites:**
+   - `tests/fleet-conflict-gantt.spec.ts`: **ผ่านครบ 3 การทดสอบ 100% (3 passed, 20.6s)**
+   - `tests/car-booking-gauge.spec.ts`: **ผ่านการทดสอบ 100% (1 passed, 6.3s)**
+
 

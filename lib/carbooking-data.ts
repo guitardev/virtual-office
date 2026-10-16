@@ -268,3 +268,137 @@ export function saveStoredVehicles(vehicles: Vehicle[]) {
     console.error("Failed to save vehicles:", e);
   }
 }
+
+/**
+ * Parses date string (e.g. YYYY-MM-DDTHH:mm or ISO) into unix timestamp (milliseconds).
+ */
+export function parseBookingTime(timeStr?: string): number {
+  if (!timeStr) return NaN;
+  const normalized = timeStr.includes(" ") && !timeStr.includes("T")
+    ? timeStr.replace(" ", "T")
+    : timeStr;
+  const parsed = new Date(normalized).getTime();
+  return isNaN(parsed) ? NaN : parsed;
+}
+
+/**
+ * Checks whether two time periods overlap.
+ * Overlap occurs if: startA < endB and endA > startB
+ */
+export function isTimeRangeOverlap(
+  startAStr: string,
+  endAStr: string,
+  startBStr: string,
+  endBStr: string
+): boolean {
+  const startA = parseBookingTime(startAStr);
+  const endA = parseBookingTime(endAStr);
+  const startB = parseBookingTime(startBStr);
+  const endB = parseBookingTime(endBStr);
+
+  if (isNaN(startA) || isNaN(endA) || isNaN(startB) || isNaN(endB)) {
+    return false;
+  }
+
+  return startA < endB && endA > startB;
+}
+
+export interface BookingConflictDetails {
+  hasConflict: boolean;
+  hasHardConflict: boolean; // Conflicting with an APPROVED booking
+  hasPendingConflict: boolean; // Conflicting with pending review or endorsed
+  conflictingBookings: CarBookingRequest[];
+}
+
+/**
+ * Returns conflicting bookings for a specific vehicle within a given time range.
+ */
+export function getConflictingBookings(
+  vehicleId: string,
+  departureTime: string,
+  returnTime: string,
+  bookings: CarBookingRequest[],
+  excludeBookingId?: string
+): BookingConflictDetails {
+  if (!vehicleId || !departureTime || !returnTime || !Array.isArray(bookings)) {
+    return {
+      hasConflict: false,
+      hasHardConflict: false,
+      hasPendingConflict: false,
+      conflictingBookings: [],
+    };
+  }
+
+  // Filter out the booking being updated, or rejected / completed ones
+  const activeBookings = bookings.filter((b) => {
+    if (excludeBookingId && b.id === excludeBookingId) return false;
+    if (b.vehicleId !== vehicleId) return false;
+    // Completed or rejected bookings do not block vehicle
+    if (b.status === "rejected" || b.status === "completed") return false;
+    return true;
+  });
+
+  const conflicts = activeBookings.filter((b) =>
+    isTimeRangeOverlap(departureTime, returnTime, b.departureTime, b.returnTime)
+  );
+
+  const hasHardConflict = conflicts.some((b) => b.status === "approved");
+  const hasPendingConflict = conflicts.some(
+    (b) => b.status === "pending_review" || b.status === "endorsed"
+  );
+
+  return {
+    hasConflict: conflicts.length > 0,
+    hasHardConflict,
+    hasPendingConflict,
+    conflictingBookings: conflicts,
+  };
+}
+
+/**
+ * Quick boolean check if a vehicle has an overlapping active booking.
+ */
+export function hasCarBookingOverlap(
+  vehicleId: string,
+  departureTime: string,
+  returnTime: string,
+  bookings: CarBookingRequest[],
+  excludeBookingId?: string
+): boolean {
+  return getConflictingBookings(
+    vehicleId,
+    departureTime,
+    returnTime,
+    bookings,
+    excludeBookingId
+  ).hasConflict;
+}
+
+/**
+ * Finds alternative available vehicles during the requested time window.
+ */
+export function findAvailableVehiclesForPeriod(
+  vehicles: Vehicle[],
+  departureTime: string,
+  returnTime: string,
+  bookings: CarBookingRequest[],
+  options?: {
+    excludeVehicleId?: string;
+    preferredCategory?: string;
+    minCapacity?: number;
+  }
+): Vehicle[] {
+  if (!Array.isArray(vehicles)) return [];
+
+  return vehicles.filter((v) => {
+    // Exclude maintenance or explicitly excluded vehicle
+    if (v.status === "maintenance") return false;
+    if (options?.excludeVehicleId && v.id === options.excludeVehicleId) return false;
+    if (options?.minCapacity && v.capacity < options.minCapacity) return false;
+
+    // Check if conflicting
+    const conflict = getConflictingBookings(v.id, departureTime, returnTime, bookings);
+    return !conflict.hasConflict;
+  });
+}
+
