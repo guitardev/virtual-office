@@ -1255,4 +1255,41 @@ on conflict (id) do update set
    - `tests/fleet-conflict-gantt.spec.ts`: **ผ่านครบ 3 การทดสอบ 100% (3 passed, 20.6s)**
    - `tests/car-booking-gauge.spec.ts`: **ผ่านการทดสอบ 100% (1 passed, 6.3s)**
 
+---
+
+## 26. การแก้ไขข้อผิดพลาดระบบไฟล์ภายใน Synology NAS (Synology Photos Code 407 Error Resolution)
+
+### 26.1 ปัญหาและสาเหตุเชิงลึก (Root Cause Analysis)
+* **ปัญหาที่พบ:** เมื่อผู้ใช้อัปโหลดรูปภาพในหน้าคลังภาพราชการ (Synology Photos) ระบบแสดงข้อความแจ้งเตือน:
+  `อัปโหลดไฟล์ล้มเหลว: เกิดข้อผิดพลาดของระบบไฟล์ภายใน Synology NAS` (รหัสข้อผิดพลาดภายใน DSM: **Code 407 - File operation failed**)
+* **สาเหตุหลัก 3 ประการ:**
+  1. **DSM 7 Photos Shared Space ACL Restriction:**
+     - บนระบบ DSM 7+ โฟลเดอร์ `/photo` เป็น Shared Library Root ของ Synology Photos ซึ่งระบบสิทธิ์ (ACL) ของ Synology ไม่อนุญาตให้เขียนไฟล์หลวม (loose files เช่น รูปภาพ/วิดีโอ) ลงในราก `/photo/` โดยตรง ไฟล์ทั้งหมดใน Shared Space ต้องจัดเก็บไว้ในโฟลเดอร์ย่อย (เช่น `/photo/General` หรือโฟลเดอร์อัลบั้ม)
+     - เมื่อผู้ใช้เลือกอยู่ที่รากของ Shared Space ใน [NasPhotoGallery.tsx](file:///c:/Users/GuitarDev/virtual-office/components/gallery/NasPhotoGallery.tsx) ตัวแปร `destFolderPath` จะได้ค่าเป็น `"/photo"` ทำให้ DSM FileStation ปฏิเสธคำขอและตอบกลับด้วย Code 407
+  2. **Fallback 2 Bypass ใน API Route:**
+     - ใน [app/api/nas/upload/route.ts](file:///c:/Users/GuitarDev/virtual-office/app/api/nas/upload/route.ts) เดิมมีกลไก Fallback 2 สำหรับผันเส้นทางจาก `/photo` ไปยัง `/photo/General` แต่ในเงื่อนไขการตรวจจับรหัสข้อผิดพลาด `[401, 403, 404, 405, 406, 1804]` **ไม่มีรหัส 407** อยู่ในรายการ ทำให้เมื่อ DSM ส่ง Code 407 กลับมา ระบบไม่เข้าเงื่อนไข Fallback และส่ง HTTP 400 ข้อผิดพลาดกลับไปทันที
+  3. **โฟลเดอร์ปลายทางยังไม่ถูกสร้างบนดิสก์จริง:**
+     - หากโฟลเดอร์ `/photo/General` หรือ `/home/Photos` ยังไม่เคยถูกสร้างขึ้นมาก่อน การส่งคำขอ `create_parents: true` ใน `SYNO.FileStation.Upload` บน DSM 7 อาจไม่สร้างโฟลเดอร์บนดิสก์ให้ทันที และส่งผลให้เกิด Code 407/408/1805
+
+### 26.2 การแก้ไขและมาตรการป้องกันเชิงรุก (Implementation & Architecture)
+1. **Frontend Proactive Auto-Routing ([NasPhotoGallery.tsx](file:///c:/Users/GuitarDev/virtual-office/components/gallery/NasPhotoGallery.tsx)):**
+   - ในฟังก์ชัน `uploadFileList` เมื่อตรวจพบว่าอยู่ใน `currentSpace === "shared"` และ `destFolderPath` คือ `"/photo"` ให้ทำการผันเส้นทางเป็น `"/photo/General"` โดยอัตโนมัติก่อนส่งคำขอไปยัง Backend
+2. **Backend Pre-routing & Resilient Directory Creation ([app/api/nas/upload/route.ts](file:///c:/Users/GuitarDev/virtual-office/app/api/nas/upload/route.ts)):**
+   - **Auto-routing:** หากได้รับคำขอปลายทาง `/photo` ให้เปลี่ยนเป้าหมายเป็น `/photo/General` ทันที
+   - **ฟังก์ชัน `ensureDirectoryExists`:** ตรวจสอบและสร้างโฟลเดอร์ปลายทางบนดิสก์จริงล่วงหน้าผ่าน `createNasFolder` (รองรับมาตรฐาน DSM 7 JSON-array format) พร้อมพารามิเตอร์ `force_parent=true`
+   - **ขยายเงื่อนไข Fallback Recovery:** เพิ่มรหัสข้อผิดพลาด `407`, `408`, `1804`, `1805` ใน Fallback 1 (`/chat_attachments`), Fallback 2 (`/photo/General`), และ Fallback 3 (General Folder Auto-Creation)
+   - **ปรับปรุงข้อความวินิจฉัย Code 407:** แสดงคำแนะนำที่ชัดเจนและเข้าใจง่ายสำหรับเจ้าหน้าที่ โดยไม่มีการรั่วไหลของ IP/URL เซิร์ฟเวอร์
+3. **ปรับปรุงคู่มือมาตรฐาน Synology ([.agents/skills/synology/SKILL.md](file:///c:/Users/GuitarDev/virtual-office/.agents/skills/synology/SKILL.md)):**
+   - บันทึกข้อจำกัด DSM 7 เกี่ยวกับ Shared Space `/photo`, รหัสข้อผิดพลาด 407 และรูปแบบการใช้ `ensureDirectoryExists` เป็นแนวปฏิบัติมาตรฐานของทีมพัฒนา
+
+### 26.3 ผลการทดสอบ (Verification & Test Results)
+1. **Production Build:**
+   - รัน `npm run build` ผ่านสมบูรณ์ `100% (Compiled in 1.4s, TypeScript passed in 452ms, 0 errors)`
+2. **Automated Playwright Test Suites:**
+   - `tests/nas-photo-gallery.spec.ts` & `tests/nas-file-manager.spec.ts`: **ผ่านครบทั้ง 7 การทดสอบ 100% (7 passed, 24.6s)**
+     - ทดสอบการสลับ Space (Shared / Personal) และโฟลเดอร์ Breadcrumb
+     - ทดสอบการดักจับข้อผิดพลาดและกระบวนการกู้คืนเซสชัน
+     - ทดสอบ Timeline View, Batch Action, และ Lightbox EXIF Inspector
+
+
 

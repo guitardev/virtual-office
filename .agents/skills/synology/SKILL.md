@@ -26,9 +26,12 @@ description: Expert guide and best practices for Synology DSM WebAPI, File Stati
 - ฝั่ง Frontend เมื่อตรวจพบ Code 119 หรือ `requireAuth: true` ให้เรียก `clearUserNasSid()`, รีเซ็ต state เป็น `null` และเปิด Modal ให้ผู้ใช้กรอกรหัสผ่านเพื่อเชื่อมต่อใหม่ทันที
 
 ## 3. สิทธิ์โฟลเดอร์และการกู้คืนอัตโนมัติ (Folder Permission & Recovery)
-- **Synology Photos Shared Space (`/photo`):** ผู้ใช้ทั่วไปมักไม่มีสิทธิ์เขียนไฟล์ที่ Root `/photo` ตรงๆ หากเกิดสิทธิ์ขัดข้อง (Code 401/403/404/406/1804) ให้ระบบ Auto-fallback ไปอัปโหลดที่ `/photo/General`
-- **Synology Photos Personal Space (`/home/Photos`):** หากผู้ใช้ยังไม่มีโฟลเดอร์ ให้เรียก `SYNO.FileStation.CreateFolder` พร้อมพารามิเตอร์ `force_parent=true` เพื่อสร้างโฟลเดอร์ก่อนอัปโหลด
-- **Chat Attachments (`/chat_attachments`):** หากโฟลเดอร์ Root ไม่มีอยู่ ให้ Fallback ไปยัง `/virtual-office/chat_attachments`
+- **Synology Photos Shared Space (`/photo`):** บน DSM 7+ ระบบไฟล์และ Photos ACL ไม่อนุญาตให้วางไฟล์ลงในราก `/photo` ตรงๆ โดย DSM จะตอบกลับด้วยข้อผิดพลาด Code 407 (File operation failed)
+  - ทั้ง Frontend (`NasPhotoGallery.tsx`) และ Backend (`/api/nas/upload`) ต้องทำ Auto-routing ปรับตำแหน่งปลายทางจาก `/photo` ไปยัง `/photo/General` โดยอัตโนมัติ
+  - รวม Code 407, 408, 1804, 1805 ในชุดตรวจสอบ Fallback Recovery ทุกจุด
+  - ก่อนอัปโหลดหรือเมื่อพบข้อผิดพลาด ให้เรียก `ensureDirectoryExists` ผ่าน `createNasFolder` (รองรับรูปแบบ DSM 7 JSON-array) พร้อม `force_parent=true` เพื่อสร้างโฟลเดอร์จริงบนดิสก์
+- **Synology Photos Personal Space (`/home/Photos`):** หากผู้ใช้ยังไม่มีโฟลเดอร์ ให้เรียก `ensureDirectoryExists` เพื่อสร้างโฟลเดอร์ก่อนอัปโหลด
+- **Chat Attachments (`/chat_attachments`):** หากโฟลเดอร์ Root ไม่มีอยู่ หรือตอบกลับ 407/408/1805 ให้ Fallback ไปยัง `/virtual-office/chat_attachments` พร้อมตรวจสอบและสร้างโฟลเดอร์ให้อัตโนมัติ
 
 ## 4. การจัดการ Drag & Drop บน UI
 - ใช้เทคนิค `dragCounter` (นับจำนวน Drag Enter/Leave) เพื่อป้องกันปัญหาภาพ Overlay กระพริบเมื่อเมาส์เลื่อนผ่าน Child elements

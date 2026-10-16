@@ -1,7 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
-import { loginSynology, safeParseJsonResponse } from "@/lib/synology";
+import { createNasFolder, loginSynology, safeParseJsonResponse } from "@/lib/synology";
 
 export const dynamic = "force-dynamic";
+
+async function ensureDirectoryExists(folderPath: string, sid: string, nasUrl: string): Promise<boolean> {
+  try {
+    const cleanPath = folderPath.replace(/\/+$/, "");
+    const lastSlashIndex = cleanPath.lastIndexOf("/");
+    if (lastSlashIndex <= 0) {
+      return true;
+    }
+    const parent = cleanPath.substring(0, lastSlashIndex);
+    const folderName = cleanPath.substring(lastSlashIndex + 1);
+    if (!parent || !folderName) return true;
+
+    const res = await createNasFolder(sid, parent, folderName, nasUrl);
+    return res.success || res.code === 414 || res.code === 1806;
+  } catch (err) {
+    console.warn(`[NAS Upload] Auto-create folder ${folderPath} failed:`, err);
+    return false;
+  }
+}
 
 function getSynologyUploadErrorMessage(code?: number, folderPath?: string): string {
   switch (code) {
@@ -25,7 +44,10 @@ function getSynologyUploadErrorMessage(code?: number, folderPath?: string): stri
     case 406:
       return `ไม่มีสิทธิ์เขียนไฟล์ลงในโฟลเดอร์ "${folderPath}" บน Synology NAS (กรุณาตรวจสอบสิทธิ์ Read/Write ของผู้ใช้ใน DSM Control Panel -> Shared Folder)`;
     case 407:
-      return "เกิดข้อผิดพลาดของระบบไฟล์ภายใน Synology NAS";
+      if (folderPath === "/photo") {
+        return "ไม่สามารถอัปโหลดไฟล์ไปที่โฟลเดอร์ราก /photo ได้โดยตรง (Synology Photos กำหนดให้บันทึกในโฟลเดอร์ย่อย เช่น /photo/General หรือสร้างอัลบั้มก่อน)";
+      }
+      return `เกิดข้อผิดพลาดของระบบไฟล์ภายใน Synology NAS (รหัส 407: ไม่สามารถเขียนลงในโฟลเดอร์ "${folderPath || "ไม่ระบุ"}" กรุณาตรวจสอบว่ามีโฟลเดอร์นี้และมีสิทธิ์ Read/Write บน DSM)`;
     case 408:
       if (folderPath?.includes("/home")) {
         return `ไม่พบโฟลเดอร์ "${folderPath}" บน NAS (สำหรับพื้นที่ส่วนบุคคล กรุณาตรวจสอบว่าได้เปิด "User Home service" ใน DSM Control Panel > User & Group > Advanced แล้วหรือไม่)`;
@@ -181,16 +203,24 @@ export async function POST(req: NextRequest) {
       return { ok: nasRes.ok, status: nasRes.status, data };
     };
 
+    // DSM 7 Synology Photos: writing files directly to root /photo is forbidden by DSM ACL (Code 407).
+    // Automatically route loose uploads in Shared Space root to /photo/General.
+    if (cleanFolderPath === "/photo") {
+      cleanFolderPath = "/photo/General";
+      await ensureDirectoryExists("/photo/General", effectiveSid, cleanUrl);
+    }
+
     let result = await attemptUpload(cleanFolderPath);
 
-    // Fallback 1: If cleanFolderPath was '/chat_attachments' and returned 408 / 1805 (Folder Not Found),
+    // Fallback 1: If cleanFolderPath was '/chat_attachments' and returned 407 / 408 / 1804 / 1805,
     // try fallback shared folder paths '/virtual-office/chat_attachments'
     if (
       !result.data?.success &&
-      (result.data?.error?.code === 408 || result.data?.error?.code === 1805) &&
+      [407, 408, 1804, 1805].includes(result.data?.error?.code) &&
       cleanFolderPath === "/chat_attachments"
     ) {
       console.log("[NAS Upload] /chat_attachments not found as root share, trying /virtual-office/chat_attachments...");
+      await ensureDirectoryExists("/virtual-office/chat_attachments", effectiveSid, cleanUrl);
       const fallbackResult = await attemptUpload("/virtual-office/chat_attachments");
       if (fallbackResult.data?.success) {
         result = fallbackResult;
@@ -198,14 +228,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Fallback 2: If uploading to root of shared photos '/photo' and rejected due to root permissions (401, 403, 404, 406, 1804),
+    // Fallback 2: If uploading to root of shared photos '/photo' and rejected due to root permissions or file op fail (401, 403, 404, 405, 406, 407, 408, 1804, 1805),
     // try automatically uploading into '/photo/General'
     if (
       !result.data?.success &&
-      [401, 403, 404, 405, 406, 1804].includes(result.data?.error?.code) &&
+      [401, 403, 404, 405, 406, 407, 408, 1804, 1805].includes(result.data?.error?.code) &&
       cleanFolderPath === "/photo"
     ) {
-      console.log("[NAS Upload] Root /photo write restricted, trying /photo/General...");
+      console.log("[NAS Upload] Root /photo write restricted, ensuring /photo/General exists and retrying...");
+      await ensureDirectoryExists("/photo/General", effectiveSid, cleanUrl);
       const photoGeneralResult = await attemptUpload("/photo/General");
       if (photoGeneralResult.data?.success) {
         result = photoGeneralResult;
@@ -213,25 +244,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Fallback 3: If uploading to personal space '/home/Photos' and folder not found (408 / 1805),
-    // attempt to create the folder first and re-upload
+    // Fallback 3: If target folder does not exist or file operation failed (407, 408, 1804, 1805),
+    // attempt directory creation with DSM 7 compliant createNasFolder and re-upload
     if (
       !result.data?.success &&
-      (result.data?.error?.code === 408 || result.data?.error?.code === 1805) &&
-      cleanFolderPath.startsWith("/home/Photos")
+      [407, 408, 1804, 1805].includes(result.data?.error?.code)
     ) {
-      console.log(`[NAS Upload] Folder ${cleanFolderPath} not found, attempting directory creation...`);
-      try {
-        const createUrl = `${cleanUrl}/webapi/entry.cgi?api=SYNO.FileStation.CreateFolder&version=2&method=create&folder_path=${encodeURIComponent(
-          "/home"
-        )}&name=Photos&force_parent=true&_sid=${encodeURIComponent(effectiveSid || "")}`;
-        await fetch(createUrl, { method: "GET", signal: AbortSignal.timeout(5000) });
+      console.log(`[NAS Upload] Folder ${cleanFolderPath} error (${result.data?.error?.code}), attempting directory creation and retry...`);
+      const created = await ensureDirectoryExists(cleanFolderPath, effectiveSid, cleanUrl);
+      if (created) {
         const retryResult = await attemptUpload(cleanFolderPath);
         if (retryResult.data?.success) {
           result = retryResult;
         }
-      } catch (createErr) {
-        console.warn("[NAS Upload] Failed to auto-create /home/Photos:", createErr);
       }
     }
 

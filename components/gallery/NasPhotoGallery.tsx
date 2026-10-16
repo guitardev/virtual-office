@@ -767,6 +767,12 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
       destFolderPath = subPath ? `${basePath}/${subPath}` : basePath;
     }
 
+    // DSM 7 Synology Photos: writing files directly to root /photo is forbidden by DSM ACL (Code 407).
+    // Automatically route loose uploads in Shared Space root to /photo/General.
+    if (currentSpace === "shared" && (destFolderPath === "/photo" || destFolderPath === "/photo/")) {
+      destFolderPath = "/photo/General";
+    }
+
     try {
       let successCount = 0;
       let lastErrorMessage = "";
