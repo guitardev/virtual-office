@@ -16,10 +16,14 @@ import {
   TaskVisibility,
   TaskSubtask,
   MeetingItem,
+  CircularDocument,
+  CircularUrgency,
+  CircularSecretLevel,
 } from "./types";
 import { INITIAL_MEMBERS, INITIAL_SYSTEM_MODULES, INITIAL_ACCESS_REQUESTS, INITIAL_AUDIT_LOGS } from "./rbac";
 import { INITIAL_VEHICLES, INITIAL_BOOKING_REQUESTS } from "./carbooking-data";
 import { DEFAULT_CHAT_GROUPS, INITIAL_CHAT_MESSAGES } from "./chat-data";
+import { loadStoredCircularDocs, saveStoredCircularDocs } from "./circular-data";
 
 // Environment variables from Vercel Marketplace Supabase Integration
 const supabaseUrl =
@@ -1618,4 +1622,194 @@ export async function updateSupabaseUserMetadata(metadata: Record<string, any>):
     return false;
   }
 }
+
+// ─── CIRCULAR DOCUMENTS (GOVERNMENT CIRCULAR & E-ACKNOWLEDGMENT) ───
+
+/**
+ * Map Supabase circular_documents row to CircularDocument object
+ */
+export function mapRowToCircularDoc(row: any): CircularDocument {
+  return {
+    id: row.id,
+    docNumber: row.doc_number,
+    title: row.title,
+    issuedDate: row.issued_date,
+    senderOrg: row.sender_org,
+    urgency: (row.urgency as CircularUrgency) || "normal",
+    secretLevel: (row.secret_level as CircularSecretLevel) || "normal",
+    summary: row.summary || undefined,
+    fileUrl: row.file_url,
+    fileName: row.file_name,
+    fileSize: Number(row.file_size) || 0,
+    totalPages: row.total_pages ? Number(row.total_pages) : undefined,
+    scannedPages: Array.isArray(row.scanned_pages) ? row.scanned_pages : undefined,
+    createdBy: row.created_by,
+    createdByName: row.created_by_name,
+    createdAt: row.created_at,
+    deadline: row.deadline || undefined,
+    targetCriteria: row.target_criteria || { scope: "all" },
+    recipients: Array.isArray(row.recipients) ? row.recipients : [],
+    totalCount: Number(row.total_count) || 0,
+    acknowledgedCount: Number(row.acknowledged_count) || 0,
+    status: (row.status as "active" | "closed" | "archived") || "active",
+  };
+}
+
+/**
+ * Map CircularDocument object to Supabase circular_documents row
+ */
+export function mapCircularDocToRow(doc: CircularDocument): any {
+  return {
+    id: doc.id,
+    doc_number: doc.docNumber,
+    title: doc.title,
+    issued_date: doc.issuedDate,
+    sender_org: doc.senderOrg,
+    urgency: doc.urgency,
+    secret_level: doc.secretLevel,
+    summary: doc.summary || null,
+    file_url: doc.fileUrl,
+    file_name: doc.fileName,
+    file_size: doc.fileSize,
+    total_pages: doc.totalPages || null,
+    scanned_pages: doc.scannedPages || null,
+    created_by: doc.createdBy,
+    created_by_name: doc.createdByName,
+    created_at: doc.createdAt,
+    deadline: doc.deadline || null,
+    target_criteria: doc.targetCriteria,
+    recipients: doc.recipients,
+    total_count: doc.totalCount,
+    acknowledged_count: doc.acknowledgedCount,
+    status: doc.status,
+  };
+}
+
+/**
+ * Fetch circular documents from Supabase with fallback to local cache
+ */
+export async function fetchCircularDocs(): Promise<CircularDocument[]> {
+  const local = loadStoredCircularDocs();
+  if (!supabase) return local;
+
+  try {
+    const { data, error } = await supabase
+      .from("circular_documents")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.warn("Could not fetch circular documents from Supabase:", error);
+      return local;
+    }
+
+    if (!data || data.length === 0) {
+      // Seed initial local documents to Supabase if remote table is empty
+      if (local.length > 0) {
+        for (const doc of local) {
+          await supabase.from("circular_documents").upsert(mapCircularDocToRow(doc));
+        }
+      }
+      return local;
+    }
+
+    const liveDocs = data.map(mapRowToCircularDoc);
+    // Keep local cache fresh
+    saveStoredCircularDocs(liveDocs);
+    return liveDocs;
+  } catch (err) {
+    console.warn("Exception fetching circular documents from Supabase:", err);
+    return local;
+  }
+}
+
+/**
+ * Save or update circular document in Supabase and local cache
+ */
+export async function saveCircularDoc(doc: CircularDocument): Promise<boolean> {
+  // Always update local cache first for responsiveness
+  try {
+    const current = loadStoredCircularDocs();
+    const idx = current.findIndex((d) => d.id === doc.id);
+    let updated: CircularDocument[];
+    if (idx >= 0) {
+      updated = [...current];
+      updated[idx] = doc;
+    } else {
+      updated = [doc, ...current];
+    }
+    saveStoredCircularDocs(updated);
+  } catch (err) {
+    console.warn("Could not update local circular cache:", err);
+  }
+
+  if (!supabase) return true;
+
+  try {
+    const row = mapCircularDocToRow(doc);
+    const { error } = await supabase.from("circular_documents").upsert(row);
+    if (error) {
+      console.error("Error upserting circular document to Supabase:", error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("Exception upserting circular document to Supabase:", err);
+    return false;
+  }
+}
+
+/**
+ * Delete a circular document from Supabase and local cache
+ */
+export async function deleteCircularDoc(id: string): Promise<boolean> {
+  try {
+    const current = loadStoredCircularDocs();
+    const updated = current.filter((d) => d.id !== id);
+    saveStoredCircularDocs(updated);
+  } catch (err) {
+    console.warn("Could not remove circular doc from local cache:", err);
+  }
+
+  if (!supabase) return true;
+
+  try {
+    const { error } = await supabase.from("circular_documents").delete().eq("id", id);
+    if (error) {
+      console.error("Error deleting circular document from Supabase:", error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("Exception deleting circular document from Supabase:", err);
+    return false;
+  }
+}
+
+/**
+ * Subscribe to realtime changes on circular_documents
+ */
+export function subscribeToCircularDocs(onUpdate: () => void): () => void {
+  if (!supabase) return () => {};
+
+  const channel = supabase
+    .channel("public:circular_documents_realtime")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "circular_documents",
+      },
+      () => {
+        onUpdate();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
 

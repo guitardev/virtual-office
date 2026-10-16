@@ -9,8 +9,14 @@ import {
 } from "@/lib/types";
 import {
   loadStoredCircularDocs,
-  saveStoredCircularDocs,
 } from "@/lib/circular-data";
+import {
+  fetchCircularDocs,
+  saveCircularDoc,
+  deleteCircularDoc,
+  subscribeToCircularDocs,
+  isSupabaseConfigured,
+} from "@/lib/supabase";
 import { GOVERNMENT_DIVISIONS } from "@/lib/rbac";
 import { NewCircularModal } from "./NewCircularModal";
 import { CircularViewerModal } from "./CircularViewerModal";
@@ -31,6 +37,8 @@ export const CircularPage: React.FC<CircularPageProps> = ({
   showToast,
 }) => {
   const [documents, setDocuments] = useState<CircularDocument[]>([]);
+  const [isLiveConnected, setIsLiveConnected] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>("inbox");
   const [searchQuery, setSearchQuery] = useState("");
   const [urgencyFilter, setUrgencyFilter] = useState<CircularUrgency | "all">("all");
@@ -43,16 +51,28 @@ export const CircularPage: React.FC<CircularPageProps> = ({
   const [viewingDoc, setViewingDoc] = useState<CircularDocument | null>(null);
   const [printingDoc, setPrintingDoc] = useState<CircularDocument | null>(null);
 
-  // Load documents on mount
-  useEffect(() => {
-    const loaded = loadStoredCircularDocs();
-    setDocuments(loaded);
-  }, []);
-
-  const handleSaveDocs = (updated: CircularDocument[]) => {
-    setDocuments(updated);
-    saveStoredCircularDocs(updated);
+  // Load documents on mount from Supabase Live with Local Storage fallback
+  const loadData = async () => {
+    try {
+      const data = await fetchCircularDocs();
+      setDocuments(data);
+      setIsLiveConnected(isSupabaseConfigured());
+    } catch {
+      setDocuments(loadStoredCircularDocs());
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  useEffect(() => {
+    loadData();
+    const unsubscribe = subscribeToCircularDocs(() => {
+      loadData();
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
   // Helper: check if current user is targeted
   const getUserRecipientStatus = (doc: CircularDocument): CircularRecipientStatus | undefined => {
@@ -144,51 +164,54 @@ export const CircularPage: React.FC<CircularPageProps> = ({
   }, [documents, searchQuery, urgencyFilter, divisionFilter, activeTab, statusFilter, currentUser]);
 
   // Handle document acknowledge update
-  const handleAcknowledgeDoc = (docId: string, signatureUrl?: string, endorsementNote?: string) => {
-    const updatedList = documents.map((d) => {
-      if (d.id !== docId) return d;
-      const updatedRecipients = d.recipients.map((r) => {
-        if (r.memberId !== currentUser?.id) return r;
-        return {
-          ...r,
-          isAcknowledged: true,
-          acknowledgedAt: new Date().toISOString(),
-          signatureUrl: signatureUrl || r.signatureUrl,
-          endorsementNote: endorsementNote || r.endorsementNote || "รับทราบและถือปฏิบัติ",
-        };
-      });
-      const ackCount = updatedRecipients.filter((r) => r.isAcknowledged).length;
-      const isComplete = ackCount === updatedRecipients.length;
+  const handleAcknowledgeDoc = async (docId: string, signatureUrl?: string, endorsementNote?: string) => {
+    const targetDoc = documents.find((d) => d.id === docId);
+    if (!targetDoc) return;
+
+    const updatedRecipients = targetDoc.recipients.map((r) => {
+      if (r.memberId !== currentUser?.id) return r;
       return {
-        ...d,
-        recipients: updatedRecipients,
-        acknowledgedCount: ackCount,
-        status: (isComplete ? "closed" : d.status) as "active" | "closed" | "archived",
+        ...r,
+        isAcknowledged: true,
+        acknowledgedAt: new Date().toISOString(),
+        signatureUrl: signatureUrl || r.signatureUrl,
+        endorsementNote: endorsementNote || r.endorsementNote || "รับทราบและถือปฏิบัติ",
       };
     });
+    const ackCount = updatedRecipients.filter((r) => r.isAcknowledged).length;
+    const isComplete = ackCount === updatedRecipients.length;
+    const updatedDoc: CircularDocument = {
+      ...targetDoc,
+      recipients: updatedRecipients,
+      acknowledgedCount: ackCount,
+      status: (isComplete ? "closed" : targetDoc.status) as "active" | "closed" | "archived",
+    };
 
-    handleSaveDocs(updatedList);
-    const updated = updatedList.find((d) => d.id === docId);
-    if (updated) setViewingDoc(updated);
-    showToast("บันทึกการลงนามรับทราบเรียบร้อยแล้ว");
+    const updatedList = documents.map((d) => (d.id === docId ? updatedDoc : d));
+    setDocuments(updatedList);
+    setViewingDoc(updatedDoc);
+    await saveCircularDoc(updatedDoc);
+    showToast("บันทึกการลงนามรับทราบลงฐานข้อมูลเรียบร้อยแล้ว");
   };
 
   // Handle create new document
-  const handleCreateDocument = (newDoc: CircularDocument) => {
+  const handleCreateDocument = async (newDoc: CircularDocument) => {
     const updated = [newDoc, ...documents];
-    handleSaveDocs(updated);
-    showToast(`ออกหนังสือเวียนเลขที่ ${newDoc.docNumber} สำเร็จ`);
+    setDocuments(updated);
+    await saveCircularDoc(newDoc);
+    showToast(`ออกหนังสือเวียนเลขที่ ${newDoc.docNumber} สำเร็จ (บันทึกลงฐานข้อมูลแล้ว)`);
   };
 
   // Handle delete document
-  const handleDeleteDocument = (docId: string, e: React.MouseEvent) => {
+  const handleDeleteDocument = async (docId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!confirm("คุณแน่ใจหรือไม่ว่าต้องการลบหนังสือเวียนฉบับนี้? การดำเนินการนี้ไม่สามารถยกเลิกได้")) {
       return;
     }
     const updated = documents.filter((d) => d.id !== docId);
-    handleSaveDocs(updated);
-    showToast("ลบหนังสือเวียนเรียบร้อยแล้ว");
+    setDocuments(updated);
+    await deleteCircularDoc(docId);
+    showToast("ลบหนังสือเวียนจากฐานข้อมูลเรียบร้อยแล้ว");
   };
 
   // Color badge helpers
@@ -212,7 +235,20 @@ export const CircularPage: React.FC<CircularPageProps> = ({
         <div>
           <div className="flex items-center gap-2">
             <span className="text-3xl">📜</span>
-            <h1 className="text-2xl font-bold text-slate-800">ระบบเวียนหนังสือราชการอิเล็กทรอนิกส์</h1>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h1 className="text-2xl font-bold text-slate-800">ระบบเวียนหนังสือราชการอิเล็กทรอนิกส์</h1>
+              {isLiveConnected ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Database Cloud Live
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                  <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+                  Local Storage
+                </span>
+              )}
+            </div>
           </div>
           <p className="text-slate-500 text-sm mt-1">
             เวียนหนังสือตามฝ่ายงาน/ประเภทบุคลากร พร้อมระบบสแกนเอกสาร ลงนามดิจิทัล และติดตามผลแบบเรียลไทม์

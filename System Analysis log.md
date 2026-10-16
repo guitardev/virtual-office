@@ -1469,5 +1469,38 @@ on conflict (id) do update set
   - เพิ่มกรณีทดสอบ `should attach a file and show active attachment card with file details`
   - **ผลการทดสอบ: ผ่าน 100% ครบทั้ง 5 กรณีทดสอบ (5 passed, 18.1s)**
 
+---
+
+### 29.5 การเชื่อมต่อฐานข้อมูล Supabase Cloud (Live Database Integration & Realtime Sync)
+
+* **โครงสร้างตารางฐานข้อมูล (`public.circular_documents` บน PostgreSQL 17 / Supabase Cloud):**
+  - `id (TEXT, Primary Key)`: รหัสหนังสือเวียน เช่น `circ_2569_001`
+  - `doc_number (TEXT)`: เลขที่หนังสือราชการ เช่น `กพ ๐๐๓๒/ว ๔๕๒`
+  - `title (TEXT)`: เรื่อง/ชื่อหนังสือเวียน
+  - `issued_date (TEXT)`: ลงวันที่ออกหนังสือ
+  - `sender_org (TEXT)`: หน่วยงานเจ้าของเรื่อง/ผู้ส่ง
+  - `urgency (TEXT)`: ชั้นความเร็ว (`normal` | `urgent` | `very_urgent` | `most_urgent`)
+  - `secret_level (TEXT)`: ชั้นความลับ (`normal` | `confidential` | `top_secret`)
+  - `summary (TEXT)`: สรุปสาระสำคัญ
+  - `file_url (TEXT)`, `file_name (TEXT)`, `file_size (BIGINT)`: ข้อมูลและลิงก์ไฟล์เอกสารแนบ
+  - `total_pages (INTEGER)`, `scanned_pages (JSONB)`: ข้อมูลหน้าที่สแกนจากกล้อง/สแกนเนอร์
+  - `created_by (TEXT)`, `created_by_name (TEXT)`, `created_at (TIMESTAMPTZ)`: ผู้สร้างและวันเวลาที่ออกหนังสือ
+  - `deadline (TEXT)`: วันที่ครบกำหนดรับทราบ/รายงานผล
+  - `target_criteria (JSONB)`: เกณฑ์การกระจายหนังสือ (ขอบเขตทุกคน, ฝ่ายงาน, หรือประเภทบุคลากร)
+  - `recipients (JSONB)`: สถานะการรับทราบรายบุคคล (ลายมือชื่อดิจิทัล Base64 Data URL, วันเวลาที่ลงนาม, ข้อสั่งการ)
+  - `total_count (INTEGER)`, `acknowledged_count (INTEGER)`: จำนวนผู้รับทั้งหมดและจำนวนผู้รับทราบแล้ว
+  - `status (TEXT)`: สถานะหนังสือ (`active` | `closed` | `archived`)
+* **ความปลอดภัยและประสิทธิภาพ (Security & Performance):**
+  - เปิดใช้งาน Row Level Security (RLS) พร้อมกำหนด Read/Write Policies: `Allow all read circular_documents` และ `Allow all write circular_documents`
+  - สร้าง Indexes: `idx_circular_documents_created_at` (DESC) และ `idx_circular_documents_status`
+  - เพิ่มเข้าสู่ Realtime Publication: `ALTER PUBLICATION supabase_realtime ADD TABLE public.circular_documents;` เพื่อรองรับ WebSocket Realtime Push
+* **โมเดลการซิงก์ข้อมูลแบบไฮบริด ([lib/supabase.ts](file:///c:/Users/GuitarDev/virtual-office/lib/supabase.ts)):**
+  - เพิ่มฟังก์ชัน `fetchCircularDocs()`, `saveCircularDoc()`, `deleteCircularDoc()`, และ `subscribeToCircularDocs()`
+  - อัปเดตข้อมูลลง Local Storage เสมอเพื่อเป็น Fallback Offline ในกรณีที่เครือข่ายขัดข้อง
+* **การแสดงผลสถานะบนหน้าจอ ([CircularPage.tsx](file:///c:/Users/GuitarDev/virtual-office/components/circular/CircularPage.tsx)):**
+  - แสดงป้ายสถานะ **`Database Cloud Live`** (พร้อมจุดสีเขียวกระพริบ) เมื่อเชื่อมต่อฐานข้อมูล Supabase สำเร็จ
+  - รองรับการกดลงนามรับทราบ การออกหนังสือใหม่ และการลบหนังสือ โดยจะซิงก์ข้อมูลลงฐานข้อมูล Supabase ทันที พร้อมอัปเดตสถานะแบบเรียลไทม์ข้ามเครื่อง
+
+
 
 
