@@ -192,13 +192,19 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
         return;
       }
 
-      const rawErr = data.error || "ไม่สามารถยืนยันตัวตนกับ Synology NAS ได้ กรุณาตรวจสอบชื่อผู้ใช้หรือรหัสผ่าน";
-      setErrorMessage(rawErr.replace(/https?:\/\/[^\s]+/g, "เซิร์ฟเวอร์ NAS"));
+      const rawErr = data.error || "ไม่สามารถยืนยันตัวตนได้ กรุณาตรวจสอบชื่อผู้ใช้หรือรหัสผ่าน";
+      setErrorMessage(
+        rawErr
+          .replace(/https?:\/\/[^\s]+/g, "เซิร์ฟเวอร์")
+          .replace(/Synology(\s*NAS)?/gi, "ระบบฐานข้อมูล")
+      );
     } catch (err: any) {
       setIsLoading(false);
       const msg = err?.message || "การเชื่อมต่อขัดข้อง";
       setErrorMessage(
-        `เกิดข้อผิดพลาดในการเชื่อมต่อ Synology NAS: ${msg.replace(/https?:\/\/[^\s]+/g, "เซิร์ฟเวอร์ NAS")}`
+        `เกิดข้อผิดพลาดในการเชื่อมต่อระบบฐานข้อมูล: ${msg
+          .replace(/https?:\/\/[^\s]+/g, "เซิร์ฟเวอร์")
+          .replace(/Synology(\s*NAS)?/gi, "ระบบฐานข้อมูล")}`
       );
     }
   };
@@ -489,7 +495,7 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
         <div className="relative z-10 my-10 lg:my-0 space-y-6 max-w-lg">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 text-xs font-semibold">
             <span>✨ ระบบจัดการสำนักงานเสมือนยุคใหม่</span>
-            <span>· Synology NAS Auth</span>
+            <span>· Database Auth Live</span>
           </div>
 
           <h1 className="text-3xl lg:text-5xl font-black font-heading text-white leading-tight">
@@ -498,14 +504,14 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
 
           <p className="text-slate-300 text-sm lg:text-base leading-relaxed">
             ระบบสื่อสาร วางแผนงานกระดาน Kanban จัดการห้องประชุม และจองรถยนต์ส่วนกลาง
-            พร้อมระบบยืนยันตัวตน On-Premise ผ่าน <strong>Synology DSM WebAPI</strong> และการควบคุมสิทธิ์ RBAC 4 ระดับบทบาท
+            พร้อมระบบยืนยันตัวตน On-Premise ผ่าน <strong>Database Auth</strong> และการควบคุมสิทธิ์ RBAC 4 ระดับบทบาท
           </p>
 
           {/* Feature Highlights Grid */}
           <div className="grid grid-cols-2 gap-4 pt-3">
             <div className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
-              <div className="text-2xl mb-1.5">💾</div>
-              <div className="font-bold text-sm text-white">Synology NAS DSM</div>
+              <div className="text-2xl mb-1.5">🔐</div>
+              <div className="font-bold text-sm text-white">Database Auth</div>
               <div className="text-xs text-slate-400 mt-0.5">ระบบยืนยันตัวตน On-Premise</div>
             </div>
             <div className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
@@ -540,7 +546,7 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
           </div>
           <span className="flex items-center gap-1.5 text-emerald-400 font-semibold">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            Synology NAS WebAPI Live
+            Database Auth Live
           </span>
         </div>
       </div>
@@ -553,7 +559,7 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
             <div className="flex items-center justify-between mb-2">
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
                 <span className={`w-2 h-2 rounded-full ${nasOnline ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
-                <span>Synology DSM WebAPI {nasOnline ? "(Online)" : "(Standby)"}</span>
+                <span>Database Auth {nasOnline ? "(Online)" : "(Standby)"}</span>
               </div>
               <span className="text-[11px] font-semibold text-slate-400">
                 SSL 256-Bit Encrypted
@@ -561,19 +567,19 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
             </div>
 
             <h2 className="text-2xl lg:text-3xl font-black font-heading text-slate-900">
-              เข้าสู่ระบบด้วย Synology NAS
+              เข้าสู่ระบบสำนักงานเสมือน
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              ยืนยันตัวตนด้วยบัญชีและรหัสผ่าน Synology DSM ประจำสำนักงาน พมจ.กำแพงเพชร
+              ยืนยันตัวตนด้วยบัญชีและรหัสผ่านประจำสำนักงาน พมจ.กำแพงเพชร
             </p>
           </div>
 
           {/* Active Authentication System Indicator */}
           <div className="p-3 rounded-2xl bg-indigo-50/80 border border-indigo-200/80 flex items-center justify-between text-xs">
             <div className="flex items-center gap-2.5 text-indigo-950 font-semibold">
-              <span className="text-base">💾</span>
+              <span className="text-base">🔐</span>
               <div>
-                <div className="font-bold text-slate-800">ระบบยืนยันตัวตนหลัก: Synology DSM WebAPI</div>
+                <div className="font-bold text-slate-800">ระบบยืนยันตัวตนหลัก: Database Auth</div>
                 <div className="text-[11px] text-indigo-600 font-normal">ระบบอื่นปิดไว้ชั่วคราว เพื่อรอการพัฒนาให้สมบูรณ์</div>
               </div>
             </div>
@@ -614,7 +620,7 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
             </div>
           )}
 
-          {/* ─── SYNOLOGY NAS FORM (EXCLUSIVE AUTHENTICATION) ─── */}
+          {/* ─── EXCLUSIVE DATABASE AUTH FORM ─── */}
           <form onSubmit={handleNasSubmit} className="space-y-4">
             {/* Connection Status Badge */}
             <div className="flex items-center justify-between p-3 rounded-xl bg-slate-100/90 border border-slate-200 text-xs">
@@ -625,7 +631,7 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
                   }`}
                 />
                 <span className="font-bold text-slate-800">
-                  {nasOnline ? "Synology NAS พร้อมใช้งาน" : "Synology NAS ไม่ตอบสนอง"}
+                  {nasOnline ? "Database Auth พร้อมใช้งาน" : "Database Auth ไม่ตอบสนอง"}
                 </span>
               </div>
               <span
@@ -646,13 +652,13 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                ชื่อบัญชีผู้ใช้ Synology (Username)
+                ชื่อบัญชีผู้ใช้งาน (Username)
               </label>
               <div className="relative">
                 <input
                   type="text"
                   required
-                  placeholder="เช่น admin หรือชื่อผู้ใช้บน NAS"
+                  placeholder="เช่น admin หรือชื่อบัญชีผู้ใช้"
                   value={nasUsername}
                   onChange={(e) => setNasUsername(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-800 focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/20 transition-all font-mono"
@@ -664,15 +670,15 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-xs font-bold text-slate-700">
-                  รหัสผ่าน Synology (DSM Password)
+                  รหัสผ่าน (Password)
                 </label>
-                <span className="text-[11px] text-slate-400 font-mono">SYNO.API.Auth</span>
+                <span className="text-[11px] text-slate-400 font-mono">Database Auth</span>
               </div>
               <div className="relative">
                 <input
                   type={showNasPassword ? "text" : "password"}
                   required
-                  placeholder="ระบุรหัสผ่านบัญชี Synology DSM"
+                  placeholder="ระบุรหัสผ่านบัญชีผู้ใช้งาน"
                   value={nasPassword}
                   onChange={(e) => setNasPassword(e.target.value)}
                   className="w-full pl-10 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-800 focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/20 transition-all"
@@ -718,10 +724,10 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
               {isLoading ? (
                 <>
                   <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>กำลังยืนยันตัวตนกับ Synology NAS...</span>
+                  <span>กำลังตรวจสอบข้อมูลและยืนยันตัวตน...</span>
                 </>
               ) : (
-                <span>เข้าสู่ระบบผ่าน Synology NAS ➜</span>
+                <span>เข้าสู่ระบบ ➜</span>
               )}
             </button>
           </form>
@@ -729,10 +735,10 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
           {/* Development Status Notice */}
           <div className="pt-2 text-center text-xs text-slate-400 space-y-1">
             <p className="text-[11px] text-slate-500 font-medium">
-              * ระบบล็อกอินอื่น (Supabase Email, Google SSO, LINE SSO) ปิดชั่วคราวเพื่อรอการพัฒนาให้สมบูรณ์
+              * ระบบล็อกอินอื่น (Email, Google SSO, LINE SSO) ปิดชั่วคราวเพื่อรอการพัฒนาให้สมบูรณ์
             </p>
             <p className="text-[10px] text-slate-400">
-              ติดต่อผู้ดูแลระบบเครือข่าย พมจ.กำแพงเพชร หากต้องการจัดการสิทธิ์บัญชี Synology
+              ติดต่อผู้ดูแลระบบเครือข่าย พมจ.กำแพงเพชร หากต้องการจัดการสิทธิ์บัญชีผู้ใช้งาน
             </p>
           </div>
 
@@ -747,7 +753,7 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
                 ข้อกำหนดการใช้งาน
               </Link>
             </div>
-            <span>v2.4 Live (NAS Edition)</span>
+            <span>v2.4 Live (Database Auth)</span>
           </div>
         </div>
       </div>

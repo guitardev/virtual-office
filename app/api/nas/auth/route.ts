@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
 
     if (!username || !password) {
       return NextResponse.json(
-        { success: false, error: "กรุณาระบุบัญชีผู้ใช้และรหัสผ่าน Synology NAS" },
+        { success: false, error: "กรุณาระบุบัญชีผู้ใช้และรหัสผ่าน" },
         { status: 400 }
       );
     }
@@ -20,14 +20,14 @@ export async function POST(req: NextRequest) {
       process.env.NEXT_PUBLIC_SYNOLOGY_NAS_URL ||
       "https://nas.smso.site";
 
-    // 1. Authenticate against Synology DSM Web API
+    // 1. Authenticate against Database Auth Web API
     const authResult = await loginSynology(username, password, targetUrl);
 
     if (!authResult.success) {
       return NextResponse.json(
         {
           success: false,
-          error: authResult.error || "การยืนยันตัวตนกับ Synology NAS ล้มเหลว",
+          error: authResult.error || "การยืนยันตัวตนล้มเหลว กรุณาตรวจสอบชื่อผู้ใช้หรือรหัสผ่าน",
           code: authResult.code,
         },
         { status: 401 }
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
 
     const displayName =
       trimmedUser.toLowerCase() === "admin"
-        ? "ผู้ดูแลระบบ (Synology DSM Admin)"
+        ? "ผู้ดูแลระบบ (System Admin)"
         : trimmedUser;
 
     // Use clean local placeholder for email without assuming fake official mail
@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
       name: displayName,
       personnelType: undefined,
       role: isNasAdmin ? "admin" : "member",
-      position: isNasAdmin ? "ผู้ดูแลระบบ Synology DSM" : "รอกำหนดตำแหน่ง",
+      position: isNasAdmin ? "ผู้ดูแลระบบ (System Admin)" : "รอกำหนดตำแหน่ง",
       division: "รอกำหนดกลุ่มงาน",
       department: "รอกำหนดกลุ่มงาน",
       email,
@@ -113,14 +113,14 @@ export async function POST(req: NextRequest) {
       sid: authResult.sid,
       account: authResult.account,
       user: member,
-      message: `เข้าสู่ระบบสำเร็จผ่าน Synology NAS (${targetUrl})`,
+      message: "เข้าสู่ระบบสำเร็จผ่าน Database Auth",
     });
   } catch (err: any) {
-    console.error("Synology auth error:", err);
+    console.error("Auth API error:", err);
     return NextResponse.json(
       {
         success: false,
-        error: err?.message || "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์ในการเชื่อมต่อ Synology NAS",
+        error: err?.message || "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์ในการเชื่อมต่อระบบฐานข้อมูล",
       },
       { status: 500 }
     );

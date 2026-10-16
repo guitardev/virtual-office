@@ -1363,7 +1363,13 @@ on conflict (id) do update set
 3. **Regression Tests:**
    - ทดสอบ `tests/nas-photo-gallery.spec.ts` และ `tests/nas-file-manager.spec.ts`: **ผ่านครบทั้ง 8 ข้อ (8 passed, 24.1s)**
 
-
-
-
+### 28.4 ปรับแต่งการแสดงผล: ไม่ระบุชื่อแบรนด์ Synology และแสดงสถานะเป็น Database Auth
+* **การปรับข้อความส่วนหัวและฟอร์ม ([LoginPage.tsx](file:///c:/Users/GuitarDev/virtual-office/components/auth/LoginPage.tsx)):**
+  - เปลี่ยนจาก "เข้าสู่ระบบด้วย Synology NAS" เป็น **"เข้าสู่ระบบสำนักงานเสมือน"**
+  - เปลี่ยนคำอธิบายเป็น "ยืนยันตัวตนด้วยบัญชีและรหัสผ่านประจำสำนักงาน พมจ.กำแพงเพชร"
+  - เปลี่ยนป้ายสถานะระบบหลักจาก Synology NAS WebAPI เป็น **`Database Auth Live`** และ **`Database Auth (Online)`**
+  - ปรับ Label ช่องกรอกบัญชีและรหัสผ่านเป็น "ชื่อบัญชีผู้ใช้งาน (Username)" และ "รหัสผ่าน (Password)"
+  - ปรับปุ่มเข้าสู่ระบบเป็น **"เข้าสู่ระบบ ➜"** (ขณะโหลด: "กำลังตรวจสอบข้อมูลและยืนยันตัวตน...")
+* **การป้องกันข้อมูล Backend ([app/api/nas/auth/route.ts](file:///c:/Users/GuitarDev/virtual-office/app/api/nas/auth/route.ts)):**
+  - ปรับข้อความ Error Response และ Success Message ไม่ให้มีข้อความอ้างอิง Synology NAS เพื่อความปลอดภัยและภาพลักษณ์ระบบที่เป็นทางการ
 
