@@ -28,8 +28,8 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
   const [authMode, setAuthMode] = useState<"nas" | "signin" | "signup">("nas");
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
-  // Synology NAS Sign In state
-  const [nasUsername, setNasUsername] = useState("admin");
+  // Database Auth Sign In state
+  const [nasUsername, setNasUsername] = useState("");
   const [nasPassword, setNasPassword] = useState("");
   const [showNasPassword, setShowNasPassword] = useState(false);
   const [nasOnline, setNasOnline] = useState(true);
@@ -658,7 +658,7 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
                 <input
                   type="text"
                   required
-                  placeholder="เช่น admin หรือชื่อบัญชีผู้ใช้"
+                  placeholder="ระบุชื่อบัญชีผู้ใช้งาน"
                   value={nasUsername}
                   onChange={(e) => setNasUsername(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-800 focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/20 transition-all font-mono"

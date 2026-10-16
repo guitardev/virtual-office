@@ -13,9 +13,10 @@ test.describe("Database Auth Exclusive Authentication", () => {
     // 2. Check Database Auth status indicators
     await expect(page.getByText("Database Auth Live", { exact: true })).toBeVisible();
 
-    // 3. Verify credentials inputs exist with sanitized generic placeholders
-    const usernameInput = page.getByPlaceholder("เช่น admin หรือชื่อบัญชีผู้ใช้");
+    // 3. Verify credentials inputs exist with sanitized generic placeholders and empty value
+    const usernameInput = page.getByPlaceholder("ระบุชื่อบัญชีผู้ใช้งาน");
     await expect(usernameInput).toBeVisible();
+    await expect(usernameInput).toHaveValue("");
 
     const passwordInput = page.getByPlaceholder("ระบุรหัสผ่านบัญชีผู้ใช้งาน");
     await expect(passwordInput).toBeVisible();
