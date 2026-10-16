@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import {
   Member,
   CircularDocument,
@@ -26,6 +26,8 @@ export function NewCircularModal({
   onSave,
   onClose,
 }: NewCircularModalProps) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const [docNumber, setDocNumber] = useState<string>("กพ ๐๐๓๒/ว ");
   const [title, setTitle] = useState<string>("");
   const [issuedDate, setIssuedDate] = useState<string>(
@@ -51,8 +53,12 @@ export function NewCircularModal({
   // File and Scan state
   const [fileName, setFileName] = useState<string>("");
   const [fileUrl, setFileUrl] = useState<string>("");
+  const [fileSize, setFileSize] = useState<number>(0);
+  const [fileType, setFileType] = useState<string>("");
   const [scannedPages, setScannedPages] = useState<string[]>([]);
   const [showScannerModal, setShowScannerModal] = useState<boolean>(false);
+  const [isDragOver, setIsDragOver] = useState<boolean>(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Calculate recipients dynamically
   const targetCriteria: CircularTargetCriteria = useMemo(() => {
@@ -86,24 +92,87 @@ export function NewCircularModal({
     );
   };
 
-  const handleManualFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  // Robust file processor for file input or drag-and-drop
+  const processSelectedFile = (file: File) => {
     if (!file) return;
+    setUploadError(null);
+
+    // Limit check (e.g. 25MB)
+    if (file.size > 25 * 1024 * 1024) {
+      setUploadError("ขนาดไฟล์ใหญ่เกินกว่า 25 MB กรุณาเลือกไฟล์ที่มีขนาดเล็กลง");
+      return;
+    }
+
     setFileName(file.name);
+    setFileSize(file.size);
+    setFileType(file.type);
+
+    const isImage = file.type.startsWith("image/") || /\.(jpe?g|png|webp|gif|bmp)$/i.test(file.name);
+
     const reader = new FileReader();
     reader.onload = (loadEvt) => {
-      if (loadEvt.target?.result) {
-        setFileUrl(loadEvt.target.result as string);
+      const result = loadEvt.target?.result as string;
+      if (result) {
+        setFileUrl(result);
+        if (isImage) {
+          setScannedPages([result]);
+        }
       }
     };
+    reader.onerror = () => {
+      setUploadError("ไม่สามารถอ่านข้อมูลไฟล์ได้ กรุณาลองใหม่อีกครั้ง");
+    };
     reader.readAsDataURL(file);
+  };
+
+  const handleManualFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processSelectedFile(file);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      processSelectedFile(file);
+    }
   };
 
   const handleScannerFinished = (pages: string[], name: string) => {
     setScannedPages(pages);
     setFileName(name);
     setFileUrl(pages[0] || "");
+    setFileSize(pages.length * 450000);
+    setFileType("image/jpeg");
     setShowScannerModal(false);
+  };
+
+  const handleRemoveAttachment = () => {
+    setFileName("");
+    setFileUrl("");
+    setFileSize(0);
+    setFileType("");
+    setScannedPages([]);
+    setUploadError(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -121,7 +190,7 @@ export function NewCircularModal({
       summary: summary.trim(),
       fileUrl: fileUrl || "/virtual-office/circular_docs/sample.pdf",
       fileName: fileName || "เอกสารแนบหนังสือเวียน.pdf",
-      fileSize: scannedPages.length > 0 ? scannedPages.length * 450000 : 1250000,
+      fileSize: fileSize || (scannedPages.length > 0 ? scannedPages.length * 450000 : 1250000),
       totalPages: scannedPages.length > 0 ? scannedPages.length : 1,
       scannedPages: scannedPages.length > 0 ? scannedPages : undefined,
       createdBy: currentUser.id,
@@ -185,7 +254,7 @@ export function NewCircularModal({
                   value={docNumber}
                   onChange={(e) => setDocNumber(e.target.value)}
                   placeholder="เช่น กพ ๐๐๓๒/ว ๑๒๓๔"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 font-mono focus:border-indigo-600"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 font-mono font-bold focus:border-indigo-600"
                 />
               </div>
 
@@ -238,7 +307,7 @@ export function NewCircularModal({
                 <select
                   value={urgency}
                   onChange={(e) => setUrgency(e.target.value as CircularUrgency)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 cursor-pointer"
                 >
                   <option value="normal">ปกติ</option>
                   <option value="urgent">⚡ ด่วน</option>
@@ -249,20 +318,46 @@ export function NewCircularModal({
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  กำหนดรับทราบภายใน (Deadline)
+                  ชั้นความลับ
+                </label>
+                <select
+                  value={secretLevel}
+                  onChange={(e) => setSecretLevel(e.target.value as CircularSecretLevel)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 cursor-pointer"
+                >
+                  <option value="normal">ปกติ</option>
+                  <option value="confidential">🔒 ลับ</option>
+                  <option value="top_secret">🔐 ลับที่สุด</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  กำหนดส่งการรับทราบ/ถือปฏิบัติภายใน (ถ้ามี)
                 </label>
                 <input
                   type="date"
                   value={deadline}
                   onChange={(e) => setDeadline(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:border-indigo-600 cursor-pointer"
                 />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  ผู้ส่งเวียน (ออกคำสั่ง)
+                </label>
+                <div className="px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-600 font-medium">
+                  {currentUser.name} ({currentUser.position})
+                </div>
               </div>
             </div>
 
             <div>
               <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                สรุปสาระสำคัญโดยย่อ
+                สรุปสาระสำคัญของหนังสือ
               </label>
               <textarea
                 rows={2}
@@ -307,7 +402,7 @@ export function NewCircularModal({
                   name="scope"
                   checked={scope === "all"}
                   onChange={() => setScope("all")}
-                  className="accent-indigo-600"
+                  className="accent-indigo-600 cursor-pointer"
                 />
                 <div>
                   <div className="text-xs font-bold">👥 เวียนทุกคนในสำนักงาน</div>
@@ -327,7 +422,7 @@ export function NewCircularModal({
                   name="scope"
                   checked={scope === "custom"}
                   onChange={() => setScope("custom")}
-                  className="accent-indigo-600"
+                  className="accent-indigo-600 cursor-pointer"
                 />
                 <div>
                   <div className="text-xs font-bold">🎯 กำหนดกลุ่มเป้าหมายเฉพาะ</div>
@@ -392,10 +487,39 @@ export function NewCircularModal({
                     })}
                   </div>
                 </div>
+
+                {/* 3. Specific Personnel Selection */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1.5">
+                    เลือกบุคลากรรายบุคคลเพิ่มเติม (ถ้ามี):
+                  </label>
+                  <div className="max-h-36 overflow-y-auto space-y-1 p-2 bg-white rounded-xl border border-slate-200">
+                    {availableMembers.map((member) => {
+                      const isSelected = selectedSpecificIds.includes(member.id);
+                      return (
+                        <div
+                          key={member.id}
+                          onClick={() => toggleSpecificMember(member.id)}
+                          className={`px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between cursor-pointer transition-colors ${
+                            isSelected ? "bg-indigo-50 text-indigo-900 font-bold" : "hover:bg-slate-50 text-slate-700"
+                          }`}
+                        >
+                          <div>
+                            <span>{member.name}</span>
+                            <span className="text-[10px] text-slate-400 ml-1.5">
+                              ({member.position} - {member.division})
+                            </span>
+                          </div>
+                          <span>{isSelected ? "✓" : "+"}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             )}
 
-            {/* Recipients List Drawer */}
+            {/* Recipients Preview Drawer */}
             {showRecipientsList && (
               <div className="max-h-48 overflow-y-auto border border-indigo-100 rounded-xl bg-white p-2 divide-y divide-slate-100 text-xs animate-fade-in">
                 {resolvedRecipients.length === 0 ? (
@@ -429,55 +553,115 @@ export function NewCircularModal({
           <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-3">
             <div className="text-xs font-bold text-slate-900 flex items-center justify-between border-b border-slate-100 pb-2">
               <span>๓. ไฟล์หนังสือราชการต้นฉบับ</span>
-              <span className="text-[10px] text-slate-400 font-mono">บันทึกลง Synology NAS</span>
+              <span className="text-[10px] text-indigo-600 font-mono">แนบไฟล์ PDF, รูปภาพ หรือสแกนสด</span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setShowScannerModal(true)}
-                className="p-4 rounded-xl border-2 border-dashed border-indigo-300 hover:border-indigo-500 bg-indigo-50/50 hover:bg-indigo-50 text-indigo-700 text-xs font-bold flex flex-col items-center justify-center gap-1.5 cursor-pointer transition-all"
-              >
-                <span className="text-2xl">📷</span>
-                <span>เปิดกล้องสแกนเอกสารสด (Live Camera)</span>
-                <span className="text-[10px] text-indigo-500 font-normal">
-                  ถ่ายภาพหนังสือหลายหน้า ปรับความคมชัดอัตโนมัติ
-                </span>
-              </button>
-
-              <label className="p-4 rounded-xl border-2 border-dashed border-slate-300 hover:border-slate-400 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold flex flex-col items-center justify-center gap-1.5 cursor-pointer transition-all">
-                <span className="text-2xl">📁</span>
-                <span>เลือกไฟล์จากเครื่อง (PDF / รูปภาพ)</span>
-                <span className="text-[10px] text-slate-500 font-normal">
-                  {fileName ? `ไฟล์ที่เลือก: ${fileName}` : "ลากวางไฟล์ หรือคลิกเพื่อค้นหา"}
-                </span>
-                <input
-                  type="file"
-                  accept="application/pdf,image/*"
-                  onChange={handleManualFileUpload}
-                  className="hidden"
-                />
-              </label>
-            </div>
-
-            {/* Scanned Badge */}
-            {scannedPages.length > 0 && (
-              <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs text-emerald-800">
-                <div className="flex items-center gap-2">
-                  <span>✓</span>
-                  <span>
-                    สแกนเอกสารเรียบร้อยแล้ว: <strong>{scannedPages.length} หน้า</strong> ({fileName})
-                  </span>
-                </div>
+            {uploadError && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center justify-between">
+                <span>⚠️ {uploadError}</span>
                 <button
                   type="button"
-                  onClick={() => setShowScannerModal(true)}
-                  className="text-xs text-emerald-700 font-bold hover:underline"
+                  onClick={() => setUploadError(null)}
+                  className="text-rose-500 hover:text-rose-700 font-bold ml-2 cursor-pointer"
                 >
-                  เปิดดู/สแกนเพิ่ม
+                  ✕
                 </button>
               </div>
             )}
+
+            {/* If a file is already selected or scanned, display active card */}
+            {fileName ? (
+              <div className="p-4 rounded-2xl bg-indigo-50/70 border-2 border-indigo-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-fade-in">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-12 h-12 rounded-xl bg-indigo-600 text-white flex items-center justify-center text-2xl shrink-0 shadow-sm">
+                    {fileType.startsWith("image/") || scannedPages.length > 0 ? "🖼️" : "📄"}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-900 truncate">{fileName}</span>
+                      <span className="px-2 py-0.2 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-full">
+                        แนบไฟล์เรียบร้อย
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      {fileSize > 0 ? `${(fileSize / (1024 * 1024)).toFixed(2)} MB` : "ไฟล์พร้อมเวียน"}
+                      {scannedPages.length > 0 && ` • สแกน ${scannedPages.length} หน้า`}
+                      {fileType && ` • ${fileType.includes("pdf") ? "เอกสาร PDF" : "รูปภาพเอกสาร"}`}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-3 py-1.5 text-xs font-semibold bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl cursor-pointer transition-all shadow-2xs"
+                  >
+                    เปลี่ยนไฟล์
+                  </button>
+                  {scannedPages.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowScannerModal(true)}
+                      className="px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl cursor-pointer transition-all shadow-2xs"
+                    >
+                      สแกนเพิ่ม
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleRemoveAttachment}
+                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl cursor-pointer transition-colors"
+                    title="ยกเลิกไฟล์แนบ"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Live Camera Scanner Button */}
+                <button
+                  type="button"
+                  onClick={() => setShowScannerModal(true)}
+                  className="p-5 rounded-2xl border-2 border-dashed border-indigo-300 hover:border-indigo-500 bg-indigo-50/40 hover:bg-indigo-50 text-indigo-700 text-xs font-bold flex flex-col items-center justify-center gap-2 cursor-pointer transition-all group"
+                >
+                  <span className="text-3xl group-hover:scale-110 transition-transform">📷</span>
+                  <span className="text-sm">เปิดกล้องสแกนเอกสารสด (Live Camera)</span>
+                  <span className="text-[11px] text-indigo-500 font-normal text-center">
+                    ถ่ายภาพหนังสือราชการ A4 หลายหน้า ปรับภาพขาวดำคมชัดอัตโนมัติ
+                  </span>
+                </button>
+
+                {/* File Upload Dropzone */}
+                <div
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`p-5 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-2 cursor-pointer transition-all group ${
+                    isDragOver
+                      ? "border-indigo-500 bg-indigo-100/70"
+                      : "border-slate-300 hover:border-slate-400 bg-slate-50 hover:bg-slate-100"
+                  }`}
+                >
+                  <span className="text-3xl group-hover:scale-110 transition-transform">📁</span>
+                  <span className="text-sm font-bold text-slate-700">เลือกไฟล์จากเครื่อง (PDF / รูปภาพ)</span>
+                  <span className="text-[11px] text-slate-500 font-normal text-center">
+                    คลิกเพื่อค้นหา หรือลากไฟล์ PDF / รูปภาพ มาวางที่นี่
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Hidden native file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/pdf,image/*"
+              onChange={handleManualFileUpload}
+              className="hidden"
+            />
           </div>
 
           {/* Footer Submit */}
@@ -485,7 +669,7 @@ export function NewCircularModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 text-xs font-bold transition-all cursor-pointer"
+              className="px-5 py-2.5 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-bold transition-all cursor-pointer"
             >
               ยกเลิก
             </button>
@@ -493,19 +677,20 @@ export function NewCircularModal({
             <button
               type="submit"
               disabled={!title.trim() || resolvedRecipients.length === 0}
-              className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/25 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
+              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-indigo-600/25 transition-all cursor-pointer flex items-center gap-2"
             >
-              <span>ส่งเวียนหนังสือราชการ ({resolvedRecipients.length} คน) ➜</span>
+              <span>🚀 ออกหนังสือเวียนทันที</span>
+              <span>({resolvedRecipients.length} ท่าน)</span>
             </button>
           </div>
         </form>
       </div>
 
-      {/* Scanner Sub-modal */}
+      {/* Submodal for Document Scanner */}
       {showScannerModal && (
         <DocumentScannerModal
-          onPagesCaptured={handleScannerFinished}
           onClose={() => setShowScannerModal(false)}
+          onPagesCaptured={handleScannerFinished}
         />
       )}
     </div>

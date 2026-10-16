@@ -109,4 +109,34 @@ test.describe("Government Circular Document & E-Acknowledgment Workflow", () => 
     await modalBackdrop.locator("button:has-text('ยกเลิก')").click();
     await expect(modalBackdrop).not.toBeVisible();
   });
+
+  test("should attach a file and show active attachment card with file details", async ({ page }) => {
+    const circularNav = page.locator("button", { hasText: "เวียนหนังสือราชการ" }).first();
+    await circularNav.click();
+
+    // Click "ออกหนังสือเวียนใหม่"
+    const newDocBtn = page.locator("button", { hasText: "ออกหนังสือเวียนใหม่" });
+    await newDocBtn.click();
+
+    const modalBackdrop = page.locator("div.fixed.z-50");
+    await expect(modalBackdrop).toBeVisible();
+
+    // Attach sample PDF file
+    const fileInput = modalBackdrop.locator("input[type='file']").last();
+    await fileInput.setInputFiles({
+      name: "ระเบียบสำนักนายกรัฐมนตรี_๒๕๖๙.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4 test government circular file content"),
+    });
+
+    // Verify attachment card displays
+    await expect(modalBackdrop.locator("text=แนบไฟล์เรียบร้อย")).toBeVisible();
+    await expect(modalBackdrop.locator("text=ระเบียบสำนักนายกรัฐมนตรี_๒๕๖๙.pdf")).toBeVisible();
+    await expect(modalBackdrop.locator("button:has-text('เปลี่ยนไฟล์')")).toBeVisible();
+
+    // Close modal
+    await modalBackdrop.locator("button:has-text('ยกเลิก')").click();
+    await expect(modalBackdrop).not.toBeVisible();
+  });
 });
+

@@ -1451,4 +1451,23 @@ on conflict (id) do update set
 4. **Regression Tests:**
    - `tests/admin-dossier-rbac.spec.ts` และ `tests/auth-login-exclusive-nas.spec.ts`: **ผ่าน 100% (2 passed, 4.3s)**
 
+---
+
+### 29.4 การยกระดับระบบแนบไฟล์เอกสารราชการและการแสดงผลแบบอินไลน์ (File Attachment & Preview Enhancement)
+
+* **การแก้ไขปัญหาการแนบไฟล์ ([NewCircularModal.tsx](file:///c:/Users/GuitarDev/virtual-office/components/circular/NewCircularModal.tsx)):**
+  - **Drag and Drop Zone:** เพิ่มการรองรับการลากไฟล์เอกสารมาปล่อย (`onDragOver`, `onDragLeave`, `onDrop`)
+  - **Direct Ref Trigger:** เชื่อมต่อ `fileInputRef` โดยตรง แก้ไขปัญหาคลิก `<label>` แล้วไม่เปิดหน้าต่างเลือกไฟล์
+  - **Visual Attachment Card:** เมื่อเลือกไฟล์สำเร็จ แสดงการ์ดสรุปข้อมูลไฟล์ชัดเจน (ไอคอนประเภทไฟล์, ชื่อไฟล์, ขนาด MB/KB, แท็กสถานะ *"แนบไฟล์เรียบร้อย"*) พร้อมปุ่ม *"เปลี่ยนไฟล์"* และ *"✕ ยกเลิกไฟล์"*
+  - **รองรับไฟล์หลากหลาย:** ตรวจจับทั้งไฟล์ PDF (`application/pdf`) และไฟล์รูปภาพ (`image/*`) ปรับปรุงการส่งต่อข้อมูลเข้าสู่ Document Viewer โดยตรง
+* **การแสดงผลเอกสารแบบอินไลน์ ([CircularViewerModal.tsx](file:///c:/Users/GuitarDev/virtual-office/components/circular/CircularViewerModal.tsx)):**
+  - เพิ่มการเรนเดอร์ PDF แบบอินไลน์ด้วย `<iframe>` ฝังในหน้าต่างอ่านหนังสือ เพื่อให้เจ้าหน้าที่เปิดตรวจอ่านเอกสารราชการได้ทันทีโดยไม่ต้องดาวน์โหลดแยก
+  - เพิ่มปุ่มดาวน์โหลดไฟล์ต้นฉบับ (`download`) และรองรับการแสดงผลรูปภาพทุกฟอร์แมต
+* **ความทนทานของแคช ([lib/circular-data.ts](file:///c:/Users/GuitarDev/virtual-office/lib/circular-data.ts)):**
+  - ป้องกันข้อผิดพลาด `QuotaExceededError` ของ `localStorage` ในฟังก์ชัน `saveStoredCircularDocs` ด้วยกลไกสำรองข้อมูลอัจฉริยะ (Graceful Storage Fallback)
+* **การทดสอบอัตโนมัติ ([tests/circular-workflow.spec.ts](file:///c:/Users/GuitarDev/virtual-office/tests/circular-workflow.spec.ts)):**
+  - เพิ่มกรณีทดสอบ `should attach a file and show active attachment card with file details`
+  - **ผลการทดสอบ: ผ่าน 100% ครบทั้ง 5 กรณีทดสอบ (5 passed, 18.1s)**
+
+
 

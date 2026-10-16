@@ -196,12 +196,67 @@ export function CircularViewerModal({
                       </div>
                     </div>
 
-                    <div className="w-full max-h-[500px] overflow-auto bg-slate-900/5 rounded-xl border border-slate-200 flex items-center justify-center p-2">
+                    <div className="w-full max-h-[550px] overflow-auto bg-slate-900/5 rounded-xl border border-slate-200 flex items-center justify-center p-2">
+                      {doc.scannedPages[currentPageIndex].startsWith("data:application/pdf") ||
+                      doc.scannedPages[currentPageIndex].toLowerCase().endsWith(".pdf") ? (
+                        <iframe
+                          src={doc.scannedPages[currentPageIndex]}
+                          title={`Document page ${currentPageIndex + 1}`}
+                          className="w-full h-[500px] rounded-lg border-none bg-white"
+                        />
+                      ) : (
+                        <img
+                          src={doc.scannedPages[currentPageIndex]}
+                          alt={`Document page ${currentPageIndex + 1}`}
+                          className="max-h-[480px] w-auto object-contain shadow-md rounded"
+                        />
+                      )}
+                    </div>
+                  </div>
+                ) : doc.fileUrl &&
+                  (doc.fileUrl.startsWith("data:application/pdf") ||
+                    doc.fileName.toLowerCase().endsWith(".pdf")) ? (
+                  <div className="w-full space-y-3">
+                    <div className="w-full h-[520px] rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
+                      <iframe
+                        src={doc.fileUrl}
+                        title={doc.title}
+                        className="w-full h-full border-none bg-white"
+                      />
+                    </div>
+                    <div className="flex flex-wrap justify-between items-center text-xs text-slate-500 px-2 gap-2">
+                      <span>📄 {doc.fileName} ({Math.round(doc.fileSize / 1024)} KB)</span>
+                      <a
+                        href={doc.fileUrl}
+                        download={doc.fileName}
+                        className="px-3.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold border border-indigo-200 flex items-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <span>⬇️</span>
+                        <span>ดาวน์โหลดไฟล์ PDF</span>
+                      </a>
+                    </div>
+                  </div>
+                ) : doc.fileUrl &&
+                  (doc.fileUrl.startsWith("data:image/") ||
+                    /\.(png|jpe?g|webp|gif)$/i.test(doc.fileName)) ? (
+                  <div className="w-full space-y-3 flex flex-col items-center">
+                    <div className="w-full max-h-[520px] overflow-auto bg-slate-900/5 rounded-xl border border-slate-200 flex items-center justify-center p-2">
                       <img
-                        src={doc.scannedPages[currentPageIndex]}
-                        alt={`Document page ${currentPageIndex + 1}`}
+                        src={doc.fileUrl}
+                        alt={doc.fileName}
                         className="max-h-[480px] w-auto object-contain shadow-md rounded"
                       />
+                    </div>
+                    <div className="w-full flex justify-between items-center text-xs text-slate-500 px-2">
+                      <span>🖼️ {doc.fileName} ({Math.round(doc.fileSize / 1024)} KB)</span>
+                      <a
+                        href={doc.fileUrl}
+                        download={doc.fileName}
+                        className="px-3.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold border border-indigo-200 flex items-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <span>⬇️</span>
+                        <span>ดาวน์โหลดรูปภาพ</span>
+                      </a>
                     </div>
                   </div>
                 ) : (
@@ -213,11 +268,13 @@ export function CircularViewerModal({
                     </p>
                     <a
                       href={doc.fileUrl}
+                      download={doc.fileName}
                       target="_blank"
                       rel="noreferrer"
-                      className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl text-xs border border-indigo-200 transition-all cursor-pointer"
+                      className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl text-xs border border-indigo-200 transition-all cursor-pointer flex items-center gap-1.5"
                     >
-                      เปิดอ่านไฟล์ต้นฉบับในแท็บใหม่ ↗
+                      <span>⬇️</span>
+                      <span>เปิดหรือดาวน์โหลดเอกสาร</span>
                     </a>
                   </div>
                 )}

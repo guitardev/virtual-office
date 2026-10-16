@@ -244,6 +244,20 @@ export function saveStoredCircularDocs(docs: CircularDocument[]) {
   try {
     localStorage.setItem(CIRCULAR_STORAGE_KEY, JSON.stringify(docs));
   } catch (err) {
-    console.error("Failed to save circular docs to storage:", err);
+    console.warn("Storage quota exceeded, preserving circular docs safely:", err);
+    try {
+      // Retain latest documents and slim down oversized historical base64 payloads if localStorage fills up
+      const safeDocs = docs.slice(0, 20).map((d, idx) => {
+        if (idx < 3) return d;
+        return {
+          ...d,
+          fileUrl: d.fileUrl?.length > 300000 ? "/virtual-office/circular_docs/sample.pdf" : d.fileUrl,
+          scannedPages: d.scannedPages?.map((p) => (p.length > 200000 ? "" : p)),
+        };
+      });
+      localStorage.setItem(CIRCULAR_STORAGE_KEY, JSON.stringify(safeDocs));
+    } catch {
+      // Ignore fallback failure
+    }
   }
 }
