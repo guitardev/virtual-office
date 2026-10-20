@@ -290,7 +290,7 @@ test.describe("Government Circular Document & E-Acknowledgment Workflow", () => 
 
     // Verify scanned page thumbnail appears
     await expect(scannerView.locator("text=หน้า 1")).toBeVisible();
-    await expect(scannerView.locator("text=1 หน้า").first()).toBeVisible();
+    await expect(scannerView.locator("text=1 รายการ").first()).toBeVisible();
 
     // Complete scan and import to new circular form
     const importBtn = scannerView.locator("button:has-text('นำเข้าหนังสือเวียน')");
@@ -304,6 +304,38 @@ test.describe("Government Circular Document & E-Acknowledgment Workflow", () => 
     // Cancel and return
     await newFormView.locator("button:has-text('ยกเลิก')").first().click();
     await expect(newFormView).not.toBeVisible();
+  });
+
+  test("should display attached PDF document in scanner with dedicated PDF card and preview mode", async ({ page }) => {
+    const circularNav = page.locator("button", { hasText: "เวียนหนังสือราชการ" }).first();
+    await circularNav.click();
+
+    // Click "สแกนหนังสือเข้าสู่ระบบ"
+    const scannerBtn = page.locator("button", { hasText: "สแกนหนังสือเข้าสู่ระบบ" });
+    await scannerBtn.click();
+
+    const scannerView = page.locator("[data-testid='document-scanner-view']");
+    await expect(scannerView).toBeVisible();
+
+    // Attach sample PDF file
+    const fileInput = scannerView.locator("input[type='file']").first();
+    await fileInput.setInputFiles({
+      name: "ระเบียบการเงินการคลัง_๒๕๖๙.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4 sample pdf document content for test"),
+    });
+
+    // Verify PDF card renders in right queue (not a broken img tag)
+    await expect(scannerView.locator("text=PDF").first()).toBeVisible();
+    await expect(scannerView.locator("text=ระเบียบการเงินการคลัง_๒๕๖๙.pdf").first()).toBeVisible();
+    await expect(scannerView.locator("text=เอกสารดิจิทัล PDF")).toBeVisible();
+
+    // Verify preview mode tab is active
+    await expect(scannerView.locator("button:has-text('ดูตัวอย่างเอกสาร/PDF')")).toBeVisible();
+
+    // Click Cancel to exit
+    await scannerView.locator("button:has-text('ยกเลิก')").first().click();
+    await expect(scannerView).not.toBeVisible();
   });
 });
 

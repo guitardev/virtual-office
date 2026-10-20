@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   Member,
   CircularDocument,
@@ -173,12 +173,36 @@ export function NewCircularModal({
     }
   };
 
+  useEffect(() => {
+    if (initialScannedPages && initialScannedPages.length > 0 && !fileUrl) {
+      const firstPage = initialScannedPages[0];
+      const isPdf =
+        firstPage.startsWith("data:application/pdf") ||
+        firstPage.toLowerCase().includes(".pdf");
+      setFileUrl(firstPage);
+      setFileName(
+        isPdf
+          ? `เอกสารสแกนราชการ_${new Date().toISOString().slice(0, 10)}.pdf`
+          : `เอกสารสแกนราชการ_${new Date().toISOString().slice(0, 10)}.jpg`
+      );
+      setFileType(isPdf ? "application/pdf" : "image/jpeg");
+      setFileSize(initialScannedPages.length * 450000);
+    }
+  }, [initialScannedPages, fileUrl]);
+
   const handleScannerFinished = (pages: string[], name: string) => {
     setScannedPages(pages);
     setFileName(name);
     setFileUrl(pages[0] || "");
     setFileSize(pages.length * 450000);
-    setFileType("image/jpeg");
+    const isPdf =
+      name.toLowerCase().endsWith(".pdf") ||
+      Boolean(
+        pages[0] &&
+          (pages[0].startsWith("data:application/pdf") ||
+            pages[0].toLowerCase().includes(".pdf"))
+      );
+    setFileType(isPdf ? "application/pdf" : "image/jpeg");
     setShowScannerModal(false);
   };
 

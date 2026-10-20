@@ -41,10 +41,59 @@ export function DocumentScannerModal({
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [showHelpGuide, setShowHelpGuide] = useState<boolean>(false);
 
+  // Viewfinder mode: camera feed vs attached document/PDF preview
+  const [viewfinderMode, setViewfinderMode] = useState<"camera" | "preview">("camera");
+  const [selectedPageIndex, setSelectedPageIndex] = useState<number>(0);
+  const [activePdfBlobUrl, setActivePdfBlobUrl] = useState<string | null>(null);
+
   // NAS Picker state
   const [showNasPicker, setShowNasPicker] = useState<boolean>(false);
   const [isNasLoading, setIsNasLoading] = useState<boolean>(false);
   const [nasFiles, setNasFiles] = useState<NasFileItem[]>([]);
+
+  // Helper to detect if a file URL or data URL is a PDF
+  const isPdfUrl = (url?: string, title?: string) => {
+    if (!url) return false;
+    return (
+      url.startsWith("data:application/pdf") ||
+      url.toLowerCase().includes(".pdf") ||
+      (title && title.toLowerCase().endsWith(".pdf"))
+    );
+  };
+
+  // Convert Base64 PDF to native Blob URL for reliable browser preview
+  useEffect(() => {
+    const currentPage = scannedPages[selectedPageIndex] || scannedPages[0];
+    if (!currentPage) {
+      setActivePdfBlobUrl(null);
+      return;
+    }
+
+    if (currentPage.startsWith("data:application/pdf")) {
+      try {
+        const parts = currentPage.split(",");
+        const base64Data = parts[1] || "";
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: "application/pdf" });
+        const blobUrl = URL.createObjectURL(blob);
+        setActivePdfBlobUrl(blobUrl);
+        return () => {
+          URL.revokeObjectURL(blobUrl);
+        };
+      } catch {
+        setActivePdfBlobUrl(currentPage);
+      }
+    } else if (isPdfUrl(currentPage, docTitle)) {
+      setActivePdfBlobUrl(currentPage);
+    } else {
+      setActivePdfBlobUrl(null);
+    }
+  }, [scannedPages, selectedPageIndex, docTitle]);
 
   // Function to stop current stream
   const stopCurrentStream = useCallback(() => {
@@ -330,7 +379,12 @@ export function DocumentScannerModal({
     );
 
     const simulatedDataUrl = canvas.toDataURL("image/jpeg", 0.92);
-    setScannedPages((prev) => [...prev, simulatedDataUrl]);
+    setScannedPages((prev) => {
+      const next = [...prev, simulatedDataUrl];
+      setSelectedPageIndex(next.length - 1);
+      return next;
+    });
+    setViewfinderMode("preview");
   };
 
   // Capture current frame from camera
@@ -374,7 +428,12 @@ export function DocumentScannerModal({
       }
 
       const pageDataUrl = canvas.toDataURL("image/jpeg", 0.9);
-      setScannedPages((prev) => [...prev, pageDataUrl]);
+      setScannedPages((prev) => {
+        const next = [...prev, pageDataUrl];
+        setSelectedPageIndex(next.length - 1);
+        return next;
+      });
+      setViewfinderMode("preview");
       setIsCapturing(false);
     }, 150);
   };
@@ -382,10 +441,19 @@ export function DocumentScannerModal({
   // Upload file fallback
   const handleFilesList = (files: FileList | File[]) => {
     Array.from(files).forEach((file) => {
+      if (file.name) {
+        setDocTitle(file.name);
+      }
       const reader = new FileReader();
       reader.onload = (loadEvent) => {
         if (loadEvent.target?.result) {
-          setScannedPages((prev) => [...prev, loadEvent.target!.result as string]);
+          const resultUrl = loadEvent.target.result as string;
+          setScannedPages((prev) => {
+            const next = [...prev, resultUrl];
+            setSelectedPageIndex(next.length - 1);
+            return next;
+          });
+          setViewfinderMode("preview");
         }
       };
       reader.readAsDataURL(file);
@@ -438,13 +506,24 @@ export function DocumentScannerModal({
 
   const handleSelectNasFile = (file: NasFileItem) => {
     const fileUrl = `/api/nas/download?file_path=${encodeURIComponent(file.path)}`;
-    setScannedPages((prev) => [...prev, fileUrl]);
+    setScannedPages((prev) => {
+      const next = [...prev, fileUrl];
+      setSelectedPageIndex(next.length - 1);
+      return next;
+    });
     setDocTitle(file.name);
+    setViewfinderMode("preview");
     setShowNasPicker(false);
   };
 
   const removePage = (index: number) => {
-    setScannedPages((prev) => prev.filter((_, i) => i !== index));
+    setScannedPages((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      if (selectedPageIndex >= next.length) {
+        setSelectedPageIndex(Math.max(0, next.length - 1));
+      }
+      return next;
+    });
   };
 
   const handleFinish = () => {
@@ -452,12 +531,69 @@ export function DocumentScannerModal({
     onPagesCaptured(scannedPages, docTitle);
   };
 
+  const activePage = scannedPages[selectedPageIndex] || scannedPages[0];
+  const isCurrentPagePdf = isPdfUrl(activePage, docTitle);
+
   const scannerBodyAndFooter = (
     <>
       {/* Body */}
       <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0 bg-[#F8FAFC] grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Live Camera / Ingestion Viewfinder */}
-        <div className="lg:col-span-7 space-y-4">
+        <div className="lg:col-span-7 space-y-3">
+          {/* Viewfinder Mode Switcher */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 p-1 bg-slate-200/70 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setViewfinderMode("camera")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  viewfinderMode === "camera"
+                    ? "bg-white text-indigo-700 shadow-2xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <span>📷</span>
+                <span>กล้องสแกนสด</span>
+                {cameraActive && <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />}
+              </button>
+
+              {scannedPages.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setViewfinderMode("preview")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    viewfinderMode === "preview"
+                      ? "bg-white text-indigo-700 shadow-2xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <span>📄</span>
+                  <span>ดูตัวอย่างเอกสาร/PDF</span>
+                  <span className="px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-700 text-[10px]">
+                    {scannedPages.length}
+                  </span>
+                </button>
+              )}
+            </div>
+
+            {viewfinderMode === "preview" && scannedPages.length > 0 && (
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-[11px] text-slate-500 font-mono">
+                  หน้า {selectedPageIndex + 1} จาก {scannedPages.length}
+                </span>
+                {activePdfBlobUrl && (
+                  <button
+                    type="button"
+                    onClick={() => window.open(activePdfBlobUrl, "_blank")}
+                    className="px-2.5 py-1 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg text-slate-700 text-[11px] font-bold flex items-center gap-1 shadow-2xs cursor-pointer"
+                  >
+                    <span>🔍 ขยายเต็มจอ</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
           <div
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
@@ -477,10 +613,73 @@ export function DocumentScannerModal({
                   videoRef.current.play().catch(() => {});
                 }
               }}
-              className={`w-full h-full object-cover ${cameraActive ? "block" : "hidden"}`}
+              className={`w-full h-full object-cover ${
+                viewfinderMode === "camera" && cameraActive ? "block" : "hidden"
+              }`}
             />
 
-            {cameraActive ? (
+            {/* PREVIEW MODE: Display active scanned document or PDF */}
+            {viewfinderMode === "preview" && activePage ? (
+              <div className="w-full h-full relative flex items-center justify-center bg-slate-900">
+                {isCurrentPagePdf ? (
+                  activePdfBlobUrl ? (
+                    <object
+                      data={activePdfBlobUrl}
+                      type="application/pdf"
+                      className="w-full h-full min-h-[380px] rounded-2xl"
+                    >
+                      <iframe
+                        src={activePdfBlobUrl}
+                        title="PDF Document Preview"
+                        className="w-full h-full min-h-[380px] border-0 rounded-2xl bg-white"
+                      />
+                    </object>
+                  ) : (
+                    <div className="p-6 text-center text-white space-y-3">
+                      <div className="w-16 h-16 rounded-2xl bg-rose-500/20 border border-rose-400/30 text-rose-400 flex items-center justify-center text-3xl mx-auto shadow-sm">
+                        📄
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-white">{docTitle}</p>
+                        <p className="text-xs text-rose-300 mt-0.5">เอกสารแนบ PDF พร้อมนำเข้าสู่ระบบหนังสือเวียน</p>
+                      </div>
+                    </div>
+                  )
+                ) : (
+                  <img
+                    src={activePage}
+                    alt={`Scanned preview page ${selectedPageIndex + 1}`}
+                    className="max-w-full max-h-full object-contain p-2"
+                  />
+                )}
+
+                {/* Page Navigation Overlay */}
+                {scannedPages.length > 1 && (
+                  <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-slate-950/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-slate-700 text-white text-xs shadow-lg">
+                    <button
+                      type="button"
+                      disabled={selectedPageIndex === 0}
+                      onClick={() => setSelectedPageIndex((p) => Math.max(0, p - 1))}
+                      className="hover:text-indigo-300 disabled:opacity-40 cursor-pointer px-1"
+                    >
+                      ◀ ก่อนหน้า
+                    </button>
+                    <span className="font-mono text-[11px] text-slate-300">
+                      {selectedPageIndex + 1} / {scannedPages.length}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={selectedPageIndex === scannedPages.length - 1}
+                      onClick={() => setSelectedPageIndex((p) => Math.min(scannedPages.length - 1, p + 1))}
+                      className="hover:text-indigo-300 disabled:opacity-40 cursor-pointer px-1"
+                    >
+                      ถัดไป ▶
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : cameraActive ? (
+              /* CAMERA ACTIVE MODE: Overlay Guide */
               <div className="absolute inset-8 border-2 border-dashed border-emerald-400/80 rounded-xl pointer-events-none flex flex-col justify-between p-3">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] text-emerald-300 font-mono bg-black/60 px-2 py-0.5 rounded">
@@ -495,6 +694,7 @@ export function DocumentScannerModal({
                 </span>
               </div>
             ) : (
+              /* CAMERA INACTIVE / DIAGNOSTIC MODE */
               <div className="p-6 text-center text-slate-300 space-y-4 max-w-md mx-auto">
                 {isInitializing ? (
                   <div className="space-y-3">
@@ -524,7 +724,10 @@ export function DocumentScannerModal({
                     <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
                       <button
                         type="button"
-                        onClick={() => startCamera(selectedDeviceId)}
+                        onClick={() => {
+                          setViewfinderMode("camera");
+                          startCamera(selectedDeviceId);
+                        }}
                         className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
                       >
                         <span>🔄</span>
@@ -683,7 +886,7 @@ export function DocumentScannerModal({
             <div className="text-xs font-bold text-slate-800 flex items-center gap-2">
               <span>📑 หน้าเอกสารที่สแกนแล้ว</span>
               <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-bold text-[10px]">
-                {scannedPages.length} หน้า
+                {scannedPages.length} รายการ
               </span>
             </div>
             <div className="flex items-center gap-2 text-[11px]">
@@ -696,7 +899,7 @@ export function DocumentScannerModal({
               </button>
               <span className="text-slate-300">|</span>
               <label className="font-bold text-emerald-600 hover:text-emerald-800 cursor-pointer">
-                + เพิ่มไฟล์
+                + เพิ่มไฟล์/PDF
                 <input
                   type="file"
                   accept="image/*,application/pdf"
@@ -731,29 +934,72 @@ export function DocumentScannerModal({
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3">
-                {scannedPages.map((pageUrl, idx) => (
-                  <div
-                    key={idx}
-                    className="group relative rounded-xl border border-slate-200 overflow-hidden bg-slate-50 shadow-2xs"
-                  >
-                    <img
-                      src={pageUrl}
-                      alt={`Scanned page ${idx + 1}`}
-                      className="w-full h-36 object-contain bg-slate-900/5 p-1"
-                    />
-                    <div className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-md bg-slate-900/80 text-white text-[10px] font-bold">
-                      หน้า {idx + 1}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removePage(idx)}
-                      className="absolute top-1.5 right-1.5 w-6 h-6 rounded-md bg-rose-600/90 hover:bg-rose-700 text-white flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                      title="ลบหน้านี้"
+                {scannedPages.map((pageUrl, idx) => {
+                  const isPdf = isPdfUrl(pageUrl, docTitle);
+                  const isSelected = viewfinderMode === "preview" && selectedPageIndex === idx;
+
+                  return (
+                    <div
+                      key={idx}
+                      className={`group relative rounded-xl border overflow-hidden transition-all shadow-2xs ${
+                        isSelected
+                          ? "ring-2 ring-indigo-500 border-indigo-400 bg-indigo-50/20"
+                          : "border-slate-200 bg-slate-50 hover:border-indigo-300"
+                      }`}
                     >
-                      ✕
-                    </button>
-                  </div>
-                ))}
+                      {isPdf ? (
+                        /* PDF Specific Card with official badge (avoids broken img tag) */
+                        <div
+                          onClick={() => {
+                            setSelectedPageIndex(idx);
+                            setViewfinderMode("preview");
+                          }}
+                          className="w-full h-36 flex flex-col items-center justify-center p-2.5 text-center cursor-pointer bg-gradient-to-b from-rose-50/70 to-slate-50"
+                        >
+                          <div className="w-10 h-10 rounded-xl bg-rose-500 text-white flex items-center justify-center text-xs font-black shadow-xs mb-1.5">
+                            PDF
+                          </div>
+                          <p className="text-[11px] font-bold text-slate-800 truncate max-w-full px-1">
+                            {docTitle.endsWith(".pdf") ? docTitle : `${docTitle}.pdf`}
+                          </p>
+                          <span className="text-[10px] text-rose-600 font-semibold mt-0.5">
+                            เอกสารดิจิทัล PDF
+                          </span>
+                          <span className="mt-1.5 text-[9px] text-indigo-600 font-bold bg-white px-2 py-0.5 rounded-md border border-slate-200 shadow-2xs">
+                            👁️ ดูตัวอย่าง
+                          </span>
+                        </div>
+                      ) : (
+                        /* Standard Scanned Image Thumbnail */
+                        <img
+                          src={pageUrl}
+                          alt={`Scanned page ${idx + 1}`}
+                          onClick={() => {
+                            setSelectedPageIndex(idx);
+                            setViewfinderMode("preview");
+                          }}
+                          className="w-full h-36 object-contain bg-slate-900/5 p-1 cursor-pointer"
+                        />
+                      )}
+
+                      <div className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-md bg-slate-900/80 text-white text-[10px] font-bold pointer-events-none">
+                        {isPdf ? "PDF" : `หน้า ${idx + 1}`}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removePage(idx);
+                        }}
+                        className="absolute top-1.5 right-1.5 w-6 h-6 rounded-md bg-rose-600/90 hover:bg-rose-700 text-white flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer z-10"
+                        title="ลบเอกสารนี้"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -800,7 +1046,7 @@ export function DocumentScannerModal({
             onClick={handleFinish}
             className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
           >
-            <span>นำเข้าหนังสือเวียน ({scannedPages.length} หน้า) ➜</span>
+            <span>นำเข้าหนังสือเวียน ({scannedPages.length} รายการ) ➜</span>
           </button>
         </div>
       </div>
@@ -902,7 +1148,7 @@ export function DocumentScannerModal({
                 ระบบสแกนหนังสือราชการเข้าระบบ (Live Document Scanner)
               </h3>
               <p className="text-xs text-slate-500">
-                สแกนเอกสารจริงผ่านกล้อง, อัปโหลดไฟล์ภาพ, หรือดึงจากคลังสแกน NAS
+                สแกนเอกสารจริงผ่านกล้อง, อัปโหลดไฟล์ภาพ, ดูตัวอย่าง PDF หรือดึงจากคลังสแกน NAS
               </p>
             </div>
           </div>
@@ -939,7 +1185,7 @@ export function DocumentScannerModal({
                 ระบบสแกนหนังสือราชการเข้าระบบ (Live Document Scanner)
               </h3>
               <p className="text-xs text-indigo-200">
-                สแกนเอกสารจริงผ่านกล้อง หรืออัปโหลดไฟล์ภาพ เพื่อรวมเล่มเป็นหนังสือเวียนอิเล็กทรอนิกส์
+                สแกนเอกสารจริงผ่านกล้อง, อัปโหลดไฟล์ภาพ/PDF, เพื่อรวมเล่มเป็นหนังสือเวียนอิเล็กทรอนิกส์
               </p>
             </div>
           </div>
