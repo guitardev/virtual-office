@@ -265,6 +265,47 @@ test.describe("Government Circular Document & E-Acknowledgment Workflow", () => 
     await backBtn.click();
     await expect(inPageView).not.toBeVisible();
   });
+
+  test("should handle scanner camera diagnostics, allow simulated scan, and import scanned pages", async ({ page }) => {
+    const circularNav = page.locator("button", { hasText: "เวียนหนังสือราชการ" }).first();
+    await circularNav.click();
+
+    // Click "สแกนหนังสือเข้าสู่ระบบ" button
+    const scannerBtn = page.locator("button", { hasText: "สแกนหนังสือเข้าสู่ระบบ" });
+    await expect(scannerBtn).toBeVisible();
+    await scannerBtn.click();
+
+    // Verify document scanner is open in-page
+    const scannerView = page.locator("[data-testid='document-scanner-view']");
+    await expect(scannerView).toBeVisible();
+
+    // Verify presence of camera diagnostic actions and alternatives
+    const simulateScanBtn = scannerView.locator("button:has-text('จำลองการสแกนเอกสารจริง')").first();
+    await expect(simulateScanBtn).toBeVisible();
+    await expect(scannerView.locator("button:has-text('ลองเชื่อมต่อกล้องใหม่')")).toBeVisible();
+    await expect(scannerView.locator("text=เลือกรูปภาพ/PDF")).toBeVisible();
+
+    // Trigger simulated scan
+    await simulateScanBtn.click();
+
+    // Verify scanned page thumbnail appears
+    await expect(scannerView.locator("text=หน้า 1")).toBeVisible();
+    await expect(scannerView.locator("text=1 หน้า").first()).toBeVisible();
+
+    // Complete scan and import to new circular form
+    const importBtn = scannerView.locator("button:has-text('นำเข้าหนังสือเวียน')");
+    await expect(importBtn).toBeVisible();
+    await importBtn.click();
+
+    // Verify transition to create document form with scanned pages
+    const newFormView = page.locator("[data-testid='new-circular-view']");
+    await expect(newFormView).toBeVisible();
+
+    // Cancel and return
+    await newFormView.locator("button:has-text('ยกเลิก')").first().click();
+    await expect(newFormView).not.toBeVisible();
+  });
 });
+
 
 

@@ -1663,6 +1663,49 @@ on conflict (id) do update set
   7. `should display dual-mode view in circular viewer (Garuda letter and attachment)` (ผ่าน)
 - **อัตราความสำเร็จ: 7 ผ่าน / 7 ทดสอบ (100% Passed)**
 
+---
+
+## 33. การแก้ปัญหาหน้าจอสแกนหนังสือไม่พบกล้อง และการเพิ่มระบบจำลองการสแกน (Document Scanner Camera Diagnostic & Mock Scan Healing)
+
+### 33.1 สาเหตุของการแจ้งเตือน "ไม่พบอุปกรณ์กล้องหรือเบราว์เซอร์ไม่ได้รับอนุญาตให้เข้าถึงกล้อง"
+
+1. **ไม่มีอุปกรณ์เว็บแคมเชื่อมต่อกับคอมพิวเตอร์ (NotFoundError):**
+   - ในสภาพแวดล้อมสำนักงานราชการ หรือเครื่องคอมพิวเตอร์แบบ Desktop PC ส่วนใหญ่ไม่มีการติดตั้งเว็บแคมหรือกล้องภายนอก
+   - เมธอด `navigator.mediaDevices.getUserMedia` จึงล้มเหลวด้วยข้อผิดพลาด `NotFoundError / DevicesNotFoundError`
+2. **สิทธิ์เข้าถึงกล้องของเบราว์เซอร์ถูกปฏิเสธ (NotAllowedError / PermissionDeniedError):**
+   - ผู้ใช้งานหรือเบราว์เซอร์ (Chrome / Edge) ตั้งค่าบล็อกสิทธิ์กล้องของโดเมนไว้ หรือระบบปฏิบัติการ Windows ปิดสิทธิ์ "Camera access for desktop apps"
+3. **ข้อจำกัดด้านความปลอดภัยของเบราว์เซอร์ (Insecure Origin HTTP Context):**
+   - หากผู้ใช้งานเปิดระบบผ่าน IP Address เช่น `http://192.168.162.26:3000` เบราว์เซอร์ Chromium จะถือว่าเป็น Insecure Context (`isSecureContext === false`) และปิดกั้นการเรียกใช้งานกล้องฮาร์ดแวร์โดยสมบูรณ์ตามมาตรฐาน WebRTC Security Standard (ต้องใช้งานผ่าน HTTPS หรือ localhost เท่านั้น)
+4. **ความตึงของ Constraint (OverconstrainedError):**
+   - การระบุความละเอียด `1920x1080` หรือ `facingMode: "environment"` ในเว็บแคมทั่วไปอาจทำให้เกิดข้อผิดพลาดในการเจรจาสตรีมกล้อง
+
+---
+
+### 33.2 มาตรการแก้ไขและปรับปรุงฟังก์ชันสแกน ([components/circular/DocumentScannerModal.tsx](file:///c:/Users/GuitarDev/virtual-office/components/circular/DocumentScannerModal.tsx))
+
+1. **ระบบวินิจฉัยข้อผิดพลาดอัจฉริยะ (Intelligent Hardware Diagnostic):**
+   - ตรวจจับสาเหตุอย่างแม่นยำ (สิทธิ์ถูกปิดกั้น 🔒, ไม่พบกล้อง 🔌, ต้องใช้ HTTPS ⚠️, หรือกล้องติดใช้งานโดยโปรแกรมอื่น) และแสดงข้อความคำแนะนำที่ตรงจุด แทนที่จะเป็นข้อความเตือนแบบคลุมเครือ
+   - มีกล่องคำแนะนำวิธีตั้งค่าปลดบล็อกในเบราว์เซอร์ (Google Chrome, Microsoft Edge, Windows Settings)
+2. **ปุ่ม "🔄 ลองเชื่อมต่อกล้องใหม่" (Camera Retry):**
+   - ผู้ใช้งานสามารถกดลองเชื่อมต่อใหม่ได้ทันทีหลังจากเสียบกล้อง หรือกดอนุญาตสิทธิ์ที่แถบ URL โดยไม่ต้องออกจากหน้าจอ
+3. **ระบบสแกนเอกสารราชการจำลอง (High-Fidelity Simulated Document Scanner):**
+   - เพิ่มปุ่ม **"✨ จำลองการสแกนเอกสารจริง"** สร้างภาพสแกนเอกสารบันทึกข้อความราชการที่มีตราครุฑพ่าห์ราชการ, ลายน้ำ Zero Trust, ตรายางประทับรับเรื่องสีแดงของสำนักงาน พมจ.กำแพงเพชร
+   - ช่วยให้ผู้ใช้และผู้ทดสอบสามารถทดสอบขั้นตอนการสแกนเอกสารหลายหน้า การจัดเรียง การลบหน้า และการส่งออกเป็นหนังสือเวียนได้ทันที 100% แม้ไม่มีกล้องเว็บแคม
+4. **ระบบดึงไฟล์จากคลัง Synology NAS และลากวางไฟล์ (Drag & Drop):**
+   - มีปุ่ม **"☁️ คลังสแกน NAS"** ดึงไฟล์จาก `/virtual-office/circular_docs`
+   - รองรับการลากไฟล์ภาพ/PDF จากคอมพิวเตอร์มาวางในกรอบ Viewfinder เพื่อสแกนเข้าคิวได้ทันที
+5. **รองรับการสลับกล้องหลายตัว (Camera Switcher Dropdown):**
+   - ตรวจหาและแสดงรายการกล้อง (`enumerateDevices`) ให้เลือกสลับระหว่างกล้องหน้า/กล้องหลัง/กล้องสแกนเอกสาร USB
+
+---
+
+### 33.3 ผลการทดสอบระบบ (Automated Test Verification)
+
+- เพิ่มกรณีทดสอบใน [tests/circular-workflow.spec.ts](file:///c:/Users/GuitarDev/virtual-office/tests/circular-workflow.spec.ts):
+  - `should handle scanner camera diagnostics, allow simulated scan, and import scanned pages`
+- **ผลการรันทดสอบ 8 ข้อทั้งหมด: ผ่าน 8 / 8 ข้อ (100% Passed)**
+
+
 
 
 
