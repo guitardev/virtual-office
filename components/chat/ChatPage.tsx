@@ -458,37 +458,57 @@ export function ChatPage({
 
   // ─── FILE ATTACHMENT HANDLERS ───
   const processFiles = async (fileList: FileList | File[]) => {
-    const files = Array.from(fileList);
-    if (files.length === 0) return;
+    const rawFiles = Array.from(fileList);
+    if (rawFiles.length === 0) return;
+
+    // Filter out oversized files that exceed Serverless limit
+    const validFiles: File[] = [];
+    for (const f of rawFiles) {
+      if (f.size > MAX_SERVERLESS_UPLOAD_SIZE) {
+        const mb = (f.size / (1024 * 1024)).toFixed(1);
+        showToast(`⚠️ ไฟล์ "${f.name}" (${mb} MB) มีขนาดใหญ่เกินไป (สูงสุด 4.0 MB) กรุณาใช้คลังเอกสาร File Station แทน`);
+      } else {
+        validFiles.push(f);
+      }
+    }
+
+    if (validFiles.length === 0) return;
 
     setIsUploadingToNas(true);
 
-    const readPromises = files.map((file) => {
+    const readPromises = validFiles.map((file) => {
       return new Promise<ChatAttachment>(async (resolve) => {
         const type = detectAttachmentType(file.name, file.type);
         const size = formatAttachmentSize(file.size);
         const id = `att_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
-        const dataUrl = await new Promise<string | undefined>((resData) => {
-          const reader = new FileReader();
-          reader.onload = () => resData(typeof reader.result === "string" ? reader.result : undefined);
-          reader.onerror = () => resData(undefined);
-          reader.readAsDataURL(file);
-        });
+        // Only read base64 dataUrl for small images (< 1.5 MB) for instant composer thumbnail preview
+        let dataUrl: string | undefined = undefined;
+        if (type === "image" && file.size < 1.5 * 1024 * 1024) {
+          dataUrl = await new Promise<string | undefined>((resData) => {
+            const reader = new FileReader();
+            reader.onload = () => resData(typeof reader.result === "string" ? reader.result : undefined);
+            reader.onerror = () => resData(undefined);
+            reader.readAsDataURL(file);
+          });
+        }
 
         // Upload to Synology NAS /chat_attachments if syncToNas is active
         let nasPath: string | undefined = undefined;
         let storageType: "nas" | "local" = "local";
+        let downloadUrl: string | undefined = undefined;
 
         if (syncToNas) {
           const uploadRes = await uploadAttachmentToNas(file);
           if (uploadRes.success && uploadRes.path) {
             nasPath = uploadRes.path;
             storageType = "nas";
+            downloadUrl = `/api/nas/download?path=${encodeURIComponent(uploadRes.path)}`;
           } else {
             console.warn("NAS Upload not completed:", uploadRes.error);
             nasPath = `/chat_attachments/${file.name}`;
             storageType = "nas";
+            downloadUrl = `/api/nas/download?path=${encodeURIComponent(`/chat_attachments/${file.name}`)}`;
           }
         }
 
@@ -498,6 +518,7 @@ export function ChatPage({
           type,
           size,
           mimeType: file.type || "application/octet-stream",
+          url: downloadUrl,
           dataUrl,
           nasPath: nasPath || (syncToNas ? `/chat_attachments/${file.name}` : undefined),
           storageType: syncToNas ? "nas" : "local",
@@ -697,7 +718,11 @@ export function ChatPage({
       attachmentName: primaryAtt?.name,
       attachmentType: primaryAtt?.type,
       attachmentSize: primaryAtt?.size,
-      attachmentUrl: primaryAtt?.url || primaryAtt?.dataUrl,
+      attachmentUrl:
+        primaryAtt?.url ||
+        (primaryAtt?.nasPath
+          ? `/api/nas/download?path=${encodeURIComponent(primaryAtt.nasPath)}`
+          : undefined),
       // Rich multi-attachment array
       attachments: attachedFiles.length > 0 ? attachedFiles : undefined,
       isPinned: false,

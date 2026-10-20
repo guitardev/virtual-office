@@ -805,23 +805,60 @@ export function mapRowToChatMessage(row: any): ChatMessage {
 
 export function mapChatMessageToRow(m: ChatMessage): any {
   const primaryAtt = m.attachments?.[0];
+
+  // Helper to determine safe URL (never store raw Base64 data URLs > 2000 chars in database)
+  const sanitizeUrl = (url?: string, name?: string, nasPath?: string): string | null => {
+    if (url && !url.startsWith("data:") && url.length < 2000) return url;
+    if (nasPath) return `/api/nas/download?path=${encodeURIComponent(nasPath)}`;
+    if (name) return `/api/nas/download?path=${encodeURIComponent(`/chat_attachments/${name}`)}`;
+    return null;
+  };
+
+  const primaryCleanUrl = sanitizeUrl(
+    primaryAtt?.url || m.attachmentUrl,
+    primaryAtt?.name || m.attachmentName,
+    primaryAtt?.nasPath
+  );
+
+  // Sanitize attachments array so NO dataUrl or gigantic base64 is saved into Supabase
+  const rawAttachments = m.attachments || (primaryAtt ? [primaryAtt] : []);
+  const sanitizedAttachments = rawAttachments.map((a) => ({
+    id: a.id,
+    name: a.name,
+    type: a.type,
+    size: a.size,
+    mimeType: a.mimeType,
+    url: sanitizeUrl(a.url, a.name, a.nasPath) || undefined,
+    nasPath: a.nasPath || (a.name ? `/chat_attachments/${a.name}` : undefined),
+    storageType: a.storageType || "nas",
+    uploadedToNas: a.uploadedToNas ?? true,
+    // dataUrl is deliberately stripped to protect database & network payloads
+  }));
+
+  // Sanitize sender avatar (avoid repeating 32KB+ base64 per row if not a clean URL)
+  const safeAvatar =
+    m.senderAvatar && (m.senderAvatar.startsWith("http") || m.senderAvatar.length < 5000)
+      ? m.senderAvatar
+      : null;
+
   return {
     id: m.id,
     channel_id: m.groupId,
-    user_id: m.senderId || null,
+    // Guard against FK violation: only pass user_id if syno_ ID
+    user_id: m.senderId && m.senderId.startsWith("syno_") ? m.senderId : null,
     sender_name: m.senderName,
-    sender_avatar: m.senderAvatar || null,
+    sender_avatar: safeAvatar,
     sender_role: m.senderRole || "member",
     sender_position: m.senderPosition || null,
     content: m.text,
     tag: m.tag || null,
-    attachment_url: primaryAtt?.url || m.attachmentUrl || null,
+    attachment_url: primaryCleanUrl,
     attachment_metadata: {
       attachment_name: primaryAtt?.name || m.attachmentName || null,
       attachment_type: primaryAtt?.type || m.attachmentType || null,
       attachment_size: primaryAtt?.size || m.attachmentSize || null,
-      attachment_url: primaryAtt?.url || m.attachmentUrl || null,
-      attachments: m.attachments || (primaryAtt ? [primaryAtt] : []),
+      attachment_url: primaryCleanUrl,
+      attachments: sanitizedAttachments,
       sender_division: m.senderDivision || null,
       is_pinned: Boolean(m.isPinned),
     },
@@ -859,9 +896,10 @@ export async function fetchChatMessages(): Promise<ChatMessage[]> {
     const { data, error } = await supabase
       .from("messages")
       .select("*")
-      .order("created_at", { ascending: true });
+      .order("created_at", { ascending: false })
+      .limit(100);
     if (error || !data || data.length === 0) return INITIAL_CHAT_MESSAGES;
-    return data.map(mapRowToChatMessage);
+    return [...data].reverse().map(mapRowToChatMessage);
   } catch {
     return INITIAL_CHAT_MESSAGES;
   }
@@ -872,8 +910,13 @@ export async function sendChatMessage(msg: ChatMessage): Promise<boolean> {
   try {
     const row = mapChatMessageToRow(msg);
     const { error } = await supabase.from("messages").upsert(row);
-    return !error;
-  } catch {
+    if (error) {
+      console.warn("Supabase sendChatMessage error:", error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn("sendChatMessage network error:", err);
     return false;
   }
 }

@@ -247,11 +247,31 @@ export function loadStoredChatMessages(): ChatMessage[] {
 export function saveStoredChatMessages(messages: ChatMessage[]) {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(CHAT_MESSAGES_STORAGE_KEY, JSON.stringify(messages));
+    // Proactively sanitize messages so raw dataUrl never exceeds localStorage quota
+    const sanitized = messages.slice(-100).map((m) => {
+      const hasLargeAttUrl = m.attachmentUrl?.startsWith("data:");
+      const hasDataUrls = m.attachments?.some((a) => Boolean(a.dataUrl));
+      if (!hasLargeAttUrl && !hasDataUrls) return m;
+
+      return {
+        ...m,
+        attachmentUrl: hasLargeAttUrl
+          ? (m.attachments?.[0]?.nasPath ? `/api/nas/download?path=${encodeURIComponent(m.attachments[0].nasPath)}` : undefined)
+          : m.attachmentUrl,
+        attachments: m.attachments?.map((a) => ({
+          ...a,
+          dataUrl: undefined,
+          url: a.url?.startsWith("data:")
+            ? (a.nasPath ? `/api/nas/download?path=${encodeURIComponent(a.nasPath)}` : undefined)
+            : a.url,
+        })),
+      };
+    });
+    localStorage.setItem(CHAT_MESSAGES_STORAGE_KEY, JSON.stringify(sanitized));
   } catch (err) {
-    // If quota exceeded (e.g. large base64 attachments), sanitize and keep last 50 messages
+    // Aggressive fallback: keep last 30 messages with minimal fields
     try {
-      const sanitized = messages.slice(-50).map((m) => ({
+      const minimal = messages.slice(-30).map((m) => ({
         ...m,
         attachmentUrl: m.attachmentUrl?.startsWith("data:") ? undefined : m.attachmentUrl,
         attachments: m.attachments?.map((a) => ({
@@ -259,7 +279,7 @@ export function saveStoredChatMessages(messages: ChatMessage[]) {
           dataUrl: undefined,
         })),
       }));
-      localStorage.setItem(CHAT_MESSAGES_STORAGE_KEY, JSON.stringify(sanitized));
+      localStorage.setItem(CHAT_MESSAGES_STORAGE_KEY, JSON.stringify(minimal));
     } catch {
       // Non-fatal fallback
     }

@@ -1987,16 +1987,58 @@ on conflict (id) do update set
 3. **Sidebar Suite ([tests/sidebar-grouped-navigation.spec.ts](file:///c:/Users/GuitarDev/virtual-office/tests/sidebar-grouped-navigation.spec.ts)):**
    - ผลการทดสอบ: **ผ่านครบ 3 กรณีทดสอบ (3 passed, 13.6s)**
 
+---
 
+## 41. การวิเคราะห์และแก้ไขปัญหา HTTP 500 Error บน Supabase PostgREST Endpoint (`/rest/v1/messages`)
 
+### 41.1 ปัญหาที่พบ (Issue Identified)
+เมื่อผู้ใช้งานส่งข้อความหรือโหลดห้องแชทในเบราว์เซอร์ พบข้อผิดพลาดใน Developer Tools Console:
+```
+Failed to load resource: the server responded with a status of 500 () xkeiuyhkokmecefzzynb.supabase.co/rest/v1/messages:1
+```
 
+### 41.2 การสืบค้นและระบุสาเหตุที่แท้จริง (Root Cause Analysis)
+1. **การตรวจสอบ Unified ClickHouse Logs บน Supabase:**
+   จากการคิวรี `logs` บน Supabase พบ Log บันทึกความผิดพลาดโดยตรง:
+   - `POST | 500 | https://xkeiuyhkokmecefzzynb.supabase.co/rest/v1/messages`
+   - `request.headers.content_length: 38468140` (ประมาณ **38.5 Megabytes**)
+   - `response.headers.proxy_status: PostgREST; error=57014` (PostgreSQL Error Code 57014 คือ **query_canceled / statement_timeout**)
+   - `response.origin_time: 19938 ms` (~20 วินาที)
+2. **สาเหตุของ Payload ขนาดใหญ่ (Base64 Blob Leakage):**
+   - ใน [components/chat/ChatPage.tsx](file:///c:/Users/GuitarDev/virtual-office/components/chat/ChatPage.tsx) เดิม `FileReader.readAsDataURL` ถูกเรียกกับไฟล์แนบทุกประเภทและทุกขนาด (แม้กระทั่งไฟล์ขนาดหลายสิบเมกะไบต์)
+   - ข้อมูล Base64 `dataUrl` ถูกส่งต่อไปยัง `ChatMessage.attachmentUrl` และคัดลอกซ้ำซ้อนใน `ChatMessage.attachments`
+   - ใน [lib/supabase.ts](file:///c:/Users/GuitarDev/virtual-office/lib/supabase.ts) ฟังก์ชัน `mapChatMessageToRow` ได้แมป Base64 สตริงขนาดมหาศาลนี้ซ้ำถึง 3 แห่งลงในตาราง `messages`:
+     - คอลัมน์ `attachment_url`
+     - คีย์ `attachment_metadata->'attachment_url'`
+     - คีย์ `attachment_metadata->'attachments'`
+   - เมื่อส่งคำขอ `POST /rest/v1/messages` ทำให้มีขนาด Payload สูงถึง **38.5 MB** ในคำขอเดียว จน Postgres ใช้เวลาประมวลผลเกินเวลาและตัดการทำงานด้วย `statement_timeout (57014)` และส่งคืน HTTP 500
+3. **ปัญหา Database Bloat สะสม:**
+   - จากการตรวจสอบข้อมูลในตาราง `public.messages` พบข้อความในอดีตมี Base64 ขนาดใหญ่กว่า 800 KB บันทึกซ้ำซ้อน ทำให้ข้อความเพียง 18 แถว กินพื้นที่ดิสก์ฐานข้อมูลสูงถึง **8.2 MB**
+   - เมื่อเรียก `fetchChatMessages()` ด้วย `select("*")` แบบไม่มีการจำกัดจำนวนแถว ทำให้ PostgREST ต้องตอบกลับข้อมูล 8.2 MB ทุกครั้ง เกิดความล่าช้าและเสี่ยงต่อการเกิด Timeout
 
+### 41.3 แนวทางแก้ไขและการพัฒนา (Implementation Details)
 
+1. **ทำความสะอาดและบีบอัดข้อมูลในฐานข้อมูล (Database Sanitization):**
+   - รัน SQL Script ปรับปรุงตาราง `public.messages` ใน Supabase โดยแปลง Base64 ขนาดใหญ่ใน `attachment_url` และ `attachment_metadata` ให้เป็น URL ดาวน์โหลดที่ปลอดภัยตามโครงสร้าง Synology NAS (`/api/nas/download?path=/chat_attachments/...`)
+   - ลบ `dataUrl` ออกจาก JSONB `attachment_metadata->attachments` ทั้งหมด
+   - **ผลลัพธ์:** ขนาดข้อมูลในตาราง `public.messages` ลดลงจาก **8,229,432 ไบต์ (~8.2 MB)** เหลือเพียง **327,800 ไบต์ (~320 KB)** (ลดขนาดลงกว่า **96%**)
+2. **ปรับปรุง `mapChatMessageToRow` และ `sendChatMessage` ([lib/supabase.ts](file:///c:/Users/GuitarDev/virtual-office/lib/supabase.ts)):**
+   - เพิ่มตัวกรองความปลอดภัย `sanitizeUrl`: ป้องกันไม่ให้ Base64 Data URLs หรือสตริงที่ยาวเกิน 2,000 ตัวอักษรหลุดรอดเข้าไปในคอลัมน์ `attachment_url`
+   - กรองและตัดฟิลด์ `dataUrl` ออกจาก Array `attachments` ก่อนส่งเข้า JSONB ใน Supabase เสมอ
+   - ป้องกัน Foreign Key Violation (`messages_user_id_fkey`): ส่ง `user_id` เฉพาะรหัสที่ขึ้นต้นด้วย `syno_` เท่านั้น
+3. **ปรับปรุงประสิทธิภาพ `fetchChatMessages` ([lib/supabase.ts](file:///c:/Users/GuitarDev/virtual-office/lib/supabase.ts)):**
+   - เปลี่ยนจากการดึงข้อมูลทั้งหมดโดยไม่มีการจำกัด มาเป็นการจัดเรียง `.order("created_at", { ascending: false }).limit(100)` แล้ว `.reverse()` เพื่อให้ได้ 100 ข้อความล่าสุดอย่างรวดเร็ว (ลดเวลาตอบสนองจาก ~3 วินาที เหลือเพียง **600-700 ms**)
+4. **ป้องกันที่ต้นทางใน [components/chat/ChatPage.tsx](file:///c:/Users/GuitarDev/virtual-office/components/chat/ChatPage.tsx):**
+   - ใน `processFiles`: ตรวจสอบขนาดไฟล์เทียบกับ `MAX_SERVERLESS_UPLOAD_SIZE` (4.0 MB) ทันที หากเกินจะแจ้งเตือนและแนะนำให้ใช้ File Station แทน
+   - อ่าน `readAsDataURL` เฉพาะไฟล์ประเภทรูปภาพขนาดเล็ก (< 1.5 MB) สำหรับแสดง Thumbnail Preview ใน Composer เท่านั้น และไฟล์เอกสารประเภทอื่นจะไม่แปลงเป็น Base64
+   - ใน `handleSendMessage`: กำหนด `attachmentUrl` ให้ชี้ไปยัง Synology NAS Download API เสมอ
+5. **ป้องกัน QuotaExceededError ใน `saveStoredChatMessages` ([lib/chat-data.ts](file:///c:/Users/GuitarDev/virtual-office/lib/chat-data.ts)):**
+   - ทำการ Sanitize ตัด `dataUrl` ออกก่อนจัดเก็บลง `localStorage` เชิงรุกเสมอ เพื่อไม่ให้แคชของเบราว์เซอร์เต็ม
 
-
-
-
-
-
-
-
+### 41.4 ผลการทดสอบ (Verification & Validation)
+1. **Supabase REST Upsert & Fetch:**
+   - ทดสอบส่งข้อความและเอกสารแนบ: `Upsert elapsed: 468 ms (error: null)`
+   - ทดสอบดึงข้อมูลข้อความ: `Fetch elapsed: 673 ms (error: null)`
+2. **Playwright Test Suite ([tests/division-chat.spec.ts](file:///c:/Users/GuitarDev/virtual-office/tests/division-chat.spec.ts)):**
+   - รันการทดสอบครบทั้ง 6 กรณีทดสอบ ครอบคลุมการแนบไฟล์หลายประเภท (PDF, Word, Excel), การแสดงผลบน Synology NAS, และสิทธิ์สมาชิก
+   - **ผลการทดสอบ: ผ่าน 100% (6 passed, 41.7s)**
