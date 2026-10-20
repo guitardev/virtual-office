@@ -18,6 +18,11 @@ const sarabun = Sarabun({
 export const metadata = {
   title: "Smart MSO — ระบบออฟฟิศเสมือน",
   description: "ระบบสื่อสารและทำงานร่วมกันในองค์กร Smart MSO",
+  icons: {
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

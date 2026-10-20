@@ -2224,9 +2224,11 @@ export default function SmartMSOApp() {
           {!isSidebarCollapsed ? (
             <>
               <div className="flex items-center space-x-3 overflow-hidden">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#4F46E5] to-[#818CF8] flex items-center justify-center text-white font-black text-lg shadow-md shadow-indigo-500/30 shrink-0">
-                  MSO
-                </div>
+                <img
+                  src="/logo.png"
+                  alt="Smart MSO Logo"
+                  className="w-10 h-10 rounded-xl object-contain bg-white p-1 shadow-md shrink-0"
+                />
                 <div className="truncate">
                   <span className="text-lg font-bold text-white font-heading tracking-tight block leading-tight truncate">
                     Smart MSO
@@ -2252,11 +2254,11 @@ export default function SmartMSOApp() {
               <button
                 type="button"
                 onClick={toggleSidebarCollapse}
-                className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#4F46E5] to-[#818CF8] flex items-center justify-center text-white font-black text-sm shadow-md shadow-indigo-500/30 hover:scale-105 transition-transform cursor-pointer relative group"
+                className="w-10 h-10 rounded-xl bg-white p-1 shadow-md hover:scale-105 transition-transform cursor-pointer relative group flex items-center justify-center"
                 title="ขยายแถบเมนู (Expand Sidebar)"
                 aria-label="Expand Sidebar"
               >
-                <span>MSO</span>
+                <img src="/logo.png" alt="Smart MSO Logo" className="w-full h-full object-contain" />
                 <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-slate-800 text-indigo-300 border border-slate-600 text-[9px] flex items-center justify-center">
                   ▶
                 </span>
@@ -2282,9 +2284,11 @@ export default function SmartMSOApp() {
           <aside className="relative w-72 bg-[#0F172A] text-slate-300 flex flex-col h-full z-10 shadow-2xl">
             <div className="flex items-center justify-between h-16 px-6 border-b border-slate-800">
               <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 rounded-lg bg-[#4F46E5] flex items-center justify-center text-white font-bold text-xs">
-                  MSO
-                </div>
+                <img
+                  src="/logo.png"
+                  alt="Smart MSO Logo"
+                  className="w-9 h-9 rounded-xl object-contain bg-white p-1 shrink-0"
+                />
                 <span className="text-lg font-bold text-white font-heading">Smart MSO</span>
               </div>
               <button

@@ -484,9 +484,11 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
 
         {/* Brand Header */}
         <div className="relative z-10 flex items-center space-x-3.5">
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-[#4F46E5] to-[#818CF8] flex items-center justify-center text-white font-black text-xl shadow-lg shadow-indigo-500/30">
-            MSO
-          </div>
+          <img
+            src="/logo.png"
+            alt="Smart MSO Logo"
+            className="w-12 h-12 rounded-2xl object-contain bg-white/95 p-1.5 shadow-xl shadow-indigo-500/20 backdrop-blur-md"
+          />
           <div>
             <span className="text-2xl font-black text-white font-heading tracking-tight block leading-tight">
               Smart MSO
@@ -562,10 +564,17 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
         <div className="w-full max-w-md space-y-5">
           {/* Header & Status Indicator */}
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                <span className={`w-2 h-2 rounded-full ${nasOnline ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
-                <span>Database Auth {nasOnline ? "(Online)" : "(Standby)"}</span>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2.5">
+                <img
+                  src="/logo.png"
+                  alt="Smart MSO Logo"
+                  className="w-10 h-10 rounded-xl object-contain bg-white p-1 border border-slate-200 shadow-2xs"
+                />
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                  <span className={`w-2 h-2 rounded-full ${nasOnline ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
+                  <span>Database Auth {nasOnline ? "(Online)" : "(Standby)"}</span>
+                </div>
               </div>
               <span className="text-[11px] font-semibold text-slate-400">
                 SSL 256-Bit Encrypted

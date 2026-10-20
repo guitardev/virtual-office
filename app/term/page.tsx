@@ -17,9 +17,11 @@ export default function TermsOfServicePage() {
             href="/"
             className="flex items-center space-x-3 group transition-transform hover:scale-102"
           >
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#4F46E5] to-[#818CF8] flex items-center justify-center text-white font-black text-xl shadow-md shadow-indigo-500/25">
-              MSO
-            </div>
+            <img
+              src="/logo.png"
+              alt="Smart MSO Logo"
+              className="w-9 h-9 rounded-xl object-contain bg-white p-1 shadow-md shrink-0"
+            />
             <div>
               <span className="text-lg font-black text-white font-heading tracking-tight block leading-none">
                 Smart MSO
