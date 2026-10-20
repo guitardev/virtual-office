@@ -5,6 +5,7 @@ import {
   CircularDocument,
   AccessRequest,
   CarBookingRequest,
+  TaskItem,
   Member,
   Role,
 } from "./types";
@@ -133,6 +134,7 @@ export function buildUnifiedNotifications({
   circularDocs,
   accessRequests,
   carBookings,
+  tasks,
   allMembers,
 }: {
   currentUser: Member | null;
@@ -142,6 +144,7 @@ export function buildUnifiedNotifications({
   circularDocs: CircularDocument[];
   accessRequests: AccessRequest[];
   carBookings: CarBookingRequest[];
+  tasks?: TaskItem[];
   allMembers: Member[];
 }): SystemNotification[] {
   if (!currentUser) return [];
@@ -339,6 +342,39 @@ export function buildUnifiedNotifications({
         },
       });
     }
+  });
+
+  // ─── 5. ASSIGNED TASK NOTIFICATIONS ───
+  tasks?.forEach((task) => {
+    if (task.status === "done") return;
+    const isAssigned =
+      task.assigneeId === currentUser.id ||
+      (task.assignee && currentUser.name && task.assignee.trim() === currentUser.name.trim()) ||
+      (currentUser.firstName && task.assignee && task.assignee.includes(currentUser.firstName));
+
+    if (!isAssigned) return;
+
+    const notifId = `task_${task.id}`;
+    let priority: "normal" | "urgent" | "emergency" = "normal";
+    if (task.priority === "high") {
+      priority = "urgent";
+    }
+
+    notifs.push({
+      id: notifId,
+      type: "task",
+      title: `งานมอบหมาย: ${task.title}`,
+      message: `ฝ่าย${task.dept || currentUser.division || "งาน"} · กำหนดส่ง: ${task.due || "เร็วๆ นี้"} (${task.status === "in_progress" ? "กำลังทำ" : task.status === "review" ? "รอตรวจ" : "รอดำเนินการ"})`,
+      timestamp: task.due || "เร็วๆ นี้",
+      createdAt: task.createdAt || new Date().toISOString(),
+      isRead: readIds.has(notifId),
+      priority,
+      senderName: task.createdByName || "ผู้มอบหมาย",
+      link: {
+        page: "task",
+        targetId: String(task.id),
+      },
+    });
   });
 
   // Sort: Unread first, then by createdAt descending

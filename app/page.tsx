@@ -635,7 +635,20 @@ export default function SmartMSOApp() {
       });
 
       const unsubscribeRequests = subscribeToAccessRequests((updatedRequests) => {
-        setAccessRequests(updatedRequests);
+        setAccessRequests((prev) => {
+          if (prev && prev.length > 0 && updatedRequests.length > prev.length) {
+            const newReq = updatedRequests[0];
+            if (currentUserRole === "admin") {
+              showToast(`📬 มีคำขอเข้าใช้งานใหม่: ${newReq.name} (${newReq.position})`);
+              if (typeof document !== "undefined") {
+                sendBrowserNotification(`📬 คำขอสิทธิ์ใหม่: ${newReq.name}`, {
+                  body: `${newReq.position} · ${newReq.division} (ขอสิทธิ์ ${newReq.requestedRole})`,
+                });
+              }
+            }
+          }
+          return updatedRequests;
+        });
       });
 
       const unsubscribeAudit = subscribeToAuditLogs(() => {
@@ -647,7 +660,25 @@ export default function SmartMSOApp() {
       });
 
       const unsubscribeTasks = subscribeToTasks((updatedTasks) => {
-        setTasks(updatedTasks);
+        setTasks((prev) => {
+          if (prev && prev.length > 0 && updatedTasks.length > prev.length) {
+            const newTask = updatedTasks[0];
+            if (
+              currentUser &&
+              (newTask.assigneeId === currentUser.id ||
+                newTask.assignee === currentUser.name ||
+                (currentUser.firstName && newTask.assignee?.includes(currentUser.firstName)))
+            ) {
+              showToast(`📋 งานมอบหมายใหม่: "${newTask.title}" (ฝ่าย${newTask.dept})`);
+              if (typeof document !== "undefined") {
+                sendBrowserNotification(`📋 งานมอบหมายใหม่: ${newTask.title}`, {
+                  body: `ฝ่าย${newTask.dept} · กำหนดส่ง: ${newTask.due || "เร็วๆ นี้"}`,
+                });
+              }
+            }
+          }
+          return updatedTasks;
+        });
       });
 
       const unsubscribeMeetings = subscribeToMeetings((updatedMeetings) => {
@@ -655,7 +686,15 @@ export default function SmartMSOApp() {
       });
 
       const unsubscribeCarBookings = subscribeToCarBookings((updatedBookings) => {
-        setCarBookings(updatedBookings);
+        setCarBookings((prev) => {
+          if (prev && prev.length > 0 && updatedBookings.length > prev.length) {
+            const newBooking = updatedBookings[0];
+            if (currentUserRole === "admin" || currentUserRole === "manager") {
+              showToast(`🚗 คำขอจองรถใหม่: ${newBooking.destination} โดย ${newBooking.requesterName}`);
+            }
+          }
+          return updatedBookings;
+        });
       });
 
       // Fetch chat messages, groups, and circular documents for Notification Center
@@ -1531,6 +1570,7 @@ export default function SmartMSOApp() {
       circularDocs,
       accessRequests,
       carBookings,
+      tasks,
       allMembers: members,
     });
   }, [
@@ -1541,6 +1581,7 @@ export default function SmartMSOApp() {
     circularDocs,
     accessRequests,
     carBookings,
+    tasks,
     members,
     readNotifRevision,
   ]);
@@ -2491,6 +2532,10 @@ export default function SmartMSOApp() {
                             ) : notif.type === "carbooking" ? (
                               <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 font-bold text-sm flex items-center justify-center">
                                 🚗
+                              </div>
+                            ) : notif.type === "task" ? (
+                              <div className="w-8 h-8 rounded-xl bg-orange-100 text-orange-800 font-bold text-sm flex items-center justify-center">
+                                📋
                               </div>
                             ) : (
                               <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-800 font-bold text-sm flex items-center justify-center">

@@ -127,4 +127,38 @@ test.describe("ระบบแจ้งเตือนแบบรวมศู�
     const notifItem = dropdown.locator('div[class*="transition-colors flex items-start gap-3 cursor-pointer"]').first();
     await expect(notifItem).toBeVisible();
   });
+
+  test("5. ตรวจสอบการทำงานของระบบอื่นๆ (คำขอสิทธิ์, จองรถ, งานมอบหมาย) ในศูนย์แจ้งเตือน", async ({ page }) => {
+    // Open Notification Bell
+    const notifBell = page.locator('button[aria-label="การแจ้งเตือน"]').first();
+    await notifBell.click();
+    await page.waitForTimeout(500);
+
+    const dropdown = page.locator(".absolute.right-0").filter({ hasText: "ศูนย์การแจ้งเตือน" });
+    await expect(dropdown).toBeVisible();
+
+    // Switch to "คำขอ/งาน" tab
+    const requestsTab = dropdown.getByRole("button", { name: /คำขอ/ });
+    await expect(requestsTab).toBeVisible();
+    await requestsTab.click();
+    await page.waitForTimeout(400);
+
+    // Check if any request/car/task item is displayed
+    const items = dropdown.locator('div[class*="transition-colors flex items-start gap-3 cursor-pointer"]');
+    const itemCount = await items.count();
+
+    if (itemCount > 0) {
+      const firstItem = items.first();
+      await expect(firstItem).toBeVisible();
+      // Click item to verify Deeplinking
+      await firstItem.click();
+      await page.waitForTimeout(1000);
+      // Dropdown should be dismissed after click
+      await expect(dropdown).not.toBeVisible();
+    } else {
+      // Empty state verification
+      const emptyNotice = dropdown.getByText(/ไม่มีรายการแจ้งเตือนในหมวดนี้/i);
+      await expect(emptyNotice).toBeVisible();
+    }
+  });
 });
