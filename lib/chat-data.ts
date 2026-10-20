@@ -109,10 +109,11 @@ const CHAT_MESSAGES_STORAGE_KEY = "smartmso_chat_messages_v2";
 const LEGACY_CHAT_MESSAGES_STORAGE_KEY = "omnioffice_chat_messages_v2";
 
 /**
- * Filter out mock usr_ IDs
+ * Filter out mock usr_ IDs (only usr_1 and usr_mock are legacy mock IDs)
  */
 function isNotMockUserId(id: string): boolean {
-  return !/^usr_\d+$/.test(id);
+  if (!id) return false;
+  return id !== "usr_1" && id !== "usr_mock";
 }
 
 /**
@@ -146,8 +147,18 @@ export function syncDivisionGroupMembers(
     }
 
     if (group.type === "division" && group.division) {
+      const targetDiv = group.division;
       const divisionMemberIds = allMembers
-        .filter((m) => isNotMockUserId(m.id) && m.division === group.division)
+        .filter(
+          (m) =>
+            isNotMockUserId(m.id) &&
+            Boolean(
+              m.division &&
+                (m.division === targetDiv ||
+                  m.division.includes(targetDiv) ||
+                  targetDiv.includes(m.division))
+            )
+        )
         .map((m) => m.id);
 
       return {

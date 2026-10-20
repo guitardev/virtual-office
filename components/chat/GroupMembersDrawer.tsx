@@ -27,8 +27,22 @@ export function GroupMembersDrawer({
   const [showAddMember, setShowAddMember] = useState(false);
   const [selectedToAdd, setSelectedToAdd] = useState<string>("");
 
-  const groupMembers = allMembers.filter((m) => group.memberIds.includes(m.id));
-  const nonGroupMembers = allMembers.filter((m) => !group.memberIds.includes(m.id));
+  const groupMembers = allMembers.filter((m) => {
+    const isExplicit = Array.isArray(group.memberIds) && group.memberIds.includes(m.id);
+    const isDivision = Boolean(
+      group.isOfficial &&
+      group.division &&
+      m.division &&
+      (m.division === group.division ||
+        m.division.includes(group.division) ||
+        group.division.includes(m.division))
+    );
+    const isAllStaff = group.id === "ch_all_staff";
+    const isExecutive =
+      group.id === "ch_executive" && (m.role === "admin" || m.role === "manager");
+    return isExplicit || isDivision || isAllStaff || isExecutive;
+  });
+  const nonGroupMembers = allMembers.filter((m) => !groupMembers.some((gm) => gm.id === m.id));
   const onlineCount = groupMembers.filter((m) => onlineUserIds.includes(m.id)).length;
 
   const filteredMembers = groupMembers.filter((m) => {

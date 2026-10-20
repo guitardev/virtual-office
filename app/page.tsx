@@ -462,6 +462,41 @@ export default function SmartMSOApp() {
       fetchMembers().then((liveMembers) => {
         if (liveMembers && liveMembers.length > 0) {
           setMembers(liveMembers);
+          // Sync current logged in user with official profile from database
+          setCurrentUser((prev) => {
+            if (!prev) return null;
+            const liveMatch = liveMembers.find(
+              (m) =>
+                m.id === prev.id ||
+                (prev.email && m.email && m.email.toLowerCase() === prev.email.toLowerCase()) ||
+                (prev.name && m.name && (m.name === prev.name || m.name.includes(prev.name) || prev.name.includes(m.name)))
+            );
+            if (liveMatch) {
+              const updated = {
+                ...prev,
+                prefix: liveMatch.prefix || prev.prefix,
+                firstName: liveMatch.firstName || prev.firstName,
+                lastName: liveMatch.lastName || prev.lastName,
+                name: liveMatch.name || prev.name,
+                division: liveMatch.division || prev.division,
+                department: liveMatch.department || prev.department,
+                position: liveMatch.position || prev.position,
+                personnelType: liveMatch.personnelType || prev.personnelType,
+                avatarUrl: liveMatch.avatarUrl || prev.avatarUrl,
+                role: prev.role === "admin" ? "admin" : liveMatch.role || prev.role,
+              };
+              try {
+                const raw = localStorage.getItem("smartmso_auth_session") || localStorage.getItem("omnioffice_auth_session");
+                if (raw) {
+                  const parsed = JSON.parse(raw);
+                  parsed.user = updated;
+                  localStorage.setItem("smartmso_auth_session", JSON.stringify(parsed));
+                }
+              } catch {}
+              return updated;
+            }
+            return prev;
+          });
         }
       });
 

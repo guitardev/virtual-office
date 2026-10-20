@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loginSynology } from "@/lib/synology";
 import { Member } from "@/lib/types";
+import { supabase, mapRowToMember } from "@/lib/supabase";
 
 export async function POST(req: NextRequest) {
   try {
@@ -107,6 +108,39 @@ export async function POST(req: NextRequest) {
       avatarUrl: undefined,
       avatarText,
     };
+
+    // 3. Lookup existing profile in Supabase to merge division, real name, and role
+    if (supabase) {
+      try {
+        const { data: dbUser } = await supabase
+          .from("users")
+          .select("*")
+          .or(`id.eq.${userId},id.eq.syno_${trimmedUser},name.ilike.%${trimmedUser}%`)
+          .limit(1)
+          .maybeSingle();
+
+        if (dbUser) {
+          const mapped = mapRowToMember(dbUser);
+          member.id = mapped.id;
+          member.prefix = mapped.prefix || member.prefix;
+          member.firstName = mapped.firstName || member.firstName;
+          member.lastName = mapped.lastName || member.lastName;
+          member.name = mapped.name || member.name;
+          member.personnelType = mapped.personnelType || member.personnelType;
+          member.position = mapped.position || member.position;
+          member.division = mapped.division || member.division;
+          member.department = mapped.department || member.department;
+          member.email = mapped.email || member.email;
+          if (mapped.phone && mapped.phone !== "-") member.phone = mapped.phone;
+          if (mapped.lineId && mapped.lineId !== "-") member.lineId = mapped.lineId;
+          // Prefer database role, but keep admin if NAS grants admin
+          member.role = isNasAdmin ? "admin" : mapped.role || member.role;
+          if (mapped.avatarUrl) member.avatarUrl = mapped.avatarUrl;
+        }
+      } catch (dbErr) {
+        console.warn("Could not query Supabase profile during login:", dbErr);
+      }
+    }
 
     return NextResponse.json({
       success: true,

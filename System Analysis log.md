@@ -1940,6 +1940,54 @@ on conflict (id) do update set
    - ทดสอบการบันทึกสถานะลง `localStorage`
    - **ผลการทดสอบ: ผ่าน 100% ทุกกรณีทดสอบ**
 
+---
+
+## 40. วิเคราะห์และแก้ไขปัญหาระบบแชททีม: กลุ่มนโยบายและวิชาการ UI ไม่ครบถ้วนและแสดงจำนวนสมาชิกไม่ถูกต้อง (วันที่ 20 ตุลาคม 2569)
+
+### 40.1 สาเหตุของปัญหาเชิงลึก (Root Cause Analysis)
+
+1. **สาเหตุที่ UI ไม่ครบถ้วน (ถูกล็อคสิทธิ์ 🔒):**
+   - ใน [app/api/nas/auth/route.ts](file:///c:/Users/GuitarDev/virtual-office/app/api/nas/auth/route.ts) เมื่อผู้ใช้เข้าสู่ระบบด้วยบัญชี Synology NAS ระบบตอบกลับอ็อบเจกต์ผู้ใช้โดยกำหนดค่าคงที่ `division: "รอกำหนดกลุ่มงาน"` โดยไม่ได้ดึงข้อมูลสังกัดกลุ่มงานจริงจากตาราง `users` ใน Supabase
+   - เมื่อผู้ใช้ (เช่น นายธนวัฒน์ แกมขุนทด ซึ่งแท้จริงสังกัดกลุ่มนโยบายและวิชาการ) เข้าสู่ระบบ จึงได้รับสิทธิ์เป็น `currentUser.division = "รอกำหนดกลุ่มงาน"`
+   - ส่งผลให้ใน [components/chat/ChatPage.tsx](file:///c:/Users/GuitarDev/virtual-office/components/chat/ChatPage.tsx) เงื่อนไข `isMemberOfActiveGroup` ได้ค่าเป็น `false`
+   - เมื่อ `isMemberOfActiveGroup === false`:
+     - พื้นที่ข้อความแชททั้งหมดถูกแทนที่ด้วยหน้าจอล็อค: *"เฉพาะสมาชิกกลุ่มเท่านั้นที่มีสิทธิ์ดูและสนทนา คุณไม่ได้เป็นสมาชิกของกลุ่ม จึงไม่สามารถดูข้อความหรือร่วมสนทนาในห้องนี้ได้"*
+     - แถบเครื่องมือด้านล่างทั้งหมด (แท็กด่วน, สถานะซิงก์ Synology NAS, ปุ่มแนบไฟล์, ปุ่มรูปภาพ, แบบฟอร์มราชการ, กล่องพิมพ์ข้อความ และปุ่มส่ง) ถูกซ่อนและแทนที่ด้วยแถบแจ้งเตือนถูกจำกัดสิทธิ์
+     - ปุ่มประชุมกลุ่มออนไลน์ `📹 ประชุมกลุ่ม` ถูก `disabled`
+
+2. **สาเหตุที่แสดงจำนวนคนในกลุ่มไม่ถูกต้อง (แสดง 0 คน หรือไม่ตรงกับข้อเท็จจริง):**
+   - **Regex กรอง Mock ID ผิดพลาดใน [lib/chat-data.ts](file:///c:/Users/GuitarDev/virtual-office/lib/chat-data.ts):** ฟังก์ชัน `isNotMockUserId` ใช้ `!/^usr_\d+$/.test(id)` ซึ่งกรองรหัสบุคลากรจริงของ พมจ. ทั้งหมด (`usr_2` ถึง `usr_11`) ออกจากกลุ่ม ทำให้ `syncDivisionGroupMembers` ลบรายชื่อบุคลากรจนเหลือ `memberIds: []` ว่างเปล่า
+   - **Remote Overwrite:** เมื่อเรียก `fetchChatGroups()` ข้อมูลกลุ่มจาก Supabase ถูกนำมาเซ็ตลงสเตท `groups` โดยตรงโดยไม่ได้ซิงก์กับรายชื่อสมาชิกในกลุ่มงาน
+   - **การคำนวณ `activeGroupMembers` และ Badge นับจำนวน:** เดิมคำนวณจาก `g.memberIds.length` หรือ `members.filter(m => activeGroup.memberIds.includes(m.id))` ซึ่งอิงเฉพาะ Array `memberIds` ในฐานข้อมูล โดยไม่ได้รวมบุคลากรที่สังกัดกลุ่มงานราชการทางการนั้น (`m.division === activeGroup.division`)
+
+### 40.2 แนวทางแก้ไขและการพัฒนา (Implementation Details)
+
+1. **ผสานข้อมูลโปรไฟล์จริงจากการเข้าสู่ระบบ ([app/api/nas/auth/route.ts](file:///c:/Users/GuitarDev/virtual-office/app/api/nas/auth/route.ts)):**
+   - เมื่อผู้ใช้เข้าสู่ระบบด้วยบัญชี NAS ให้ค้นหาข้อมูลในตาราง `users` บน Supabase โดยอัตโนมัติ เพื่อนำ `name`, `division`, `department`, `position`, `personnelType`, และ `role` จริงมาผสานเข้ากับอ็อบเจกต์ `member` ทันที
+2. **ซิงก์โปรไฟล์ `currentUser` อัตโนมัติใน [app/page.tsx](file:///c:/Users/GuitarDev/virtual-office/app/page.tsx):**
+   - เมื่อ `fetchMembers()` โหลดรายชื่อบุคลากรล่าสุดจาก Supabase ระบบจะตรวจสอบและอัปเดต `currentUser` ให้มี `division` ตรงกับฐานข้อมูลราชการ และบันทึกลง `smartmso_auth_session` เสมอ
+3. **ปรับปรุง `syncDivisionGroupMembers` ([lib/chat-data.ts](file:///c:/Users/GuitarDev/virtual-office/lib/chat-data.ts)):**
+   - แก้ไข `isNotMockUserId` ให้กรองเฉพาะ `usr_1` และ `usr_mock` เท่านั้น
+   - รองรับการเปรียบเทียบชื่อกลุ่มงานแบบ Partial Match
+4. **ฟังก์ชันคำนวณสมาชิกกลุ่มอัจฉริยะ `getGroupMembers` ([components/chat/ChatPage.tsx](file:///c:/Users/GuitarDev/virtual-office/components/chat/ChatPage.tsx) & [GroupMembersDrawer.tsx](file:///c:/Users/GuitarDev/virtual-office/components/chat/GroupMembersDrawer.tsx)):**
+   - รวบรวมสมาชิกของกลุ่มจาก 4 ส่วน:
+     - สมาชิกที่ระบุเจาะจงใน `memberIds`
+     - ข้าราชการ/เจ้าหน้าที่ที่สังกัดกลุ่มงานราชการนั้น (`m.division === group.division`)
+     - บุคลากรทุกคนสำหรับห้องประกาศกลาง (`ch_all_staff`)
+     - ผู้บริหารและหัวหน้ากลุ่มงาน (Admin/Manager) สำหรับห้องผู้บริหาร (`ch_executive`)
+   - นำ `getGroupMembers` ไปใช้คำนวณจำนวนสมาชิก `memberCount`, จุดสถานะ `isUserInGroup`, ป้ายออนไลน์ `onlineMemberCount`, สิทธิ์การเข้าถึง `accessibleGroups`, และการปลดล็อคหน้าจอ `isMemberOfActiveGroup`
+5. **อัปเดตข้อมูล `chat_channels` บนฐานข้อมูล Supabase:**
+   - ปรับปรุงตาราง `chat_channels` รหัส `ch_policy_planning` ให้มีรายชื่อบุคลากร `syno_วรวุฒิ`, `syno_ธนวัฒน์`, `syno_ขวัญนภา` ใน `member_ids`
+
+### 40.3 ผลการทดสอบ (Verification & Validation)
+1. **TypeScript Type Safety:** รัน `npx tsc --noEmit` ผ่านสมบูรณ์ `0 errors`
+2. **Playwright Suite ([tests/division-chat.spec.ts](file:///c:/Users/GuitarDev/virtual-office/tests/division-chat.spec.ts)):**
+   - เพิ่มกรณีทดสอบเจาะจง: `กลุ่มนโยบายและวิชาการ: ควรแสดง UI สนทนาที่ครบถ้วน และแสดงจำนวนสมาชิกถูกต้องสำหรับบุคลากรในกลุ่ม`
+   - ผลการทดสอบ: **ผ่านครบทั้ง 6 กรณีทดสอบ (6 passed, 29.3s)**
+3. **Sidebar Suite ([tests/sidebar-grouped-navigation.spec.ts](file:///c:/Users/GuitarDev/virtual-office/tests/sidebar-grouped-navigation.spec.ts)):**
+   - ผลการทดสอบ: **ผ่านครบ 3 กรณีทดสอบ (3 passed, 13.6s)**
+
+
 
 
 

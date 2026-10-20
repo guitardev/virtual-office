@@ -6,6 +6,7 @@ import { INITIAL_MEMBERS, ROLE_CONFIG } from "@/lib/rbac";
 import {
   loadStoredChatGroups,
   saveStoredChatGroups,
+  syncDivisionGroupMembers,
   loadStoredChatMessages,
   saveStoredChatMessages,
   detectAttachmentType,
@@ -117,8 +118,9 @@ export function ChatPage({
 
     fetchChatGroups().then((remoteGroups) => {
       if (isMounted && remoteGroups && remoteGroups.length > 0) {
-        setGroups(remoteGroups);
-        saveStoredChatGroups(remoteGroups);
+        const synced = syncDivisionGroupMembers(remoteGroups, members);
+        setGroups(synced);
+        saveStoredChatGroups(synced);
       }
     });
 
@@ -261,6 +263,25 @@ export function ChatPage({
   }, [activeGroupId, currentUser?.id]);
 
   // ─── PERMISSION & MEMBERSHIP FILTERING ───
+  // คำนวณรายชื่อสมาชิกจริงของกลุ่ม โดยรวมทั้ง explicit memberIds และสมาชิกตามกลุ่มงานราชการ
+  const getGroupMembers = (group: ChatGroup): Member[] => {
+    return members.filter((m) => {
+      const isExplicit = Array.isArray(group.memberIds) && group.memberIds.includes(m.id);
+      const isDivision = Boolean(
+        group.isOfficial &&
+        group.division &&
+        m.division &&
+        (m.division === group.division ||
+          m.division.includes(group.division) ||
+          group.division.includes(m.division))
+      );
+      const isAllStaff = group.id === "ch_all_staff";
+      const isExecutive =
+        group.id === "ch_executive" && (m.role === "admin" || m.role === "manager");
+      return isExplicit || isDivision || isAllStaff || isExecutive;
+    });
+  };
+
   // กรองเฉพาะกลุ่มที่ผู้ใช้เป็นสมาชิกเท่านั้น (หรือแอดมินเปิดโหมดตรวจการ)
   const accessibleGroups = useMemo(() => {
     if (!currentUser) return [];
@@ -268,18 +289,15 @@ export function ChatPage({
       return groups;
     }
     return groups.filter((g) => {
-      const isMember = Array.isArray(g.memberIds) && g.memberIds.includes(currentUser.id);
-      const isOfficialDivision = Boolean(
-        g.isOfficial &&
-        g.division &&
-        currentUser.division &&
-        (g.division === currentUser.division ||
-          currentUser.division.includes(g.division) ||
-          g.division.includes(currentUser.division))
-      );
-      return isMember || isOfficialDivision;
+      if (currentUser.role === "admin") return true;
+      if (g.id === "ch_all_staff") return true;
+      if (g.id === "ch_executive") {
+        return currentUser.role === "manager";
+      }
+      const groupMemberList = getGroupMembers(g);
+      return groupMemberList.some((m) => m.id === currentUser.id);
     });
-  }, [groups, currentUser, adminShowAll]);
+  }, [groups, currentUser, adminShowAll, members]);
 
   // สลับไปยังกลุ่มที่ตนเองมีสิทธิ์เข้าถึงโดยอัตโนมัติ
   useEffect(() => {
@@ -299,22 +317,18 @@ export function ChatPage({
   const isMemberOfActiveGroup = useMemo(() => {
     if (!currentUser || !activeGroup) return false;
     if (currentUser.role === "admin") return true;
-    const isMember = Array.isArray(activeGroup.memberIds) && activeGroup.memberIds.includes(currentUser.id);
-    const isOfficialDivision = Boolean(
-      activeGroup.isOfficial &&
-      activeGroup.division &&
-      currentUser.division &&
-      (activeGroup.division === currentUser.division ||
-        currentUser.division.includes(activeGroup.division) ||
-        activeGroup.division.includes(currentUser.division))
-    );
-    return isMember || isOfficialDivision;
-  }, [currentUser, activeGroup]);
+    if (activeGroup.id === "ch_all_staff") return true;
+    if (activeGroup.id === "ch_executive") {
+      return currentUser.role === "manager";
+    }
+    const groupMemberList = getGroupMembers(activeGroup);
+    return groupMemberList.some((m) => m.id === currentUser.id);
+  }, [currentUser, activeGroup, members]);
 
-  // Group members
+  // Group members ของกลุ่มที่กำลังเปิดอยู่
   const activeGroupMembers = useMemo(() => {
     if (!activeGroup) return [];
-    return members.filter((m) => activeGroup.memberIds.includes(m.id));
+    return getGroupMembers(activeGroup);
   }, [activeGroup, members]);
 
   // Messages of the active group
@@ -848,9 +862,10 @@ export function ChatPage({
                       .filter((g) => g.type === "division" || g.type === "announcement")
                       .map((g) => {
                         const isActive = activeGroupId === g.id;
-                        const memberCount = g.memberIds.length;
-                        const isUserInGroup = currentUser ? g.memberIds.includes(currentUser.id) : false;
-                        const onlineMemberCount = g.memberIds.filter((id) => onlineUserIds.includes(id)).length;
+                        const groupMemberList = getGroupMembers(g);
+                        const memberCount = groupMemberList.length;
+                        const isUserInGroup = currentUser ? groupMemberList.some((m) => m.id === currentUser.id) : false;
+                        const onlineMemberCount = groupMemberList.filter((m) => onlineUserIds.includes(m.id)).length;
 
                         return (
                           <button
@@ -927,9 +942,10 @@ export function ChatPage({
                       .filter((g) => g.type === "custom")
                       .map((g) => {
                         const isActive = activeGroupId === g.id;
-                        const memberCount = g.memberIds.length;
-                        const isUserInGroup = currentUser ? g.memberIds.includes(currentUser.id) : false;
-                        const onlineMemberCount = g.memberIds.filter((id) => onlineUserIds.includes(id)).length;
+                        const groupMemberList = getGroupMembers(g);
+                        const memberCount = groupMemberList.length;
+                        const isUserInGroup = currentUser ? groupMemberList.some((m) => m.id === currentUser.id) : false;
+                        const onlineMemberCount = groupMemberList.filter((m) => onlineUserIds.includes(m.id)).length;
 
                         return (
                           <button

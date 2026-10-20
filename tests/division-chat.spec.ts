@@ -219,4 +219,72 @@ test.describe("ระบบแชทกลุ่มทางการของ�
     await expect(closeDrawerBtn).toBeVisible();
     await closeDrawerBtn.click();
   });
+
+  test("กลุ่มนโยบายและวิชาการ: ควรแสดง UI สนทนาที่ครบถ้วน และแสดงจำนวนสมาชิกถูกต้องสำหรับบุคลากรในกลุ่ม", async ({
+    page,
+  }) => {
+    // กำหนด session เป็นบุคลากรกลุ่มนโยบายและวิชาการ (เช่น นายธนวัฒน์)
+    await page.addInitScript(() => {
+      const policyOfficer = {
+        id: "syno_ธนวัฒน์",
+        prefix: "นาย",
+        firstName: "ธนวัฒน์",
+        lastName: "แกมขุนทด",
+        name: "นายธนวัฒน์ แกมขุนทด",
+        personnelType: "ข้าราชการ",
+        position: "นักวิชาการคอมพิวเตอร์ปฏิบัติการ",
+        division: "กลุ่มนโยบายและวิชาการ",
+        department: "กลุ่มนโยบายและวิชาการ",
+        email: "thanawat.k@m-society.go.th",
+        role: "member",
+        status: "active",
+      };
+      const sessionData = JSON.stringify({
+        user: policyOfficer,
+        loginTime: "09:00 น.",
+        rememberMe: true,
+      });
+      localStorage.setItem("smartmso_auth_session", sessionData);
+    });
+
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    // 1. นำทางไปยังเมนู แชททีม
+    const chatNav = page.locator("aside button:has-text('แชททีม'), nav button:has-text('แชททีม')").first();
+    await chatNav.click();
+
+    // 2. คลิกเลือกห้อง 'กลุ่มนโยบายและวิชาการ'
+    const policyChannelBtn = page.locator("button:has-text('กลุ่มนโยบายและวิชาการ')").first();
+    await expect(policyChannelBtn).toBeVisible();
+    await policyChannelBtn.click();
+
+    // 3. ตรวจสอบว่า UI ครบถ้วนสมบูรณ์ (ไม่ติดหน้าจอล็อค 🔒)
+    // 3.1 กล่องพิมพ์ข้อความต้องแสดงผล
+    const chatInput = page.locator("textarea[placeholder*='กลุ่มนโยบายและวิชาการ']");
+    await expect(chatInput).toBeVisible();
+
+    // 3.2 ปุ่มส่งข้อความ และเครื่องมือแนบไฟล์ต้องแสดงผล
+    await expect(page.locator("button:has-text('แนบไฟล์')")).toBeVisible();
+    await expect(page.locator("button:has-text('รูปภาพ')")).toBeVisible();
+    await expect(page.locator("button:has-text('แบบฟอร์มราชการ')")).toBeVisible();
+    await expect(page.locator("button[type='submit']:has-text('ส่ง')")).toBeVisible();
+
+    // 3.3 ต้องไม่มีข้อความแจ้งเตือนถูกล็อคสิทธิ์
+    await expect(page.locator("text=คุณไม่ได้เป็นสมาชิกในกลุ่มนี้")).not.toBeVisible();
+
+    // 4. ตรวจสอบสถานะจำนวนสมาชิกในกลุ่ม ต้องไม่เป็น 0 คน
+    const membersBadge = page.locator("button:has-text('สมาชิก (')").first();
+    await expect(membersBadge).toBeVisible();
+    const membersBadgeText = await membersBadge.textContent();
+    // ต้องมีสมาชิกอย่างน้อย 1 คน (ไม่แสดง 0)
+    expect(membersBadgeText).not.toContain("สมาชิก (0)");
+
+    // 5. เปิดลิ้นชักดูรายชื่อสมาชิก และตรวจสอบว่ามีชื่อบุคลากรสังกัดกลุ่มนโยบายและวิชาการ
+    await membersBadge.click();
+    const drawerSummary = page.locator("text=สมาชิกทั้งหมด").first();
+    await expect(drawerSummary).toBeVisible();
+    await expect(drawerSummary).not.toContainText("สมาชิกทั้งหมด 0 คน");
+  });
 });
+
