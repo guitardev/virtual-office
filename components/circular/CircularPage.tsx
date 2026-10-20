@@ -50,6 +50,7 @@ export const CircularPage: React.FC<CircularPageProps> = ({
   const [viewingDoc, setViewingDoc] = useState<CircularDocument | null>(null);
   const [printingDoc, setPrintingDoc] = useState<CircularDocument | null>(null);
   const [scannedPagesForNewDoc, setScannedPagesForNewDoc] = useState<string[]>([]);
+  const [scannedDocNameForNewDoc, setScannedDocNameForNewDoc] = useState<string>("");
 
   // Load documents on mount from Supabase Live with Local Storage fallback
   const loadData = async () => {
@@ -247,12 +248,15 @@ export const CircularPage: React.FC<CircularPageProps> = ({
         currentUser={currentUser}
         availableMembers={members}
         initialScannedPages={scannedPagesForNewDoc}
+        initialFileName={scannedDocNameForNewDoc}
         onClose={() => {
           setScannedPagesForNewDoc([]);
+          setScannedDocNameForNewDoc("");
           setViewMode("list");
         }}
         onSave={(newDoc) => {
           setScannedPagesForNewDoc([]);
+          setScannedDocNameForNewDoc("");
           handleCreateDocument(newDoc);
           setViewMode("list");
         }}
@@ -266,8 +270,9 @@ export const CircularPage: React.FC<CircularPageProps> = ({
       <DocumentScannerModal
         inPage={true}
         onClose={() => setViewMode("list")}
-        onPagesCaptured={(scannedPages) => {
+        onPagesCaptured={(scannedPages, fileName) => {
           setScannedPagesForNewDoc(scannedPages);
+          setScannedDocNameForNewDoc(fileName);
           showToast(`สแกนเอกสารเสร็จสมบูรณ์ (${scannedPages.length} หน้า) นำไปสร้างหนังสือเวียนได้ทันที`);
           setViewMode("create");
         }}

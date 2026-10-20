@@ -25,6 +25,7 @@ interface NewCircularModalProps {
   onSave: (doc: CircularDocument) => void;
   onClose: () => void;
   initialScannedPages?: string[];
+  initialFileName?: string;
   inPage?: boolean;
 }
 
@@ -34,16 +35,21 @@ export function NewCircularModal({
   onSave,
   onClose,
   initialScannedPages = [],
+  initialFileName,
   inPage = true,
 }: NewCircularModalProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Sub-tabs for form: "edit" or "preview"
   const [formSubTab, setFormSubTab] = useState<"edit" | "preview">("edit");
+  const [previewDocViewMode, setPreviewDocViewMode] = useState<"letter" | "attachment">("letter");
   const [showPresetPicker, setShowPresetPicker] = useState<boolean>(false);
   const [isNasLoading, setIsNasLoading] = useState<boolean>(false);
   const [nasFiles, setNasFiles] = useState<{ name: string; path: string; size: number }[]>([]);
   const [showNasPicker, setShowNasPicker] = useState<boolean>(false);
+  const [blobPdfUrl, setBlobPdfUrl] = useState<string | null>(null);
+  const [activePreviewPageIndex, setActivePreviewPageIndex] = useState<number>(0);
+  const [showAttachmentPreview, setShowAttachmentPreview] = useState<boolean>(true);
 
   const [docNumber, setDocNumber] = useState<string>("กพ ๐๐๓๒/ว ");
   const [title, setTitle] = useState<string>("");
@@ -174,21 +180,60 @@ export function NewCircularModal({
   };
 
   useEffect(() => {
-    if (initialScannedPages && initialScannedPages.length > 0 && !fileUrl) {
+    if (initialScannedPages && initialScannedPages.length > 0) {
+      setScannedPages(initialScannedPages);
       const firstPage = initialScannedPages[0];
       const isPdf =
         firstPage.startsWith("data:application/pdf") ||
         firstPage.toLowerCase().includes(".pdf");
       setFileUrl(firstPage);
       setFileName(
-        isPdf
-          ? `เอกสารสแกนราชการ_${new Date().toISOString().slice(0, 10)}.pdf`
-          : `เอกสารสแกนราชการ_${new Date().toISOString().slice(0, 10)}.jpg`
+        initialFileName ||
+          (isPdf
+            ? `เอกสารสแกนราชการ_${new Date().toISOString().slice(0, 10)}.pdf`
+            : `เอกสารสแกนราชการ_${new Date().toISOString().slice(0, 10)}.jpg`)
       );
       setFileType(isPdf ? "application/pdf" : "image/jpeg");
       setFileSize(initialScannedPages.length * 450000);
+      setShowAttachmentPreview(true);
+      setActivePreviewPageIndex(0);
     }
-  }, [initialScannedPages, fileUrl]);
+  }, [initialScannedPages, initialFileName]);
+
+  // Safely convert Base64 PDF data URL into Blob URL for Chrome/Edge PDF rendering
+  useEffect(() => {
+    if (fileUrl && fileUrl.startsWith("data:application/pdf")) {
+      try {
+        const base64Data = fileUrl.includes(",") ? fileUrl.split(",")[1] : fileUrl;
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: "application/pdf" });
+        const url = URL.createObjectURL(blob);
+        setBlobPdfUrl(url);
+        return () => {
+          URL.revokeObjectURL(url);
+        };
+      } catch (err) {
+        console.warn("Could not generate Blob URL for PDF in NewCircularModal:", err);
+      }
+    } else {
+      setBlobPdfUrl(null);
+    }
+  }, [fileUrl]);
+
+  const activePdfUrl = blobPdfUrl || fileUrl;
+  const isPdfDocument =
+    fileType.includes("pdf") ||
+    fileName.toLowerCase().endsWith(".pdf") ||
+    Boolean(
+      fileUrl &&
+        (fileUrl.startsWith("data:application/pdf") ||
+          fileUrl.toLowerCase().includes(".pdf"))
+    );
 
   const handleScannerFinished = (pages: string[], name: string) => {
     setScannedPages(pages);
@@ -203,6 +248,8 @@ export function NewCircularModal({
             pages[0].toLowerCase().includes(".pdf"))
       );
     setFileType(isPdf ? "application/pdf" : "image/jpeg");
+    setShowAttachmentPreview(true);
+    setActivePreviewPageIndex(0);
     setShowScannerModal(false);
   };
 
@@ -214,6 +261,9 @@ export function NewCircularModal({
     setScannedPages([]);
     setSelectedFileObj(null);
     setUploadError(null);
+    setShowAttachmentPreview(false);
+    setActivePreviewPageIndex(0);
+    setBlobPdfUrl(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -291,6 +341,8 @@ export function NewCircularModal({
     setFileSize(preset.fileSize);
     setFileType("application/pdf");
     setScannedPages([]);
+    setShowAttachmentPreview(true);
+    setActivePreviewPageIndex(0);
     setShowPresetPicker(false);
   };
 
@@ -318,6 +370,8 @@ export function NewCircularModal({
     setFileType(file.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "application/octet-stream");
     setFileUrl(`/api/nas/download?file_path=${encodeURIComponent(file.path)}`);
     setScannedPages([]);
+    setShowAttachmentPreview(true);
+    setActivePreviewPageIndex(0);
     setShowNasPicker(false);
   };
 
@@ -451,10 +505,126 @@ export function NewCircularModal({
 
       {formSubTab === "preview" ? (
         <div className="py-4 space-y-4 animate-fade-in">
-          <div className="text-center text-xs text-slate-500 bg-slate-50 p-2 rounded-xl border border-slate-200">
-            แสดงตัวอย่างหนังสือราชการตราครุฑเสมือนจริงที่จะส่งไปยังบุคลากรเป้าหมาย ({resolvedRecipients.length} คน)
+          {/* Dual-Mode Selector in Live Preview */}
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+            <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl text-xs">
+              <button
+                type="button"
+                onClick={() => setPreviewDocViewMode("letter")}
+                className={`px-3.5 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  previewDocViewMode === "letter"
+                    ? "bg-white text-indigo-700 shadow-2xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <span>📜</span>
+                <span>หนังสือราชการตราครุฑ</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPreviewDocViewMode("attachment")}
+                className={`px-3.5 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  previewDocViewMode === "attachment"
+                    ? "bg-white text-indigo-700 shadow-2xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <span>📎</span>
+                <span>เอกสารแนบต้นฉบับ / หน้าสแกน</span>
+                {(fileName || scannedPages.length > 0) && (
+                  <span className="max-w-[140px] truncate text-[10px] text-slate-500 font-normal">
+                    ({fileName || `${scannedPages.length} หน้า`})
+                  </span>
+                )}
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-500 font-medium">
+              บุคลากรเป้าหมาย {resolvedRecipients.length} คน
+            </div>
           </div>
-          <OfficialCircularSheet document={previewDoc} showVerificationSeal={false} />
+
+          {previewDocViewMode === "letter" ? (
+            <OfficialCircularSheet document={previewDoc} showVerificationSeal={false} />
+          ) : (
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs flex flex-col items-center animate-fade-in space-y-3">
+              {scannedPages.length > 0 ? (
+                <div className="w-full space-y-3">
+                  <div className="flex items-center justify-between text-xs px-2">
+                    <span className="font-bold text-slate-700">
+                      หน้า {activePreviewPageIndex + 1} จาก {scannedPages.length}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={activePreviewPageIndex === 0}
+                        onClick={() => setActivePreviewPageIndex((p) => Math.max(0, p - 1))}
+                        className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer font-bold"
+                      >
+                        ◀ หน้าก่อน
+                      </button>
+                      <button
+                        type="button"
+                        disabled={activePreviewPageIndex === scannedPages.length - 1}
+                        onClick={() =>
+                          setActivePreviewPageIndex((p) =>
+                            Math.min(scannedPages.length - 1, p + 1)
+                          )
+                        }
+                        className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer font-bold"
+                      >
+                        หน้าถัดไป ▶
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="w-full max-h-[550px] overflow-auto bg-slate-900/5 rounded-xl border border-slate-200 flex items-center justify-center p-2">
+                    {scannedPages[activePreviewPageIndex]?.startsWith("data:application/pdf") ||
+                    scannedPages[activePreviewPageIndex]?.toLowerCase().includes(".pdf") ? (
+                      <object
+                        data={activePdfUrl}
+                        type="application/pdf"
+                        className="w-full h-[500px] rounded-lg"
+                      >
+                        <iframe
+                          src={activePdfUrl}
+                          title={`Document page ${activePreviewPageIndex + 1}`}
+                          className="w-full h-[500px] rounded-lg border-none bg-white"
+                        />
+                      </object>
+                    ) : (
+                      <img
+                        src={scannedPages[activePreviewPageIndex]}
+                        alt={`Document page ${activePreviewPageIndex + 1}`}
+                        className="max-h-[480px] w-auto object-contain shadow-md rounded"
+                      />
+                    )}
+                  </div>
+                </div>
+              ) : activePdfUrl ? (
+                <div className="w-full space-y-3">
+                  <div className="w-full h-[540px] rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
+                    <object
+                      data={activePdfUrl}
+                      type="application/pdf"
+                      className="w-full h-full"
+                    >
+                      <iframe
+                        src={activePdfUrl}
+                        title="ตัวอย่างเอกสารแนบ"
+                        className="w-full h-full border-none"
+                      />
+                    </object>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-12 text-center text-slate-400 text-xs">
+                  ยังไม่ได้แนบเอกสาร หรือสแกนเอกสารเข้าระบบ
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         <div className="space-y-6">
@@ -791,54 +961,147 @@ export function NewCircularModal({
               </div>
             )}
 
-            {/* If a file is already selected or scanned, display active card */}
+            {/* If a file is already selected or scanned, display active card & preview */}
             {fileName ? (
-              <div className="p-4 rounded-2xl bg-indigo-50/70 border-2 border-indigo-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-fade-in">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-12 h-12 rounded-xl bg-indigo-600 text-white flex items-center justify-center text-2xl shrink-0 shadow-sm">
-                    {fileType.startsWith("image/") || scannedPages.length > 0 ? "🖼️" : "📄"}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-slate-900 truncate">{fileName}</span>
-                      <span className="px-2 py-0.2 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-full">
-                        แนบไฟล์เรียบร้อย
-                      </span>
+              <div className="space-y-3 animate-fade-in">
+                <div className="p-4 rounded-2xl bg-indigo-50/70 border-2 border-indigo-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-12 h-12 rounded-xl bg-indigo-600 text-white flex items-center justify-center text-2xl shrink-0 shadow-sm">
+                      {fileType.startsWith("image/") || scannedPages.length > 0 ? "🖼️" : "📄"}
                     </div>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      {fileSize > 0 ? `${(fileSize / (1024 * 1024)).toFixed(2)} MB` : "ไฟล์พร้อมเวียน"}
-                      {scannedPages.length > 0 && ` • สแกน ${scannedPages.length} หน้า`}
-                      {fileType && ` • ${fileType.includes("pdf") ? "เอกสาร PDF" : "รูปภาพเอกสาร"}`}
-                    </p>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-slate-900 truncate">{fileName}</span>
+                        <span className="px-2 py-0.2 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-full">
+                          แนบไฟล์เรียบร้อย
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        {fileSize > 0 ? `${(fileSize / (1024 * 1024)).toFixed(2)} MB` : "ไฟล์พร้อมเวียน"}
+                        {scannedPages.length > 0 && ` • สแกน ${scannedPages.length} หน้า`}
+                        {fileType && ` • ${fileType.includes("pdf") ? "เอกสาร PDF" : "รูปภาพเอกสาร"}`}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                    <button
+                      type="button"
+                      onClick={() => setShowAttachmentPreview(!showAttachmentPreview)}
+                      className="px-3 py-1.5 text-xs font-semibold bg-white border border-indigo-200 hover:bg-indigo-50 text-indigo-700 rounded-xl cursor-pointer transition-all shadow-2xs flex items-center gap-1.5"
+                    >
+                      <span>{showAttachmentPreview ? "🙈 ซ่อนตัวอย่าง" : "👁️ ดูตัวอย่างเอกสาร"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-3 py-1.5 text-xs font-semibold bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl cursor-pointer transition-all shadow-2xs"
+                    >
+                      เปลี่ยนไฟล์
+                    </button>
+                    {scannedPages.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowScannerModal(true)}
+                        className="px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl cursor-pointer transition-all shadow-2xs"
+                      >
+                        สแกนเพิ่ม
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleRemoveAttachment}
+                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl cursor-pointer transition-colors"
+                      title="ยกเลิกไฟล์แนบ"
+                    >
+                      ✕
+                    </button>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="px-3 py-1.5 text-xs font-semibold bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl cursor-pointer transition-all shadow-2xs"
+                {/* Embedded Document Preview Box */}
+                {showAttachmentPreview && (fileUrl || scannedPages.length > 0) && (
+                  <div
+                    data-testid="circular-document-preview-box"
+                    className="p-4 bg-slate-900/5 rounded-2xl border border-slate-200 space-y-3"
                   >
-                    เปลี่ยนไฟล์
-                  </button>
-                  {scannedPages.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setShowScannerModal(true)}
-                      className="px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl cursor-pointer transition-all shadow-2xs"
-                    >
-                      สแกนเพิ่ม
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleRemoveAttachment}
-                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl cursor-pointer transition-colors"
-                    title="ยกเลิกไฟล์แนบ"
-                  >
-                    ✕
-                  </button>
-                </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                          <span>👁️</span>
+                          <span>ตัวอย่างเอกสารที่นำเข้า / หน้าสแกน</span>
+                        </span>
+                        {scannedPages.length > 1 && (
+                          <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-mono text-[11px] font-bold">
+                            หน้า {activePreviewPageIndex + 1} จาก {scannedPages.length}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {scannedPages.length > 1 && (
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              disabled={activePreviewPageIndex === 0}
+                              onClick={() => setActivePreviewPageIndex((p) => Math.max(0, p - 1))}
+                              className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-30 cursor-pointer shadow-2xs"
+                            >
+                              ◀ ก่อนหน้า
+                            </button>
+                            <button
+                              type="button"
+                              disabled={activePreviewPageIndex === scannedPages.length - 1}
+                              onClick={() =>
+                                setActivePreviewPageIndex((p) =>
+                                  Math.min(scannedPages.length - 1, p + 1)
+                                )
+                              }
+                              className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-30 cursor-pointer shadow-2xs"
+                            >
+                              ถัดไป ▶
+                            </button>
+                          </div>
+                        )}
+
+                        {activePdfUrl && (
+                          <button
+                            type="button"
+                            onClick={() => window.open(activePdfUrl, "_blank")}
+                            className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer shadow-2xs flex items-center gap-1"
+                            title="เปิดเอกสารในแท็บใหม่แบบเต็มจอ"
+                          >
+                            <span>🔍</span>
+                            <span>ขยายเต็มจอ</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Preview Viewport */}
+                    <div className="w-full max-h-[500px] overflow-auto bg-white rounded-xl border border-slate-200 flex items-center justify-center p-2 relative shadow-inner">
+                      {isPdfDocument ? (
+                        <object
+                          data={activePdfUrl}
+                          type="application/pdf"
+                          className="w-full h-[460px] rounded-lg"
+                        >
+                          <iframe
+                            src={activePdfUrl}
+                            title="ตัวอย่างเอกสาร PDF"
+                            className="w-full h-[460px] rounded-lg border-none"
+                          />
+                        </object>
+                      ) : (
+                        <img
+                          src={scannedPages[activePreviewPageIndex] || fileUrl}
+                          alt="ตัวอย่างเอกสารสแกน"
+                          className="max-h-[460px] w-auto object-contain rounded-lg shadow-sm"
+                        />
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

@@ -337,6 +337,48 @@ test.describe("Government Circular Document & E-Acknowledgment Workflow", () => 
     await scannerView.locator("button:has-text('ยกเลิก')").first().click();
     await expect(scannerView).not.toBeVisible();
   });
+
+  test("should display scanned/imported document in new circular form and in Live Preview attachment tab", async ({ page }) => {
+    const circularNav = page.locator("button", { hasText: "เวียนหนังสือราชการ" }).first();
+    await circularNav.click();
+
+    // 1. Open scanner and simulate a scan
+    const scannerBtn = page.locator("button", { hasText: "สแกนหนังสือเข้าสู่ระบบ" });
+    await scannerBtn.click();
+
+    const scannerView = page.locator("[data-testid='document-scanner-view']");
+    await expect(scannerView).toBeVisible();
+
+    const simScanBtn = scannerView.locator("button:has-text('จำลองการสแกนเอกสารจริง')").first();
+    await simScanBtn.click();
+    await expect(scannerView.locator("text=หน้า 1").first()).toBeVisible();
+
+    // 2. Click "นำเข้าหนังสือเวียน"
+    const confirmBtn = scannerView.locator("button:has-text('นำเข้าหนังสือเวียน')");
+    await confirmBtn.click();
+
+    // 3. Verify New Circular Form opens and displays the embedded document preview box!
+    const newFormView = page.locator("[data-testid='new-circular-view']");
+    await expect(newFormView).toBeVisible();
+    await expect(newFormView.locator("[data-testid='circular-document-preview-box']")).toBeVisible();
+    await expect(newFormView.locator("text=ตัวอย่างเอกสารที่นำเข้า / หน้าสแกน")).toBeVisible();
+
+    // 4. Switch to Live Preview tab
+    const previewTabBtn = newFormView.locator("button:has-text('ดูตัวอย่างหนังสือราชการตราครุฑ')");
+    await previewTabBtn.click();
+
+    // 5. Verify dual-mode preview in Live Preview tab
+    const attachmentTabBtn = newFormView.getByRole("button", { name: /เอกสารแนบต้นฉบับ/ });
+    await expect(attachmentTabBtn).toBeVisible();
+
+    // Toggle to attachment view in Live Preview
+    await attachmentTabBtn.click();
+    await expect(newFormView.locator("text=หน้า 1 จาก 1")).toBeVisible();
+
+    // Exit
+    await newFormView.locator("button:has-text('ยกเลิก')").first().click();
+    await expect(newFormView).not.toBeVisible();
+  });
 });
 
 
