@@ -1817,9 +1817,44 @@ on conflict (id) do update set
    - ผู้ใช้งานสามารถตรวจสอบได้ทั้งตัวบันทึกข้อความและเอกสารแนบจริงเสมือนมุมมองของผู้รับหนังสือเวียน
 
 ### 36.3 การทดสอบและผลลัพธ์ (Testing & Verification)
-- เพิ่มชุดทดสอบ Playwright Test ที่ 10 ใน `tests/circular-workflow.spec.ts`:
-  - `should display scanned/imported document in new circular form and in Live Preview attachment tab`
-- ตรวจสอบความถูกต้องและผ่านการทดสอบครบทุกขั้นตอน (10 passed, 100%)
+---
+
+## 37. พัฒนาระบบแชททีมแบบเรียลไทม์ (Supabase Realtime, Typing Indicator & Online Presence) (วันที่ 20 ตุลาคม 2569)
+
+### 37.1 วัตถุประสงค์และการวิเคราะห์ (Analysis & Objectives)
+เดิมระบบแชทกลุ่มราชการ (Team Chat) ใช้การดึงข้อมูลรอบใหม่ทั้งหมด (`fetchChatMessages()`) เมื่อเกิดการเปลี่ยนแปลงในตาราง `messages` ทำให้:
+1. **Network Overhead & Latency สูง:** ทุกครั้งที่มีผู้ส่ง 1 ข้อความ ทุกคนในห้องต้องยิง HTTP `SELECT * FROM messages` โหลดข้อความทั้งหมดใหม่ซ้ำซ้อน
+2. **ขาดความรู้สึกตอบสนองทันที (Zero-Latency Experience):** ไม่เห็นข้อความปรากฏแบบทันทีทันใด
+3. **ขาดสถานะผู้ร่วมสนทนา:** ไม่ทราบว่าใครกำลังพิมพ์ข้อความอยู่ (`Typing Indicator`) และไม่ทราบว่าเพื่อนร่วมงานคนใดกำลังออนไลน์อยู่ในระบบ (`Online Presence`)
+
+### 37.2 การปรับปรุงฐานข้อมูลและการตั้งค่า Supabase (Database & Publication Configuration)
+1. **เปิดใช้งาน Publication สำหรับช่องแชท (`chat_channels`):**
+   ```sql
+   ALTER PUBLICATION supabase_realtime ADD TABLE public.chat_channels;
+   ```
+2. **ตั้งค่า Replica Identity เป็น FULL เพื่อความสมบูรณ์ของ Event Payload:**
+   ```sql
+   ALTER TABLE public.messages REPLICA IDENTITY FULL;
+   ALTER TABLE public.chat_channels REPLICA IDENTITY FULL;
+   ```
+   ทำให้ทั้งข้อความ (`messages`) และกลุ่มแชท (`chat_channels`) ส่งข้อมูล `old` และ `new` ครบถ้วนผ่าน WebSocket ของ Supabase Realtime
+
+### 37.3 การพัฒนาฝั่งไคลเอนต์และคอมโพเนนต์ (Client & UI Implementation)
+1. **Granular Handlers ใน [lib/supabase.ts](file:///c:/Users/GuitarDev/virtual-office/lib/supabase.ts):**
+   - อัปเกรด `subscribeToChatMessages` และ `subscribeToChatGroups` ให้รองรับ `{ onInsert, onUpdate, onDelete }`
+   - เมื่อมีข้อความใหม่เกิดขึ้น Payload (`payload.new`) จะถูก Map เข้าสู่ React State ของแชทโดยตรงแบบ Zero-Latency โดยไม่ต้องรัน HTTP Query โหลดทั้งตาราง
+2. **ระบบแจ้งเตือนกำลังพิมพ์ (Typing Broadcast Channel):**
+   - ฟังก์ชัน `broadcastTyping(channelId, user)` และ `subscribeToTyping(channelId, onTyping)`
+   - สื่อสารผ่าน WebSocket แบบ Broadcast (Ephemeral) โดยไม่บันทึกลงฐานข้อมูล จึงไม่มีผลกระทบต่อ Quota พื้นที่
+   - ออกแบบ UI แสดงบอลลูน `💬 [ชื่อเจ้าหน้าที่] กำลังพิมพ์...` พร้อมอนิเมชันจุดกระพริบ 3 จุด และระบบ Auto-timeout 2.5 วินาที
+3. **ระบบติดตามสถานะออนไลน์ของเจ้าหน้าที่ (Realtime Presence):**
+   - ฟังก์ชัน `subscribeToOnlinePresence(currentUser, onPresenceChange)` ผ่าน Channel `online_officers_presence` โดยใช้ `currentUser.id` เป็น Presence Key
+   - แสดงจุดสถานะออนไลน์สีเขียว (🟢) และจำนวนผู้ที่กำลังออนไลน์ใน:
+     - แถบรายชื่อกลุ่มงานและโครงการ (Sidebar)
+     - แถบส่วนหัวของห้องแชทที่กำลังเปิดอยู่
+     - ลิ้นชักรายชื่อสมาชิกกลุ่ม (`GroupMembersDrawer`)
+4. **ความเข้ากันได้และการทำงานแบบออฟไลน์ (Offline Fallback):**
+   - รักษาแคชสำรองใน `localStorage` (`smartmso_chat_messages` และ `smartmso_chat_groups`) ทำให้แม้ตัดการเชื่อมต่อเครือข่าย ผู้ใช้งานก็ยังสามารถเปิดอ่านประวัติการสนทนาเดิมได้ตามปกติ
 
 
 

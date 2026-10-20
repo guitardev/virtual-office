@@ -191,4 +191,32 @@ test.describe("ระบบแชทกลุ่มทางการของ�
     // บันทึกภาพถ่ายหน้าจอสด
     await page.screenshot({ path: 'chat-nas-live.png' });
   });
+
+  test("ควรแสดงสถานะออนไลน์ของสมาชิกในลิ้นชักข้อมูลกลุ่ม (Group Members Online Presence)", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    // 1. ไปที่เมนู แชททีม
+    const chatNav = page
+      .locator("aside button:has-text('แชททีม'), nav button:has-text('แชททีม')")
+      .first();
+    await chatNav.click();
+
+    // 2. ตรวจสอบปุ่มสมาชิกกลุ่มในแถบส่วนหัว และคลิกเพื่อเปิดลิ้นชัก
+    const membersBtn = page.locator("button:has-text('สมาชิก (')").first();
+    await expect(membersBtn).toBeVisible();
+    await membersBtn.click();
+
+    // 3. ตรวจสอบว่าลิ้นชักสมาชิกแสดงผล พร้อมข้อความระบุจำนวนสมาชิกและสถานะออนไลน์
+    const memberSummary = page.locator("text=สมาชิกทั้งหมด").first();
+    await expect(memberSummary).toBeVisible();
+    await expect(memberSummary).toContainText("ออนไลน์");
+
+    // 4. ตรวจสอบปุ่มปิดลิ้นชัก
+    const closeDrawerBtn = page.locator("button:has-text('✕')").first();
+    await expect(closeDrawerBtn).toBeVisible();
+    await closeDrawerBtn.click();
+  });
 });

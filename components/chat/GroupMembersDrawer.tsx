@@ -11,6 +11,7 @@ interface GroupMembersDrawerProps {
   onClose: () => void;
   onUpdateGroupMembers: (groupId: string, newMemberIds: string[]) => void;
   showToast: (msg: string) => void;
+  onlineUserIds?: string[];
 }
 
 export function GroupMembersDrawer({
@@ -20,6 +21,7 @@ export function GroupMembersDrawer({
   onClose,
   onUpdateGroupMembers,
   showToast,
+  onlineUserIds = [],
 }: GroupMembersDrawerProps) {
   const [search, setSearch] = useState("");
   const [showAddMember, setShowAddMember] = useState(false);
@@ -27,6 +29,7 @@ export function GroupMembersDrawer({
 
   const groupMembers = allMembers.filter((m) => group.memberIds.includes(m.id));
   const nonGroupMembers = allMembers.filter((m) => !group.memberIds.includes(m.id));
+  const onlineCount = groupMembers.filter((m) => onlineUserIds.includes(m.id)).length;
 
   const filteredMembers = groupMembers.filter((m) => {
     if (!search.trim()) return true;
@@ -73,7 +76,8 @@ export function GroupMembersDrawer({
               {group.name}
             </h3>
             <span className="text-[11px] text-slate-500">
-              สมาชิกทั้งหมด {groupMembers.length} คน
+              สมาชิกทั้งหมด {groupMembers.length} คน •{" "}
+              <span className="text-emerald-600 font-medium">ออนไลน์ {onlineCount} คน</span>
             </span>
           </div>
         </div>
@@ -188,7 +192,12 @@ export function GroupMembersDrawer({
                       {member.avatarText || "พม"}
                     </div>
                   )}
-                  <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border border-white rounded-full" />
+                  <span
+                    className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-2 border-white rounded-full transition-colors ${
+                      onlineUserIds.includes(member.id) ? "bg-emerald-500 shadow-xs" : "bg-slate-300"
+                    }`}
+                    title={onlineUserIds.includes(member.id) ? "กำลังออนไลน์ในระบบ" : "ออฟไลน์"}
+                  />
                 </div>
 
                 <div className="min-w-0">
@@ -196,6 +205,11 @@ export function GroupMembersDrawer({
                     <span className="text-xs font-bold text-slate-900 truncate">
                       {member.name}
                     </span>
+                    {onlineUserIds.includes(member.id) && (
+                      <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold shrink-0">
+                        ออนไลน์
+                      </span>
+                    )}
                     {isManagerOrAdmin && (
                       <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-amber-100 text-amber-800 font-bold shrink-0">
                         {ROLE_CONFIG[member.role].icon} {member.role === "admin" ? "พมจ." : "หัวหน้า"}

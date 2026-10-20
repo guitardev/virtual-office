@@ -21,6 +21,9 @@ import {
   updateChatMessagePin,
   subscribeToChatMessages,
   subscribeToChatGroups,
+  broadcastTyping,
+  subscribeToTyping,
+  subscribeToOnlinePresence,
 } from "@/lib/supabase";
 import { CreateGroupModal } from "./CreateGroupModal";
 import { GroupMembersDrawer } from "./GroupMembersDrawer";
@@ -55,6 +58,12 @@ export function ChatPage({
   const [messageSearch, setMessageSearch] = useState<string>("");
   const [newMessageText, setNewMessageText] = useState<string>("");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
+
+  // Realtime Online Presence & Live Typing Indicators
+  const [onlineUserIds, setOnlineUserIds] = useState<string[]>([]);
+  const [typingUsers, setTypingUsers] = useState<Record<string, { userName: string; timestamp: number }>>({});
+  const typingTimeoutsRef = useRef<Record<string, NodeJS.Timeout>>({});
+  const lastTypingBroadcastRef = useRef<number>(0);
 
   // โหมดแสดงทุกกลุ่มสำหรับแอดมินเพื่อการตรวจสอบ (ค่าเริ่มต้น: false = เห็นเฉพาะกลุ่มที่ตนเป็นสมาชิก)
   const [adminShowAll, setAdminShowAll] = useState<boolean>(false);
@@ -125,27 +134,75 @@ export function ChatPage({
       }
     });
 
-    const unsubMsgs = subscribeToChatMessages(() => {
-      fetchChatMessages().then((remoteMsgs) => {
-        if (isMounted && remoteMsgs) {
-          setMessages((prev) => {
-            const remoteIds = new Set(remoteMsgs.map((m) => m.id));
-            const unsynced = prev.filter((m) => !remoteIds.has(m.id));
-            const merged = [...remoteMsgs, ...unsynced];
-            saveStoredChatMessages(merged);
-            return merged;
-          });
-        }
-      });
+    // Granular Supabase Realtime subscriptions: zero latency append/update without full re-fetch
+    const unsubMsgs = subscribeToChatMessages({
+      onInsert: (incomingMsg) => {
+        if (!isMounted) return;
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === incomingMsg.id)) return prev;
+          const updated = [...prev, incomingMsg];
+          saveStoredChatMessages(updated);
+          return updated;
+        });
+      },
+      onUpdate: (updatedMsg) => {
+        if (!isMounted) return;
+        setMessages((prev) => {
+          const idx = prev.findIndex((m) => m.id === updatedMsg.id);
+          if (idx === -1) {
+            const appended = [...prev, updatedMsg];
+            saveStoredChatMessages(appended);
+            return appended;
+          }
+          const clone = [...prev];
+          clone[idx] = updatedMsg;
+          saveStoredChatMessages(clone);
+          return clone;
+        });
+      },
+      onDelete: (deletedId) => {
+        if (!isMounted) return;
+        setMessages((prev) => {
+          const filtered = prev.filter((m) => m.id !== deletedId);
+          saveStoredChatMessages(filtered);
+          return filtered;
+        });
+      },
     });
 
-    const unsubGroups = subscribeToChatGroups(() => {
-      fetchChatGroups().then((remoteGroups) => {
-        if (isMounted && remoteGroups && remoteGroups.length > 0) {
-          setGroups(remoteGroups);
-          saveStoredChatGroups(remoteGroups);
-        }
-      });
+    const unsubGroups = subscribeToChatGroups({
+      onInsert: (incomingGroup) => {
+        if (!isMounted) return;
+        setGroups((prev) => {
+          if (prev.some((g) => g.id === incomingGroup.id)) return prev;
+          const updated = [...prev, incomingGroup];
+          saveStoredChatGroups(updated);
+          return updated;
+        });
+      },
+      onUpdate: (updatedGroup) => {
+        if (!isMounted) return;
+        setGroups((prev) => {
+          const idx = prev.findIndex((g) => g.id === updatedGroup.id);
+          if (idx === -1) {
+            const appended = [...prev, updatedGroup];
+            saveStoredChatGroups(appended);
+            return appended;
+          }
+          const clone = [...prev];
+          clone[idx] = updatedGroup;
+          saveStoredChatGroups(clone);
+          return clone;
+        });
+      },
+      onDelete: (deletedGroupId) => {
+        if (!isMounted) return;
+        setGroups((prev) => {
+          const filtered = prev.filter((g) => g.id !== deletedGroupId);
+          saveStoredChatGroups(filtered);
+          return filtered;
+        });
+      },
     });
 
     return () => {
@@ -154,6 +211,54 @@ export function ChatPage({
       unsubGroups();
     };
   }, [members, currentUser]);
+
+  // ─── REALTIME ONLINE PRESENCE TRACKING ───
+  useEffect(() => {
+    if (!currentUser) return;
+    const unsubPresence = subscribeToOnlinePresence(
+      { id: currentUser.id, name: currentUser.name, avatar: currentUser.avatarUrl },
+      (ids) => {
+        setOnlineUserIds(ids);
+      }
+    );
+    return () => {
+      unsubPresence();
+    };
+  }, [currentUser?.id, currentUser?.name, currentUser?.avatarUrl]);
+
+  // ─── REALTIME TYPING INDICATOR (LISTEN TO ACTIVE CHANNEL) ───
+  useEffect(() => {
+    setTypingUsers({});
+    if (!activeGroupId) return;
+
+    const unsubTyping = subscribeToTyping(activeGroupId, ({ userId, userName }) => {
+      if (userId === currentUser?.id) return;
+
+      if (typingTimeoutsRef.current[userId]) {
+        clearTimeout(typingTimeoutsRef.current[userId]);
+      }
+
+      setTypingUsers((prev) => ({
+        ...prev,
+        [userId]: { userName, timestamp: Date.now() },
+      }));
+
+      typingTimeoutsRef.current[userId] = setTimeout(() => {
+        setTypingUsers((prev) => {
+          const next = { ...prev };
+          delete next[userId];
+          return next;
+        });
+        delete typingTimeoutsRef.current[userId];
+      }, 2500);
+    });
+
+    return () => {
+      unsubTyping();
+      Object.values(typingTimeoutsRef.current).forEach(clearTimeout);
+      typingTimeoutsRef.current = {};
+    };
+  }, [activeGroupId, currentUser?.id]);
 
   // ─── PERMISSION & MEMBERSHIP FILTERING ───
   // กรองเฉพาะกลุ่มที่ผู้ใช้เป็นสมาชิกเท่านั้น (หรือแอดมินเปิดโหมดตรวจการ)
@@ -235,10 +340,10 @@ export function ChatPage({
     return messages.filter((m) => m.groupId === activeGroupId && m.isPinned);
   }, [messages, activeGroupId, activeGroup]);
 
-  // Auto-scroll to bottom when messages change
+  // Auto-scroll to bottom when messages change or typing occurs
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [activeMessages.length, activeGroupId]);
+  }, [activeMessages.length, activeGroupId, Object.keys(typingUsers).length]);
 
   // Filtered groups by search (เฉพาะกลุ่มที่ผู้ใช้มีสิทธิ์เห็น)
   const filteredGroups = useMemo(() => {
@@ -592,6 +697,18 @@ export function ChatPage({
     setNewMessageText("");
     setSelectedTag(null);
     setAttachedFiles([]);
+    lastTypingBroadcastRef.current = 0;
+  };
+
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setNewMessageText(e.target.value);
+    if (currentUser && activeGroupId && isMemberOfActiveGroup) {
+      const now = Date.now();
+      if (now - lastTypingBroadcastRef.current > 1500) {
+        lastTypingBroadcastRef.current = now;
+        broadcastTyping(activeGroupId, { id: currentUser.id, name: currentUser.name });
+      }
+    }
   };
 
   // Toggle pin
@@ -733,6 +850,7 @@ export function ChatPage({
                         const isActive = activeGroupId === g.id;
                         const memberCount = g.memberIds.length;
                         const isUserInGroup = currentUser ? g.memberIds.includes(currentUser.id) : false;
+                        const onlineMemberCount = g.memberIds.filter((id) => onlineUserIds.includes(id)).length;
 
                         return (
                           <button
@@ -769,9 +887,20 @@ export function ChatPage({
                               </div>
                             </div>
 
-                            <span className="text-[10px] px-2 py-0.5 rounded-full font-mono bg-slate-100 text-slate-600 shrink-0 font-semibold">
-                              {memberCount} คน
-                            </span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {onlineMemberCount > 0 && (
+                                <span
+                                  className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full font-mono bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold"
+                                  title={`${onlineMemberCount} คนกำลังออนไลน์ในห้องนี้`}
+                                >
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                  <span>{onlineMemberCount}</span>
+                                </span>
+                              )}
+                              <span className="text-[10px] px-2 py-0.5 rounded-full font-mono bg-slate-100 text-slate-600 font-semibold">
+                                {memberCount} คน
+                              </span>
+                            </div>
                           </button>
                         );
                       })
@@ -800,6 +929,7 @@ export function ChatPage({
                         const isActive = activeGroupId === g.id;
                         const memberCount = g.memberIds.length;
                         const isUserInGroup = currentUser ? g.memberIds.includes(currentUser.id) : false;
+                        const onlineMemberCount = g.memberIds.filter((id) => onlineUserIds.includes(id)).length;
 
                         return (
                           <button
@@ -836,9 +966,20 @@ export function ChatPage({
                               </div>
                             </div>
 
-                            <span className="text-[10px] px-2 py-0.5 rounded-full font-mono bg-slate-100 text-slate-600 shrink-0 font-semibold">
-                              {memberCount} คน
-                            </span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {onlineMemberCount > 0 && (
+                                <span
+                                  className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full font-mono bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold"
+                                  title={`${onlineMemberCount} คนกำลังออนไลน์ในห้องนี้`}
+                                >
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                  <span>{onlineMemberCount}</span>
+                                </span>
+                              )}
+                              <span className="text-[10px] px-2 py-0.5 rounded-full font-mono bg-slate-100 text-slate-600 shrink-0 font-semibold">
+                                {memberCount} คน
+                              </span>
+                            </div>
                           </button>
                         );
                       })
@@ -954,14 +1095,25 @@ export function ChatPage({
                 )}
 
                 {/* View Members Drawer Button */}
-                <button
-                  type="button"
-                  onClick={() => setShowMembersDrawer(true)}
-                  className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
-                >
-                  <span>👥</span>
-                  <span>สมาชิก ({activeGroupMembers.length})</span>
-                </button>
+                {(() => {
+                  const onlineCount = activeGroupMembers.filter((m) => onlineUserIds.includes(m.id)).length;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => setShowMembersDrawer(true)}
+                      className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                    >
+                      <span>👥</span>
+                      <span>สมาชิก ({activeGroupMembers.length})</span>
+                      {onlineCount > 0 && (
+                        <span className="flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-200 font-medium">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          <span>{onlineCount} ออนไลน์</span>
+                        </span>
+                      )}
+                    </button>
+                  );
+                })()}
 
                 {/* Quick Video Call */}
                 <button
@@ -1291,6 +1443,19 @@ export function ChatPage({
               );
             })
           )}
+          {/* Realtime Typing Indicator */}
+          {Object.keys(typingUsers).length > 0 && (
+            <div className="flex items-center gap-2 px-3.5 py-1.5 text-xs text-indigo-700 bg-indigo-50/90 rounded-2xl border border-indigo-100 shadow-2xs w-fit animate-fade-in mt-1 mb-2">
+              <div className="flex items-center space-x-1">
+                <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce"></span>
+              </div>
+              <span className="text-[11px] font-medium text-indigo-800">
+                {Object.values(typingUsers).map((u) => u.userName).join(", ")} กำลังพิมพ์...
+              </span>
+            </div>
+          )}
           <div ref={messagesEndRef} />
         </div>
 
@@ -1555,7 +1720,7 @@ export function ChatPage({
                     rows={2}
                     placeholder={`พิมพ์ข้อความสนทนาในห้อง ${activeGroup.name}... (หรือลากวางไฟล์ที่นี่)`}
                     value={newMessageText}
-                    onChange={(e) => setNewMessageText(e.target.value)}
+                    onChange={handleTextChange}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && !e.shiftKey) {
                         e.preventDefault();
@@ -1601,6 +1766,7 @@ export function ChatPage({
           onClose={() => setShowMembersDrawer(false)}
           onUpdateGroupMembers={handleUpdateGroupMembers}
           showToast={showToast}
+          onlineUserIds={onlineUserIds}
         />
       )}
 

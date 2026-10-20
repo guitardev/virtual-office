@@ -897,15 +897,46 @@ export async function updateChatMessagePin(msgId: string, isPinned: boolean): Pr
   }
 }
 
-export function subscribeToChatMessages(callback: () => void) {
+export interface ChatRealtimeHandlers {
+  onInsert?: (msg: ChatMessage) => void;
+  onUpdate?: (msg: ChatMessage) => void;
+  onDelete?: (msgId: string) => void;
+  onChange?: () => void;
+}
+
+export interface ChatGroupRealtimeHandlers {
+  onInsert?: (group: ChatGroup) => void;
+  onUpdate?: (group: ChatGroup) => void;
+  onDelete?: (groupId: string) => void;
+  onChange?: () => void;
+}
+
+export function subscribeToChatMessages(handler: (() => void) | ChatRealtimeHandlers) {
   if (!supabase) return () => {};
+  const isFunction = typeof handler === "function";
   const channel = supabase
     .channel(`public:messages_${Math.random().toString(36).slice(2, 8)}`)
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "messages" },
-      () => {
-        callback();
+      (payload) => {
+        if (isFunction) {
+          handler();
+          return;
+        }
+
+        handler.onChange?.();
+
+        if (payload.eventType === "INSERT" && payload.new) {
+          const msg = mapRowToChatMessage(payload.new);
+          handler.onInsert?.(msg);
+        } else if (payload.eventType === "UPDATE" && payload.new) {
+          const msg = mapRowToChatMessage(payload.new);
+          handler.onUpdate?.(msg);
+        } else if (payload.eventType === "DELETE" && payload.old) {
+          const msgId = String(payload.old.id);
+          handler.onDelete?.(msgId);
+        }
       }
     )
     .subscribe();
@@ -914,19 +945,113 @@ export function subscribeToChatMessages(callback: () => void) {
   };
 }
 
-export function subscribeToChatGroups(callback: () => void) {
+export function subscribeToChatGroups(handler: (() => void) | ChatGroupRealtimeHandlers) {
   if (!supabase) return () => {};
+  const isFunction = typeof handler === "function";
   const channel = supabase
     .channel(`public:chat_channels_${Math.random().toString(36).slice(2, 8)}`)
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "chat_channels" },
-      () => {
-        callback();
+      (payload) => {
+        if (isFunction) {
+          handler();
+          return;
+        }
+
+        handler.onChange?.();
+
+        if (payload.eventType === "INSERT" && payload.new) {
+          const grp = mapRowToChatGroup(payload.new);
+          handler.onInsert?.(grp);
+        } else if (payload.eventType === "UPDATE" && payload.new) {
+          const grp = mapRowToChatGroup(payload.new);
+          handler.onUpdate?.(grp);
+        } else if (payload.eventType === "DELETE" && payload.old) {
+          const grpId = String(payload.old.id);
+          handler.onDelete?.(grpId);
+        }
       }
     )
     .subscribe();
   return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+const activeTypingChannels = new Map<string, any>();
+
+export function subscribeToTyping(
+  channelId: string,
+  onTyping: (payload: { userId: string; userName: string }) => void
+) {
+  if (!supabase) return () => {};
+  const channel = supabase
+    .channel(`typing:${channelId}`)
+    .on("broadcast", { event: "typing" }, ({ payload }) => {
+      if (payload) onTyping(payload);
+    })
+    .subscribe();
+
+  activeTypingChannels.set(channelId, channel);
+
+  return () => {
+    activeTypingChannels.delete(channelId);
+    supabase.removeChannel(channel);
+  };
+}
+
+export function broadcastTyping(channelId: string, user: { id: string; name: string }) {
+  if (!supabase) return;
+  let channel = activeTypingChannels.get(channelId);
+  if (!channel) {
+    channel = supabase.channel(`typing:${channelId}`);
+    channel.subscribe((status: string) => {
+      if (status === "SUBSCRIBED") {
+        channel.send({
+          type: "broadcast",
+          event: "typing",
+          payload: { userId: user.id, userName: user.name, timestamp: Date.now() },
+        });
+      }
+    });
+    activeTypingChannels.set(channelId, channel);
+    return;
+  }
+  channel.send({
+    type: "broadcast",
+    event: "typing",
+    payload: { userId: user.id, userName: user.name, timestamp: Date.now() },
+  });
+}
+
+export function subscribeToOnlinePresence(
+  currentUser: { id: string; name: string; avatar?: string },
+  onPresenceChange: (onlineUserIds: string[]) => void
+) {
+  if (!supabase) return () => {};
+  const channel = supabase.channel("online_officers_presence", {
+    config: { presence: { key: currentUser.id } },
+  });
+
+  channel
+    .on("presence", { event: "sync" }, () => {
+      const state = channel.presenceState();
+      const onlineIds = Object.keys(state);
+      onPresenceChange(onlineIds);
+    })
+    .subscribe(async (status) => {
+      if (status === "SUBSCRIBED") {
+        await channel.track({
+          userId: currentUser.id,
+          userName: currentUser.name,
+          onlineAt: new Date().toISOString(),
+        });
+      }
+    });
+
+  return () => {
+    channel.untrack().catch(() => {});
     supabase.removeChannel(channel);
   };
 }

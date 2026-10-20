@@ -238,7 +238,20 @@ export function saveStoredChatMessages(messages: ChatMessage[]) {
   try {
     localStorage.setItem(CHAT_MESSAGES_STORAGE_KEY, JSON.stringify(messages));
   } catch (err) {
-    console.error("Failed to save chat messages:", err);
+    // If quota exceeded (e.g. large base64 attachments), sanitize and keep last 50 messages
+    try {
+      const sanitized = messages.slice(-50).map((m) => ({
+        ...m,
+        attachmentUrl: m.attachmentUrl?.startsWith("data:") ? undefined : m.attachmentUrl,
+        attachments: m.attachments?.map((a) => ({
+          ...a,
+          dataUrl: undefined,
+        })),
+      }));
+      localStorage.setItem(CHAT_MESSAGES_STORAGE_KEY, JSON.stringify(sanitized));
+    } catch {
+      // Non-fatal fallback
+    }
   }
 }
 
