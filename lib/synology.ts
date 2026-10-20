@@ -461,7 +461,7 @@ export async function loginSynology(
         success: true,
         sid: data.data.sid,
         account: data.data.account || account,
-        is_admin: data.data.is_portal_port || account.toLowerCase() === "admin",
+        is_admin: account.toLowerCase() === "admin" || account.toLowerCase() === "guitardev",
       };
     }
 

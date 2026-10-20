@@ -1764,6 +1764,34 @@ on conflict (id) do update set
   - `should display attached PDF document in scanner with dedicated PDF card and preview mode`
 - ผลการทดสอบครอบคลุมทั้ง 9 ขั้นตอนของเวิร์กโฟลว์หนังสือเวียนราชการผ่านฉลุย 100%
 
+---
+
+## 35. การวิเคราะห์และแก้ไขปัญหา: บัญชีผู้ใช้ (เช่น `syno_ธนวัฒน์`) ได้รับสิทธิ์ Admin ทุกครั้งที่เข้าสู่ระบบ (วันที่ 20 ตุลาคม 2569)
+
+### 35.1 สาเหตุของปัญหา (Root Cause Analysis)
+จากการตรวจสอบโค้ดและการเชื่อมโยงข้อมูลในตารางฐานข้อมูล Supabase `public.users` และ Audit Logs พบสาเหตุ 2 ประการหลัก:
+1. **การเปลี่ยนสิทธิ์ในหน้าจัดการบุคลากร (`handleChangeMemberRole`) ไม่ได้สั่งบันทึกลงฐานข้อมูล Supabase:**
+   - ใน [app/page.tsx](file:///c:/Users/GuitarDev/virtual-office/app/page.tsx): เมื่อผู้ดูแลระบบเปลี่ยนบทบาทของผู้ใช้ผ่านแถบเลือกสิทธิ์ (Role Select) ในแท็บ Members / User Role Management ฟังก์ชัน `handleChangeMemberRole` ดำเนินการเพียงอัปเดต React State ชั่วคราว (`setMembers`) และบันทึกประวัติลง Audit Log (`เปลี่ยนบทบาท นายธนวัฒน์ แกมขุนทด เป็น พนักงาน (Member)`)
+   - **แต่ไม่มีคำสั่ง `saveMember(updatedMember)`** เพื่ออัปเดตลงตาราง `public.users` และ Local Storage
+   - ส่งผลให้ในฐานข้อมูล Supabase แถวข้อมูลของ `syno_ธนวัฒน์` ยังคงมีค่า `role: "admin"` ค้างอยู่ถาวร
+   - เมื่อผู้ใช้ล็อกอินใหม่หรือรีเฟรชหน้าเว็บ ระบบจะโหลดรายชื่อบุคลากรจาก `public.users` ซึ่งระบุว่าเป็น `admin` ส่งผลให้ผู้ใช้ได้รับสิทธิ์ Admin กลับคืนมาทุกครั้ง
+2. **การนำแฟล็ก `is_portal_port` ของ Synology DSM Web API มาประเมินเป็นสิทธิ์ Admin (`is_admin`):**
+   - ใน [lib/synology.ts](file:///c:/Users/GuitarDev/virtual-office/lib/synology.ts): ฟังก์ชัน `loginSynology` มีโค้ดเดิมเขียนไว้ว่า:
+     ```ts
+     is_admin: data.data.is_portal_port || account.toLowerCase() === "admin"
+     ```
+   - ตามข้อกำหนดของ Synology DSM Web API แฟล็ก `is_portal_port` หมายถึงการเชื่อมต่อผ่าน Application Portal หรือพอร์ตที่กำหนด ไม่ใช่การระบุสิทธิ์ผู้ดูแลระบบ (DSM Administrator) หากเชื่อมต่อผ่านพอร์ตหรือโดเมนที่เป็น Portal จะทำให้ `is_admin` กลายเป็น `true` เสมอ
+
+### 35.2 การแก้ไขและปรับปรุง (Implemented Fixes)
+1. **แก้ไข `handleChangeMemberRole` ใน [app/page.tsx](file:///c:/Users/GuitarDev/virtual-office/app/page.tsx):**
+   - เรียกใช้ `saveMember(updatedMember)` ทุกครั้งที่มีการเปลี่ยนบทบาท เพื่อบันทึกค่าลงตาราง `public.users` บน Supabase และ Local Cache ทันที
+   - ตรวจสอบหากผู้ใช้ที่ถูกเปลี่ยนบทบาทคือผู้ที่กำลังใช้งานอยู่ (`currentUser.id === memberId`) ให้ซิงค์สถานะ `currentUser`, `currentUserRole` และ `smartmso_auth_session` ในเบราว์เซอร์ให้ตรงกันทันที
+2. **แก้ไขการตรวจจับสิทธิ์ Admin ของ Synology ใน [lib/synology.ts](file:///c:/Users/GuitarDev/virtual-office/lib/synology.ts):**
+   - ตัด `data.data.is_portal_port` ออกจากการเช็ค `is_admin` โดยพิจารณาจากชื่อบัญชีผู้ดูแลระบบที่แท้จริง (`admin` หรือ `guitardev`)
+3. **ปรับปรุงข้อมูลในตารางฐานข้อมูล Supabase (`public.users`):**
+   - รันคำสั่งอัปเดต `public.users` ให้บัญชี `syno_ธนวัฒน์` มีบทบาทเป็น `member` (พนักงาน) ตามเจตนาล่าสุดของผู้ดูแลระบบเรียบร้อยแล้ว
+
+
 
 
 

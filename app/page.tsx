@@ -681,18 +681,40 @@ export default function SmartMSOApp() {
 
   // Change member role
   const handleChangeMemberRole = (memberId: string, newRole: Role) => {
-    setMembers((prev) =>
-      prev.map((m) => (m.id === memberId ? { ...m, role: newRole } : m))
-    );
     const targetMember = members.find((m) => m.id === memberId);
-    if (targetMember) {
-      addAuditLog(
-        currentUser ? currentUser.name : "Admin",
-        `เปลี่ยนบทบาท ${targetMember.name} เป็น ${ROLE_CONFIG[newRole].label}`,
-        "User Role Management",
-        "success"
-      );
+    if (!targetMember) return;
+
+    const updatedMember: Member = { ...targetMember, role: newRole };
+
+    setMembers((prev) =>
+      prev.map((m) => (m.id === memberId ? updatedMember : m))
+    );
+    saveMember(updatedMember).catch(console.error);
+
+    // If target member is the currently logged-in user, synchronize current session
+    if (currentUser && currentUser.id === memberId) {
+      setCurrentUser(updatedMember);
+      setCurrentUserRole(newRole);
+      if (typeof window !== "undefined") {
+        try {
+          const savedSession = localStorage.getItem("smartmso_auth_session");
+          if (savedSession) {
+            const parsed = JSON.parse(savedSession);
+            localStorage.setItem(
+              "smartmso_auth_session",
+              JSON.stringify({ ...parsed, user: updatedMember })
+            );
+          }
+        } catch {}
+      }
     }
+
+    addAuditLog(
+      currentUser ? currentUser.name : "Admin",
+      `เปลี่ยนบทบาท ${targetMember.name} เป็น ${ROLE_CONFIG[newRole].label}`,
+      "User Role Management",
+      "success"
+    );
     showToast(`✅ อัปเดตสิทธิ์ของสมาชิกเรียบร้อยแล้ว`);
   };
 
