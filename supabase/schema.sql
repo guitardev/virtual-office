@@ -147,6 +147,11 @@ create table meetings (
   end_time timestamptz not null,
   meeting_link text,
   location text,
+  description text,
+  category text default 'general',
+  attendees jsonb default '[]'::jsonb,
+  organizer jsonb default '{}'::jsonb,
+  status text default 'confirmed',
   created_at timestamptz default now()
 );
 

@@ -224,7 +224,11 @@ export function DashboardPage({
                       <span className="px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-200">{m.location}</span>
                     </div>
                     <h3 className="font-bold text-sm text-slate-900">{m.title}</h3>
-                    <div className="text-xs text-slate-500">ผู้เข้าร่วม: {m.attendees.join(", ")}</div>
+                    <div className="text-xs text-slate-500">
+                      ผู้เข้าร่วม:{" "}
+                      {m.attendees?.map((a) => (typeof a === "string" ? a : a.name)).join(", ") ||
+                        "ข้าราชการและเจ้าหน้าที่ พมจ."}
+                    </div>
                   </div>
                   <button
                     type="button"

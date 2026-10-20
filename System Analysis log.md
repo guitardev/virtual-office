@@ -2138,6 +2138,50 @@ Failed to load resource: the server responded with a status of 500 () xkeiuyhkok
 1. **TypeScript Type Safety:** รัน `npx tsc --noEmit` ผ่านสมบูรณ์ `0 errors`
 2. **Playwright E2E Test Suite ([tests/unified-notifications.spec.ts](file:///c:/Users/GuitarDev/virtual-office/tests/unified-notifications.spec.ts)):**
    - เพิ่มกรณีทดสอบที่ 4: `เมื่อสร้างหนังสือเวียนใหม่ ต้องเกิดการแจ้งเตือนทันที (Toast, Bell Badge, รายการในศูนย์แจ้งเตือน)`
-   - **ผลการทดสอบ: ผ่านครบทั้ง 4 กรณีทดสอบ (4/4 passed, 33.1s)**
+   - **ผลการทดสอบ: ผ่านครบทั้ง 5 กรณีทดสอบ (5/5 passed)**
+
+---
+
+## 44. ยกระดับระบบการประชุมและนัดหมาย (Meetings) ให้ครบถ้วนสมบูรณ์ตามมาตรฐานสากล เชื่อมโยง Google Calendar & iCalendar (.ics) (วันที่ 20 ตุลาคม 2569)
+
+### 44.1 ความต้องการของผู้ใช้งาน (User Requirements)
+1. **ความครบถ้วนของข้อมูลการประชุม (Comprehensive Meeting Metadata):**
+   - รองรับหัวข้อการประชุม, หมวดหมู่ (ทั่วไป, กลุ่มงาน, ผู้บริหาร, เร่งด่วน, ภายนอก), รูปแบบ (ออนไลน์, ออนไซต์, ไฮบริด)
+   - สถานที่ประชุมจริง (ห้องประชุม, อาคาร, ชั้น) และลิงก์การประชุมออนไลน์ (Google Meet, Microsoft Teams, Zoom)
+   - ระเบียบวาระและรายละเอียดการประชุม (Meeting Agenda / Description)
+   - รายชื่อผู้เข้าร่วมประชุม (Attendees) พร้อมสังกัดฝ่าย/กลุ่มงาน และสถานะการตอบรับ
+   - ข้อมูลผู้จัดการประชุม/ผู้ประสานงาน (Organizer)
+2. **การเชื่อมโยง Calendar ตามมาตรฐานสากล (Standard Calendar Interoperability):**
+   - รองรับการบันทึกลง **Google Calendar** แบบคลิกเดียว (1-Click Google Calendar Event URL Generation)
+   - รองรับมาตรฐาน **iCalendar RFC 5545 (`.ics`)** สำหรับ Apple Calendar, Microsoft Outlook, และสมาร์ตโฟนทุกระบบ
+   - รองรับการเชื่อมต่อไปยัง **Outlook Web / Microsoft 365**
+   - รองรับการส่งออกปฏิทินรวมทั้งสำนักงานเป็นไฟล์ `.ics` feed เพื่อสมัครรับข้อมูล (Calendar Subscription)
+   - มีปุ่มคัดลอกข้อความเชิญประชุมมาตรฐานราชการ สำหรับแชร์ต่อใน LINE กลุ่ม หรืออีเมล
+
+### 44.2 การออกแบบและการพัฒนา (Implementation Details)
+1. **การขยาย Schema ฐานข้อมูล Supabase Live (`meetings` table):**
+   - เพิ่มคอลัมน์ `description (TEXT)`, `category (TEXT)`, `attendees (JSONB)`, `organizer (JSONB)`, `status (TEXT)`
+   - ปรับปรุง [supabase/schema.sql](file:///c:/Users/GuitarDev/virtual-office/supabase/schema.sql) และรันคำสั่ง Migration บน Live Supabase ผ่าน Supabase MCP Tool
+2. **พัฒนายูทิลิตี้ปฏิทินมาตรฐานสากล ([lib/calendar.ts](file:///c:/Users/GuitarDev/virtual-office/lib/calendar.ts)):**
+   - `createGoogleCalendarUrl(meeting)`: สร้าง URL ที่มีพารามิเตอร์ `text`, `dates`, `details`, `location`, `add` (อีเมลผู้เข้าร่วม) ถูกต้องตามสเปก RFC
+   - `generateIcsContent(meeting)` / `downloadMeetingIcs(meeting)`: สร้างและดาวน์โหลดไฟล์มาตรฐาน RFC 5545 iCalendar (`.ics`)
+   - `generateAllMeetingsIcs(meetings)` / `downloadAllMeetingsIcs(meetings)`: ส่งออกปฏิทินการประชุมทั้งหมดของสำนักงาน
+   - `createOutlookCalendarUrl(meeting)`: เชื่อมโยงเข้า Outlook Web Compose
+3. **แม่แบบการประชุมราชการมาตรฐาน ([lib/meeting-data.ts](file:///c:/Users/GuitarDev/virtual-office/lib/meeting-data.ts)):**
+   - เพิ่มชุดแม่แบบมาตรฐาน: ประชุมประจำเดือนข้าราชการและเจ้าหน้าที่, ประชุมติดตามเร่งรัดการเบิกจ่ายงบประมาณ, ประชุมขับเคลื่อน Smart MSO, ประชุมด่วนช่วยเหลือสังคม
+   - ชุดห้องประชุมมาตรฐานของสำนักงาน พมจ. และศาลากลางจังหวัด
+4. **ยกระดับ UI หน้าระบบการประชุม ([components/meetings/MeetingsPage.tsx](file:///c:/Users/GuitarDev/virtual-office/components/meetings/MeetingsPage.tsx)):**
+   - แถบตัวกรองอัจฉริยะ (ค้นหาข้อความ, กรองตามหมวดหมู่, กรองตามรูปแบบออนไลน์/ออนไซต์, กรองตามช่วงเวลากำลังจะถึง/ที่ผ่านมาแล้ว)
+   - การ์ดการประชุมรูปแบบใหม่ แสดงประเภท, หมวดหมู่, วันเวลา, สถานที่, วาระโดยย่อ, จำนวนผู้เข้าร่วม และปุ่ม Calendar Actions
+   - หน้าต่างแสดงรายละเอียดเชิงลึก (`MeetingDetailModal`) พร้อมปุ่มบันทึกลง Google Calendar, ดาวน์โหลด .ics, Outlook และคัดลอกข้อความเชิญ
+   - หน้าต่างสร้างนัดหมายใหม่ (`CreateMeetingModal`) พร้อมระบบดึงแม่แบบอัตโนมัติ และระบบเลือกผู้เข้าร่วมจากรายชื่อบุคลากรจริงในระบบ
+5. **การเชื่อมโยงระบบ Realtime & Data Mapping ([lib/supabase.ts](file:///c:/Users/GuitarDev/virtual-office/lib/supabase.ts)):**
+   - อัปเดต `mapRowToMeeting` และ `saveMeeting` ให้แปลงและบันทึกเวลา ISO Timestamps และ JSONB Attendees ลง Supabase สมบูรณ์
+
+### 44.3 ผลการทดสอบ (Verification & Validation)
+- **TypeScript Compilation:** `npx tsc --noEmit` ผ่านสมบูรณ์ **0 errors**
+- **Playwright Test Suite ([tests/meetings-workflow.spec.ts](file:///c:/Users/GuitarDev/virtual-office/tests/meetings-workflow.spec.ts)):**
+  - ผ่านครบทั้ง 5 กรณีทดสอบ (5/5 passed, 17.3s)
+- **All Previous Test Suites:** Unified Notifications (5/5), Typing Indicator (1/1), Circular Workflow (10/10) ผ่านครบ 100% ปราศจากข้อผิดพลาดตกค้าง
 
 

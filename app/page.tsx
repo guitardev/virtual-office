@@ -2789,6 +2789,7 @@ export default function SmartMSOApp() {
                   showToast={showToast}
                   currentUser={currentUser}
                   setMeetings={setMeetings}
+                  members={members}
                 />
               )}
 

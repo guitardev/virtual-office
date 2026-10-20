@@ -191,15 +191,51 @@ export interface TaskItem {
   createdAt?: string;
 }
 
+export type MeetingType = "online" | "onsite" | "hybrid";
+export type MeetingCategory = "general" | "division" | "management" | "urgent" | "external";
+export type MeetingStatus = "confirmed" | "tentative" | "cancelled";
+
+export interface MeetingAttendee {
+  id?: string;
+  name: string;
+  email?: string;
+  division?: string;
+  role?: "chairperson" | "secretary" | "member" | "observer";
+  status?: "accepted" | "declined" | "tentative" | "needs-action";
+}
+
+export interface MeetingOrganizer {
+  id?: string;
+  name: string;
+  email?: string;
+  division?: string;
+  phone?: string;
+}
+
+export interface MeetingAttachment {
+  name: string;
+  url: string;
+  size?: number;
+  type?: string;
+}
+
 export interface MeetingItem {
   id: string | number;
   title: string;
+  description?: string;
   dateStr: string;
   timeStr: string;
+  startTime?: string;
+  endTime?: string;
   location: string;
-  type: "online" | "onsite";
-  attendees: string[];
+  type: MeetingType;
+  category?: MeetingCategory;
+  status?: MeetingStatus;
+  attendees: (string | MeetingAttendee)[];
+  organizer?: MeetingOrganizer;
   meetingLink?: string;
+  attachments?: MeetingAttachment[];
+  createdAt?: string;
 }
 
 export type VehicleStatus = "available" | "in_use" | "maintenance";

@@ -1373,7 +1373,7 @@ export function subscribeToTasks(callback: (tasks: TaskItem[]) => void) {
 
 export function mapRowToMeeting(row: any): MeetingItem {
   const start = row.start_time ? new Date(row.start_time) : new Date();
-  const end = row.end_time ? new Date(row.end_time) : new Date(Date.now() + 3600000);
+  const end = row.end_time ? new Date(row.end_time) : new Date(start.getTime() + 7200000);
 
   const dateStr = start.toLocaleDateString("th-TH", {
     year: "numeric",
@@ -1385,15 +1385,35 @@ export function mapRowToMeeting(row: any): MeetingItem {
     minute: "2-digit",
   })} - ${end.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.`;
 
+  let attendees: any[] = [];
+  if (Array.isArray(row.attendees) && row.attendees.length > 0) {
+    attendees = row.attendees;
+  } else if (typeof row.attendees === "string") {
+    try {
+      attendees = JSON.parse(row.attendees);
+    } catch {
+      attendees = [row.attendees];
+    }
+  } else {
+    attendees = ["ข้าราชการและเจ้าหน้าที่ พมจ."];
+  }
+
   return {
     id: row.id,
     title: row.title,
+    description: row.description || undefined,
     dateStr,
     timeStr,
-    location: row.location || "ห้องประชุมออนไลน์",
-    type: row.meeting_link ? "online" : "onsite",
-    attendees: ["ข้าราชการและเจ้าหน้าที่ พมจ."],
+    startTime: start.toISOString(),
+    endTime: end.toISOString(),
+    location: row.location || (row.meeting_link ? "ห้องประชุมออนไลน์ Google Meet" : "ห้องประชุมสำนักงาน พมจ."),
+    type: row.meeting_link && row.location && !row.location.includes("ออนไลน์") ? "hybrid" : (row.meeting_link ? "online" : "onsite"),
+    category: (row.category as any) || "general",
+    status: (row.status as any) || "confirmed",
+    attendees,
+    organizer: row.organizer || undefined,
     meetingLink: row.meeting_link || undefined,
+    createdAt: row.created_at || undefined,
   };
 }
 
@@ -1417,21 +1437,43 @@ export async function saveMeeting(meeting: MeetingItem): Promise<boolean> {
     const isUuid =
       typeof meeting.id === "string" &&
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(meeting.id);
-    const now = new Date();
-    const oneHourLater = new Date(Date.now() + 3600000);
+
+    let startTimeIso = meeting.startTime;
+    let endTimeIso = meeting.endTime;
+    if (!startTimeIso) {
+      const now = new Date();
+      startTimeIso = now.toISOString();
+      endTimeIso = new Date(now.getTime() + 7200000).toISOString();
+    }
+    if (!endTimeIso) {
+      endTimeIso = new Date(new Date(startTimeIso).getTime() + 7200000).toISOString();
+    }
+
     const row: any = {
       title: meeting.title,
-      start_time: now.toISOString(),
-      end_time: oneHourLater.toISOString(),
-      location: meeting.location || "ห้องประชุมสำนักงาน พมจ.",
+      description: meeting.description || null,
+      start_time: startTimeIso,
+      end_time: endTimeIso,
+      location:
+        meeting.location ||
+        (meeting.type === "online" ? "ห้องประชุมออนไลน์ Google Meet" : "ห้องประชุมสำนักงาน พมจ."),
       meeting_link:
         meeting.meetingLink ||
         (meeting.type === "online" ? "https://meet.google.com/kpp-msoc" : null),
+      category: meeting.category || "general",
+      status: meeting.status || "confirmed",
+      attendees: Array.isArray(meeting.attendees) ? meeting.attendees : [],
+      organizer: meeting.organizer || null,
     };
     if (isUuid) row.id = meeting.id;
     const { error } = await supabase.from("meetings").upsert(row);
-    return !error;
-  } catch {
+    if (error) {
+      console.error("Supabase upsert meeting error:", error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("saveMeeting error:", err);
     return false;
   }
 }
