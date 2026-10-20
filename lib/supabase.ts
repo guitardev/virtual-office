@@ -1940,6 +1940,9 @@ export async function saveCircularDoc(doc: CircularDocument): Promise<boolean> {
       console.error("Error upserting circular document to Supabase:", error);
       return false;
     }
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("smartmso:circular_updated", { detail: doc }));
+    }
     return true;
   } catch (err) {
     console.error("Exception upserting circular document to Supabase:", err);
@@ -1978,13 +1981,26 @@ export async function deleteCircularDoc(id: string): Promise<boolean> {
 }
 
 /**
+ * Handlers for circular documents realtime events
+ */
+export interface CircularRealtimeHandlers {
+  onInsert?: (doc: CircularDocument) => void;
+  onUpdate?: (doc: CircularDocument) => void;
+  onDelete?: (docId: string) => void;
+  onChange?: () => void;
+}
+
+/**
  * Subscribe to realtime changes on circular_documents
  */
-export function subscribeToCircularDocs(onUpdate: () => void): () => void {
+export function subscribeToCircularDocs(
+  handler: (() => void) | CircularRealtimeHandlers
+): () => void {
   if (!supabase) return () => {};
+  const isFunction = typeof handler === "function";
 
   const channel = supabase
-    .channel("public:circular_documents_realtime")
+    .channel(`public:circular_docs_${Math.random().toString(36).slice(2, 8)}`)
     .on(
       "postgres_changes",
       {
@@ -1992,8 +2008,24 @@ export function subscribeToCircularDocs(onUpdate: () => void): () => void {
         schema: "public",
         table: "circular_documents",
       },
-      () => {
-        onUpdate();
+      (payload) => {
+        if (isFunction) {
+          handler();
+          return;
+        }
+
+        handler.onChange?.();
+
+        if (payload.eventType === "INSERT" && payload.new) {
+          const doc = mapRowToCircularDoc(payload.new);
+          handler.onInsert?.(doc);
+        } else if (payload.eventType === "UPDATE" && payload.new) {
+          const doc = mapRowToCircularDoc(payload.new);
+          handler.onUpdate?.(doc);
+        } else if (payload.eventType === "DELETE" && payload.old) {
+          const docId = String(payload.old.id);
+          handler.onDelete?.(docId);
+        }
       }
     )
     .subscribe();

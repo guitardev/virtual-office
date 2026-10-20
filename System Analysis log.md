@@ -2096,3 +2096,48 @@ Failed to load resource: the server responded with a status of 500 () xkeiuyhkok
 3. **Division Chat Suite ([tests/division-chat.spec.ts](file:///c:/Users/GuitarDev/virtual-office/tests/division-chat.spec.ts)):**
    - ตรวจสอบความเข้ากันได้ของระบบแชทเดิม: **ผ่านครบ 6 กรณีทดสอบ (6 passed, 50.7s)**
 
+---
+
+## 43. การแก้ไขและปรับปรุงระบบแจ้งเตือนการสร้างหนังสือเวียนราชการใหม่ (Circular Document Creation Notification Fix)
+
+### 43.1 ปัญหาที่พบ (Issue Identified)
+เมื่อผู้ใช้งานออกหนังสือเวียนราชการใหม่ (เช่น คลิก "ออกหนังสือเวียนทันที") พบว่า:
+1. ไม่มีการแจ้งเตือน (Toast Notification) หรือการแจ้งเตือนระดับเบราว์เซอร์เกิดขึ้น
+2. กระดิ่งแจ้งเตือน (Notification Bell) และป้ายตัวเลขบนแถบเมนูด้านข้าง (Sidebar) ไม่เพิ่มขึ้นทันที
+3. รายการในศูนย์การแจ้งเตือน (Dropdown) หมวดหมู่ "หนังสือเวียน" ไม่ปรากฏหนังสือฉบับใหม่ทันที
+
+### 43.2 สาเหตุของปัญหา (Root Cause Analysis)
+1. **State Isolation ระหว่าง Parent กับ Child Component:**
+   - คอมโพเนนต์ [CircularPage.tsx](file:///c:/Users/GuitarDev/virtual-office/components/circular/CircularPage.tsx) จัดเก็บ State รายการเอกสาร (`documents`) แยกอยู่ภายในตัวคอมโพเนนต์เอง
+   - เมื่อผู้ใช้กดสร้างเอกสารใหม่ (`handleCreateDocument`) เอกสารถูกบันทึกลงฐานข้อมูลและ State ภายใน แต่ไม่มีการส่ง Callback หรือ Event กลับมาอัปเดต State `circularDocs` ของ [app/page.tsx](file:///c:/Users/GuitarDev/virtual-office/app/page.tsx)
+2. **Realtime Subscription Channel Collision:**
+   - ใน [lib/supabase.ts](file:///c:/Users/GuitarDev/virtual-office/lib/supabase.ts) ฟังก์ชัน `subscribeToCircularDocs` เดิมใช้ชื่อ Channel คงที่ `"public:circular_documents_realtime"`
+   - เมื่อมีหลายคอมโพเนนต์เรียกใช้พร้อมกัน (เช่น ทั้ง `app/page.tsx` และ `CircularPage.tsx`) Channel จะชนกัน หรือการ Unsubscribe ของคอมโพเนนต์ลูกจะไปยกเลิก Channel ของคอมโพเนนต์หลัก
+3. **ขาด Realtime Event Handlers สำหรับ INSERT:**
+   - `subscribeToCircularDocs` ใน [lib/supabase.ts](file:///c:/Users/GuitarDev/virtual-office/lib/supabase.ts) เดิมรับเฉพาะ Callback เปล่า `() => void` ไม่มี `onInsert`, `onUpdate`, `onDelete`
+   - ใน [app/page.tsx](file:///c:/Users/GuitarDev/virtual-office/app/page.tsx) จึงไม่มีการเรียก `showToast` หรือ `sendBrowserNotification` เมื่อมีหนังสือเวียนฉบับใหม่เข้ามา
+4. **ความเข้มงวดในการตรวจสอบสิทธิ์ผู้รับ (Recipient Filtering):**
+   - ใน [lib/notifications.ts](file:///c:/Users/GuitarDev/virtual-office/lib/notifications.ts) การตรวจสอบผู้รับเดิมเปรียบเทียบเฉพาะ `r.memberId === currentUser.id`
+   - หากผู้สร้างกำหนดกลุ่มเป้าหมายเป็น "ทั้งองค์กร" (`scope === "all"`) หรืออ้างอิงชื่อเต็ม/กลุ่มงาน บุคลากรบางส่วนอาจไม่ถูกนับเป็นผู้รับหาก `memberId` ต่างรูปแบบกัน
+
+### 43.3 การแก้ไขและการพัฒนา (Implementation Details)
+1. **ขยายความสามารถ `subscribeToCircularDocs` ([lib/supabase.ts](file:///c:/Users/GuitarDev/virtual-office/lib/supabase.ts)):**
+   - เพิ่ม `CircularRealtimeHandlers` รองรับ `onInsert`, `onUpdate`, `onDelete`, `onChange`
+   - สร้างชื่อ Channel แบบไดนามิกและเป็นเอกลักษณ์: `public:circular_docs_${Math.random()}` ป้องกันการชนกัน
+   - เพิ่มการยิง Custom Event `smartmso:circular_updated` ลงใน `window` เพื่อความฉับไวระดับ 0ms ในแท็บเดียวกัน
+2. **เชื่อมต่อ Realtime Toast และ Desktop Push ใน [app/page.tsx](file:///c:/Users/GuitarDev/virtual-office/app/page.tsx):**
+   - เพิ่ม Handler `onInsert`: เมื่อมีหนังสือเวียนฉบับใหม่ ระบบจะแสดง Toast แจ้งเตือนทันที เช่น `📜 [ด่วนที่สุด] มีหนังสือเวียนใหม่: [เลขที่] "[ชื่อเรื่อง]"` พร้อมส่ง Web Push Notification
+   - เพิ่ม Listener ดักจับ Custom Events `smartmso:circular_created` และ `smartmso:circular_updated`
+   - ส่งพร็อพ `onDocumentCreated` เข้าไปยัง `<CircularPage />` เพื่ออัปเดต State ส่วนกลางทันทีที่กดสร้างสำเร็จ
+3. **ปรับปรุงการคำนวณผู้รับใน [lib/notifications.ts](file:///c:/Users/GuitarDev/virtual-office/lib/notifications.ts):**
+   - ตรวจสอบผู้รับครอบคลุมทั้ง: `memberId`, ชื่อเต็ม (`memberName`), ชื่อจริง (`firstName`), โหมดเวียนทั้งองค์กร (`scope === "all"`), การตรงกันของกลุ่มงาน (`divisions`), และสิทธิ์ผู้ดูแลระบบ (`admin`)
+4. **ส่งต่อ Event จาก [CircularPage.tsx](file:///c:/Users/GuitarDev/virtual-office/components/circular/CircularPage.tsx):**
+   - ใน `handleCreateDocument`: เรียก `onDocumentCreated?.(newDoc)` และ `window.dispatchEvent(new CustomEvent("smartmso:circular_created", { detail: newDoc }))`
+
+### 43.4 ผลการทดสอบ (Verification & Validation)
+1. **TypeScript Type Safety:** รัน `npx tsc --noEmit` ผ่านสมบูรณ์ `0 errors`
+2. **Playwright E2E Test Suite ([tests/unified-notifications.spec.ts](file:///c:/Users/GuitarDev/virtual-office/tests/unified-notifications.spec.ts)):**
+   - เพิ่มกรณีทดสอบที่ 4: `เมื่อสร้างหนังสือเวียนใหม่ ต้องเกิดการแจ้งเตือนทันที (Toast, Bell Badge, รายการในศูนย์แจ้งเตือน)`
+   - **ผลการทดสอบ: ผ่านครบทั้ง 4 กรณีทดสอบ (4/4 passed, 33.1s)**
+
+

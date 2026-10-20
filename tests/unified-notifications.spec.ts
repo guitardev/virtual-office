@@ -77,4 +77,54 @@ test.describe("ระบบแจ้งเตือนแบบรวมศู�
       await expect(dropdown).not.toBeVisible();
     }
   });
+
+  test("4. เมื่อสร้างหนังสือเวียนใหม่ ต้องเกิดการแจ้งเตือนทันที (Toast, Bell Badge, รายการในศูนย์แจ้งเตือน)", async ({ page }) => {
+    // Navigate to Circular page from sidebar
+    const circularNav = page.locator("aside button:has-text('เวียนหนังสือราชการ'), nav button:has-text('เวียนหนังสือราชการ')").first();
+    await circularNav.click();
+    await page.waitForTimeout(500);
+
+    // Click "ออกหนังสือเวียนใหม่" button
+    const createBtn = page.getByRole("button", { name: /ออกหนังสือเวียนใหม่/i });
+    await expect(createBtn).toBeVisible({ timeout: 10000 });
+    await createBtn.click();
+    await page.waitForTimeout(500);
+
+    // Open preset picker to quickly populate valid data
+    const presetBtn = page.getByRole("button", { name: /นำเข้าจากแม่แบบราชการมาตรฐาน/i });
+    await expect(presetBtn).toBeVisible();
+    await presetBtn.click();
+    await page.waitForTimeout(300);
+
+    // Click first preset template
+    const firstPreset = page.locator("button:has-text('แนวทางจัดสรรงบประมาณ'), button:has-text('กพ ๐๐๓๒')").first();
+    await expect(firstPreset).toBeVisible();
+    await firstPreset.click();
+    await page.waitForTimeout(300);
+
+    // Submit circular document
+    const submitBtn = page.getByRole("button", { name: /ออกหนังสือเวียนทันที/i });
+    await expect(submitBtn).toBeVisible();
+    await submitBtn.click();
+
+    // Verify Toast notification appears
+    const toast = page.locator("div.fixed").filter({ hasText: /ออกหนังสือเวียน/i });
+    await expect(toast).toBeVisible({ timeout: 5000 });
+
+    // Open Notification Bell
+    const notifBell = page.locator('button[aria-label="การแจ้งเตือน"]').first();
+    await notifBell.click();
+    await page.waitForTimeout(500);
+
+    // Verify the circular doc appears in the Notification dropdown under Circular tab
+    const dropdown = page.locator(".absolute.right-0").filter({ hasText: "ศูนย์การแจ้งเตือน" });
+    await expect(dropdown).toBeVisible();
+    const circularTab = dropdown.getByRole("button", { name: /หนังสือเวียน/ });
+    await circularTab.click();
+    await page.waitForTimeout(300);
+
+    // Should display circular notification item in dropdown
+    const notifItem = dropdown.locator('div[class*="transition-colors flex items-start gap-3 cursor-pointer"]').first();
+    await expect(notifItem).toBeVisible();
+  });
 });

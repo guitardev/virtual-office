@@ -692,10 +692,38 @@ export default function SmartMSOApp() {
         },
       });
 
-      const unsubscribeCircular = subscribeToCircularDocs(() => {
-        fetchCircularDocs().then((docs) => {
-          setCircularDocs(docs);
-        });
+      const unsubscribeCircular = subscribeToCircularDocs({
+        onInsert: (newDoc) => {
+          setCircularDocs((prev) => {
+            if (prev.some((d) => d.id === newDoc.id)) return prev;
+            return [newDoc, ...prev];
+          });
+          const urgencyPrefix =
+            newDoc.urgency === "most_urgent"
+              ? "🚨 [ด่วนที่สุด] "
+              : newDoc.urgency === "very_urgent"
+              ? "⚡ [ด่วนมาก] "
+              : newDoc.urgency === "urgent"
+              ? "⚡ [ด่วน] "
+              : "";
+          showToast(`📜 ${urgencyPrefix}มีหนังสือเวียนใหม่: ${newDoc.docNumber} "${(newDoc.title || "").slice(0, 45)}"`);
+          if (typeof document !== "undefined") {
+            sendBrowserNotification(`📜 หนังสือเวียนใหม่: ${newDoc.docNumber}`, {
+              body: `${newDoc.title} (${newDoc.senderOrg || "สป.พม."})`,
+            });
+          }
+        },
+        onUpdate: (updatedDoc) => {
+          setCircularDocs((prev) =>
+            prev.map((d) => (d.id === updatedDoc.id ? updatedDoc : d))
+          );
+        },
+        onDelete: (deletedDocId) => {
+          setCircularDocs((prev) => prev.filter((d) => d.id !== deletedDocId));
+        },
+        onChange: () => {
+          fetchCircularDocs().then((docs) => setCircularDocs(docs));
+        },
       });
 
       return () => {
@@ -713,6 +741,27 @@ export default function SmartMSOApp() {
       setCircularDocs(loadStoredCircularDocs());
     }
   }, [isLiveConnected, currentUser?.id, currentUser?.name]);
+
+  // Listen to local circular creation events for 0ms in-tab responsiveness
+  useEffect(() => {
+    const handleLocalCircularEvent = (e: any) => {
+      const doc = e.detail as CircularDocument;
+      if (doc && doc.id) {
+        setCircularDocs((prev) => {
+          if (prev.some((d) => d.id === doc.id)) {
+            return prev.map((d) => (d.id === doc.id ? doc : d));
+          }
+          return [doc, ...prev];
+        });
+      }
+    };
+    window.addEventListener("smartmso:circular_created", handleLocalCircularEvent);
+    window.addEventListener("smartmso:circular_updated", handleLocalCircularEvent);
+    return () => {
+      window.removeEventListener("smartmso:circular_created", handleLocalCircularEvent);
+      window.removeEventListener("smartmso:circular_updated", handleLocalCircularEvent);
+    };
+  }, []);
 
   useEffect(() => {
     setBrowserNotifPermission(getBrowserNotificationPermission());
@@ -2712,6 +2761,24 @@ export default function SmartMSOApp() {
                   members={members}
                   showToast={showToast}
                   initialDocId={deeplinkCircularDocId}
+                  onDocumentCreated={(newDoc) => {
+                    setCircularDocs((prev) => {
+                      if (prev.some((d) => d.id === newDoc.id)) return prev;
+                      return [newDoc, ...prev];
+                    });
+                    const urgencyPrefix =
+                      newDoc.urgency === "most_urgent"
+                        ? "🚨 [ด่วนที่สุด] "
+                        : newDoc.urgency === "very_urgent"
+                        ? "⚡ [ด่วนมาก] "
+                        : newDoc.urgency === "urgent"
+                        ? "⚡ [ด่วน] "
+                        : "";
+                    showToast(`📜 ${urgencyPrefix}ออกหนังสือเวียนใหม่: ${newDoc.docNumber} "${(newDoc.title || "").slice(0, 45)}"`);
+                    sendBrowserNotification(`📜 หนังสือเวียนใหม่: ${newDoc.docNumber}`, {
+                      body: `${newDoc.title} (${newDoc.senderOrg || "สป.พม."})`,
+                    });
+                  }}
                 />
               )}
 

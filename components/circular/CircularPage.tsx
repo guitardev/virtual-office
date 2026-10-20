@@ -28,6 +28,7 @@ interface CircularPageProps {
   members: Member[];
   showToast: (message: string) => void;
   initialDocId?: string | null;
+  onDocumentCreated?: (doc: CircularDocument) => void;
 }
 
 type TabType = "inbox" | "all" | "tracking";
@@ -37,6 +38,7 @@ export const CircularPage: React.FC<CircularPageProps> = ({
   members,
   showToast,
   initialDocId,
+  onDocumentCreated,
 }) => {
   const [documents, setDocuments] = useState<CircularDocument[]>([]);
   const [isLiveConnected, setIsLiveConnected] = useState(false);
@@ -214,6 +216,10 @@ export const CircularPage: React.FC<CircularPageProps> = ({
     setDocuments(updated);
     await saveCircularDoc(newDoc);
     showToast(`ออกหนังสือเวียนเลขที่ ${newDoc.docNumber} สำเร็จ (บันทึกลงฐานข้อมูลแล้ว)`);
+    onDocumentCreated?.(newDoc);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("smartmso:circular_created", { detail: newDoc }));
+    }
   };
 
   // Handle delete document

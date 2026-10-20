@@ -211,12 +211,31 @@ export function buildUnifiedNotifications({
 
   // ─── 2. GOVERNMENT CIRCULAR NOTIFICATIONS ───
   circularDocs.forEach((doc) => {
-    // Check if currentUser is a target recipient
-    const recipient = doc.recipients?.find((r) => r.memberId === currentUser.id);
-    if (!recipient) return;
+    // Check if currentUser is a target recipient:
+    // 1. Direct recipient list by memberId, full name, or first name
+    // 2. Or by target criteria: scope === "all", division match, or personnelType match
+    // 3. Or if user is admin viewing all circulars
+    const directRecipient = doc.recipients?.find(
+      (r) =>
+        r.memberId === currentUser.id ||
+        (r.memberName && currentUser.name && r.memberName.trim() === currentUser.name.trim()) ||
+        (currentUser.firstName && r.memberName && r.memberName.includes(currentUser.firstName))
+    );
+
+    const isScopeAll = doc.targetCriteria?.scope === "all";
+    const isDivisionMatch =
+      Boolean(currentUser.division) &&
+      Boolean(doc.targetCriteria?.divisions?.includes(currentUser.division));
+    const isPersonnelMatch =
+      Boolean(currentUser.personnelType) &&
+      Boolean(doc.targetCriteria?.personnelTypes?.includes(currentUser.personnelType!));
+    const isAdmin = currentUserRole === "admin";
+
+    const isTargeted = Boolean(directRecipient || isScopeAll || isDivisionMatch || isPersonnelMatch || isAdmin);
+    if (!isTargeted) return;
 
     const notifId = `circ_${doc.id}`;
-    const isAck = recipient.isAcknowledged;
+    const isAck = directRecipient ? directRecipient.isAcknowledged : false;
 
     let priority: "normal" | "urgent" | "emergency" = "normal";
     if (doc.urgency === "most_urgent") {
