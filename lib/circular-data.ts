@@ -93,7 +93,7 @@ export const CIRCULAR_OFFICIAL_PRESETS: CircularPreset[] = [
   {
     id: "preset_budget_2569",
     name: "แนวทางจัดสรรงบประมาณโครงการพัฒนาคุณภาพชีวิต (พ.ศ. ๒๕๖๙)",
-    docNumber: "กพ ๐๐๓๒/ว ๔๕๒",
+    docNumber: "พม ๐๐๐๕/ว ๔๕๒",
     title: "แนวทางการจัดสรรงบประมาณโครงการพัฒนาคุณภาพชีวิตผู้สูงอายุและคนพิการ ประจำปีงบประมาณ พ.ศ. ๒๕๖๙",
     issuedDate: "๑๐ ตุลาคม ๒๕๖๙",
     senderOrg: "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
@@ -108,7 +108,7 @@ export const CIRCULAR_OFFICIAL_PRESETS: CircularPreset[] = [
   {
     id: "preset_pdpa_2569",
     name: "มาตรการความปลอดภัยสารสนเทศและการคุ้มครองข้อมูลส่วนบุคคล (PDPA)",
-    docNumber: "กพ ๐๐๓๒/ว ๔๙๘",
+    docNumber: "พม ๐๐๐๕/ว ๔๙๘",
     title: "มาตรการความปลอดภัยการใช้งานระบบสารสนเทศและการคุ้มครองข้อมูลส่วนบุคคล (PDPA) สำนักงาน พมจ.กำแพงเพชร",
     issuedDate: "๑๔ ตุลาคม ๒๕๖๙",
     senderOrg: "กลุ่มนโยบายและวิชาการ (งานเทคโนโลยีสารสนเทศ)",
@@ -123,7 +123,7 @@ export const CIRCULAR_OFFICIAL_PRESETS: CircularPreset[] = [
   {
     id: "preset_smartmso_attend",
     name: "แนวทางการลงเวลาปฏิบัติราชการอิเล็กทรอนิกส์ (Smart MSO)",
-    docNumber: "กพ ๐๐๓๒/ว ๕๑๑",
+    docNumber: "พม ๐๐๐๕/ว ๕๑๑",
     title: "แนวทางการลงเวลาปฏิบัติราชการอิเล็กทรอนิกส์และการขออนุมัติปฏิบัติราชการนอกสถานที่ผ่านระบบ Smart MSO",
     issuedDate: "๑๘ ตุลาคม ๒๕๖๙",
     senderOrg: "ฝ่ายบริหารทั่วไป",
@@ -138,7 +138,7 @@ export const CIRCULAR_OFFICIAL_PRESETS: CircularPreset[] = [
   {
     id: "preset_energy_vehicle",
     name: "ประกาศมาตรการประหยัดพลังงานและการใช้ยานพาหนะส่วนกลาง",
-    docNumber: "กพ ๐๐๓๒/ว ๕๒๕",
+    docNumber: "พม ๐๐๐๕/ว ๕๒๕",
     title: "ประกาศมาตรการประหยัดพลังงานและการใช้ยานพาหนะส่วนกลางของสำนักงาน พมจ.กำแพงเพชร",
     issuedDate: "๒๐ ตุลาคม ๒๕๖๙",
     senderOrg: "ฝ่ายบริหารทั่วไป (งานยานพาหนะและอาคารสถานที่)",

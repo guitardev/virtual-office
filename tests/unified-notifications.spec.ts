@@ -97,7 +97,7 @@ test.describe("ระบบแจ้งเตือนแบบรวมศู�
     await page.waitForTimeout(300);
 
     // Click first preset template
-    const firstPreset = page.locator("button:has-text('แนวทางจัดสรรงบประมาณ'), button:has-text('กพ ๐๐๓๒')").first();
+    const firstPreset = page.locator("button:has-text('แนวทางจัดสรรงบประมาณ'), button:has-text('พม ๐๐๐๕'), button:has-text('กพ ๐๐๓๒')").first();
     await expect(firstPreset).toBeVisible();
     await firstPreset.click();
     await page.waitForTimeout(300);

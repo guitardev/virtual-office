@@ -297,7 +297,7 @@ export function DocumentScannerModal({
     ctx.font = "bold 28px 'TH Sarabun New', Sarabun, sans-serif";
     ctx.fillText("ที่", 90, 305);
     ctx.font = "26px 'TH Sarabun New', Sarabun, sans-serif";
-    ctx.fillText(`กพ ๐๐๓๒/ว ๔๙${pageNum}  (หน้า ${pageNum})`, 130, 305);
+    ctx.fillText(`พม ๐๐๐๕/ว ๔๙${pageNum}  (หน้า ${pageNum})`, 130, 305);
 
     ctx.font = "bold 28px 'TH Sarabun New', Sarabun, sans-serif";
     ctx.fillText("วันที่", 720, 305);

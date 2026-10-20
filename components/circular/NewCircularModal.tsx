@@ -51,7 +51,7 @@ export function NewCircularModal({
   const [activePreviewPageIndex, setActivePreviewPageIndex] = useState<number>(0);
   const [showAttachmentPreview, setShowAttachmentPreview] = useState<boolean>(true);
 
-  const [docNumber, setDocNumber] = useState<string>("กพ ๐๐๓๒/ว ");
+  const [docNumber, setDocNumber] = useState<string>("พม ๐๐๐๕/ว ");
   const [title, setTitle] = useState<string>("");
   const [issuedDate, setIssuedDate] = useState<string>(
     new Date().toLocaleDateString("th-TH", {
@@ -645,7 +645,7 @@ export function NewCircularModal({
                   required
                   value={docNumber}
                   onChange={(e) => setDocNumber(e.target.value)}
-                  placeholder="เช่น กพ ๐๐๓๒/ว ๑๒๓๔"
+                  placeholder="เช่น พม ๐๐๐๕/ว ๑๒๓๔"
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 font-mono font-bold focus:border-indigo-600"
                 />
               </div>
