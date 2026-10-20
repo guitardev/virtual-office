@@ -27,6 +27,7 @@ interface CircularPageProps {
   currentUser: Member | null;
   members: Member[];
   showToast: (message: string) => void;
+  initialDocId?: string | null;
 }
 
 type TabType = "inbox" | "all" | "tracking";
@@ -35,6 +36,7 @@ export const CircularPage: React.FC<CircularPageProps> = ({
   currentUser,
   members,
   showToast,
+  initialDocId,
 }) => {
   const [documents, setDocuments] = useState<CircularDocument[]>([]);
   const [isLiveConnected, setIsLiveConnected] = useState(false);
@@ -74,6 +76,17 @@ export const CircularPage: React.FC<CircularPageProps> = ({
       unsubscribe();
     };
   }, []);
+
+  // Auto-open viewer modal if initialDocId is specified
+  useEffect(() => {
+    if (initialDocId && documents.length > 0) {
+      const found = documents.find((d) => d.id === initialDocId);
+      if (found) {
+        setViewingDoc(found);
+        setViewMode("viewer");
+      }
+    }
+  }, [initialDocId, documents]);
 
   // Helper: check if current user is targeted
   const getUserRecipientStatus = (doc: CircularDocument): CircularRecipientStatus | undefined => {

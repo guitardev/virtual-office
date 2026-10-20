@@ -12,6 +12,10 @@ import {
   TaskItem,
   MeetingItem,
   CarBookingRequest,
+  SystemNotification,
+  ChatMessage,
+  ChatGroup,
+  CircularDocument,
 } from "@/lib/types";
 import {
   ROLE_CONFIG,
@@ -41,6 +45,15 @@ import { NasPhotoGallery } from "@/components/gallery/NasPhotoGallery";
 import { CircularPage } from "@/components/circular/CircularPage";
 import { loadStoredCircularDocs } from "@/lib/circular-data";
 import {
+  buildUnifiedNotifications,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+  requestBrowserNotificationPermission,
+  sendBrowserNotification,
+  getBrowserNotificationPermission,
+  isBrowserNotificationSupported,
+} from "@/lib/notifications";
+import {
   isSupabaseConfigured,
   fetchMembers,
   saveMember,
@@ -68,6 +81,11 @@ import {
   subscribeToMeetings,
   fetchCarBookings,
   subscribeToCarBookings,
+  fetchChatMessages,
+  subscribeToChatMessages,
+  fetchChatGroups,
+  fetchCircularDocs,
+  subscribeToCircularDocs,
 } from "@/lib/supabase";
 import {
   initCurrentSession,
@@ -179,7 +197,17 @@ export default function SmartMSOApp() {
   const [showEditRequestModal, setShowEditRequestModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+
+  // ─── UNIFIED SYSTEM NOTIFICATIONS STATE ───
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
+  const [notificationTab, setNotificationTab] = useState<"all" | "chat" | "circular" | "other">("all");
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatGroups, setChatGroups] = useState<ChatGroup[]>([]);
+  const [circularDocs, setCircularDocs] = useState<CircularDocument[]>([]);
+  const [deeplinkChatGroupId, setDeeplinkChatGroupId] = useState<string | null>(null);
+  const [deeplinkCircularDocId, setDeeplinkCircularDocId] = useState<string | null>(null);
+  const [browserNotifPermission, setBrowserNotifPermission] = useState<NotificationPermission>("default");
+  const [readNotifRevision, setReadNotifRevision] = useState<number>(0);
 
   const [editRequestForm, setEditRequestForm] = useState({
     prefix: "นาย",
@@ -630,6 +658,46 @@ export default function SmartMSOApp() {
         setCarBookings(updatedBookings);
       });
 
+      // Fetch chat messages, groups, and circular documents for Notification Center
+      fetchChatMessages().then((msgs) => setChatMessages(msgs));
+      fetchChatGroups().then((grps) => setChatGroups(grps));
+      fetchCircularDocs().then((docs) => setCircularDocs(docs));
+
+      const unsubscribeChat = subscribeToChatMessages({
+        onInsert: (newMsg) => {
+          setChatMessages((prev) => {
+            if (prev.some((m) => m.id === newMsg.id)) return prev;
+            return [...prev, newMsg];
+          });
+          if (
+            currentUser &&
+            newMsg.senderId !== currentUser.id &&
+            newMsg.senderName !== currentUser.name
+          ) {
+            showToast(`💬 ข้อความใหม่จาก ${newMsg.senderName}: "${(newMsg.text || "แนบไฟล์").slice(0, 45)}"`);
+            if (typeof document !== "undefined" && document.hidden) {
+              sendBrowserNotification(`💬 ข้อความใหม่: ${newMsg.senderName}`, {
+                body: newMsg.text || "มีเอกสารแนบใหม่ในห้องแชท",
+              });
+            }
+          }
+        },
+        onUpdate: (updatedMsg) => {
+          setChatMessages((prev) =>
+            prev.map((m) => (m.id === updatedMsg.id ? updatedMsg : m))
+          );
+        },
+        onChange: () => {
+          fetchChatMessages().then((msgs) => setChatMessages(msgs));
+        },
+      });
+
+      const unsubscribeCircular = subscribeToCircularDocs(() => {
+        fetchCircularDocs().then((docs) => {
+          setCircularDocs(docs);
+        });
+      });
+
       return () => {
         unsubscribeMembers();
         unsubscribeRequests();
@@ -637,10 +705,18 @@ export default function SmartMSOApp() {
         unsubscribeTasks();
         unsubscribeMeetings();
         unsubscribeCarBookings();
+        unsubscribeChat();
+        unsubscribeCircular();
         authSub?.unsubscribe?.();
       };
+    } else {
+      setCircularDocs(loadStoredCircularDocs());
     }
-  }, [isLiveConnected]);
+  }, [isLiveConnected, currentUser?.id, currentUser?.name]);
+
+  useEffect(() => {
+    setBrowserNotifPermission(getBrowserNotificationPermission());
+  }, []);
 
   // Active session lifecycle and remote revocation listener
   useEffect(() => {
@@ -1396,6 +1472,80 @@ export default function SmartMSOApp() {
     showToast("✅ บันทึกข้อมูลส่วนบุคคลเรียบร้อยแล้ว");
   };
 
+  // ─── UNIFIED SYSTEM NOTIFICATIONS COMPUTATION ───
+  const systemNotifications = useMemo(() => {
+    return buildUnifiedNotifications({
+      currentUser,
+      currentUserRole,
+      messages: chatMessages,
+      groups: chatGroups,
+      circularDocs,
+      accessRequests,
+      carBookings,
+      allMembers: members,
+    });
+  }, [
+    currentUser,
+    currentUserRole,
+    chatMessages,
+    chatGroups,
+    circularDocs,
+    accessRequests,
+    carBookings,
+    members,
+    readNotifRevision,
+  ]);
+
+  const unreadNotifCount = useMemo(() => {
+    return systemNotifications.filter((n) => !n.isRead).length;
+  }, [systemNotifications]);
+
+  const handleMarkAsRead = (id: string) => {
+    markNotificationAsRead(id);
+    setReadNotifRevision((r) => r + 1);
+  };
+
+  const handleMarkAllAsRead = () => {
+    const unreadIds = systemNotifications.filter((n) => !n.isRead).map((n) => n.id);
+    markAllNotificationsAsRead(unreadIds);
+    setReadNotifRevision((r) => r + 1);
+    showToast("✓ ทำเครื่องหมายว่าอ่านแล้วทั้งหมด");
+  };
+
+  const handleEnableBrowserNotifications = async () => {
+    const granted = await requestBrowserNotificationPermission();
+    setBrowserNotifPermission(granted ? "granted" : "denied");
+    if (granted) {
+      showToast("🔔 เปิดการแจ้งเตือนระดับเบราว์เซอร์สำเร็จ");
+      sendBrowserNotification("Smart MSO - ระบบสำนักงานเสมือนจริง", {
+        body: "เปิดใช้งานระบบแจ้งเตือนข้อราชการและหนังสือเวียนเรียบร้อยแล้ว",
+      });
+    } else {
+      showToast("⚠️ ไม่ได้รับการอนุญาตแจ้งเตือนจากเบราว์เซอร์");
+    }
+  };
+
+  const handleNotificationClick = (notif: SystemNotification) => {
+    handleMarkAsRead(notif.id);
+    setShowNotificationDropdown(false);
+    if (notif.link.page === "chat") {
+      setDeeplinkChatGroupId(notif.link.targetId || null);
+      setCurrentPage("chat");
+    } else if (notif.link.page === "circular") {
+      setDeeplinkCircularDocId(notif.link.targetId || null);
+      setCurrentPage("circular");
+    } else if (notif.link.page === "admin") {
+      setCurrentPage("admin");
+      setAdminTab("requests");
+      const matched = accessRequests.find((r) => r.id === notif.link.targetId);
+      if (matched) setSelectedRequest(matched);
+    } else if (notif.link.page === "carbooking") {
+      setCurrentPage("carbooking");
+    } else if (notif.link.page === "task") {
+      setCurrentPage("task");
+    }
+  };
+
   // Dynamic navigation badges calculated from real live Supabase state
   const navBadges: Record<ModuleId, number> = useMemo(() => {
     const taskCount = tasks.filter((t) => t.status !== "done").length;
@@ -1415,33 +1565,36 @@ export default function SmartMSOApp() {
       ).length;
     }
 
-    let pendingCircularCount = 0;
-    try {
-      const cDocs = loadStoredCircularDocs();
-      if (currentUser) {
-        pendingCircularCount = cDocs.filter((d) => {
-          const r = d.recipients.find((rec) => rec.memberId === currentUser.id);
-          return r && !r.isAcknowledged;
-        }).length;
-      }
-    } catch {
-      // fallback
-    }
+    const unreadChatCount = systemNotifications.filter(
+      (n) => n.type === "chat" && !n.isRead
+    ).length;
+
+    const unreadCircularCount = systemNotifications.filter(
+      (n) => n.type === "circular" && !n.isRead
+    ).length;
 
     return {
       dashboard: 0,
-      chat: 2,
+      chat: unreadChatCount,
       task: taskCount,
       meetings: meetingCount,
       carbooking: carCount,
-      circular: pendingCircularCount,
+      circular: unreadCircularCount,
       files: 0,
       gallery: 0,
       reports: 0,
       admin: currentUserRole === "admin" ? pendingReqCount : 0,
       user: 0,
     };
-  }, [tasks, meetings, accessRequests, carBookings, currentUserRole, currentUser?.id]);
+  }, [
+    tasks,
+    meetings,
+    accessRequests,
+    carBookings,
+    currentUserRole,
+    currentUser?.id,
+    systemNotifications,
+  ]);
 
   const toggleTaskStatus = (id: string | number) => {
     let updatedTask: TaskItem | null = null;
@@ -2061,7 +2214,7 @@ export default function SmartMSOApp() {
       {/* ─── MAIN CONTENT VIEWPORT ─── */}
       <div className="flex-1 min-w-0 flex flex-col h-screen overflow-hidden">
         {/* Top Header */}
-        <header className="h-16 px-6 md:px-8 border-b border-slate-200/80 bg-white/90 backdrop-blur-md flex items-center justify-between shrink-0 shadow-xs z-10">
+        <header className="h-16 px-6 md:px-8 border-b border-slate-200/80 bg-white/90 backdrop-blur-md flex items-center justify-between shrink-0 shadow-xs z-30">
           <div className="flex items-center space-x-4 flex-1 max-w-2xl">
             <button
               type="button"
@@ -2110,90 +2263,232 @@ export default function SmartMSOApp() {
             </div>
 
 
-            {/* Notification Bell & Dropdown */}
+            {/* ─── UNIFIED NOTIFICATION CENTER BELL & DROPDOWN ─── */}
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setShowNotificationDropdown(!showNotificationDropdown)}
                 className="relative p-2.5 rounded-xl hover:bg-slate-100 transition-colors text-slate-600 cursor-pointer"
-                title="การแจ้งเตือน"
+                title="ศูนย์การแจ้งเตือนราชการ (Notifications)"
+                aria-label="การแจ้งเตือน"
               >
-                🔔
-                {isHydrated && accessRequests.filter((r) => r.status === "pending").length > 0 && (
-                  <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-[#F59E0B] text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-xs animate-pulse">
-                    {accessRequests.filter((r) => r.status === "pending").length}
+                <span className="text-lg">🔔</span>
+                {isHydrated && unreadNotifCount > 0 && (
+                  <span className="absolute top-1 right-1 min-w-4 h-4 px-1 bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center shadow-xs animate-pulse">
+                    {unreadNotifCount > 99 ? "99+" : unreadNotifCount}
                   </span>
                 )}
               </button>
 
               {showNotificationDropdown && (
-                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden animate-fade-in text-slate-800">
+                <div className="absolute right-0 mt-2 w-84 sm:w-[420px] bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden animate-fade-in text-slate-800">
+                  {/* Dropdown Header */}
                   <div className="p-3.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="text-base">🔔</span>
-                      <span className="font-bold text-xs text-slate-800">ศูนย์การแจ้งเตือน (Notifications)</span>
-                    </div>
-                    {accessRequests.filter((r) => r.status === "pending").length > 0 && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                        {accessRequests.filter((r) => r.status === "pending").length} คำขอรออนุมัติ
+                      <span className="font-bold text-xs text-slate-800">
+                        ศูนย์การแจ้งเตือน (Notifications)
                       </span>
+                      {unreadNotifCount > 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-200">
+                          {unreadNotifCount} ใหม่
+                        </span>
+                      )}
+                    </div>
+                    {unreadNotifCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleMarkAllAsRead}
+                        className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer"
+                      >
+                        ✓ อ่านทั้งหมด
+                      </button>
                     )}
                   </div>
 
-                  <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
-                    {accessRequests.filter((r) => r.status === "pending").length === 0 ? (
-                      <div className="p-6 text-center text-xs text-slate-400">
-                        ✨ ไม่มีคำขอสิทธิ์ใหม่ที่รอดำเนินการ
+                  {/* Browser Push Permission Banner */}
+                  {browserNotifPermission !== "granted" && isBrowserNotificationSupported() && (
+                    <div className="mx-3 my-2 p-2.5 rounded-xl bg-indigo-50/70 border border-indigo-100 flex items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-2 text-indigo-900 min-w-0">
+                        <span className="shrink-0 text-base">🌐</span>
+                        <span className="text-[11px] font-medium leading-tight truncate">
+                          เปิดรับแจ้งเตือนราชการด่วนบนหน้าจอ
+                        </span>
                       </div>
-                    ) : (
-                      accessRequests
-                        .filter((r) => r.status === "pending")
-                        .map((req) => (
-                          <div key={req.id} className="p-3 hover:bg-slate-50 transition-colors flex items-start gap-3">
-                            <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
-                              📬
+                      <button
+                        type="button"
+                        onClick={handleEnableBrowserNotifications}
+                        className="px-2.5 py-1 bg-[#4F46E5] text-white rounded-lg text-[10px] font-bold hover:bg-indigo-700 transition-colors shrink-0 cursor-pointer shadow-xs"
+                      >
+                        เปิดใช้งาน
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Category Tabs */}
+                  <div className="flex items-center px-3 pt-2 gap-1 border-b border-slate-100 bg-white">
+                    <button
+                      type="button"
+                      onClick={() => setNotificationTab("all")}
+                      className={`px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                        notificationTab === "all"
+                          ? "bg-slate-800 text-white shadow-xs"
+                          : "text-slate-500 hover:bg-slate-100"
+                      }`}
+                    >
+                      ทั้งหมด ({systemNotifications.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNotificationTab("chat")}
+                      className={`px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                        notificationTab === "chat"
+                          ? "bg-blue-600 text-white shadow-xs"
+                          : "text-slate-500 hover:bg-slate-100"
+                      }`}
+                    >
+                      <span>💬 แชท</span>
+                      <span className="text-[10px] opacity-80">
+                        ({systemNotifications.filter((n) => n.type === "chat").length})
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNotificationTab("circular")}
+                      className={`px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                        notificationTab === "circular"
+                          ? "bg-amber-600 text-white shadow-xs"
+                          : "text-slate-500 hover:bg-slate-100"
+                      }`}
+                    >
+                      <span>📜 หนังสือเวียน</span>
+                      <span className="text-[10px] opacity-80">
+                        ({systemNotifications.filter((n) => n.type === "circular").length})
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNotificationTab("other")}
+                      className={`px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                        notificationTab === "other"
+                          ? "bg-purple-600 text-white shadow-xs"
+                          : "text-slate-500 hover:bg-slate-100"
+                      }`}
+                    >
+                      <span>📬 คำขอ/งาน</span>
+                      <span className="text-[10px] opacity-80">
+                        ({systemNotifications.filter((n) => n.type !== "chat" && n.type !== "circular").length})
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Notification List */}
+                  <div className="max-h-88 overflow-y-auto divide-y divide-slate-100">
+                    {(() => {
+                      const displayedNotifs = systemNotifications.filter((n) => {
+                        if (notificationTab === "chat") return n.type === "chat";
+                        if (notificationTab === "circular") return n.type === "circular";
+                        if (notificationTab === "other")
+                          return n.type !== "chat" && n.type !== "circular";
+                        return true;
+                      });
+
+                      if (displayedNotifs.length === 0) {
+                        return (
+                          <div className="p-8 text-center text-xs text-slate-400">
+                            <span className="text-3xl block mb-2 opacity-50">✨</span>
+                            ไม่มีรายการแจ้งเตือนในหมวดนี้
+                          </div>
+                        );
+                      }
+
+                      return displayedNotifs.map((notif) => (
+                        <div
+                          key={notif.id}
+                          onClick={() => handleNotificationClick(notif)}
+                          className={`p-3 transition-colors flex items-start gap-3 cursor-pointer group ${
+                            !notif.isRead
+                              ? "bg-indigo-50/50 hover:bg-indigo-50/90"
+                              : "hover:bg-slate-50"
+                          }`}
+                        >
+                          {/* Unread indicator */}
+                          <div className="pt-1.5 shrink-0">
+                            {!notif.isRead ? (
+                              <span className="block w-2 h-2 rounded-full bg-indigo-600 ring-2 ring-indigo-200 animate-pulse" />
+                            ) : (
+                              <span className="block w-2 h-2 rounded-full bg-transparent" />
+                            )}
+                          </div>
+
+                          {/* Icon / Avatar */}
+                          <div className="shrink-0">
+                            {notif.type === "chat" ? (
+                              notif.senderAvatar ? (
+                                <img
+                                  src={notif.senderAvatar}
+                                  alt={notif.senderName || ""}
+                                  className="w-8 h-8 rounded-xl object-cover border border-slate-200"
+                                />
+                              ) : (
+                                <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 font-bold text-sm flex items-center justify-center">
+                                  💬
+                                </div>
+                              )
+                            ) : notif.type === "circular" ? (
+                              <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 font-bold text-sm flex items-center justify-center">
+                                📜
+                              </div>
+                            ) : notif.type === "carbooking" ? (
+                              <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 font-bold text-sm flex items-center justify-center">
+                                🚗
+                              </div>
+                            ) : (
+                              <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-800 font-bold text-sm flex items-center justify-center">
+                                📬
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Content */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="text-xs font-bold text-slate-900 truncate">
+                                {notif.title}
+                              </span>
+                              <span className="text-[10px] text-slate-400 shrink-0">
+                                {notif.timestamp}
+                              </span>
                             </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between gap-1">
-                                <span className="text-xs font-bold text-slate-900 truncate">{req.name}</span>
-                                <span className="text-[10px] text-slate-400 shrink-0">{req.createdAt}</span>
-                              </div>
-                              <div className="text-[11px] text-slate-600 truncate mt-0.5">
-                                {req.position} · {req.division}
-                              </div>
-                              <div className="text-[10px] text-indigo-600 font-semibold mt-0.5">
-                                ขอสิทธิ์: {ROLE_CONFIG[req.requestedRole]?.label || req.requestedRole}
-                              </div>
-                              <div className="mt-2 flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setCurrentPage("admin");
-                                    setAdminTab("requests");
-                                    setSelectedRequest(req);
-                                    setShowNotificationDropdown(false);
-                                  }}
-                                  className="px-2.5 py-1 bg-[#4F46E5] text-white rounded-lg text-[10px] font-bold hover:bg-indigo-700 transition-colors cursor-pointer"
-                                >
-                                  ตรวจสอบ & จัดการ
-                                </button>
-                                {currentUserRole === "admin" && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      handleApproveRequest(req);
-                                      setShowNotificationDropdown(false);
-                                    }}
-                                    className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg text-[10px] font-bold hover:bg-emerald-700 transition-colors cursor-pointer"
-                                  >
-                                    ✓ อนุมัติทันที
-                                  </button>
-                                )}
-                              </div>
+
+                            <p className="text-[11px] text-slate-600 line-clamp-2 mt-0.5 leading-snug">
+                              {notif.message}
+                            </p>
+
+                            <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                              {notif.priority === "emergency" && (
+                                <span className="px-1.5 py-0.2 bg-red-600 text-white rounded text-[9px] font-bold">
+                                  🚨 ด่วนที่สุด
+                                </span>
+                              )}
+                              {notif.priority === "urgent" && (
+                                <span className="px-1.5 py-0.2 bg-amber-500 text-white rounded text-[9px] font-bold">
+                                  ⚡ สำคัญ/ด่วน
+                                </span>
+                              )}
+                              {notif.senderName && (
+                                <span className="text-[10px] text-slate-400">
+                                  โดย {notif.senderName}
+                                </span>
+                              )}
+                              <span className="text-[10px] text-indigo-600 font-semibold group-hover:underline ml-auto">
+                                เปิดดู ➜
+                              </span>
                             </div>
                           </div>
-                        ))
-                    )}
+                        </div>
+                      ));
+                    })()}
                   </div>
                 </div>
               )}
@@ -2379,6 +2674,7 @@ export default function SmartMSOApp() {
                   currentUser={currentUser}
                   showToast={showToast}
                   members={members}
+                  initialGroupId={deeplinkChatGroupId}
                 />
               )}
 
@@ -2415,6 +2711,7 @@ export default function SmartMSOApp() {
                   currentUser={currentUser}
                   members={members}
                   showToast={showToast}
+                  initialDocId={deeplinkCircularDocId}
                 />
               )}
 

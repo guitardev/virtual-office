@@ -45,16 +45,25 @@ interface ChatPageProps {
   currentUser: Member | null;
   showToast: (msg: string) => void;
   members?: Member[];
+  initialGroupId?: string | null;
 }
 
 export function ChatPage({
   currentUser,
   showToast,
   members = INITIAL_MEMBERS,
+  initialGroupId,
 }: ChatPageProps) {
   const [groups, setGroups] = useState<ChatGroup[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [activeGroupId, setActiveGroupId] = useState<string>("ch_all_staff");
+
+  // Switch to initialGroupId if provided (e.g. from Notification Deeplink)
+  useEffect(() => {
+    if (initialGroupId && groups.some((g) => g.id === initialGroupId)) {
+      setActiveGroupId(initialGroupId);
+    }
+  }, [initialGroupId, groups]);
   const [channelSearch, setChannelSearch] = useState<string>("");
   const [messageSearch, setMessageSearch] = useState<string>("");
   const [newMessageText, setNewMessageText] = useState<string>("");

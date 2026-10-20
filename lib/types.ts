@@ -435,3 +435,25 @@ export interface CircularDocument {
   acknowledgedCount: number;
   status: "active" | "closed" | "archived";
 }
+
+// ─── UNIFIED SYSTEM NOTIFICATIONS TYPES ───
+export type NotificationType = "chat" | "circular" | "access_request" | "carbooking" | "task";
+export type NotificationPriority = "normal" | "urgent" | "emergency";
+
+export interface SystemNotification {
+  id: string;
+  type: NotificationType;
+  title: string;              // e.g. "กลุ่มนโยบายและวิชาการ", "หนังสือเวียนด่วนที่สุด"
+  message: string;            // Text content snippet or document title
+  timestamp: string;          // Formatted time, e.g. "14:05 น."
+  createdAt: string;          // ISO string for sorting
+  isRead: boolean;
+  priority: NotificationPriority;
+  senderName?: string;
+  senderAvatar?: string;
+  link: {
+    page: ModuleId;           // "chat" | "circular" | "admin" | "carbooking" | "task"
+    targetId?: string;        // groupId for chat, docId for circular, requestId for admin
+    subTab?: string;
+  };
+}

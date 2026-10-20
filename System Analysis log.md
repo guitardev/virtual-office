@@ -2042,3 +2042,57 @@ Failed to load resource: the server responded with a status of 500 () xkeiuyhkok
 2. **Playwright Test Suite ([tests/division-chat.spec.ts](file:///c:/Users/GuitarDev/virtual-office/tests/division-chat.spec.ts)):**
    - รันการทดสอบครบทั้ง 6 กรณีทดสอบ ครอบคลุมการแนบไฟล์หลายประเภท (PDF, Word, Excel), การแสดงผลบน Synology NAS, และสิทธิ์สมาชิก
    - **ผลการทดสอบ: ผ่าน 100% (6 passed, 41.7s)**
+
+---
+
+## 42. การเชื่อมโยงระบบแชทกลุ่มราชการและระบบเวียนหนังสือราชการเข้ากับระบบแจ้งเตือนแบบรวมศูนย์ (Unified Government Notification System)
+
+### 42.1 ปัญหาและวัตถุประสงค์ (Problem & Objective)
+- แต่เดิมระบบแจ้งเตือน (Notification Bell) มีเพียงการแจ้งเตือนคำขอสิทธิ์การเข้าถึง (Access Requests) ของผู้ดูแลระบบ และตัวเลขแจ้งเตือนใน Sidebar เป็นการจำลองตัวเลขคงที่ (`chat: 2`)
+- เมื่อมีการส่งข้อความในกลุ่มแชทราชการ หรือมีหนังสือเวียนราชการใหม่/หนังสือด่วนที่สุดเข้ามา บุคลากรไม่ได้รับการแจ้งเตือนที่รวมศูนย์ ทำให้พลาดข้อความหรือหนังสือสำคัญ
+- **วัตถุประสงค์:** เชื่อมโยงระบบแชทกลุ่มราชการ (`chat`) และระบบเวียนหนังสือราชการ (`circular`) เข้ากับศูนย์การแจ้งเตือนส่วนกลาง (`SystemNotification`) ของ Smart MSO พร้อมการแจ้งเตือนแบบเรียลไทม์ (Supabase Realtime Sync), ป้ายตัวเลขอัจฉริยะแบบไดนามิก (Dynamic Sidebar Badges), การกรองตามหมวดหมู่ (Tabs Filter), การเปิดอ่านลัด (Deeplinking), และการแจ้งเตือนบนหน้าจอคอมพิวเตอร์ (Web Push / Desktop Notifications)
+
+### 42.2 สถาปัตยกรรมและโครงสร้างข้อมูล (Architecture & Data Modeling)
+1. **Unified Notification Model ([lib/types.ts](file:///c:/Users/GuitarDev/virtual-office/lib/types.ts)):**
+   - นิยามประเภทการแจ้งเตือน `NotificationType = "chat" | "circular" | "access_request" | "carbooking" | "task"`
+   - นิยามลำดับความสำคัญ `NotificationPriority = "emergency" | "urgent" | "normal" | "info"`
+   - นิยามโครงสร้าง `SystemNotification` ครอบคลุม: `id`, `type`, `title`, `message`, `timestamp`, `priority`, `isRead`, `link: { page, targetId, subTab }`, `senderName`, `senderAvatar`
+2. **เครื่องมือประมวลผลการแจ้งเตือน ([lib/notifications.ts](file:///c:/Users/GuitarDev/virtual-office/lib/notifications.ts)):**
+   - **`buildUnifiedNotifications()`:** รวบรวมการแจ้งเตือนจากหลายแหล่ง โดยคำนวณสิทธิ์การเข้าถึงอย่างแม่นยำ:
+     - **ระบบแชทราชการ (`chat`):** กรองเฉพาะข้อความในกลุ่มที่ผู้ใช้เป็นสมาชิก (ตรวจสอบกลุ่มทางการ, กลุ่มงาน/ฝ่าย, แชทโครงการ) และไม่ใช่ข้อความที่ผู้ใช้เป็นผู้ส่งเอง
+     - **ระบบเวียนหนังสือราชการ (`circular`):** กรองเฉพาะหนังสือเวียนที่ส่งถึงกลุ่มงานหรือบุคคลของผู้ใช้ และยังไม่ได้กดยืนยันรับทราบ (`unacknowledged`) โดยกำหนดความสำคัญเป็น `emergency` สำหรับหนังสือด่วนที่สุด
+     - **คำขอสิทธิ์และงานอื่นๆ:** กรองคำขอสิทธิ์สำหรับ Admin และคำขอจองรถยนต์
+   - **Persistence Layer:** บันทึกสถานะการอ่านลงใน `localStorage` (`smartmso_read_notif_ids`) ป้องกันข้อมูลสูญหายเมื่อรีเฟรชหน้าเว็บ
+   - **HTML5 Web Notifications API:** รองรับการขอสิทธิ์ (`requestBrowserNotificationPermission`) และส่งการแจ้งเตือนระดับ Desktop Notification เมื่อผู้ใช้เปิดหน้าต่างอื่นอยู่
+
+3. **ศูนย์การแจ้งเตือนบนแถบเมนูด้านบน ([app/page.tsx](file:///c:/Users/GuitarDev/virtual-office/app/page.tsx)):**
+   - **กระดิ่งแจ้งเตือนอัจฉริยะ (Smart Bell Icon):** แสดงป้ายตัวเลขสีแดงกระพริบตามจำนวนการแจ้งเตือนที่ยังไม่ได้อ่านจริง
+   - **แผงควบคุมศูนย์การแจ้งเตือน (Notification Center Dropdown):**
+     - แถบสลับหมวดหมู่: **"ทั้งหมด"**, **"💬 แชท"**, **"📜 หนังสือเวียน"**, **"📬 คำขอ/งาน"** พร้อมตัวเลขนับแยกแต่ละหมวด
+     - แถบเปิดรับการแจ้งเตือนบนเบราว์เซอร์ (Desktop Push Permission Banner)
+     - ปุ่ม **"✓ อ่านทั้งหมด"** (Mark All as Read)
+     - รายการแจ้งเตือนแยกไอคอนสีตามประเภท พร้อมป้ายสถานะ "🚨 ด่วนที่สุด" หรือ "⚡ สำคัญ/ด่วน"
+   - **กลไกการนำทางด่วน (Deeplinking):**
+     - เมื่อคลิกแจ้งเตือนแชท -> สลับไปหน้า `chat` และเปิดห้องสนทนานั้นทันที (`initialGroupId`)
+     - เมื่อคลิกแจ้งเตือนหนังสือเวียน -> สลับไปหน้า `circular` และเปิดโมดอลอ่านเอกสารนั้นทันที (`initialDocId`)
+     - ทำเครื่องหมายว่าอ่านแล้วอัตโนมัติเมื่อกดคลิก
+   - **ป้ายตัวเลขไดนามิกบนแถบเมนูด้านข้าง (Dynamic Sidebar Navigation Badges):**
+     - อัปเดตตัวเลขแชทและหนังสือเวียนตามจำนวนที่ยังไม่ได้อ่านจริง แทนที่ค่าคงที่เดิม
+   - **การแก้ไข Stacking Context (Z-Index Hierarchy):**
+     - ปรับ `<header>` เป็น `z-30` เพื่อให้ Dropdown เมนูแจ้งเตือนลอยอยู่เหนือองค์ประกอบของเนื้อหาหลัก (`<main>`) อย่างสมบูรณ์ แก้ไขปัญหา Pointer Events Interception
+
+4. **การเชื่อมโยงระบบในคอมโพเนนต์ย่อย:**
+   - [components/chat/ChatPage.tsx](file:///c:/Users/GuitarDev/virtual-office/components/chat/ChatPage.tsx): รองรับพร็อพ `initialGroupId` และทำการเลือกห้องแชทเป้าหมายอัตโนมัติ
+   - [components/circular/CircularPage.tsx](file:///c:/Users/GuitarDev/virtual-office/components/circular/CircularPage.tsx): รองรับพร็อพ `initialDocId` และเปิดโมดอลอ่านเอกสารอัตโนมัติ
+   - [lib/chat-data.ts](file:///c:/Users/GuitarDev/virtual-office/lib/chat-data.ts): ส่งออก `getGroupMembers` เป็นฟังก์ชันกลาง เพื่อความสม่ำเสมอในการคำนวณสมาชิกกลุ่ม
+
+### 42.3 การทดสอบและการตรวจสอบความถูกต้อง (Verification & Validation)
+1. **TypeScript Type Safety:** รัน `npx tsc --noEmit` ผ่านสมบูรณ์ `0 errors`
+2. **Playwright E2E Suite ([tests/unified-notifications.spec.ts](file:///c:/Users/GuitarDev/virtual-office/tests/unified-notifications.spec.ts)):**
+   - กรณีทดสอบ 1: แสดงกระดิ่งแจ้งเตือนพร้อมป้ายตัวเลข และเปิดเมนูศูนย์การแจ้งเตือนได้ (`2.8s`)
+   - กรณีทดสอบ 2: กรองการแจ้งเตือนตามหมวดหมู่ (Tabs Filter) และกดอ่านทั้งหมดได้ (`3.4s`)
+   - กรณีทดสอบ 3: คลิกการแจ้งเตือนแชทหรือหนังสือเวียน และ Deeplink ไปยังหน้านั้นได้ถูกต้อง (`2.2s`)
+   - ผลการทดสอบ: **ผ่านครบทุกกรณีทดสอบ (3 passed, 13.4s)**
+3. **Division Chat Suite ([tests/division-chat.spec.ts](file:///c:/Users/GuitarDev/virtual-office/tests/division-chat.spec.ts)):**
+   - ตรวจสอบความเข้ากันได้ของระบบแชทเดิม: **ผ่านครบ 6 กรณีทดสอบ (6 passed, 50.7s)**
+

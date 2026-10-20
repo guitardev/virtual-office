@@ -487,3 +487,24 @@ export const GOVERNMENT_DOCUMENT_TEMPLATES = [
   },
 ];
 
+/**
+ * คำนวณรายชื่อสมาชิกจริงของกลุ่ม โดยรวมทั้ง explicit memberIds และสมาชิกตามกลุ่มงานราชการ
+ */
+export function getGroupMembers(group: ChatGroup, allMembers: Member[]): Member[] {
+  return allMembers.filter((m) => {
+    const isExplicit = Array.isArray(group.memberIds) && group.memberIds.includes(m.id);
+    const isDivision = Boolean(
+      group.isOfficial &&
+      group.division &&
+      m.division &&
+      (m.division === group.division ||
+        m.division.includes(group.division) ||
+        group.division.includes(m.division))
+    );
+    const isAllStaff = group.id === "ch_all_staff";
+    const isExecutive =
+      group.id === "ch_executive" && (m.role === "admin" || m.role === "manager");
+    return isExplicit || isDivision || isAllStaff || isExecutive;
+  });
+}
+
