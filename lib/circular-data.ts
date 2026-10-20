@@ -72,6 +72,87 @@ export function resolveTargetRecipients(
 export const INITIAL_CIRCULAR_DOCS: CircularDocument[] = [];
 
 /**
+ * Standard Government Circular Presets for Quick Document Importing & Demonstration
+ */
+export interface CircularPreset {
+  id: string;
+  name: string;
+  docNumber: string;
+  title: string;
+  issuedDate: string;
+  senderOrg: string;
+  urgency: "normal" | "urgent" | "very_urgent" | "most_urgent";
+  secretLevel: "normal" | "confidential" | "top_secret";
+  summary: string;
+  fileName: string;
+  fileUrl: string;
+  fileSize: number;
+}
+
+export const CIRCULAR_OFFICIAL_PRESETS: CircularPreset[] = [
+  {
+    id: "preset_budget_2569",
+    name: "แนวทางจัดสรรงบประมาณโครงการพัฒนาคุณภาพชีวิต (พ.ศ. ๒๕๖๙)",
+    docNumber: "กพ ๐๐๓๒/ว ๔๕๒",
+    title: "แนวทางการจัดสรรงบประมาณโครงการพัฒนาคุณภาพชีวิตผู้สูงอายุและคนพิการ ประจำปีงบประมาณ พ.ศ. ๒๕๖๙",
+    issuedDate: "๑๐ ตุลาคม ๒๕๖๙",
+    senderOrg: "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
+    urgency: "urgent",
+    secretLevel: "normal",
+    summary:
+      "แจ้งแนวทางปฏิบัติการเบิกจ่ายงบประมาณและหลักเกณฑ์การสนับสนุนเงินสงเคราะห์ครอบครัวคนพิการและผู้สูงอายุในภาวะยากลำบาก ประจำไตรมาสที่ ๑ ให้ทุกกลุ่มงานถือปฏิบัติโดยเคร่งครัด",
+    fileName: "คำสั่งและแนวทางจัดสรรงบประมาณ_2569.pdf",
+    fileUrl: "/virtual-office/circular_docs/budget_guideline_2569.pdf",
+    fileSize: 1845000,
+  },
+  {
+    id: "preset_pdpa_2569",
+    name: "มาตรการความปลอดภัยสารสนเทศและการคุ้มครองข้อมูลส่วนบุคคล (PDPA)",
+    docNumber: "กพ ๐๐๓๒/ว ๔๙๘",
+    title: "มาตรการความปลอดภัยการใช้งานระบบสารสนเทศและการคุ้มครองข้อมูลส่วนบุคคล (PDPA) สำนักงาน พมจ.กำแพงเพชร",
+    issuedDate: "๑๔ ตุลาคม ๒๕๖๙",
+    senderOrg: "กลุ่มนโยบายและวิชาการ (งานเทคโนโลยีสารสนเทศ)",
+    urgency: "very_urgent",
+    secretLevel: "normal",
+    summary:
+      "ขอให้ข้าราชการ พนักงานราชการ และเจ้าหน้าที่ทุกคน ปฏิบัติตามแนวทางการเข้าใช้งานเครือข่ายความปลอดภัย Zero Trust และห้ามส่งต่อข้อมูลส่วนบุคคลของกลุ่มเปราะบางออกภายนอกโดยไม่ได้รับอนุญาต",
+    fileName: "มาตรการความปลอดภัยและPDPA_พมจ_กพ.pdf",
+    fileUrl: "/virtual-office/circular_docs/pdpa_policy_2569.pdf",
+    fileSize: 2420000,
+  },
+  {
+    id: "preset_smartmso_attend",
+    name: "แนวทางการลงเวลาปฏิบัติราชการอิเล็กทรอนิกส์ (Smart MSO)",
+    docNumber: "กพ ๐๐๓๒/ว ๕๑๑",
+    title: "แนวทางการลงเวลาปฏิบัติราชการอิเล็กทรอนิกส์และการขออนุมัติปฏิบัติราชการนอกสถานที่ผ่านระบบ Smart MSO",
+    issuedDate: "๑๘ ตุลาคม ๒๕๖๙",
+    senderOrg: "ฝ่ายบริหารทั่วไป",
+    urgency: "normal",
+    secretLevel: "normal",
+    summary:
+      "กำหนดแนวทางปฏิบัติการบันทึกเวลาเข้า-ออกงานผ่านระบบ Smart MSO พร้อมการตรวจยืนยันพิกัดและการลงนามดิจิทัลเพื่อเพิ่มความโปร่งใสและคล่องตัวของบุคลากรทุกฝ่าย",
+    fileName: "ระเบียบการลงเวลาอิเล็กทรอนิกส์_SmartMSO.pdf",
+    fileUrl: "/virtual-office/circular_docs/sample.pdf",
+    fileSize: 1680000,
+  },
+  {
+    id: "preset_energy_vehicle",
+    name: "ประกาศมาตรการประหยัดพลังงานและการใช้ยานพาหนะส่วนกลาง",
+    docNumber: "กพ ๐๐๓๒/ว ๕๒๕",
+    title: "ประกาศมาตรการประหยัดพลังงานและการใช้ยานพาหนะส่วนกลางของสำนักงาน พมจ.กำแพงเพชร",
+    issuedDate: "๒๐ ตุลาคม ๒๕๖๙",
+    senderOrg: "ฝ่ายบริหารทั่วไป (งานยานพาหนะและอาคารสถานที่)",
+    urgency: "normal",
+    secretLevel: "normal",
+    summary:
+      "กำหนดมาตรการประหยัดน้ำมันเชื้อเพลิง การตรวจเช็กสภาพยานพาหนะ และการจองรถราชการผ่านระบบดิจิทัลล่วงหน้า เพื่อการจัดสรรยานพาหนะให้เกิดประสิทธิภาพสูงสุด",
+    fileName: "ประกาศมาตรการประหยัดพลังงานและยานพาหนะ.pdf",
+    fileUrl: "/virtual-office/circular_docs/sample.pdf",
+    fileSize: 1520000,
+  },
+];
+
+/**
  * Load circular documents from local cache or initial
  */
 export function loadStoredCircularDocs(): CircularDocument[] {

@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Member, CircularDocument } from "@/lib/types";
 import { DigitalSignaturePad } from "./DigitalSignaturePad";
 import { CirculationPrintSlip } from "./CirculationPrintSlip";
+import { OfficialCircularSheet } from "./OfficialCircularSheet";
 
 interface CircularViewerModalProps {
   document: CircularDocument;
@@ -25,9 +26,38 @@ export function CircularViewerModal({
   inPage = true,
 }: CircularViewerModalProps) {
   const [activeTab, setActiveTab] = useState<"doc" | "tracking">("doc");
+  const [docViewMode, setDocViewMode] = useState<"letter" | "attachment">(
+    doc.scannedPages && doc.scannedPages.length > 0 ? "attachment" : "letter"
+  );
   const [currentPageIndex, setCurrentPageIndex] = useState<number>(0);
   const [showSignaturePad, setShowSignaturePad] = useState<boolean>(false);
   const [showPrintSlip, setShowPrintSlip] = useState<boolean>(false);
+  const [blobPdfUrl, setBlobPdfUrl] = useState<string | null>(null);
+
+  // Safely convert Base64 PDF data URL into Blob URL for Chrome/Edge PDF rendering
+  useEffect(() => {
+    if (doc.fileUrl && doc.fileUrl.startsWith("data:application/pdf")) {
+      try {
+        const base64Data = doc.fileUrl.includes(",") ? doc.fileUrl.split(",")[1] : doc.fileUrl;
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: "application/pdf" });
+        const url = URL.createObjectURL(blob);
+        setBlobPdfUrl(url);
+        return () => {
+          URL.revokeObjectURL(url);
+        };
+      } catch (err) {
+        console.warn("Could not generate Blob URL for PDF:", err);
+      }
+    }
+  }, [doc.fileUrl]);
+
+  const activePdfUrl = blobPdfUrl || doc.fileUrl;
 
   // Check if current user is a recipient and their status
   const recipientRecord = doc.recipients.find((r) => r.memberId === currentUser.id);
@@ -98,141 +128,209 @@ export function CircularViewerModal({
         {/* Body Content */}
         <div className="flex-1 overflow-y-auto p-6 bg-[#F8FAFC]">
           {activeTab === "doc" ? (
-            <div className="space-y-6">
-              {/* Document Metadata Banner */}
-              <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-2 text-xs">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-600">
-                  <div>
-                    <strong>หน่วยงานเจ้าของเรื่อง:</strong> {doc.senderOrg}
-                  </div>
-                  <div>
-                    <strong>ลงวันที่:</strong> {doc.issuedDate}
-                  </div>
+            <div className="space-y-4">
+              {/* Dual-Mode Selector: Official Letter vs Attachment */}
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+                <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setDocViewMode("letter")}
+                    className={`px-3.5 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      docViewMode === "letter"
+                        ? "bg-white text-indigo-700 shadow-2xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    <span>📜</span>
+                    <span>หนังสือราชการตราครุฑ</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setDocViewMode("attachment")}
+                    className={`px-3.5 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      docViewMode === "attachment"
+                        ? "bg-white text-indigo-700 shadow-2xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    <span>📎</span>
+                    <span>ไฟล์แนบต้นฉบับ</span>
+                    {doc.fileName && (
+                      <span className="max-w-[140px] truncate text-[10px] text-slate-500 font-normal">
+                        ({doc.fileName})
+                      </span>
+                    )}
+                  </button>
                 </div>
 
-                {doc.summary && (
-                  <div className="pt-2 border-t border-slate-100 text-slate-700">
-                    <strong className="text-slate-900">สาระสำคัญ:</strong> {doc.summary}
-                  </div>
-                )}
+                {/* Quick actions for attachment */}
+                <div className="flex items-center gap-2 text-xs">
+                  {activePdfUrl && (
+                    <button
+                      type="button"
+                      onClick={() => window.open(activePdfUrl, "_blank")}
+                      className="px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold flex items-center gap-1 cursor-pointer transition-all"
+                      title="เปิดเอกสารในหน้าต่างใหม่แบบเต็มจอ"
+                    >
+                      <span>🔍</span>
+                      <span>เปิดเต็มจอ</span>
+                    </button>
+                  )}
+                  {onPrintSlip && (
+                    <button
+                      type="button"
+                      onClick={onPrintSlip}
+                      className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center gap-1 cursor-pointer transition-all"
+                    >
+                      <span>🖨️</span>
+                      <span>พิมพ์ใบเวียน</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
-              {/* Document Viewing Area */}
-              <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs flex flex-col items-center">
-                {doc.scannedPages && doc.scannedPages.length > 0 ? (
-                  <div className="w-full space-y-3">
-                    {/* Multi-page controls */}
-                    <div className="flex items-center justify-between text-xs px-2">
-                      <span className="font-bold text-slate-700">
-                        หน้า {currentPageIndex + 1} จาก {doc.scannedPages.length}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          disabled={currentPageIndex === 0}
-                          onClick={() => setCurrentPageIndex((prev) => Math.max(0, prev - 1))}
-                          className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer font-bold"
-                        >
-                          ◀ หน้าก่อน
-                        </button>
-                        <button
-                          type="button"
-                          disabled={currentPageIndex === doc.scannedPages.length - 1}
-                          onClick={() =>
-                            setCurrentPageIndex((prev) =>
-                              Math.min(doc.scannedPages!.length - 1, prev + 1)
-                            )
-                          }
-                          className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer font-bold"
-                        >
-                          หน้าถัดไป ▶
-                        </button>
+              {/* View Content depending on docViewMode */}
+              {docViewMode === "letter" ? (
+                <div className="animate-fade-in flex flex-col items-center">
+                  <OfficialCircularSheet document={doc} />
+                </div>
+              ) : (
+                <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs flex flex-col items-center animate-fade-in">
+                  {doc.scannedPages && doc.scannedPages.length > 0 ? (
+                    <div className="w-full space-y-3">
+                      {/* Multi-page controls */}
+                      <div className="flex items-center justify-between text-xs px-2">
+                        <span className="font-bold text-slate-700">
+                          หน้า {currentPageIndex + 1} จาก {doc.scannedPages.length}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            disabled={currentPageIndex === 0}
+                            onClick={() => setCurrentPageIndex((prev) => Math.max(0, prev - 1))}
+                            className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer font-bold"
+                          >
+                            ◀ หน้าก่อน
+                          </button>
+                          <button
+                            type="button"
+                            disabled={currentPageIndex === doc.scannedPages.length - 1}
+                            onClick={() =>
+                              setCurrentPageIndex((prev) =>
+                                Math.min(doc.scannedPages!.length - 1, prev + 1)
+                              )
+                            }
+                            className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer font-bold"
+                          >
+                            หน้าถัดไป ▶
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="w-full max-h-[550px] overflow-auto bg-slate-900/5 rounded-xl border border-slate-200 flex items-center justify-center p-2">
+                        {doc.scannedPages[currentPageIndex].startsWith("data:application/pdf") ||
+                        doc.scannedPages[currentPageIndex].toLowerCase().endsWith(".pdf") ? (
+                          <iframe
+                            src={doc.scannedPages[currentPageIndex]}
+                            title={`Document page ${currentPageIndex + 1}`}
+                            className="w-full h-[500px] rounded-lg border-none bg-white"
+                          />
+                        ) : (
+                          <img
+                            src={doc.scannedPages[currentPageIndex]}
+                            alt={`Document page ${currentPageIndex + 1}`}
+                            className="max-h-[480px] w-auto object-contain shadow-md rounded"
+                          />
+                        )}
                       </div>
                     </div>
-
-                    <div className="w-full max-h-[550px] overflow-auto bg-slate-900/5 rounded-xl border border-slate-200 flex items-center justify-center p-2">
-                      {doc.scannedPages[currentPageIndex].startsWith("data:application/pdf") ||
-                      doc.scannedPages[currentPageIndex].toLowerCase().endsWith(".pdf") ? (
-                        <iframe
-                          src={doc.scannedPages[currentPageIndex]}
-                          title={`Document page ${currentPageIndex + 1}`}
-                          className="w-full h-[500px] rounded-lg border-none bg-white"
-                        />
-                      ) : (
+                  ) : activePdfUrl &&
+                    (activePdfUrl.includes(".pdf") ||
+                      doc.fileName.toLowerCase().endsWith(".pdf") ||
+                      activePdfUrl.startsWith("data:application/pdf") ||
+                      activePdfUrl.startsWith("blob:")) ? (
+                    <div className="w-full space-y-3">
+                      <div className="w-full h-[540px] rounded-xl overflow-hidden border border-slate-200 bg-slate-100 relative">
+                        <object
+                          data={activePdfUrl}
+                          type="application/pdf"
+                          className="w-full h-full"
+                        >
+                          <iframe
+                            src={activePdfUrl}
+                            title={doc.title}
+                            className="w-full h-full border-none bg-white"
+                          />
+                        </object>
+                      </div>
+                      <div className="flex flex-wrap justify-between items-center text-xs text-slate-500 px-2 gap-2">
+                        <span>📄 {doc.fileName} ({Math.round(doc.fileSize / 1024)} KB)</span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => window.open(activePdfUrl, "_blank")}
+                            className="px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold transition-all cursor-pointer"
+                          >
+                            เปิดในแท็บใหม่ ↗
+                          </button>
+                          <a
+                            href={activePdfUrl}
+                            download={doc.fileName}
+                            className="px-3.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold border border-indigo-200 flex items-center gap-1.5 transition-all cursor-pointer"
+                          >
+                            <span>⬇️</span>
+                            <span>ดาวน์โหลดไฟล์ PDF</span>
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  ) : activePdfUrl &&
+                    (activePdfUrl.startsWith("data:image/") ||
+                      /\.(png|jpe?g|webp|gif)$/i.test(doc.fileName)) ? (
+                    <div className="w-full space-y-3 flex flex-col items-center">
+                      <div className="w-full max-h-[520px] overflow-auto bg-slate-900/5 rounded-xl border border-slate-200 flex items-center justify-center p-2">
                         <img
-                          src={doc.scannedPages[currentPageIndex]}
-                          alt={`Document page ${currentPageIndex + 1}`}
+                          src={activePdfUrl}
+                          alt={doc.fileName}
                           className="max-h-[480px] w-auto object-contain shadow-md rounded"
                         />
+                      </div>
+                      <div className="w-full flex justify-between items-center text-xs text-slate-500 px-2">
+                        <span>🖼️ {doc.fileName} ({Math.round(doc.fileSize / 1024)} KB)</span>
+                        <a
+                          href={activePdfUrl}
+                          download={doc.fileName}
+                          className="px-3.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold border border-indigo-200 flex items-center gap-1.5 transition-all cursor-pointer"
+                        >
+                          <span>⬇️</span>
+                          <span>ดาวน์โหลดรูปภาพ</span>
+                        </a>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="w-full py-12 flex flex-col items-center justify-center text-center space-y-3">
+                      <div className="text-4xl">📄</div>
+                      <div className="text-sm font-bold text-slate-800">{doc.fileName}</div>
+                      <p className="text-xs text-slate-500 max-w-sm">
+                        เอกสารจัดเก็บบนระบบคลังเอกสารความปลอดภัยสูง Synology NAS
+                      </p>
+                      {activePdfUrl && (
+                        <a
+                          href={activePdfUrl}
+                          download={doc.fileName}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl text-xs border border-indigo-200 transition-all cursor-pointer flex items-center gap-1.5"
+                        >
+                          <span>⬇️</span>
+                          <span>เปิดหรือดาวน์โหลดเอกสาร</span>
+                        </a>
                       )}
                     </div>
-                  </div>
-                ) : doc.fileUrl &&
-                  (doc.fileUrl.startsWith("data:application/pdf") ||
-                    doc.fileName.toLowerCase().endsWith(".pdf")) ? (
-                  <div className="w-full space-y-3">
-                    <div className="w-full h-[520px] rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
-                      <iframe
-                        src={doc.fileUrl}
-                        title={doc.title}
-                        className="w-full h-full border-none bg-white"
-                      />
-                    </div>
-                    <div className="flex flex-wrap justify-between items-center text-xs text-slate-500 px-2 gap-2">
-                      <span>📄 {doc.fileName} ({Math.round(doc.fileSize / 1024)} KB)</span>
-                      <a
-                        href={doc.fileUrl}
-                        download={doc.fileName}
-                        className="px-3.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold border border-indigo-200 flex items-center gap-1.5 transition-all cursor-pointer"
-                      >
-                        <span>⬇️</span>
-                        <span>ดาวน์โหลดไฟล์ PDF</span>
-                      </a>
-                    </div>
-                  </div>
-                ) : doc.fileUrl &&
-                  (doc.fileUrl.startsWith("data:image/") ||
-                    /\.(png|jpe?g|webp|gif)$/i.test(doc.fileName)) ? (
-                  <div className="w-full space-y-3 flex flex-col items-center">
-                    <div className="w-full max-h-[520px] overflow-auto bg-slate-900/5 rounded-xl border border-slate-200 flex items-center justify-center p-2">
-                      <img
-                        src={doc.fileUrl}
-                        alt={doc.fileName}
-                        className="max-h-[480px] w-auto object-contain shadow-md rounded"
-                      />
-                    </div>
-                    <div className="w-full flex justify-between items-center text-xs text-slate-500 px-2">
-                      <span>🖼️ {doc.fileName} ({Math.round(doc.fileSize / 1024)} KB)</span>
-                      <a
-                        href={doc.fileUrl}
-                        download={doc.fileName}
-                        className="px-3.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold border border-indigo-200 flex items-center gap-1.5 transition-all cursor-pointer"
-                      >
-                        <span>⬇️</span>
-                        <span>ดาวน์โหลดรูปภาพ</span>
-                      </a>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="w-full py-12 flex flex-col items-center justify-center text-center space-y-3">
-                    <div className="text-4xl">📄</div>
-                    <div className="text-sm font-bold text-slate-800">{doc.fileName}</div>
-                    <p className="text-xs text-slate-500 max-w-sm">
-                      เอกสารจัดเก็บบนระบบคลังเอกสารความปลอดภัยสูง Synology NAS
-                    </p>
-                    <a
-                      href={doc.fileUrl}
-                      download={doc.fileName}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl text-xs border border-indigo-200 transition-all cursor-pointer flex items-center gap-1.5"
-                    >
-                      <span>⬇️</span>
-                      <span>เปิดหรือดาวน์โหลดเอกสาร</span>
-                    </a>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
 
               {/* User Acknowledged Verified Stamp Card (If already signed) */}
               {isRecipient && hasAcknowledged && recipientRecord && (

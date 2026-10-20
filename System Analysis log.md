@@ -1609,6 +1609,61 @@ on conflict (id) do update set
 4. **ระดับชุดทดสอบระบบ ([tests/circular-workflow.spec.ts](file:///c:/Users/GuitarDev/virtual-office/tests/circular-workflow.spec.ts)):**
    - ใช้เทคนิค `page.route()` เพื่อ Mock ข้อมูลหนังสือเวียนเสมือนสำหรับการรัน Automation Test โดยเฉพาะ ไม่กระทบต่อฐานข้อมูลจริง และผ่านการทดสอบครบ 5/5 แบบแยกส่วน (Deterministic Isolation)
 
+---
+
+## 32. การทบทวนและแก้ไขระบบนำเข้าหนังสือเวียน และการแก้ปัญหาการแสดงเอกสารตัวอย่าง (Circular Document Import & Sample Preview Healing)
+
+### 32.1 การวิเคราะห์สาเหตุของปัญหา (Root Cause Analysis)
+
+1. **ปัญหาการไม่พบไฟล์ PDF (404 Not Found & Missing `public/` directory):**
+   - ใน Next.js โฟลเดอร์ `public/` เป็น root สำหรับให้บริการ static assets ต่อเบราว์เซอร์
+   - ตรวจพบว่าโฟลเดอร์ `public/` เดิมในโปรเจกต์ไม่มีอยู่ ทำให้ URL อ้างอิงเช่น `/virtual-office/circular_docs/sample.pdf`, `/virtual-office/circular_docs/budget_guideline_2569.pdf` ส่งคืนหน้า 404 HTML ของ Next.js แทนที่จะเป็นไฟล์ PDF
+   - ส่งผลให้ `<iframe>` หรือ `<object>` ใน CircularViewerModal พยายามโหลด HTML เข้ามาในโปรแกรมอ่าน PDF ทำให้หน้าจอแสดงข้อผิดพลาด "ไม่สามารถแสดงเอกสารตัวอย่างได้"
+2. **ปัญหา Chromium Security Policy ปิดกั้น Base64 PDF Data URL:**
+   - เมื่อผู้ใช้งานแนบไฟล์ PDF ผ่านหน้าฟอร์ม ระบบแปลงไฟล์ผ่าน `FileReader.readAsDataURL` เป็น Base64 URI (`data:application/pdf;base64,...`)
+   - เบราว์เซอร์ Chromium สมัยใหม่ (Chrome 85+, Edge) มีนโยบายความปลอดภัยที่บล็อกการแสดงผลหรือปิดการทำงานของ Top-level / Iframe Navigation สำหรับ PDF data URI ส่งผลให้เกิดหน้าต่างสีขาวว่างเปล่า
+3. **การขาดระบบพรีวิวหนังสือราชการตราครุฑก่อนและหลังออกหนังสือ:**
+   - เดิมหากเอกสารไม่มีไฟล์แนบมา หรือไฟล์มีปัญหา ตัวอ่านเอกสารจะไม่สามารถแสดงเนื้อหาหนังสือราชการในรูปแบบมาตรฐานได้
+
+---
+
+### 32.2 มาตรการแก้ไขและปรับปรุงสถาปัตยกรรม (Architecture & Implementation)
+
+1. **สร้าง Static Asset PDF ตัวอย่างจริงใน `public/virtual-office/circular_docs/`:**
+   - พัฒนาสคริปต์ [scripts/create-sample-pdfs.js](file:///c:/Users/GuitarDev/virtual-office/scripts/create-sample-pdfs.js) สร้างไฟล์ PDF 1.4 มาตรฐานจำนวน 3 ไฟล์:
+     - `sample.pdf` (ไฟล์ตัวอย่างทั่วไป)
+     - `budget_guideline_2569.pdf` (แนวทางการบริหารงบประมาณ)
+     - `pdpa_policy_2569.pdf` (มาตรการคุ้มครองข้อมูลส่วนบุคคล)
+   - ไฟล์ทั้งหมดส่งคืน `HTTP 200 OK` พร้อม Header `Content-Type: application/pdf` อย่างสมบูรณ์
+2. **คอมโพเนนต์หนังสือราชการตราครุฑมาตรฐาน ([components/circular/OfficialCircularSheet.tsx](file:///c:/Users/GuitarDev/virtual-office/components/circular/OfficialCircularSheet.tsx)):**
+   - ออกแบบแบบจำลองบันทึกข้อความราชการไทยถูกต้องตามระเบียบงานสารบรรณ พ.ศ. ๒๕๒๖ และที่แก้ไขเพิ่มเติม
+   - มีตราครุฑพ่าห์ราชการ (Garuda Crest), ชั้นความเร็ว/ความลับ, ส่วนราชการ, ที่, วันที่, เรื่อง, คำขึ้นต้น "เรียน", เนื้อหาบันทึกข้อความ, ผู้ลงนาม, พร้อม Digital Verification Seal แสดงความถูกต้องระดับ Zero Trust
+3. **ระบบเปิดดูเอกสารแบบ Dual-Mode ([components/circular/CircularViewerModal.tsx](file:///c:/Users/GuitarDev/virtual-office/components/circular/CircularViewerModal.tsx)):**
+   - **แท็บ 1: 📜 หนังสือราชการตราครุฑ:** แสดงหนังสือราชการเสมือนจริงให้บุคลากรอ่านเนื้อหาได้อย่างชัดเจน 100% ไม่ว่าจะมีไฟล์แนบหรือไม่
+   - **แท็บ 2: 📎 ไฟล์แนบต้นฉบับ:**
+     - แก้ปัญหา Chromium Data URL Block: แปลง Base64 สู่ Native Blob URL (`URL.createObjectURL(blob)`) เพื่อให้เบราว์เซอร์เรนเดอร์ PDF ได้อย่างลื่นไหล
+     - ใช้แท็ก `<object>` ควบคู่ `<iframe>` fallback
+     - เมนูแถบเครื่องมือด่วน: "เปิดเต็มจอในหน้าต่างใหม่", "ดาวน์โหลด PDF", "พิมพ์ใบเวียนราชการ"
+4. **ระบบนำเข้าหนังสือเวียนด่วนและคลัง NAS ([components/circular/NewCircularModal.tsx](file:///c:/Users/GuitarDev/virtual-office/components/circular/NewCircularModal.tsx)):**
+   - เพิ่มตัวเลือก **"✨ นำเข้าจากแม่แบบราชการมาตรฐาน"** มีแม่แบบพร้อมใช้ 4 ประเภท (งบประมาณ, PDPA, Smart MSO, พลังงานและยานพาหนะ) ออโต้ฟิลล์ข้อมูลและแนบไฟล์ PDF ทันที
+   - เพิ่มตัวเลือก **"☁️ ดึงไฟล์จากคลัง NAS"** เชื่อมโยง Synology NAS File Station (`/virtual-office/circular_docs`)
+   - เพิ่มระบบ **"👁️ ดูตัวอย่างหนังสือราชการตราครุฑ (Live Preview)"** ตรวจสอบหน้าตาหนังสือตราครุฑก่อนกดออกหนังสือเวียนจริง
+
+---
+
+### 32.3 ผลการทดสอบระบบ (Automated Test Verification)
+
+- ดำเนินการทดสอบผ่าน Playwright Test Suite ([tests/circular-workflow.spec.ts](file:///c:/Users/GuitarDev/virtual-office/tests/circular-workflow.spec.ts)) ครบ 7 การทดสอบ:
+  1. `should navigate to Circular module and display dashboard metrics` (ผ่าน)
+  2. `should open document viewer in-page and trigger digital signature` (ผ่าน)
+  3. `should open and display official printable circulation slip in-page` (ผ่าน)
+  4. `should open new circular form in-page and toggle target audience settings` (ผ่าน)
+  5. `should attach a file and show active attachment card with file details in-page` (ผ่าน)
+  6. `should allow importing from official government presets and previewing in Live Preview` (ผ่าน)
+  7. `should display dual-mode view in circular viewer (Garuda letter and attachment)` (ผ่าน)
+- **อัตราความสำเร็จ: 7 ผ่าน / 7 ทดสอบ (100% Passed)**
+
+
 
 
 

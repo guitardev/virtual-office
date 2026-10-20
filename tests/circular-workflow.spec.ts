@@ -190,5 +190,81 @@ test.describe("Government Circular Document & E-Acknowledgment Workflow", () => 
     await newFormView.locator("button:has-text('ยกเลิก')").first().click();
     await expect(newFormView).not.toBeVisible();
   });
+
+  test("should allow importing from official government presets and previewing in Live Preview", async ({ page }) => {
+    const circularNav = page.locator("button", { hasText: "เวียนหนังสือราชการ" }).first();
+    await circularNav.click();
+
+    // Click "ออกหนังสือเวียนใหม่"
+    const newDocBtn = page.locator("button", { hasText: "ออกหนังสือเวียนใหม่" });
+    await newDocBtn.click();
+
+    const newFormView = page.locator("[data-testid='new-circular-view']");
+    await expect(newFormView).toBeVisible();
+
+    // Open Presets Drawer
+    const presetBtn = newFormView.locator("button:has-text('นำเข้าจากแม่แบบราชการมาตรฐาน')");
+    await expect(presetBtn).toBeVisible();
+    await presetBtn.click();
+
+    // Verify preset options appear
+    await expect(newFormView.locator("text=เลือกแม่แบบหนังสือเวียนเพื่อกรอกข้อมูล")).toBeVisible();
+    const budgetPreset = newFormView.locator("button:has-text('แนวทางจัดสรรงบประมาณ')").first();
+    await expect(budgetPreset).toBeVisible();
+    await budgetPreset.click();
+
+    // Check that title input has been populated
+    const titleInput = newFormView.locator("input[placeholder*='ระบุชื่อเรื่องหนังสือเวียน']");
+    await expect(titleInput).toHaveValue(/งบประมาณ/);
+
+    // Switch to "ดูตัวอย่างหนังสือราชการตราครุฑ (Live Preview)" tab
+    const livePreviewTab = newFormView.locator("button:has-text('ดูตัวอย่างหนังสือราชการตราครุฑ')");
+    await expect(livePreviewTab).toBeVisible();
+    await livePreviewTab.click();
+
+    // Verify Garuda letter sheet is rendered
+    await expect(newFormView.locator("text=บันทึกข้อความ")).toBeVisible();
+    await expect(newFormView.locator("text=ส่วนราชการ")).toBeVisible();
+    await expect(newFormView.locator("text=เรื่อง").first()).toBeVisible();
+
+    // Cancel and return
+    await newFormView.locator("button:has-text('ยกเลิก')").first().click();
+    await expect(newFormView).not.toBeVisible();
+  });
+
+  test("should display dual-mode view in circular viewer (Garuda letter and attachment)", async ({ page }) => {
+    const circularNav = page.locator("button", { hasText: "เวียนหนังสือราชการ" }).first();
+    await circularNav.click();
+
+    const allTab = page.locator("button", { hasText: "หนังสือเวียนทั้งหมด" });
+    await allTab.click();
+
+    // Open first document
+    const openDocBtn = page.locator("div.grid button", { hasText: /เปิดอ่าน|ลงนาม/ }).first();
+    await expect(openDocBtn).toBeVisible();
+    await openDocBtn.click();
+
+    const inPageView = page.locator("[data-testid='circular-viewer-view']");
+    await expect(inPageView).toBeVisible();
+
+    // 1. Verify Default Tab "หนังสือราชการตราครุฑ" is visible
+    await expect(inPageView.locator("button:has-text('หนังสือราชการตราครุฑ')")).toBeVisible();
+    await expect(inPageView.locator("text=บันทึกข้อความ")).toBeVisible();
+    await expect(inPageView.locator("text=ส่วนราชการ")).toBeVisible();
+
+    // 2. Switch to "ไฟล์แนบต้นฉบับ" Tab
+    const attachmentTab = inPageView.locator("button:has-text('ไฟล์แนบต้นฉบับ')");
+    await expect(attachmentTab).toBeVisible();
+    await attachmentTab.click();
+
+    // 3. Verify attachment controls or frame are visible
+    await expect(inPageView.locator("button:has-text('เปิดเต็มจอ')").or(inPageView.locator("a:has-text('ดาวน์โหลด PDF')"))).toBeVisible();
+
+    // Close viewer
+    const backBtn = inPageView.locator("button", { hasText: /ย้อนกลับ|ปิดหน้าเอกสาร/ }).first();
+    await backBtn.click();
+    await expect(inPageView).not.toBeVisible();
+  });
 });
+
 

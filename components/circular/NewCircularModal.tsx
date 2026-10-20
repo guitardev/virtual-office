@@ -10,9 +10,14 @@ import {
   PersonnelType,
 } from "@/lib/types";
 import { GOVERNMENT_DIVISIONS, GOVERNMENT_PERSONNEL_TYPES } from "@/lib/rbac";
-import { resolveTargetRecipients } from "@/lib/circular-data";
+import {
+  resolveTargetRecipients,
+  CIRCULAR_OFFICIAL_PRESETS,
+  CircularPreset,
+} from "@/lib/circular-data";
 import { getUserNasSid, getClientSynologyConfig } from "@/lib/synology";
 import { DocumentScannerModal } from "./DocumentScannerModal";
+import { OfficialCircularSheet } from "./OfficialCircularSheet";
 
 interface NewCircularModalProps {
   currentUser: Member;
@@ -32,6 +37,13 @@ export function NewCircularModal({
   inPage = true,
 }: NewCircularModalProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Sub-tabs for form: "edit" or "preview"
+  const [formSubTab, setFormSubTab] = useState<"edit" | "preview">("edit");
+  const [showPresetPicker, setShowPresetPicker] = useState<boolean>(false);
+  const [isNasLoading, setIsNasLoading] = useState<boolean>(false);
+  const [nasFiles, setNasFiles] = useState<{ name: string; path: string; size: number }[]>([]);
+  const [showNasPicker, setShowNasPicker] = useState<boolean>(false);
 
   const [docNumber, setDocNumber] = useState<string>("กพ ๐๐๓๒/ว ");
   const [title, setTitle] = useState<string>("");
@@ -242,10 +254,188 @@ export function NewCircularModal({
     }
   };
 
+  const handleSelectPreset = (preset: CircularPreset) => {
+    setDocNumber(preset.docNumber);
+    setTitle(preset.title);
+    setIssuedDate(preset.issuedDate);
+    setSenderOrg(preset.senderOrg);
+    setUrgency(preset.urgency);
+    setSecretLevel(preset.secretLevel);
+    setSummary(preset.summary);
+    setFileName(preset.fileName);
+    setFileUrl(preset.fileUrl);
+    setFileSize(preset.fileSize);
+    setFileType("application/pdf");
+    setScannedPages([]);
+    setShowPresetPicker(false);
+  };
+
+  const handleFetchNasFiles = async () => {
+    setShowNasPicker(true);
+    setIsNasLoading(true);
+    try {
+      const res = await fetch("/api/nas/files?folder_path=/virtual-office/circular_docs");
+      const data = await res.json();
+      if (data.success && Array.isArray(data.files)) {
+        setNasFiles(data.files.filter((f: any) => !f.is_dir));
+      } else {
+        setNasFiles([]);
+      }
+    } catch {
+      setNasFiles([]);
+    } finally {
+      setIsNasLoading(false);
+    }
+  };
+
+  const handleSelectNasFile = (file: { name: string; path: string; size: number }) => {
+    setFileName(file.name);
+    setFileSize(file.size);
+    setFileType(file.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "application/octet-stream");
+    setFileUrl(`/api/nas/download?file_path=${encodeURIComponent(file.path)}`);
+    setScannedPages([]);
+    setShowNasPicker(false);
+  };
+
+  const previewDoc: CircularDocument = useMemo(
+    () => ({
+      id: `circ_preview_${Date.now()}`,
+      docNumber: docNumber.trim() || "ว-ภายใน",
+      title: title.trim() || "ชื่อเรื่องหนังสือเวียนราชการ",
+      issuedDate: issuedDate.trim(),
+      senderOrg: senderOrg.trim(),
+      urgency,
+      secretLevel,
+      summary: summary.trim(),
+      fileUrl: fileUrl || "/virtual-office/circular_docs/sample.pdf",
+      fileName: fileName || "เอกสารแนบหนังสือเวียน.pdf",
+      fileSize: fileSize || 1500000,
+      totalPages: scannedPages.length > 0 ? scannedPages.length : 1,
+      scannedPages: scannedPages.length > 0 ? scannedPages : undefined,
+      createdBy: currentUser.id,
+      createdByName: currentUser.name,
+      createdAt: new Date().toISOString(),
+      deadline: deadline ? new Date(deadline).toISOString() : undefined,
+      targetCriteria,
+      recipients: resolvedRecipients,
+      totalCount: resolvedRecipients.length,
+      acknowledgedCount: 0,
+      status: "active",
+    }),
+    [
+      docNumber,
+      title,
+      issuedDate,
+      senderOrg,
+      urgency,
+      secretLevel,
+      summary,
+      fileUrl,
+      fileName,
+      fileSize,
+      scannedPages,
+      currentUser,
+      deadline,
+      targetCriteria,
+      resolvedRecipients,
+    ]
+  );
+
   const formInner = (
     <>
-      {/* Section 1: Official Header & Urgency */}
-      <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-3">
+      {/* Top Controls: Mode Switcher & Quick Import Presets */}
+      <div className="space-y-3 pb-2 border-b border-slate-200">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl text-xs">
+            <button
+              type="button"
+              onClick={() => setFormSubTab("edit")}
+              className={`px-3.5 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                formSubTab === "edit"
+                  ? "bg-white text-indigo-700 shadow-2xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <span>📝</span>
+              <span>กรอกข้อมูลหนังสือเวียน</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setFormSubTab("preview")}
+              className={`px-3.5 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                formSubTab === "preview"
+                  ? "bg-white text-indigo-700 shadow-2xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <span>👁️</span>
+              <span>ดูตัวอย่างหนังสือราชการตราครุฑ (Live Preview)</span>
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowPresetPicker(!showPresetPicker)}
+            className="px-3.5 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+          >
+            <span>✨</span>
+            <span>นำเข้าจากแม่แบบราชการมาตรฐาน</span>
+            <span>{showPresetPicker ? "▲" : "▼"}</span>
+          </button>
+        </div>
+
+        {/* Preset Drawer */}
+        {showPresetPicker && (
+          <div className="p-3.5 rounded-2xl bg-indigo-50/50 border border-indigo-200 space-y-2.5 animate-fade-in text-xs">
+            <div className="font-bold text-slate-800 flex items-center justify-between">
+              <span>เลือกแม่แบบหนังสือเวียนเพื่อกรอกข้อมูลและแนบไฟล์ตัวอย่างอัตโนมัติ:</span>
+              <button
+                type="button"
+                onClick={() => setShowPresetPicker(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                ✕ ปิด
+              </button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {CIRCULAR_OFFICIAL_PRESETS.map((p) => (
+                <button
+                  type="button"
+                  key={p.id}
+                  onClick={() => handleSelectPreset(p)}
+                  className="p-3 rounded-xl bg-white border border-indigo-100 hover:border-indigo-400 hover:shadow-xs transition-all cursor-pointer group text-left w-full"
+                >
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <span className="font-mono text-[10px] text-indigo-600 font-bold bg-indigo-50 px-1.5 py-0.2 rounded">
+                      {p.docNumber}
+                    </span>
+                    <span className="text-[10px] text-slate-400">{p.issuedDate}</span>
+                  </div>
+                  <div className="font-bold text-slate-800 group-hover:text-indigo-600 line-clamp-1">
+                    {p.name}
+                  </div>
+                  <div className="text-[11px] text-slate-500 line-clamp-2 mt-0.5">
+                    {p.summary}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {formSubTab === "preview" ? (
+        <div className="py-4 space-y-4 animate-fade-in">
+          <div className="text-center text-xs text-slate-500 bg-slate-50 p-2 rounded-xl border border-slate-200">
+            แสดงตัวอย่างหนังสือราชการตราครุฑเสมือนจริงที่จะส่งไปยังบุคลากรเป้าหมาย ({resolvedRecipients.length} คน)
+          </div>
+          <OfficialCircularSheet document={previewDoc} showVerificationSeal={false} />
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {/* Section 1: Official Header & Urgency */}
+          <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-3">
             <div className="text-xs font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-2">
               <span>๑. ข้อมูลหนังสือราชการ</span>
               <span className="text-[10px] text-indigo-600 font-mono">ระเบียบงานสารบรรณ</span>
@@ -627,17 +817,17 @@ export function NewCircularModal({
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {/* Live Camera Scanner Button */}
                 <button
                   type="button"
                   onClick={() => setShowScannerModal(true)}
-                  className="p-5 rounded-2xl border-2 border-dashed border-indigo-300 hover:border-indigo-500 bg-indigo-50/40 hover:bg-indigo-50 text-indigo-700 text-xs font-bold flex flex-col items-center justify-center gap-2 cursor-pointer transition-all group"
+                  className="p-4 rounded-2xl border-2 border-dashed border-indigo-300 hover:border-indigo-500 bg-indigo-50/40 hover:bg-indigo-50 text-indigo-700 text-xs font-bold flex flex-col items-center justify-center gap-2 cursor-pointer transition-all group"
                 >
-                  <span className="text-3xl group-hover:scale-110 transition-transform">📷</span>
-                  <span className="text-sm">เปิดกล้องสแกนเอกสารสด (Live Camera)</span>
-                  <span className="text-[11px] text-indigo-500 font-normal text-center">
-                    ถ่ายภาพหนังสือราชการ A4 หลายหน้า ปรับภาพขาวดำคมชัดอัตโนมัติ
+                  <span className="text-2xl group-hover:scale-110 transition-transform">📷</span>
+                  <span className="text-xs font-bold">สแกนเอกสารสด</span>
+                  <span className="text-[10px] text-indigo-500 font-normal text-center">
+                    ถ่ายภาพเอกสาร A4 ปรับขาวดำคมชัด
                   </span>
                 </button>
 
@@ -647,18 +837,80 @@ export function NewCircularModal({
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
                   onClick={() => fileInputRef.current?.click()}
-                  className={`p-5 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-2 cursor-pointer transition-all group ${
+                  className={`p-4 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-2 cursor-pointer transition-all group ${
                     isDragOver
                       ? "border-indigo-500 bg-indigo-100/70"
                       : "border-slate-300 hover:border-slate-400 bg-slate-50 hover:bg-slate-100"
                   }`}
                 >
-                  <span className="text-3xl group-hover:scale-110 transition-transform">📁</span>
-                  <span className="text-sm font-bold text-slate-700">เลือกไฟล์จากเครื่อง (PDF / รูปภาพ)</span>
-                  <span className="text-[11px] text-slate-500 font-normal text-center">
-                    คลิกเพื่อค้นหา หรือลากไฟล์ PDF / รูปภาพ มาวางที่นี่
+                  <span className="text-2xl group-hover:scale-110 transition-transform">📁</span>
+                  <span className="text-xs font-bold text-slate-700">อัปโหลดไฟล์จากเครื่อง</span>
+                  <span className="text-[10px] text-slate-500 font-normal text-center">
+                    ไฟล์ PDF หรือรูปภาพ (ลากวางได้)
                   </span>
                 </div>
+
+                {/* Synology NAS Cloud Library Picker */}
+                <button
+                  type="button"
+                  onClick={handleFetchNasFiles}
+                  className="p-4 rounded-2xl border-2 border-dashed border-sky-300 hover:border-sky-500 bg-sky-50/40 hover:bg-sky-50 text-sky-800 text-xs font-bold flex flex-col items-center justify-center gap-2 cursor-pointer transition-all group"
+                >
+                  <span className="text-2xl group-hover:scale-110 transition-transform">☁️</span>
+                  <span className="text-xs font-bold">คลังเอกสาร NAS</span>
+                  <span className="text-[10px] text-sky-600 font-normal text-center">
+                    ดึงไฟล์จาก Synology File Station
+                  </span>
+                </button>
+              </div>
+            )}
+
+            {/* NAS File Picker Drawer */}
+            {showNasPicker && (
+              <div className="p-3.5 rounded-2xl bg-sky-50/70 border border-sky-200 space-y-2 animate-fade-in text-xs">
+                <div className="flex items-center justify-between font-bold text-sky-950">
+                  <span className="flex items-center gap-1.5">
+                    <span>☁️</span>
+                    <span>ไฟล์เอกสารบน Synology NAS (/virtual-office/circular_docs):</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowNasPicker(false)}
+                    className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    ✕ ปิด
+                  </button>
+                </div>
+
+                {isNasLoading ? (
+                  <div className="py-4 text-center text-sky-600 flex items-center justify-center gap-2">
+                    <span className="animate-spin">⏳</span> กำลังโหลดไฟล์จากคลัง Synology NAS...
+                  </div>
+                ) : nasFiles.length === 0 ? (
+                  <div className="py-4 text-center text-slate-500 bg-white rounded-xl border border-sky-100">
+                    ไม่พบไฟล์ในโฟลเดอร์ /virtual-office/circular_docs บน NAS ท่านสามารถอัปโหลดไฟล์จากเครื่องได้โดยตรง
+                  </div>
+                ) : (
+                  <div className="max-h-48 overflow-y-auto divide-y divide-sky-100 bg-white rounded-xl border border-sky-200">
+                    {nasFiles.map((file) => (
+                      <div
+                        key={file.path}
+                        onClick={() => handleSelectNasFile(file)}
+                        className="p-2.5 flex items-center justify-between hover:bg-sky-50 cursor-pointer transition-colors group"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-lg">📄</span>
+                          <span className="font-semibold text-slate-800 truncate group-hover:text-sky-700">
+                            {file.name}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-slate-400 shrink-0 font-mono">
+                          {Math.round(file.size / 1024)} KB
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -671,8 +923,10 @@ export function NewCircularModal({
               className="hidden"
             />
           </div>
+        </div>
+      )}
 
-          {/* Footer Submit */}
+      {/* Footer Submit */}
           <div className="pt-2 flex items-center justify-between gap-3">
             <button
               type="button"
