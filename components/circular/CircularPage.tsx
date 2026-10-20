@@ -290,6 +290,14 @@ export const CircularPage: React.FC<CircularPageProps> = ({
           setPrintingDoc(viewingDoc);
           setViewMode("print");
         }}
+        onDelete={async (docId) => {
+          const updated = documents.filter((d) => d.id !== docId);
+          setDocuments(updated);
+          setViewingDoc(null);
+          setViewMode("list");
+          await deleteCircularDoc(docId);
+          showToast("ลบหนังสือเวียนจากฐานข้อมูลเรียบร้อยแล้ว");
+        }}
       />
     );
   }
@@ -648,7 +656,7 @@ export const CircularPage: React.FC<CircularPageProps> = ({
                           <span>{isTargeted && !isSigned ? "✍️ ลงนาม" : "📖 เปิดอ่าน"}</span>
                         </button>
 
-                        {(currentUser?.role === "admin" || currentUser?.id === doc.createdBy) && (
+                        {(currentUser?.role === "admin" || currentUser?.role === "manager" || currentUser?.id === doc.createdBy) && (
                           <button
                             onClick={(e) => handleDeleteDocument(doc.id, e)}
                             className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors text-xs cursor-pointer"
@@ -762,6 +770,15 @@ export const CircularPage: React.FC<CircularPageProps> = ({
                             >
                               รายละเอียด
                             </button>
+                            {(currentUser?.role === "admin" || currentUser?.role === "manager" || currentUser?.id === doc.createdBy) && (
+                              <button
+                                onClick={(e) => handleDeleteDocument(doc.id, e)}
+                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors text-xs cursor-pointer"
+                                title="ลบหนังสือเวียน"
+                              >
+                                🗑️
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

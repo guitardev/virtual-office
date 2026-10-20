@@ -9,6 +9,7 @@ import {
   clearUserNasSid,
   getClientSynologyConfig,
   saveClientSynologyConfig,
+  DEFAULT_NAS_LAN_URL,
   checkNasHealth,
   loginSynology,
   SynologyHealthStatus,
@@ -1561,7 +1562,7 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                   <button
                     type="button"
                     onClick={() => {
-                      saveClientSynologyConfig({ nasUrl: "http://192.168.162.21:5000" });
+                      saveClientSynologyConfig({ nasUrl: DEFAULT_NAS_LAN_URL });
                       showToast("🔄 สลับไปใช้โหมดเครือข่ายภายในสำนักงาน (Office LAN) เรียบร้อย");
                       window.location.reload();
                     }}

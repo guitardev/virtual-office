@@ -406,32 +406,38 @@ export function ChatPage({
     e.target.value = "";
   };
 
-  const handleAttachTemplate = async (template: (typeof GOVERNMENT_DOCUMENT_TEMPLATES)[0]) => {
-    let nasPath = `/chat_attachments/${template.name}`;
-
-    if (syncToNas) {
-      // Create and upload actual template document to NAS
-      const templateContent = `สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร\nแบบฟอร์ม: ${template.name}\nประเภท: ${template.type.toUpperCase()}\nขนาด: ${template.size}\nจัดเก็บบน Synology NAS: ${nasPath}\nวันที่บันทึก: ${new Date().toLocaleString("th-TH")}`;
-      const blob = new Blob([templateContent], { type: "application/octet-stream" });
-      const file = new File([blob], template.name, { type: "application/octet-stream" });
-      const uploadRes = await uploadAttachmentToNas(file);
-      if (uploadRes.success && uploadRes.path) {
-        nasPath = uploadRes.path;
-      }
-    }
-
+  const handleAttachTemplate = (template: (typeof GOVERNMENT_DOCUMENT_TEMPLATES)[0]) => {
+    const defaultNasPath = `/chat_attachments/${template.name}`;
+    const newAttId = `tpl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const newAtt: ChatAttachment = {
-      id: `tpl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      id: newAttId,
       name: template.name,
       type: template.type,
       size: template.size,
-      nasPath,
+      nasPath: defaultNasPath,
       storageType: "nas",
       uploadedToNas: true,
     };
+
     setAttachedFiles((prev) => [...prev, newAtt]);
     setShowTemplatesDropdown(false);
     showToast(`📑 แนบแบบฟอร์มราชการ "${template.name}" (พร้อมจัดเก็บบน Synology NAS /chat_attachments)`);
+
+    if (syncToNas) {
+      // Create and upload actual template document to NAS asynchronously
+      const templateContent = `สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร\nแบบฟอร์ม: ${template.name}\nประเภท: ${template.type.toUpperCase()}\nขนาด: ${template.size}\nจัดเก็บบน Synology NAS: ${defaultNasPath}\nวันที่บันทึก: ${new Date().toLocaleString("th-TH")}`;
+      const blob = new Blob([templateContent], { type: "application/octet-stream" });
+      const file = new File([blob], template.name, { type: "application/octet-stream" });
+      uploadAttachmentToNas(file).then((uploadRes) => {
+        if (uploadRes.success && uploadRes.path) {
+          setAttachedFiles((prev) =>
+            prev.map((f) => (f.id === newAttId ? { ...f, nasPath: uploadRes.path } : f))
+          );
+        }
+      }).catch((err) => {
+        console.warn("Async template upload error:", err);
+      });
+    }
   };
 
   const handleRemoveAttachedFile = (id: string) => {

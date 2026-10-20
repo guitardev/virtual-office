@@ -2,6 +2,53 @@ import { test, expect } from "./fixtures";
 
 test.describe("Government Circular Document & E-Acknowledgment Workflow", () => {
   test.beforeEach(async ({ page }) => {
+    // Intercept Supabase circular_documents queries to provide test fixture
+    await page.route("**/rest/v1/circular_documents*", async (route) => {
+      const method = route.request().method();
+      if (method === "GET") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([
+            {
+              id: "circ_test_001",
+              doc_number: "กพ ๐๐๓๒/ว ๔๕๒",
+              title: "แนวทางการจัดสรรงบประมาณโครงการพัฒนาคุณภาพชีวิตผู้สูงอายุและคนพิการ ประจำปีงบประมาณ พ.ศ. ๒๕๖๙",
+              issued_date: "๑๐ ตุลาคม ๒๕๖๙",
+              sender_org: "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
+              urgency: "urgent",
+              secret_level: "normal",
+              summary: "แจ้งแนวทางปฏิบัติการเบิกจ่ายงบประมาณ",
+              file_url: "/virtual-office/circular_docs/sample.pdf",
+              file_name: "คำสั่งและแนวทางจัดสรรงบประมาณ_2569.pdf",
+              file_size: 1845000,
+              total_pages: 3,
+              created_by: "usr_2",
+              created_by_name: "นายเสกพล ดิษฐโชติ",
+              created_at: "2026-10-10T08:30:00Z",
+              deadline: "2026-10-25T16:30:00Z",
+              target_criteria: { scope: "all" },
+              recipients: [
+                {
+                  memberId: "usr_2",
+                  memberName: "นายเสกพล ดิษฐโชติ",
+                  division: "ฝ่ายบริหารทั่วไป",
+                  personnelType: "ข้าราชการ",
+                  position: "นักพัฒนาสังคมชำนาญการ",
+                  isAcknowledged: false,
+                },
+              ],
+              total_count: 1,
+              acknowledged_count: 0,
+              status: "active",
+            },
+          ]),
+        });
+      } else {
+        await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+      }
+    });
+
     await page.goto("/");
     await page.waitForLoadState("networkidle");
   });

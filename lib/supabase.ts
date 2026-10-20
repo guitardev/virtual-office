@@ -1704,16 +1704,25 @@ export async function fetchCircularDocs(): Promise<CircularDocument[]> {
     }
 
     if (!data || data.length === 0) {
-      // Seed initial local documents to Supabase if remote table is empty
-      if (local.length > 0) {
-        for (const doc of local) {
-          await supabase.from("circular_documents").upsert(mapCircularDocToRow(doc));
-        }
-      }
-      return local;
+      // Remote table is clean/empty - do NOT resurrect mock documents
+      saveStoredCircularDocs([]);
+      return [];
     }
 
-    const liveDocs = data.map(mapRowToCircularDoc);
+    const hasMockDocs = data.some((r: any) => r.id === "circ_2569_001" || r.id === "circ_2569_002");
+    if (hasMockDocs) {
+      // Asynchronously purge obsolete mock rows from Supabase permanently
+      supabase
+        .from("circular_documents")
+        .delete()
+        .in("id", ["circ_2569_001", "circ_2569_002"])
+        .then(() => {});
+    }
+
+    const liveDocs = data
+      .map(mapRowToCircularDoc)
+      .filter((d) => d.id !== "circ_2569_001" && d.id !== "circ_2569_002");
+
     // Keep local cache fresh
     saveStoredCircularDocs(liveDocs);
     return liveDocs;
@@ -1727,6 +1736,17 @@ export async function fetchCircularDocs(): Promise<CircularDocument[]> {
  * Save or update circular document in Supabase and local cache
  */
 export async function saveCircularDoc(doc: CircularDocument): Promise<boolean> {
+  // Guard: Reject obsolete mock documents to prevent any accidental reseeding
+  if (doc.id === "circ_2569_001" || doc.id === "circ_2569_002") {
+    return false;
+  }
+
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.removeItem("smartmso_circular_cleared");
+    } catch {}
+  }
+
   // Always update local cache first for responsiveness
   try {
     const current = loadStoredCircularDocs();
@@ -1767,6 +1787,9 @@ export async function deleteCircularDoc(id: string): Promise<boolean> {
     const current = loadStoredCircularDocs();
     const updated = current.filter((d) => d.id !== id);
     saveStoredCircularDocs(updated);
+    if (typeof window !== "undefined" && updated.length === 0) {
+      localStorage.setItem("smartmso_circular_cleared", "true");
+    }
   } catch (err) {
     console.warn("Could not remove circular doc from local cache:", err);
   }

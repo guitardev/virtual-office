@@ -11,6 +11,7 @@ interface CircularViewerModalProps {
   onAcknowledge: (docId: string, signatureUrl?: string, endorsementNote?: string) => void;
   onClose: () => void;
   onPrintSlip?: () => void;
+  onDelete?: (docId: string) => void;
   inPage?: boolean;
 }
 
@@ -20,6 +21,7 @@ export function CircularViewerModal({
   onAcknowledge,
   onClose,
   onPrintSlip,
+  onDelete,
   inPage = true,
 }: CircularViewerModalProps) {
   const [activeTab, setActiveTab] = useState<"doc" | "tracking">("doc");
@@ -433,6 +435,21 @@ export function CircularViewerModal({
           </div>
 
           <div className="flex items-center gap-2">
+            {(currentUser.role === "admin" || currentUser.role === "manager" || currentUser.id === doc.createdBy) && onDelete && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบหนังสือเวียนเลขที่ ${doc.docNumber}? การกระทำนี้ไม่สามารถย้อนกลับได้`)) {
+                    onDelete(doc.id);
+                  }
+                }}
+                className="px-3.5 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold flex items-center gap-1.5 border border-red-200 cursor-pointer transition-all"
+                title="ลบหนังสือเวียนฉบับนี้"
+              >
+                <span>🗑️</span>
+                <span>ลบเอกสาร</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => {
@@ -500,6 +517,21 @@ export function CircularViewerModal({
           </div>
 
           <div className="flex items-center gap-2">
+            {(currentUser.role === "admin" || currentUser.role === "manager" || currentUser.id === doc.createdBy) && onDelete && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบหนังสือเวียนเลขที่ ${doc.docNumber}? การกระทำนี้ไม่สามารถย้อนกลับได้`)) {
+                    onDelete(doc.id);
+                  }
+                }}
+                className="px-3 py-1.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-200 border border-red-400/30 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all"
+                title="ลบหนังสือเวียนฉบับนี้"
+              >
+                <span>🗑️</span>
+                <span>ลบ</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setShowPrintSlip(true)}

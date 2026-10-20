@@ -14,7 +14,13 @@ import {
   isSupabaseConfigured,
   saveMember,
 } from "@/lib/supabase";
-import { setUserNasSid, getClientSynologyConfig, saveClientSynologyConfig, safeParseJsonResponse } from "@/lib/synology";
+import {
+  setUserNasSid,
+  getClientSynologyConfig,
+  saveClientSynologyConfig,
+  safeParseJsonResponse,
+  DEFAULT_NAS_LAN_URL,
+} from "@/lib/synology";
 import { TurnstileWidget } from "./TurnstileWidget";
 
 interface LoginPageProps {
@@ -157,13 +163,13 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
 
       let data = await attemptAuth(targetUrl);
 
-      // Auto fallback to LAN IP if Cloudflare Tunnel domain is offline (Error 1033 / 530)
-      if (!data.success && (data.code === 1033 || targetUrl.includes("nas.smso.site"))) {
-        const lanUrl = "http://192.168.162.21:5000";
+      // Auto fallback to LAN IP if Cloudflare Tunnel domain is offline (Error 1033 / 530 / 502)
+      if (!data.success && (data.code === 1033 || data.code === 502 || data.code === 530 || targetUrl.includes("nas.smso.site"))) {
+        const lanUrl = DEFAULT_NAS_LAN_URL;
         if (targetUrl !== lanUrl) {
           try {
             const lanData = await attemptAuth(lanUrl);
-            if (lanData && (lanData.success || (lanData.code && lanData.code !== 1033))) {
+            if (lanData && (lanData.success || (lanData.code && lanData.code !== 1033 && lanData.code !== 502))) {
               data = lanData;
               saveClientSynologyConfig({ nasUrl: lanUrl });
             }

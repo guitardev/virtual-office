@@ -1,11 +1,16 @@
 /**
  * Synology NAS Integration Engine for Smart MSO / Virtual Office
- * Connects directly to Synology DSM Web API at http://192.168.162.21:5000
+ * Connects directly to Synology DSM Web API at http://192.168.162.26:5000
  * Handles Authentication (SYNO.API.Auth) and File Station DMS (SYNO.FileStation.*)
  */
 
+export const DEFAULT_NAS_LAN_URL =
+  process.env.NEXT_PUBLIC_SYNOLOGY_LAN_URL ||
+  process.env.SYNOLOGY_LAN_URL ||
+  "http://192.168.162.26:5000";
+
 export interface SynologyConfig {
-  nasUrl: string; // e.g. "http://192.168.162.21:5000"
+  nasUrl: string; // e.g. "http://192.168.162.26:5000"
   serviceAccount: string;
   servicePassword?: string;
   sharedFolder: string; // e.g. "/virtual-office"
@@ -438,13 +443,13 @@ export async function loginSynology(
 
     let data = await attemptLogin(nasUrl);
 
-    // Fallback to local LAN IP if Cloudflare Tunnel domain is offline (Error 1033 / 530)
-    if (!data.success && (data.code === 1033 || nasUrl.includes("nas.smso.site"))) {
-      const lanUrl = "http://192.168.162.21:5000";
+    // Fallback to local LAN IP if Cloudflare Tunnel domain is offline (Error 1033 / 530 / 502)
+    if (!data.success && (data.code === 1033 || data.code === 502 || data.code === 530 || nasUrl.includes("nas.smso.site"))) {
+      const lanUrl = DEFAULT_NAS_LAN_URL;
       if (nasUrl !== lanUrl) {
         try {
           const lanData = await attemptLogin(lanUrl);
-          if (lanData && (lanData.success || (lanData.code && lanData.code !== 1033))) {
+          if (lanData && (lanData.success || (lanData.code && lanData.code !== 1033 && lanData.code !== 502))) {
             data = lanData;
           }
         } catch {}

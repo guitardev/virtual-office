@@ -285,11 +285,11 @@ export function NasTab({ showToast }: NasTabProps) {
     }
   };
 
-  const isLocalLanIp = config.nasUrl.includes("192.168.162.21") || config.nasUrl.includes("localhost");
+  const isLocalLanIp = config.nasUrl.includes("192.168.162.") || config.nasUrl.includes("localhost");
 
   return (
     <div className="space-y-6">
-      {/* ─── LOCAL LAN WARNING (If still using 192.168.162.21) ─── */}
+      {/* ─── LOCAL LAN WARNING (If still using Office LAN IP) ─── */}
       {isLocalLanIp && (
         <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
           <div className="flex items-start gap-2.5">

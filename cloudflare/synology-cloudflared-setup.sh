@@ -3,7 +3,7 @@
 # Smart MSO — Synology NAS Cloudflare Tunnel Quick Setup Script
 # ==============================================================================
 # คำแนะนำการใช้งานบน Synology DSM (DSM 7+ ผ่าน Container Manager หรือ SSH):
-# 1. เชื่อมต่อ SSH ไปยังเครื่อง Synology: ssh admin@192.168.162.21
+# 1. เชื่อมต่อ SSH ไปยังเครื่อง Synology: ssh admin@192.168.162.26
 # 2. นำเข้า Token จาก Cloudflare Zero Trust Dashboard (Networks > Tunnels)
 # 3. รันคำสั่ง: ./synology-cloudflared-setup.sh YOUR_TUNNEL_TOKEN
 # ==============================================================================

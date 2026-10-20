@@ -2,7 +2,7 @@
 # Smart MSO — Cloudflare Tunnel Configuration (cloudflared)
 # ==============================================================
 # สถาปัตยกรรม: Web App โฮสต์บน Vercel (Edge) + Cloudflare Tunnel เชื่อม Synology NAS
-# ติดตั้งบน: Synology NAS (192.168.162.21) ผ่าน Container Manager หรือ Linux Server ใน LAN
+# ติดตั้งบน: Synology NAS (192.168.162.26) ผ่าน Container Manager หรือ Linux Server ใน LAN
 
 tunnel: YOUR_TUNNEL_UUID_HERE
 credentials-file: /etc/cloudflared/YOUR_TUNNEL_UUID_HERE.json
@@ -11,7 +11,7 @@ credentials-file: /etc/cloudflared/YOUR_TUNNEL_UUID_HERE.json
 ingress:
   # 💾 บริการหลัก: เชื่อมต่อไปยัง Synology NAS DSM (File Station, Photos, Chat Attachments)
   - hostname: nas.smso.site
-    service: http://192.168.162.21:5000
+    service: http://192.168.162.26:5000
     originRequest:
       noTLSVerify: true
       connectTimeout: 60s

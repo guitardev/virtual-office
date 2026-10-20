@@ -1519,6 +1519,97 @@ on conflict (id) do update set
   - Next.js Production Build: ผ่านสมบูรณ์ `100% (Compiled in 1894ms, TypeScript 465ms, 0 errors)`
   - Automated Playwright Suite ([tests/circular-workflow.spec.ts](file:///c:/Users/GuitarDev/virtual-office/tests/circular-workflow.spec.ts)): ผ่านครบทั้ง 5 การทดสอบ `(5 passed, 17.1s)` โดยตรวจสอบว่าไม่มี `div.fixed.z-50.backdrop-blur-md` ปรากฏขึ้นมารบกวนผู้ใช้งาน
 
+---
+
+## 30. บันทึกการแก้ไขปัญหา Cloudflare Error 502 Bad Gateway และการเปลี่ยน IP ของ Synology NAS
+
+> **วันที่บันทึก:** 20 ตุลาคม 2569  
+> **เวอร์ชัน:** v2.4.2 (NAS LAN IP Re-alignment & Gateway Healing)  
+> **สถานะภาพรวม:** ตรวจพบและแก้ไขสาเหตุของข้อผิดพลาด `HTTP 502 Bad Gateway` บนโดเมน `nas.smso.site` ซึ่งเกิดจากการที่ IP ของเครื่อง Synology NAS ภายในวง LAN สำนักงานเปลี่ยนจาก `192.168.162.21` ไปเป็น `192.168.162.26`
+
+---
+
+### 30.1 สาเหตุและการตรวจพิสูจน์ (Root Cause & Live Verification)
+
+1. **การตรวจสอบผ่านโดเมนสาธารณะ (`https://nas.smso.site`):**
+   - Cloudflare Edge Node (สิงคโปร์ - SIN) ส่งคืน `HTTP 502 Bad Gateway` (error code: 502)
+   - หน้าแดชบอร์ด Vercel Production (`https://www.smso.site/api/nas/health`) รายงานสถานะออฟไลน์ด้วยข้อความ `HTTP 502: Bad Gateway`
+2. **การตรวจจับทางกายภาพในวง LAN สำนักงาน (`192.168.162.x`):**
+   - คำสั่ง Ping ไปยัง IP เดิม `192.168.162.21` ให้ผลลัพธ์เป็น `Destination host unreachable`
+   - ตรวจพบเครื่อง Synology NAS ทำงานอยู่ที่ IP ใหม่คือ **`192.168.162.26`** (MAC: `bc-24-11-00-17-9a`)
+   - ทดสอบเรียก API สด:
+     - `http://192.168.162.26:5000/webman/pingpong.cgi` -> ได้รับ `200 OK` (`"success": true`)
+     - `http://192.168.162.26:5000/webapi/query.cgi` -> ได้รับ `200 OK` ตอบกลับรายการ WebAPI ครบถ้วน
+3. **สาเหตุของ 502 Bad Gateway:**
+   - Cloudflare Tunnel (`cloudflared`) ที่รันอยู่ยังคงพยายามส่งต่อทราฟฟิก (Ingress) ไปยัง IP เก่า `http://192.168.162.21:5000` ซึ่งไม่มีเครื่องอยู่ ทำให้เกิด Connection Refused / Timeout จน Cloudflare Edge ตัดสินว่า Origin ทำงานล้มเหลว จึงส่งรหัส 502
+
+---
+
+### 30.2 มาตรการแก้ไขในซอร์สโค้ด (Source Code Adaptations)
+
+1. **เพิ่มตัวแปรกลาง `DEFAULT_NAS_LAN_URL` ([lib/synology.ts](file:///c:/Users/GuitarDev/virtual-office/lib/synology.ts)):**
+   - กำหนดค่าเริ่มต้นเป็น `http://192.168.162.26:5000` โดยสามารถ Override ผ่าน Environment Variable `NEXT_PUBLIC_SYNOLOGY_LAN_URL` หรือ `SYNOLOGY_LAN_URL` ได้
+2. **ขยายขอบเขต Auto-fallback ดักจับ HTTP 502 Bad Gateway:**
+   - ใน [`lib/synology.ts`](file:///c:/Users/GuitarDev/virtual-office/lib/synology.ts) และ [`LoginPage.tsx`](file:///c:/Users/GuitarDev/virtual-office/components/auth/LoginPage.tsx) เพิ่มเงื่อนไข `data.code === 502` ร่วมกับ `1033` และ `530` เพื่อให้ระบบสลับไปใช้ Office LAN ทันทีอัตโนมัติหาก Cloudflare Tunnel กำลังมีปัญหา
+3. **อัปเดตไฟล์คอนฟิกและสคริปต์ Cloudflare:**
+   - [`cloudflare/config.yml`](file:///c:/Users/GuitarDev/virtual-office/cloudflare/config.yml): ปรับ Service Ingress เป็น `http://192.168.162.26:5000`
+   - [`cloudflare/docker-compose.tunnel.yml`](file:///c:/Users/GuitarDev/virtual-office/cloudflare/docker-compose.tunnel.yml): อัปเดต Host Network Mapping
+   - [`cloudflare/synology-cloudflared-setup.sh`](file:///c:/Users/GuitarDev/virtual-office/cloudflare/synology-cloudflared-setup.sh): อัปเดตคำแนะนำ SSH ชี้ไปยัง `192.168.162.26`
+   - [`.env.local`](file:///c:/Users/GuitarDev/virtual-office/.env.local) และ [`.env.example`](file:///c:/Users/GuitarDev/virtual-office/.env.example): ปรับหมายเหตุ LAN fallback เป็น `192.168.162.26:5000`
+
+---
+
+## 31. บันทึกการขจัดปัญหาหนังสือเวียน Mock เพิ่มเข้ามาตลอดเวลา (Eliminating Infinite Mock Circular Reseeding Loop)
+
+> **วันที่บันทึก:** 20 ตุลาคม 2569  
+> **เวอร์ชัน:** v2.4.3 (Circular Auto-Reseed Loop Severance & Multi-Layer RLS Defense)  
+> **สถานะภาพรวม:** ตรวจพบและขจัดปัญหาที่หนังสือเวียนจำลอง (Mock Documents: `circ_2569_001` และ `circ_2569_002`) ถูกเพิ่มกลับเข้ามาในระบบตลอดเวลาหลังการลบสำเร็จ 100%
+
+---
+
+### 31.1 การตรวจพิสูจน์สาเหตุเชิงลึก (Deep Root Cause Analysis)
+
+1. **การตรวจสอบผ่าน Unified Access Logs (Supabase ClickHouse Engine):**
+   - เมื่อส่งคำสั่งลบเอกสาร `DELETE /rest/v1/circular_documents?id=eq.circ_2569_002` ได้รับการยืนยันผล `200 OK`
+   - ภายใน 1 วินาทีถัดมา มีคำขอ `POST /rest/v1/circular_documents` ส่งกลับมาจากเบราว์เซอร์ Chrome ที่กำลังเปิดหน้าเว็บโปรดักชัน `https://www.smso.site/` โดยตรง (`Referer: https://www.smso.site/`)
+2. **วงจรการคืนชีพแบบไม่รู้จบ (The Reseeding Loop):**
+   - ในโค้ดของโปรดักชันเดิม มี Logic ใน `fetchCircularDocs()` ว่า:
+     ```typescript
+     if (!data || data.length === 0) {
+       for (const doc of local) {
+         await supabase.from("circular_documents").upsert(mapCircularDocToRow(doc));
+       }
+     }
+     ```
+   - เมื่อเอกสารบน Supabase ถูกลบจนหมด (`data.length === 0`) ช่องสัญญาณ **Supabase Realtime WebSocket** จะแจ้งเตือนไปยังหน้าเว็บที่ผู้ใช้หรือผู้ดูแลเปิดค้างอยู่
+   - Event Handler ดักจับการเปลี่ยนแปลงและสั่งโหลดข้อมูลใหม่ (`loadData()`)
+   - เบราว์เซอร์ตรวจพบว่าคลาวด์ว่างเปล่า จึงทำการ Reseed ข้อมูลจาก LocalStorage/Initial Mock กลับขึ้น Supabase ทันที ทำให้เอกสาร Mock ฟื้นคืนชีพขึ้นมาซ้ำแล้วซ้ำเล่าแบบ Realtime Loop
+3. **การหลงเหลือใน Local Storage และตัวแปรตั้งต้น:**
+   - ค่า `INITIAL_CIRCULAR_DOCS` เดิมมีฮาร์ดโค้ดเป็นหนังสือเวียน `circ_2569_001` และ `circ_2569_002` หากไคลเอนต์ใดไม่มีค่าแคช จะโหลด Mock เหล่านี้ขึ้นมาเป็นค่าเริ่มต้นเสมอ
+
+---
+
+### 31.2 มาตรการแก้ไขเบ็ดเสร็จหลายชั้น (Multi-Layer Permanent Defense)
+
+1. **ระดับฐานข้อมูล (PostgreSQL 17 Row-Level Security Defense):**
+   - อัปเดต RLS Policy `"Allow all write circular_documents"` บนตาราง `public.circular_documents` เพื่อป้องกันที่ระดับ Database Engine:
+     ```sql
+     ALTER POLICY "Allow all write circular_documents" 
+     ON public.circular_documents 
+     WITH CHECK (id NOT IN ('circ_2569_001', 'circ_2569_002'));
+     ```
+   - ผลลัพธ์: คำขอเขียน Mock Docs จากเบราว์เซอร์หรือเครื่องที่ยังไม่ได้รีเฟรชหน้าจอจะถูกปฏิเสธทันทีด้วยรหัสข้อผิดพลาด `401 / 42501 (new row violates row-level security policy)` ทำให้คลาวด์สะอาดหมดจด 100%
+2. **ระดับแอปพลิเคชัน ([lib/supabase.ts](file:///c:/Users/GuitarDev/virtual-office/lib/supabase.ts)):**
+   - เพิ่ม Guard ใน `saveCircularDoc()`: ปฏิเสธการบันทึกเอกสาร Mock ทันที
+   - ปรับปรุง `fetchCircularDocs()`: หากพบเอกสาร Mock ตกค้างจะตัดทิ้งออกจากผลลัพธ์และสั่งคำสั่ง `delete().in(...)` ล้างข้อมูลบน Supabase เบื้องหลังอัตโนมัติ
+   - ยกเลิกตรรกะการ Reseed ทั้งหมด หากคลาวด์ว่างเปล่าจะส่งคืน `[]` เท่านั้น
+3. **ระดับตัวแปรแคชและ Storage ([lib/circular-data.ts](file:///c:/Users/GuitarDev/virtual-office/lib/circular-data.ts)):**
+   - เปลี่ยนค่า `INITIAL_CIRCULAR_DOCS: CircularDocument[] = []` เป็น Array ว่าง
+   - ฟังก์ชัน `loadStoredCircularDocs()` จะกรองและล้าง `circ_2569_001` และ `circ_2569_002` ออกจาก LocalStorage ทันทีที่มีการเรียกใช้งาน
+4. **ระดับชุดทดสอบระบบ ([tests/circular-workflow.spec.ts](file:///c:/Users/GuitarDev/virtual-office/tests/circular-workflow.spec.ts)):**
+   - ใช้เทคนิค `page.route()` เพื่อ Mock ข้อมูลหนังสือเวียนเสมือนสำหรับการรัน Automation Test โดยเฉพาะ ไม่กระทบต่อฐานข้อมูลจริง และผ่านการทดสอบครบ 5/5 แบบแยกส่วน (Deterministic Isolation)
+
+
 
 
 
