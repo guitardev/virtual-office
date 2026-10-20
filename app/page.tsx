@@ -84,20 +84,56 @@ interface NavItem {
   badge?: number;
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { id: "dashboard", label: "หน้าแรก", icon: "📊" },
-  { id: "chat", label: "แชททีม", icon: "💬" },
-  { id: "task", label: "งานและโปรเจกต์", icon: "📋" },
-  { id: "meetings", label: "การประชุม", icon: "📹" },
-  { id: "carbooking", label: "รถยนต์สำนักงาน", icon: "🚗" },
-  { id: "circular", label: "เวียนหนังสือราชการ", icon: "📜" },
-  { id: "files", label: "คลังเอกสาร NAS", icon: "📁" },
-  { id: "gallery", label: "คลังภาพและสื่อ", icon: "📸" },
-  { id: "reports", label: "รายงานและสถิติ", icon: "📈" },
-  { id: "admin", label: "ระบบจัดการ & RBAC", icon: "⚙️" },
-  { id: "user", label: "ข้อมูลส่วนตัว", icon: "👤" },
+export interface NavGroup {
+  id: string;
+  title: string;
+  icon?: string;
+  items: NavItem[];
+}
+
+export const NAV_GROUPS: NavGroup[] = [
+  {
+    id: "overview",
+    title: "ภาพรวมสำนักงาน",
+    icon: "🏛️",
+    items: [
+      { id: "dashboard", label: "หน้าแรก", icon: "📊" },
+      { id: "reports", label: "รายงานและสถิติ", icon: "📈" },
+    ],
+  },
+  {
+    id: "collaboration",
+    title: "การประสานงาน & สื่อสาร",
+    icon: "💬",
+    items: [
+      { id: "chat", label: "แชททีม", icon: "💬" },
+      { id: "task", label: "งานและโปรเจกต์", icon: "📋" },
+      { id: "meetings", label: "การประชุม", icon: "📹" },
+    ],
+  },
+  {
+    id: "operations",
+    title: "สารบรรณ & บริการองค์กร",
+    icon: "📑",
+    items: [
+      { id: "circular", label: "เวียนหนังสือราชการ", icon: "📜" },
+      { id: "carbooking", label: "รถยนต์สำนักงาน", icon: "🚗" },
+      { id: "files", label: "คลังเอกสาร NAS", icon: "📁" },
+      { id: "gallery", label: "คลังภาพและสื่อ", icon: "📸" },
+    ],
+  },
+  {
+    id: "settings",
+    title: "ระบบและการตั้งค่า",
+    icon: "⚙️",
+    items: [
+      { id: "admin", label: "ระบบจัดการ & RBAC", icon: "⚙️" },
+      { id: "user", label: "ข้อมูลส่วนตัว", icon: "👤" },
+    ],
+  },
 ];
 
+const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((g) => g.items);
 
 export default function SmartMSOApp() {
   // ─── AUTH & SESSION STATE ───
@@ -109,6 +145,11 @@ export default function SmartMSOApp() {
 
   const [currentPage, setCurrentPage] = useState<ModuleId>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // ─── COLLAPSIBLE SIDEBAR & GROUP ACCORDION STATE ───
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+
   const [searchQuery, setSearchQuery] = useState("");
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -248,6 +289,16 @@ export default function SmartMSOApp() {
       const cachedRequests = getLocalAccessRequests();
       if (cachedRequests && cachedRequests.length > 0) {
         setAccessRequests(cachedRequests);
+      }
+
+      // Load saved sidebar collapse preferences
+      const storedSidebar = localStorage.getItem("smartmso_sidebar_collapsed");
+      if (storedSidebar === "true") setIsSidebarCollapsed(true);
+      const storedGroups = localStorage.getItem("smartmso_collapsed_groups");
+      if (storedGroups) {
+        try {
+          setCollapsedGroups(JSON.parse(storedGroups));
+        } catch {}
       }
     } catch (e) {
       console.error("Failed to load saved session:", e);
@@ -1491,144 +1542,279 @@ export default function SmartMSOApp() {
     );
   }
 
-  // Render navigation links with RBAC badge/lock and System status
-  const renderNavLinks = (isMobile: boolean = false) => (
-    <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-      <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 flex items-center justify-between">
-        <span>โมดูลการทำงาน</span>
-        <span className="text-[10px] lowercase text-indigo-400 font-mono">rbac active</span>
-      </div>
-      {NAV_ITEMS.map((item) => {
-        const isActive = currentPage === item.id;
-        const permitted = canAccess(item.id);
-        const sysModule = systemModules[item.id];
-        const isModuleOpen = sysModule?.enabled !== false;
+  const toggleSidebarCollapse = () => {
+    setIsSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("smartmso_sidebar_collapsed", String(next));
+      } catch {}
+      return next;
+    });
+  };
 
-        return (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => {
-              setCurrentPage(item.id);
-              if (isMobile) setSidebarOpen(false);
-              if (!permitted) {
-                addAuditLog(
-                  `${currentUser.name} (${ROLE_CONFIG[currentUserRole].label})`,
-                  `พยายามเข้าถึงโมดูล ${sysModule?.name || MODULE_NAMES[item.id].name} (ถูกปฏิเสธสิทธิ์ RBAC)`,
-                  "Access Control",
-                  "denied"
-                );
-              } else if (!isModuleOpen && currentUserRole !== "admin") {
-                addAuditLog(
-                  `${currentUser.name} (${ROLE_CONFIG[currentUserRole].label})`,
-                  `พยายามเข้าถึงโมดูล ${sysModule?.name || item.label} (โมดูลปิดปรับปรุงชั่วคราว)`,
-                  "Maintenance Control",
-                  "denied"
-                );
-              }
-            }}
-            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all group ${
-              isActive
-                ? "bg-gradient-to-r from-[#4F46E5] to-[#6366F1] text-white shadow-md shadow-indigo-500/25 font-semibold"
-                : !permitted
-                ? "text-slate-500 hover:bg-slate-800/40 opacity-70"
-                : !isModuleOpen
-                ? "text-amber-300/80 hover:bg-slate-800/60"
-                : "text-slate-300 hover:bg-slate-800 hover:text-white"
-            }`}
+  const toggleGroupCollapse = (groupId: string) => {
+    setCollapsedGroups((prev) => {
+      const next = { ...prev, [groupId]: !prev[groupId] };
+      try {
+        localStorage.setItem("smartmso_collapsed_groups", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  // Render navigation links with Groups, Collapsible Sections, RBAC badge/lock and System status
+  const renderNavLinks = (isMobile: boolean = false) => {
+    const isCollapsed = !isMobile && isSidebarCollapsed;
+
+    return (
+      <nav className="flex-1 px-2.5 py-3 space-y-3 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-slate-800">
+        {!isCollapsed && (
+          <div className="px-2.5 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
+            <span>เมนูระบบราชการ</span>
+            <span className="text-[9px] lowercase text-indigo-400 font-mono bg-indigo-950/60 px-1.5 py-0.2 rounded border border-indigo-800/40">
+              rbac active
+            </span>
+          </div>
+        )}
+
+        {NAV_GROUPS.map((group, groupIdx) => {
+          const isGroupCollapsed = !isCollapsed && Boolean(collapsedGroups[group.id]);
+
+          return (
+            <div key={group.id} className="space-y-1">
+              {/* Group Header */}
+              {!isCollapsed ? (
+                <button
+                  type="button"
+                  onClick={() => toggleGroupCollapse(group.id)}
+                  className="w-full px-2.5 py-1 flex items-center justify-between text-[11px] font-bold text-slate-400 hover:text-slate-200 transition-colors group/header cursor-pointer select-none rounded-lg hover:bg-slate-800/40"
+                  title={isGroupCollapsed ? `คลิกเพื่อขยายกลุ่ม ${group.title}` : `คลิกเพื่อยุบกลุ่ม ${group.title}`}
+                >
+                  <span className="truncate flex items-center gap-1.5">
+                    {group.icon && <span className="text-xs opacity-75">{group.icon}</span>}
+                    <span>{group.title}</span>
+                  </span>
+                  <span className="text-[10px] text-slate-500 group-hover/header:text-slate-300 transition-transform">
+                    {isGroupCollapsed ? "▸" : "▾"}
+                  </span>
+                </button>
+              ) : (
+                groupIdx > 0 && <hr className="border-slate-800/80 my-2" />
+              )}
+
+              {/* Group Items */}
+              {(!isGroupCollapsed || isCollapsed) && (
+                <div className="space-y-1">
+                  {group.items.map((item) => {
+                    const isActive = currentPage === item.id;
+                    const permitted = canAccess(item.id);
+                    const sysModule = systemModules[item.id];
+                    const isModuleOpen = sysModule?.enabled !== false;
+                    const badgeCount = isHydrated ? navBadges[item.id] || 0 : 0;
+                    const moduleTitle = sysModule?.name ? sysModule.name.split(" (")[0] : item.label;
+
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          setCurrentPage(item.id);
+                          if (isMobile) setSidebarOpen(false);
+                          if (!permitted) {
+                            addAuditLog(
+                              `${currentUser.name} (${ROLE_CONFIG[currentUserRole].label})`,
+                              `พยายามเข้าถึงโมดูล ${sysModule?.name || MODULE_NAMES[item.id].name} (ถูกปฏิเสธสิทธิ์ RBAC)`,
+                              "Access Control",
+                              "denied"
+                            );
+                          } else if (!isModuleOpen && currentUserRole !== "admin") {
+                            addAuditLog(
+                              `${currentUser.name} (${ROLE_CONFIG[currentUserRole].label})`,
+                              `พยายามเข้าถึงโมดูล ${sysModule?.name || item.label} (โมดูลปิดปรับปรุงชั่วคราว)`,
+                              "Maintenance Control",
+                              "denied"
+                            );
+                          }
+                        }}
+                        title={`${moduleTitle}${!permitted ? " (ไม่มีสิทธิ์เข้าถึง)" : ""}${!isModuleOpen ? " (ปิดปรับปรุง)" : ""}`}
+                        className={`w-full flex items-center rounded-xl text-sm font-medium transition-all group relative cursor-pointer ${
+                          isCollapsed
+                            ? "justify-center p-2.5 mx-auto"
+                            : "justify-between px-3 py-2"
+                        } ${
+                          isActive
+                            ? "bg-gradient-to-r from-[#4F46E5] to-[#6366F1] text-white shadow-md shadow-indigo-500/25 font-semibold"
+                            : !permitted
+                            ? "text-slate-500 hover:bg-slate-800/40 opacity-70"
+                            : !isModuleOpen
+                            ? "text-amber-300/80 hover:bg-slate-800/60"
+                            : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                        }`}
+                      >
+                        <div className={`flex items-center ${isCollapsed ? "justify-center" : "space-x-2.5 min-w-0"}`}>
+                          <span
+                            className={`shrink-0 transition-transform ${
+                              isCollapsed ? "text-xl" : "text-base"
+                            } ${isActive ? "scale-110" : "group-hover:scale-105"}`}
+                          >
+                            {sysModule?.icon || item.icon}
+                          </span>
+                          <span className={isCollapsed ? "sr-only" : "truncate text-xs sm:text-[13px]"}>
+                            {moduleTitle}
+                          </span>
+                        </div>
+
+                        {/* Badges and Indicators */}
+                        {!isCollapsed ? (
+                          <div className="flex items-center gap-1.5 shrink-0 ml-1">
+                            {!isModuleOpen ? (
+                              <span
+                                className="px-1.5 py-0.5 text-[9px] font-bold rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                                title="โมดูลนี้ปิดปรับปรุงชั่วคราวโดยผู้ดูแลระบบ"
+                              >
+                                ปิดปรับปรุง
+                              </span>
+                            ) : null}
+
+                            {!permitted ? (
+                              <span className="text-xs text-amber-400" title="ไม่มีสิทธิ์เข้าถึงตามบทบาทปัจจุบัน">
+                                🔒
+                              </span>
+                            ) : badgeCount > 0 && !isActive && isModuleOpen ? (
+                              <span
+                                className={`px-1.5 py-0.2 text-[10px] font-bold rounded-full ${
+                                  item.id === "admin" || item.id === "carbooking"
+                                    ? "bg-amber-500 text-white shadow-xs animate-pulse"
+                                    : "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
+                                }`}
+                                title={`${item.label}: ${badgeCount} รายการ`}
+                              >
+                                {badgeCount}
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : (
+                          // Collapsed miniature badge indicator
+                          badgeCount > 0 && !isActive && isModuleOpen && (
+                            <span
+                              className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-500 border border-[#0F172A] animate-pulse"
+                              title={`${item.label}: ${badgeCount} รายการ`}
+                            />
+                          )
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </nav>
+    );
+  };
+
+  const renderUserProfile = (isMobile: boolean = false) => {
+    const isCollapsed = !isMobile && isSidebarCollapsed;
+
+    if (isCollapsed) {
+      return (
+        <div className="p-2 border-t border-slate-800 bg-[#0B0F19] flex flex-col items-center gap-2">
+          <div
+            className="relative cursor-pointer hover:scale-105 transition-transform"
+            onClick={() => setCurrentPage("user")}
+            title={`${currentUser.name} (${ROLE_CONFIG[currentUserRole].label})`}
           >
-            <div className="flex items-center space-x-3 truncate">
-              <span className={`text-lg shrink-0 transition-transform ${isActive ? "scale-110" : "group-hover:scale-105"}`}>
-                {sysModule?.icon || item.icon}
-              </span>
-              <span className="truncate">{sysModule?.name ? sysModule.name.split(" (")[0] : item.label}</span>
-            </div>
+            {currentUser.avatarUrl ? (
+              <img
+                src={currentUser.avatarUrl}
+                alt={currentUser.name}
+                className="w-10 h-10 rounded-xl object-cover shadow-sm border border-slate-700"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-400 text-white flex items-center justify-center font-bold text-sm shadow-sm">
+                {currentUser.avatarText}
+              </div>
+            )}
+            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-[#0B0F19] rounded-full" />
+          </div>
 
-            <div className="flex items-center gap-1.5 shrink-0">
-              {!isModuleOpen ? (
-                <span
-                  className="px-1.5 py-0.5 text-[9px] font-bold rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                  title="โมดูลนี้ปิดปรับปรุงชั่วคราวโดยผู้ดูแลระบบ"
-                >
-                  ปิดปรับปรุง
-                </span>
-              ) : null}
-
-              {!permitted ? (
-                <span className="text-xs text-amber-400" title="ไม่มีสิทธิ์เข้าถึงตามบทบาทปัจจุบัน">
-                  🔒
-                </span>
-              ) : isHydrated && navBadges[item.id] > 0 && !isActive && isModuleOpen ? (
-                <span
-                  className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${
-                    item.id === "admin" || item.id === "carbooking"
-                      ? "bg-amber-500 text-white shadow-xs animate-pulse"
-                      : "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
-                  }`}
-                  title={`${item.label}: ${navBadges[item.id]} รายการ`}
-                >
-                  {navBadges[item.id]}
-                </span>
-              ) : null}
-            </div>
+          <button
+            type="button"
+            onClick={handleInitiateLogout}
+            className="w-9 h-9 rounded-xl flex items-center justify-center text-rose-400 hover:text-white hover:bg-rose-500/20 transition-all cursor-pointer"
+            title="ออกจากระบบ"
+          >
+            <svg
+              className="w-4 h-4 stroke-[2]"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"
+              />
+            </svg>
           </button>
-        );
-      })}
-    </nav>
-  );
-
-  const renderUserProfile = () => (
-    <div className="p-3.5 border-t border-slate-800 bg-[#0B0F19] space-y-2">
-      <div
-        className="flex items-center space-x-3 p-2 rounded-xl bg-slate-800/40 hover:bg-slate-800 transition-colors cursor-pointer"
-        onClick={() => setCurrentPage("user")}
-      >
-        <div className="relative shrink-0">
-          {currentUser.avatarUrl ? (
-            <img
-              src={currentUser.avatarUrl}
-              alt={currentUser.name}
-              className="w-10 h-10 rounded-xl object-cover shadow-sm border border-slate-700"
-            />
-          ) : (
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-400 text-white flex items-center justify-center font-bold text-sm shadow-sm">
-              {currentUser.avatarText}
-            </div>
-          )}
-          <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-[#0B0F19] rounded-full" />
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold text-white truncate font-heading">
-            {currentUser.name}
-          </div>
-          <div className="text-xs text-indigo-400 truncate flex items-center gap-1">
-            <span>{ROLE_CONFIG[currentUserRole].icon} {ROLE_CONFIG[currentUserRole].label.split(" ")[0]}</span>
-          </div>
-        </div>
-      </div>
+      );
+    }
 
-      {/* Quick Logout Button in Sidebar */}
-      <button
-        type="button"
-        onClick={handleInitiateLogout}
-        className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold text-rose-300 hover:text-white hover:bg-rose-500/15 border border-rose-500/25 transition-all cursor-pointer group shadow-xs"
-      >
-        <svg
-          className="w-4 h-4 text-rose-400 group-hover:text-rose-200 transition-colors stroke-[2]"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
+    return (
+      <div className="p-3.5 border-t border-slate-800 bg-[#0B0F19] space-y-2">
+        <div
+          className="flex items-center space-x-3 p-2 rounded-xl bg-slate-800/40 hover:bg-slate-800 transition-colors cursor-pointer"
+          onClick={() => setCurrentPage("user")}
         >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"
-          />
-        </svg>
-        <span>ออกจากระบบ</span>
-      </button>
-    </div>
-  );
+          <div className="relative shrink-0">
+            {currentUser.avatarUrl ? (
+              <img
+                src={currentUser.avatarUrl}
+                alt={currentUser.name}
+                className="w-10 h-10 rounded-xl object-cover shadow-sm border border-slate-700"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-400 text-white flex items-center justify-center font-bold text-sm shadow-sm">
+                {currentUser.avatarText}
+              </div>
+            )}
+            <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-[#0B0F19] rounded-full" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold text-white truncate font-heading">
+              {currentUser.name}
+            </div>
+            <div className="text-xs text-indigo-400 truncate flex items-center gap-1">
+              <span>{ROLE_CONFIG[currentUserRole].icon} {ROLE_CONFIG[currentUserRole].label.split(" ")[0]}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Logout Button in Sidebar */}
+        <button
+          type="button"
+          onClick={handleInitiateLogout}
+          className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold text-rose-300 hover:text-white hover:bg-rose-500/15 border border-rose-500/25 transition-all cursor-pointer group shadow-xs"
+        >
+          <svg
+            className="w-4 h-4 text-rose-400 group-hover:text-rose-200 transition-colors stroke-[2]"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"
+            />
+          </svg>
+          <span>ออกจากระบบ</span>
+        </button>
+      </div>
+    );
+  };
 
   // 403 Forbidden Screen component
   const renderAccessDenied = (moduleId: ModuleId) => (
@@ -1750,29 +1936,62 @@ export default function SmartMSOApp() {
       )}
 
       {/* ─── DESKTOP SIDEBAR ─── */}
-      <aside className="hidden md:flex w-64 shrink-0 bg-[#0F172A] text-slate-300 flex-col h-screen border-r border-slate-800/80 select-none shadow-xl z-20">
-        {/* Brand */}
-        <div className="flex items-center justify-between h-16 px-5 border-b border-slate-800 shrink-0">
-          <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#4F46E5] to-[#818CF8] flex items-center justify-center text-white font-black text-lg shadow-md shadow-indigo-500/30">
-              MSO
+      <aside
+        className={`hidden md:flex shrink-0 bg-[#0F172A] text-slate-300 flex-col h-screen border-r border-slate-800/80 select-none shadow-xl z-20 transition-all duration-300 ease-in-out ${
+          isSidebarCollapsed ? "w-20" : "w-64"
+        }`}
+      >
+        {/* Brand & Collapse Button */}
+        <div className="flex items-center justify-between h-16 px-4 border-b border-slate-800 shrink-0">
+          {!isSidebarCollapsed ? (
+            <>
+              <div className="flex items-center space-x-3 overflow-hidden">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#4F46E5] to-[#818CF8] flex items-center justify-center text-white font-black text-lg shadow-md shadow-indigo-500/30 shrink-0">
+                  MSO
+                </div>
+                <div className="truncate">
+                  <span className="text-lg font-bold text-white font-heading tracking-tight block leading-tight truncate">
+                    Smart MSO
+                  </span>
+                  <span className="text-[10px] text-indigo-400 font-medium tracking-wide block truncate">
+                    RBAC WORKSPACE
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={toggleSidebarCollapse}
+                className="w-7 h-7 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center text-xs transition-colors cursor-pointer shrink-0 ml-1"
+                title="ยุบแถบเมนู (Collapse Sidebar)"
+                aria-label="Collapse Sidebar"
+              >
+                ◀
+              </button>
+            </>
+          ) : (
+            <div className="w-full flex items-center justify-center">
+              <button
+                type="button"
+                onClick={toggleSidebarCollapse}
+                className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#4F46E5] to-[#818CF8] flex items-center justify-center text-white font-black text-sm shadow-md shadow-indigo-500/30 hover:scale-105 transition-transform cursor-pointer relative group"
+                title="ขยายแถบเมนู (Expand Sidebar)"
+                aria-label="Expand Sidebar"
+              >
+                <span>MSO</span>
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-slate-800 text-indigo-300 border border-slate-600 text-[9px] flex items-center justify-center">
+                  ▶
+                </span>
+              </button>
             </div>
-            <div>
-              <span className="text-lg font-bold text-white font-heading tracking-tight block leading-tight">
-                Smart MSO
-              </span>
-              <span className="text-[10px] text-indigo-400 font-medium tracking-wide">
-                RBAC WORKSPACE
-              </span>
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Navigation */}
         {renderNavLinks(false)}
 
         {/* User Footer with Quick Logout */}
-        {renderUserProfile()}
+        {renderUserProfile(false)}
       </aside>
 
       {/* ─── MOBILE DRAWER ─── */}
@@ -1799,7 +2018,7 @@ export default function SmartMSOApp() {
               </button>
             </div>
             {renderNavLinks(true)}
-            {renderUserProfile()}
+            {renderUserProfile(true)}
           </aside>
         </div>
       )}

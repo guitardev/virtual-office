@@ -1884,6 +1884,63 @@ on conflict (id) do update set
 - ทดสอบการทำงานด้วย Playwright Test: [tests/circular-workflow.spec.ts](file:///c:/Users/GuitarDev/virtual-office/tests/circular-workflow.spec.ts) ผ่านครบ **10/10 Tests (100% Passed)**
 - ข้อผิดพลาด `QuotaExceededError` หายไปโดยสิ้นเชิง ไม่มีการส่ง Warning ใน Console อีกต่อไป
 
+---
+
+## 39. ปรับสถาปัตยกรรมแถบเมนูข้างตามกลุ่มงานราชการ และระบบย่อ/ขยายอัจฉริยะ (Grouped Collapsible Sidebar & Accordion Navigation) (วันที่ 20 ตุลาคม 2569)
+
+### 39.1 วัตถุประสงค์และความต้องการ (User Requirements & Objectives)
+เนื่องจากระบบ Smart MSO Virtual Office มีการพัฒนาโมดูลการทำงานราชการเพิ่มขึ้นเป็น 11 โมดูล การจัดวางเมนูแบบรายการยาวตอนเดียว (Flat List) ส่งผลให้:
+1. การค้นหาและเข้าถึงโมดูลสำคัญทำได้ช้า โดยเฉพาะบนหน้าจอคอมพิวเตอร์และแล็ปท็อปขนาดกลาง
+2. ขาดการจัดหมวดหมู่งานที่เป็นสัดส่วนตามลักษณะการปฏิบัติราชการ
+3. ผู้ใช้งานต้องการขยายพื้นที่แสดงผลส่วนกลาง (Main Content Area) ให้กว้างขึ้นสำหรับงานตารางไทม์ไลน์ งานเอกสารราชการ และห้องแชท
+
+จึงได้ดำเนินการปรับโครงสร้าง Sidebar ให้แบ่งเป็น **กลุ่มเมนูงานราชการ (Menu Groups)** และเพิ่ม **ระบบย่อ/ขยายเมนู (Dual Collapsible System)**:
+- **Accordion Groups:** ยุบ/ย่อหมวดหมู่ที่ไม่จำเป็นลงเพื่อดูเฉพาะกลุ่มงานที่ต้องการ
+- **Mini Sidebar (Icon-Only Mode):** ย่อความกว้างแถบเมนูทั้งหมดจาก `w-64` (256px) เหลือ `w-20` (80px) แสดงเฉพาะไอคอนพร้อม Tooltip และป้ายแจ้งเตือน
+
+### 39.2 สถาปัตยกรรมและรายละเอียดการพัฒนา (Implementation Details)
+
+1. **โครงสร้างกลุ่มเมนูงานราชการ 4 กลุ่มหลัก ([app/page.tsx](file:///c:/Users/GuitarDev/virtual-office/app/page.tsx)):**
+   - **`overview` ("ภาพรวมสำนักงาน" 🏢):**
+     - `dashboard` (หน้าแรกสำนักงาน)
+     - `reports` (รายงานและสถิติภาพรวม)
+   - **`collaboration` ("การประสานงาน & สื่อสาร" 💬):**
+     - `chat` (แชททีมและการสื่อสารภายใน)
+     - `task` (งานและโปรเจกต์กลุ่มงาน)
+     - `meetings` (การประชุมและตารางนัดหมาย)
+   - **`operations` ("สารบรรณ & บริการองค์กร" 🏛️):**
+     - `circular` (เวียนหนังสือราชการและลงนามดิจิทัล)
+     - `carbooking` (ยานพาหนะและการเดินทางราชการ)
+     - `files` (คลังเอกสารและแฟ้มราชการ NAS DMS)
+     - `gallery` (คลังภาพกิจกรรมและสื่อราชการ NAS Photos)
+   - **`settings` ("ระบบและการตั้งค่า" ⚙️):**
+     - `admin` (ระบบจัดการสิทธิ์และผู้ใช้ RBAC)
+     - `user` (ข้อมูลส่วนตัวและเซสชัน)
+
+2. **ระบบควบคุมสถานะการย่อ/ขยาย (Collapsible State & Handlers):**
+   - `isSidebarCollapsed: boolean`: สถานะย่อแถบเมนูทั้งหมดเป็นโหมดไอคอนกะทัดรัด (Mini Sidebar)
+   - `collapsedGroups: string[]`: อาร์เรย์เก็บรหัสกลุ่มเมนูที่ผู้ใช้คลิกย่อ Accordion
+   - ฟังก์ชัน `toggleSidebarCollapse()` และ `toggleGroupCollapse(groupId)` พร้อมบันทึกลง `localStorage` (`smartmso_sidebar_collapsed` และ `smartmso_collapsed_groups`) เพื่อคงสถานะเดิมไว้เสมอเมื่อรีเฟรชหน้าจอ
+
+3. **การออกแบบส่วนติดต่อผู้ใช้ที่ยืดหยุ่นและเป็นมิตร (Responsive UX/UI):**
+   - **Full Mode (`w-64`):** แสดงหัวกลุ่มเมนูพร้อมไอคอน, ชื่อกลุ่ม, และลูกศร Accordion (`▾`/`▸`), ปุ่มเมนูแสดงไอคอนพร้อมชื่อภาษาไทย, ป้ายสถานะ (`ปิดปรับปรุง`, `🔒 ล็อคสิทธิ์`), ป้ายตัวเลขนับ (Badge Counter)
+   - **Mini Mode (`w-20`):** ซ่อนข้อความชื่อกลุ่มและขอบหัวข้อ เหลือเพียงปุ่มไอคอนขนาดพอดี จัดกึ่งกลาง มี Tooltip ระบุชื่อและสถานะชัดเจน พร้อมป้ายแจ้งเตือนสีแดง/ส้มที่มุมไอคอน
+   - **User Profile Area:** แสดงการ์ดผู้ใช้และปุ่มออกจากระบบขนาดเต็มเมื่อขยาย และเปลี่ยนเป็นอวาตาร์กลมจัดกึ่งกลางพร้อมจุดเขียวออนไลน์และปุ่ม Logout กะทัดรัดเมื่อย่อ
+   - **Mobile Drawer:** แสดงโหมดเต็มกว้างและรายการขยายครบทุกกลุ่ม เพื่อความสะดวกในการแตะสัมผัสบนสมาร์ตโฟน
+
+4. **การรองรับ Playwright Automated Testing และ Accessibility (A11y):**
+   - เพิ่มคลาส `sr-only` ให้กับชื่อโมดูลเมื่ออยู่ในสถานะย่อ Mini Sidebar ทำให้ชุดทดสอบ Playwright ที่ค้นหาด้วย `button:has-text('...')` ยังคงตรวจจับและทำงานได้ถูกต้อง 100% โดยไม่เกิด Regression Break
+
+### 39.3 ผลการทดสอบและการตรวจสอบคุณภาพ (Verification Results)
+1. **TypeScript Type Safety:** รัน `npx tsc --noEmit` ผ่านสมบูรณ์ `0 errors`
+2. **Dedicated Playwright Suite ([tests/sidebar-grouped-navigation.spec.ts](file:///c:/Users/GuitarDev/virtual-office/tests/sidebar-grouped-navigation.spec.ts)):**
+   - ทดสอบการแสดงผลกลุ่มเมนูครบทั้ง 4 กลุ่ม
+   - ทดสอบการคลิกยุบ/ขยาย Accordion แต่ละกลุ่ม
+   - ทดสอบการคลิกปุ่มย่อ Mini Sidebar และขยายกลับ
+   - ทดสอบการบันทึกสถานะลง `localStorage`
+   - **ผลการทดสอบ: ผ่าน 100% ทุกกรณีทดสอบ**
+
+
 
 
 
