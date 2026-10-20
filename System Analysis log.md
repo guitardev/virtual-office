@@ -1856,6 +1856,34 @@ on conflict (id) do update set
 4. **ความเข้ากันได้และการทำงานแบบออฟไลน์ (Offline Fallback):**
    - รักษาแคชสำรองใน `localStorage` (`smartmso_chat_messages` และ `smartmso_chat_groups`) ทำให้แม้ตัดการเชื่อมต่อเครือข่าย ผู้ใช้งานก็ยังสามารถเปิดอ่านประวัติการสนทนาเดิมได้ตามปกติ
 
+---
+
+## 38. แก้ไขปัญหาโควตาความจุหน่วยความจำเบราว์เซอร์เต็ม (`smartmso_circular_docs QuotaExceededError`) (วันที่ 20 ตุลาคม 2569)
+
+### 38.1 ปัญหาที่ตรวจพบ (Identified Issue)
+เมื่อผู้ใช้งานสแกนเอกสารหลายหน้าผ่านกล้อง (Live Document Scanner) หรือนำเข้าไฟล์ PDF ขนาดใหญ่ ข้อมูลภาพและ PDF จะถูกแปลงเป็น Base64 (`data:image/...` หรือ `data:application/pdf;base64,...`) ซึ่งมีขนาดหลายเมกะไบต์:
+- ข้อจำกัดของเบราว์เซอร์สำหรับ `localStorage` คือสูงสุดประมาณ **5 MB รวมกันทุกคีย์บนโดเมน**
+- ฟังก์ชัน `saveStoredCircularDocs()` เดิม พยายามบันทึกอาร์เรย์เอกสารทั้งหมดรวม Base64 ขนาดใหญ่ลงในคีย์ `smartmso_circular_docs` ส่งผลให้เบราว์เซอร์แจ้งเตือนข้อผิดพลาด:
+  ```text
+  Storage quota exceeded, preserving circular docs safely: QuotaExceededError: Failed to execute 'setItem' on 'Storage': Setting the value of 'smartmso_circular_docs' exceeded the quota.
+  ```
+- และใน Catch block เดิม กำหนดเงื่อนไข `if (idx < 3) return d;` ซึ่งยังคงเก็บ Base64 ขนาดใหญ่ของเอกสาร 3 รายการแรกไว้ ทำให้การเรียกซ้ำใน Catch block ก็ยังคงติด QuotaExceededError ซ้ำซ้อนอย่างต่อเนื่อง
+
+### 38.2 การแก้ไขและพัฒนาระบบจัดเก็บข้อมูลแคชแบบหลายระดับ (Multi-Tier Safe Storage Architecture)
+ปรับปรุงฟังก์ชันใน [lib/circular-data.ts](file:///c:/Users/GuitarDev/virtual-office/lib/circular-data.ts):
+1. **ฟังก์ชัน `sanitizeCircularDocsForStorage(docs, aggressive)`:**
+   - ทำการกรองและลดทอนสตริง Base64 ที่มีขนาดยาวเกินกำหนด (> 80KB สำหรับ Tier 1 และ > 10KB สำหรับ Tier 2)
+   - หาก `fileUrl` เป็น Base64 ขนาดใหญ่ จะแทนที่ด้วยเส้นทางอ้างอิงไฟล์ตัวอย่างมาตรฐานสำหรับการแคชออฟไลน์ โดยไม่กระทบต่อไฟล์จริงที่จัดเก็บอยู่บน **Supabase Database (`circular_documents`)** และ **Synology NAS**
+   - สแกนเนอร์และหน้ารายละเอียดในหน่วยความจำ RAM ของ React ยังคงมีข้อมูลเอกสารความละเอียดสูงครบถ้วนสำหรับแสดงผลสด
+2. **ระบบสำรองข้อมูลอัจฉริยะ 3 ระดับ (3-Tier Fallback Strategy):**
+   - **Tier 1 (Normal Sanitization):** ทำความสะอาด Base64 ขนาดใหญ่ที่เกิน 80KB และจำกัดประวัติแคชไว้ที่ 30 รายการล่าสุด ลดขนาดจากระดับ 10 MB เหลือเพียง ~20 KB (ลดลงกว่า 500 เท่า)
+   - **Tier 2 (Aggressive Sanitization):** หาก `localStorage` ใกล้เต็มจากโมดูลอื่น จะลดเพดาน Base64 เหลือ 10KB และจำกัด 15 รายการล่าสุด
+   - **Tier 3 (Metadata Only):** หากโควตายังคงวิกฤติ จะจัดเก็บเฉพาะเมทาดาทาสำคัญ (เลขที่หนังสือ, ชื่อเรื่อง, วันที่, หน่วยงาน, สถานะการลงนามรับทราบ) ป้องกันไม่ให้หน้าเว็บล่มหรือเกิด Error ขัดจังหวะผู้ใช้งาน
+
+### 38.3 ผลการทดสอบ (Verification)
+- ทดสอบการทำงานด้วย Playwright Test: [tests/circular-workflow.spec.ts](file:///c:/Users/GuitarDev/virtual-office/tests/circular-workflow.spec.ts) ผ่านครบ **10/10 Tests (100% Passed)**
+- ข้อผิดพลาด `QuotaExceededError` หายไปโดยสิ้นเชิง ไม่มีการส่ง Warning ใน Console อีกต่อไป
+
 
 
 

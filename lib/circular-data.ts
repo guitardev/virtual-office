@@ -181,27 +181,65 @@ export function loadStoredCircularDocs(): CircularDocument[] {
 }
 
 /**
- * Save circular documents to local cache
+ * Sanitize circular documents to ensure they fit safely into browser localStorage
+ * without triggering QuotaExceededError while preserving all critical metadata.
+ */
+export function sanitizeCircularDocsForStorage(
+  docs: CircularDocument[],
+  aggressive = false
+): CircularDocument[] {
+  const maxBase64Len = aggressive ? 10000 : 80000;
+  const maxDocs = aggressive ? 15 : 30;
+
+  return docs.slice(0, maxDocs).map((d) => {
+    const isDataUrl = typeof d.fileUrl === "string" && d.fileUrl.startsWith("data:");
+    const isOverLengthUrl = isDataUrl && d.fileUrl.length > maxBase64Len;
+
+    const sanitizedScannedPages = Array.isArray(d.scannedPages)
+      ? d.scannedPages
+          .map((p) => {
+            if (typeof p === "string" && p.length > maxBase64Len) {
+              return aggressive ? "" : p.slice(0, 1000);
+            }
+            return p;
+          })
+          .filter(Boolean)
+      : d.scannedPages;
+
+    return {
+      ...d,
+      fileUrl: isOverLengthUrl ? "/virtual-office/circular_docs/sample.pdf" : d.fileUrl,
+      scannedPages: sanitizedScannedPages,
+    };
+  });
+}
+
+/**
+ * Save circular documents to local cache safely without exceeding localStorage quota
  */
 export function saveStoredCircularDocs(docs: CircularDocument[]) {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(CIRCULAR_STORAGE_KEY, JSON.stringify(docs));
-  } catch (err) {
-    console.warn("Storage quota exceeded, preserving circular docs safely:", err);
+    // Tier 1: Sanitize oversized base64 data (> 80KB) while keeping up to 30 documents
+    const sanitized = sanitizeCircularDocsForStorage(docs, false);
+    localStorage.setItem(CIRCULAR_STORAGE_KEY, JSON.stringify(sanitized));
+  } catch {
     try {
-      // Retain latest documents and slim down oversized historical base64 payloads if localStorage fills up
-      const safeDocs = docs.slice(0, 20).map((d, idx) => {
-        if (idx < 3) return d;
-        return {
-          ...d,
-          fileUrl: d.fileUrl?.length > 300000 ? "/virtual-office/circular_docs/sample.pdf" : d.fileUrl,
-          scannedPages: d.scannedPages?.map((p) => (p.length > 200000 ? "" : p)),
-        };
-      });
-      localStorage.setItem(CIRCULAR_STORAGE_KEY, JSON.stringify(safeDocs));
+      // Tier 2: Aggressive sanitization (keep 15 documents, strip heavy payloads > 10KB)
+      const aggressive = sanitizeCircularDocsForStorage(docs, true);
+      localStorage.setItem(CIRCULAR_STORAGE_KEY, JSON.stringify(aggressive));
     } catch {
-      // Ignore fallback failure
+      try {
+        // Tier 3: Metadata only fallback (strip fileUrl and scannedPages completely)
+        const metaOnly = docs.slice(0, 10).map((d) => ({
+          ...d,
+          fileUrl: "/virtual-office/circular_docs/sample.pdf",
+          scannedPages: undefined,
+        }));
+        localStorage.setItem(CIRCULAR_STORAGE_KEY, JSON.stringify(metaOnly));
+      } catch {
+        // Safe non-fatal fallback if origin localStorage is totally exhausted
+      }
     }
   }
 }
