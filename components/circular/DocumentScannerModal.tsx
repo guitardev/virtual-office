@@ -27,6 +27,7 @@ export function DocumentScannerModal({
   const streamRef = useRef<MediaStream | null>(null);
 
   const [cameraActive, setCameraActive] = useState<boolean>(false);
+  const [stream, setStream] = useState<MediaStream | null>(null);
   const [isInitializing, setIsInitializing] = useState<boolean>(true);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [cameraErrorType, setCameraErrorType] = useState<CameraErrorType>(null);
@@ -51,11 +52,22 @@ export function DocumentScannerModal({
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
+    setStream(null);
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
     setCameraActive(false);
   }, []);
+
+  // Ensure video element plays whenever stream is attached or changes
+  useEffect(() => {
+    if (videoRef.current && stream) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.play().catch((err) => {
+        console.warn("Video play error:", err);
+      });
+    }
+  }, [stream]);
 
   // Enumerate video devices
   const updateAvailableDevices = useCallback(async () => {
@@ -116,8 +128,8 @@ export function DocumentScannerModal({
             ? { deviceId: { exact: preferredDeviceId } }
             : {
                 facingMode: { ideal: "environment" },
-                width: { ideal: 1920 },
-                height: { ideal: 1080 },
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
               };
 
           mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -133,10 +145,12 @@ export function DocumentScannerModal({
         }
 
         streamRef.current = mediaStream;
+        setStream(mediaStream);
+        setCameraActive(true);
+
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream;
-          await videoRef.current.play().catch(() => {});
-          setCameraActive(true);
+          videoRef.current.play().catch(() => {});
         }
 
         await updateAvailableDevices();
@@ -452,24 +466,34 @@ export function DocumentScannerModal({
               isDragging ? "border-indigo-400 bg-indigo-950/40 ring-4 ring-indigo-500/30" : "border-slate-800 shadow-lg"
             }`}
           >
+            {/* Always mounted video element ensures videoRef is never null on initial render */}
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              onLoadedMetadata={() => {
+                if (videoRef.current) {
+                  videoRef.current.play().catch(() => {});
+                }
+              }}
+              className={`w-full h-full object-cover ${cameraActive ? "block" : "hidden"}`}
+            />
+
             {cameraActive ? (
-              <>
-                <video
-                  ref={videoRef}
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover"
-                />
-                {/* A4 Document Overlay Guide */}
-                <div className="absolute inset-8 border-2 border-dashed border-emerald-400/80 rounded-xl pointer-events-none flex flex-col justify-between p-3">
-                  <span className="text-[10px] text-emerald-300 font-mono bg-black/60 px-2 py-0.5 rounded self-start">
-                    กรอบเอกสาร A4
+              <div className="absolute inset-8 border-2 border-dashed border-emerald-400/80 rounded-xl pointer-events-none flex flex-col justify-between p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-emerald-300 font-mono bg-black/60 px-2 py-0.5 rounded">
+                    🟢 สตรีมกล้องพร้อมทำงาน • กรอบ A4
                   </span>
-                  <span className="text-[10px] text-emerald-300 font-mono bg-black/60 px-2 py-0.5 rounded self-end">
+                  <span className="text-[10px] text-emerald-300 font-mono bg-black/60 px-2 py-0.5 rounded">
                     จัดวางเอกสารให้อยู่ในกรอบ
                   </span>
                 </div>
-              </>
+                <span className="text-[10px] text-slate-300 font-mono bg-black/60 px-2 py-0.5 rounded self-center">
+                  กดปุ่ม &ldquo;📸 ถ่ายภาพหน้านี้&rdquo; ด้านล่างเพื่อบันทึก
+                </span>
+              </div>
             ) : (
               <div className="p-6 text-center text-slate-300 space-y-4 max-w-md mx-auto">
                 {isInitializing ? (

@@ -1705,6 +1705,34 @@ on conflict (id) do update set
   - `should handle scanner camera diagnostics, allow simulated scan, and import scanned pages`
 - **ผลการรันทดสอบ 8 ข้อทั้งหมด: ผ่าน 8 / 8 ข้อ (100% Passed)**
 
+---
+
+### 33.4 การแก้ไขปัญหา "อนุญาตเปิดกล้องแล้วแต่หน้าจอไม่แสดง" (Camera Stream Video Ref Unmounting Bug Healing)
+
+1. **สาเหตุที่หน้าจอไม่แสดงภาพแม้ผู้ใช้จะกดอนุญาตกล้องแล้ว (Root Cause):**
+   - ใน JSX มีการใช้เงื่อนไข `{cameraActive ? (<video ref={videoRef} ... />) : (<div ...>...</div>)}`
+   - เมื่อคอมโพเนนต์เริ่มทำงาน ค่าเริ่มต้นของ `cameraActive` คือ `false` ส่งผลให้แท็ก `<video>` ยังไม่ได้ถูก Mount ลงใน DOM Tree
+   - เมื่อฟังก์ชัน `startCamera()` ได้รับ `MediaStream` จากเบราว์เซอร์สำเร็จ แล้วทำการตรวจสอบ `if (videoRef.current)`:
+     - ค่าของ `videoRef.current` ยังคงเป็น `null` เพราะแท็ก `<video>` ยังไม่ถูกเรนเดอร์
+     - คำสั่ง `setCameraActive(true)` และ `videoRef.current.srcObject = mediaStream` ซึ่งอยู่ภายในบล็อก `if (videoRef.current)` จึงไม่ถูกเรียกใช้งานเลย
+     - ระบบจึงค้างอยู่ที่สถานะ `cameraActive = false` แม้เบราว์เซอร์จะเปิดกล้องสำเร็จแล้วก็ตาม
+2. **วิธีแก้ไขถาวร (Permanent Resolution):**
+   - ปรับปรุงให้แท็ก `<video>` ถูก Mount อยู่ใน DOM เสมอ (Permanent Mounting):
+     ```tsx
+     <video
+       ref={videoRef}
+       autoPlay
+       playsInline
+       muted
+       onLoadedMetadata={() => videoRef.current?.play().catch(() => {})}
+       className={`w-full h-full object-cover ${cameraActive ? "block" : "hidden"}`}
+     />
+     ```
+   - เพิ่ม `useEffect` คอยตรวจจับการเปลี่ยนแปลงของ `stream` เมื่อกล้องเชื่อมต่อได้ จะส่งผ่าน `srcObject = stream` และสั่ง `play()` ทันที
+   - อัปเดต `setCameraActive(true)` ทันทีที่ `getUserMedia` ส่งคืน Stream โดยไม่ต้องรอการผูก Element ล่วงหน้า
+   - ปรับความละเอียดเริ่มต้นให้ยืดหยุ่น (`width: 1280, height: 720`) เพื่อให้เข้ากันได้กับเว็บแคมโน้ตบุ๊กและมือถือทุกรุ่น
+
+
 
 
 
