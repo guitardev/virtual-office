@@ -58,7 +58,8 @@ export const CircularPage: React.FC<CircularPageProps> = ({
   const [scannedDocNameForNewDoc, setScannedDocNameForNewDoc] = useState<string>("");
 
   // Load documents on mount from Supabase Live with Local Storage fallback
-  const loadData = async () => {
+  const loadData = async (showLoading = true) => {
+    if (showLoading) setIsLoading(true);
     try {
       const data = await fetchCircularDocs();
       setDocuments(data);
@@ -71,9 +72,9 @@ export const CircularPage: React.FC<CircularPageProps> = ({
   };
 
   useEffect(() => {
-    loadData();
+    loadData(true);
     const unsubscribe = subscribeToCircularDocs(() => {
-      loadData();
+      loadData(false);
     });
     return () => {
       unsubscribe();
@@ -368,7 +369,15 @@ export const CircularPage: React.FC<CircularPageProps> = ({
             <span className="text-3xl">📜</span>
             <div className="flex flex-wrap items-center gap-2.5">
               <h1 className="text-2xl font-bold text-slate-800">ระบบเวียนหนังสือราชการอิเล็กทรอนิกส์</h1>
-              {isLiveConnected ? (
+              {isLoading ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
+                  <svg className="w-3 h-3 animate-spin text-indigo-600" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                  </svg>
+                  กำลังเชื่อมต่อ Database...
+                </span>
+              ) : isLiveConnected ? (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                   Database Cloud Live
@@ -387,6 +396,16 @@ export const CircularPage: React.FC<CircularPageProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => loadData(true)}
+            disabled={isLoading}
+            className="flex items-center gap-1.5 px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium text-sm transition-colors border border-slate-200 cursor-pointer disabled:opacity-50"
+            title="รีเฟรชข้อมูลล่าสุดจากฐานข้อมูล"
+          >
+            <span className={isLoading ? "animate-spin inline-block" : ""}>🔄</span>
+            <span className="hidden sm:inline">รีเฟรช</span>
+          </button>
+
           <button
             onClick={() => setViewMode("scanner")}
             className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium text-sm transition-colors border border-slate-200 cursor-pointer"
@@ -411,7 +430,11 @@ export const CircularPage: React.FC<CircularPageProps> = ({
         <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-xs font-medium text-slate-400">หนังสือเวียนทั้งหมด</p>
-            <p className="text-2xl font-bold text-slate-800 mt-1">{stats.total} <span className="text-xs text-slate-500 font-normal">ฉบับ</span></p>
+            {isLoading ? (
+              <div className="h-8 w-20 bg-slate-200/80 rounded-lg animate-pulse mt-1" />
+            ) : (
+              <p className="text-2xl font-bold text-slate-800 mt-1">{stats.total} <span className="text-xs text-slate-500 font-normal">ฉบับ</span></p>
+            )}
           </div>
           <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl">
             📑
@@ -421,7 +444,11 @@ export const CircularPage: React.FC<CircularPageProps> = ({
         <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-xs font-medium text-amber-600">รอฉันลงนามรับทราบ</p>
-            <p className="text-2xl font-bold text-amber-600 mt-1">{stats.pendingMyAck} <span className="text-xs text-amber-500 font-normal">ฉบับ</span></p>
+            {isLoading ? (
+              <div className="h-8 w-16 bg-amber-100/80 rounded-lg animate-pulse mt-1" />
+            ) : (
+              <p className="text-2xl font-bold text-amber-600 mt-1">{stats.pendingMyAck} <span className="text-xs text-amber-500 font-normal">ฉบับ</span></p>
+            )}
           </div>
           <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl">
             ✍️
@@ -431,7 +458,11 @@ export const CircularPage: React.FC<CircularPageProps> = ({
         <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-xs font-medium text-emerald-600">ฉันรับทราบแล้ว</p>
-            <p className="text-2xl font-bold text-emerald-600 mt-1">{stats.completedByMe} <span className="text-xs text-emerald-500 font-normal">ฉบับ</span></p>
+            {isLoading ? (
+              <div className="h-8 w-16 bg-emerald-100/80 rounded-lg animate-pulse mt-1" />
+            ) : (
+              <p className="text-2xl font-bold text-emerald-600 mt-1">{stats.completedByMe} <span className="text-xs text-emerald-500 font-normal">ฉบับ</span></p>
+            )}
           </div>
           <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl">
             ✅
@@ -441,7 +472,11 @@ export const CircularPage: React.FC<CircularPageProps> = ({
         <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-xs font-medium text-indigo-600">อัตราการรับทราบเฉลี่ย</p>
-            <p className="text-2xl font-bold text-indigo-600 mt-1">{stats.overallRate}%</p>
+            {isLoading ? (
+              <div className="h-8 w-16 bg-indigo-100/80 rounded-lg animate-pulse mt-1" />
+            ) : (
+              <p className="text-2xl font-bold text-indigo-600 mt-1">{stats.overallRate}%</p>
+            )}
           </div>
           <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl">
             📊
@@ -480,7 +515,7 @@ export const CircularPage: React.FC<CircularPageProps> = ({
               }`}
             >
               <span>📚</span>
-              <span>หนังสือเวียนทั้งหมด ({documents.length})</span>
+              <span>หนังสือเวียนทั้งหมด {isLoading ? "(กำลังโหลด...)" : `(${documents.length})`}</span>
             </button>
 
             <button
@@ -573,7 +608,87 @@ export const CircularPage: React.FC<CircularPageProps> = ({
       {/* ─── TAB 1 & 2: INBOX & ALL DOCUMENTS LIST ─── */}
       {activeTab !== "tracking" && (
         <div className="space-y-4">
-          {filteredDocuments.length === 0 ? (
+          {isLoading ? (
+            <div className="space-y-4">
+              {/* Premium Loading Banner */}
+              <div className="bg-indigo-50/80 border border-indigo-100 rounded-2xl p-4 flex items-center justify-between gap-4 shadow-sm">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-indigo-200">
+                    <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                    </svg>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-bold text-indigo-950">กำลังเชื่อมต่อและโหลดข้อมูลหนังสือเวียนราชการ...</h3>
+                      <span className="hidden sm:inline-flex text-[11px] px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 font-semibold animate-pulse">
+                        Cloud Database
+                      </span>
+                    </div>
+                    <p className="text-xs text-indigo-700/80 mt-0.5">
+                      ระบบกำลังดึงข้อมูลหนังสือเวียน ลำดับความเร่งด่วน และสถานะการลงนามรับทราบล่าสุดจากฐานข้อมูล
+                    </p>
+                  </div>
+                </div>
+                <div className="hidden md:flex items-center gap-1.5 text-xs text-indigo-600 font-medium shrink-0">
+                  <span className="w-2 h-2 rounded-full bg-indigo-500 animate-ping"></span>
+                  <span>กำลังดึงข้อมูล...</span>
+                </div>
+              </div>
+
+              {/* Skeletons */}
+              <div className="grid grid-cols-1 gap-4">
+                {[1, 2, 3].map((idx) => (
+                  <div
+                    key={idx}
+                    className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm animate-pulse flex flex-col md:flex-row md:items-center justify-between gap-4"
+                  >
+                    {/* Left: Skeleton Doc Info */}
+                    <div className="space-y-3 flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="h-5 w-14 bg-slate-200 rounded"></div>
+                        <div className="h-5 w-28 bg-slate-200 rounded"></div>
+                        <div className="h-4 w-24 bg-slate-100 rounded"></div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="h-5 bg-slate-200 rounded w-4/5"></div>
+                        <div className="h-3.5 bg-slate-100 rounded w-11/12"></div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-3 pt-1">
+                        <div className="h-4 w-36 bg-slate-100 rounded"></div>
+                        <div className="h-4 w-4 bg-slate-100 rounded-full"></div>
+                        <div className="h-4 w-40 bg-slate-100 rounded"></div>
+                      </div>
+                    </div>
+
+                    {/* Middle: Skeleton Progress */}
+                    <div className="md:w-56 shrink-0 bg-slate-50 p-3.5 rounded-xl border border-slate-100 space-y-2">
+                      <div className="flex justify-between items-center">
+                        <div className="h-3 w-16 bg-slate-200 rounded"></div>
+                        <div className="h-3 w-12 bg-slate-200 rounded"></div>
+                      </div>
+                      <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                        <div className="h-full bg-slate-300 rounded-full w-1/2"></div>
+                      </div>
+                      <div className="h-2.5 w-24 bg-slate-100 rounded ml-auto"></div>
+                    </div>
+
+                    {/* Right: Skeleton Actions */}
+                    <div className="flex flex-row md:flex-col items-center md:items-end justify-between gap-2.5 shrink-0">
+                      <div className="h-6 w-24 bg-slate-200 rounded-full"></div>
+                      <div className="flex items-center gap-2">
+                        <div className="h-8 w-20 bg-slate-200 rounded-lg"></div>
+                        <div className="h-8 w-20 bg-indigo-100 rounded-lg"></div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : filteredDocuments.length === 0 ? (
             <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center">
               <span className="text-5xl block mb-3">📭</span>
               <h3 className="text-base font-semibold text-slate-700">ไม่พบหนังสือเวียนตามเงื่อนไขที่เลือก</h3>
@@ -741,7 +856,50 @@ export const CircularPage: React.FC<CircularPageProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredDocuments.map((doc) => {
+                  {isLoading ? (
+                    [1, 2, 3, 4].map((idx) => (
+                      <tr key={idx} className="animate-pulse">
+                        <td className="py-3 px-4">
+                          <div className="h-4 w-24 bg-slate-200 rounded mb-1.5" />
+                          <div className="h-3 w-16 bg-slate-100 rounded" />
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="h-4 w-60 bg-slate-200 rounded mb-1.5" />
+                          <div className="h-3 w-16 bg-slate-100 rounded" />
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="h-4 w-32 bg-slate-200 rounded" />
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <div className="h-5 w-16 bg-slate-200 rounded mx-auto" />
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="w-28 mx-auto">
+                            <div className="h-3 w-14 bg-slate-200 rounded mb-1.5 mx-auto" />
+                            <div className="h-1.5 w-full bg-slate-200 rounded-full" />
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <div className="h-5 w-20 bg-slate-200 rounded-full mx-auto" />
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <div className="h-7 w-14 bg-slate-200 rounded-lg" />
+                            <div className="h-7 w-16 bg-slate-200 rounded-lg" />
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  ) : filteredDocuments.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-12 text-center text-slate-400">
+                        <span className="text-3xl block mb-2">📭</span>
+                        <p className="font-medium text-slate-600">ไม่พบหนังสือเวียนตามเงื่อนไขที่เลือก</p>
+                        <p className="text-xs text-slate-400 mt-1">ลองเปลี่ยนคำค้นหาหรือล้างตัวกรอง</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredDocuments.map((doc) => {
                     const ackCount = doc.recipients.filter((r) => r.isAcknowledged).length;
                     const totalCount = doc.recipients.length;
                     const percent = totalCount > 0 ? Math.round((ackCount / totalCount) * 100) : 100;
@@ -827,7 +985,7 @@ export const CircularPage: React.FC<CircularPageProps> = ({
                         </td>
                       </tr>
                     );
-                  })}
+                  }))}
                 </tbody>
               </table>
             </div>

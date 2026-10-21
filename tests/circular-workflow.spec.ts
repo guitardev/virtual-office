@@ -379,6 +379,58 @@ test.describe("Government Circular Document & E-Acknowledgment Workflow", () => 
     await newFormView.locator("button:has-text('ยกเลิก')").first().click();
     await expect(newFormView).not.toBeVisible();
   });
+
+  test("should display elegant loading skeleton state when fetching circular documents from database", async ({ page }) => {
+    // Intercept with delay to capture loading state
+    await page.route("**/rest/v1/circular_documents*", async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            id: "circ_delayed_001",
+            doc_number: "กพ ๐๐๓๒/ว ๙๙๙",
+            title: "หนังสือเวียนทดสอบการโหลดข้อมูล",
+            issued_date: "๒๑ ตุลาคม ๒๕๖๙",
+            sender_org: "สำนักงานปลัดกระทรวง",
+            urgency: "normal",
+            secret_level: "normal",
+            summary: "สรุปเนื้อหา",
+            created_by: "usr_2",
+            created_by_name: "นายเสกพล ดิษฐโชติ",
+            created_at: "2026-10-21T08:30:00Z",
+            target_criteria: { scope: "all" },
+            recipients: [
+              {
+                memberId: "usr_2",
+                memberName: "นายเสกพล ดิษฐโชติ",
+                division: "ฝ่ายบริหารทั่วไป",
+                personnelType: "ข้าราชการ",
+                position: "นักพัฒนาสังคมชำนาญการ",
+                isAcknowledged: false,
+              },
+            ],
+            total_count: 1,
+            acknowledged_count: 0,
+            status: "active",
+          },
+        ]),
+      });
+    });
+
+    const circularNav = page.locator("button", { hasText: "เวียนหนังสือราชการ" }).first();
+    await circularNav.click();
+
+    // Verify loading indicator and skeleton banner are visible
+    const loadingBanner = page.locator("text=กำลังเชื่อมต่อและโหลดข้อมูลหนังสือเวียนราชการ");
+    await expect(loadingBanner).toBeVisible();
+    await expect(page.locator("text=กำลังเชื่อมต่อ Database...")).toBeVisible();
+
+    // After loading completes, verify transition to rendered document
+    await expect(loadingBanner).not.toBeVisible({ timeout: 5000 });
+    await expect(page.locator("text=หนังสือเวียนทดสอบการโหลดข้อมูล")).toBeVisible();
+  });
 });
 
 
