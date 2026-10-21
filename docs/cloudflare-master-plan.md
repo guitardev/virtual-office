@@ -102,11 +102,11 @@ Cloudflare แบ่งหน้าต่างการจัดการออ
    ```
 7. ที่หัวข้อ **Modify response headers** ด้านล่าง คลิก **+ Add** เพื่อเพิ่ม 3 รายการ:
 
-   | Type | Header name | Value |
+   | เลือกประเภท (Type) | ช่อง Header name | ช่อง Value |
    | :--- | :--- | :--- |
-   | **Set static** | `Access-Control-Allow-Origin` | `*` |
-   | **Set static** | `Access-Control-Allow-Methods` | `GET, POST, PUT, DELETE, OPTIONS, HEAD` |
-   | **Set static** | `Access-Control-Allow-Headers` | `*` |
+   | **Add static header to response** | `Access-Control-Allow-Origin` | `*` |
+   | **Add static header to response** | `Access-Control-Allow-Methods` | `GET, POST, PUT, DELETE, OPTIONS, HEAD` |
+   | **Add static header to response** | `Access-Control-Allow-Headers` | `*` |
 
 8. เลื่อนลงไปล่างสุด คลิกปุ่ม **Deploy**
 
