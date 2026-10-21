@@ -38,6 +38,7 @@ import {
   createSynologyPhotoFolder,
   deleteSynologyPhotoFolder,
 } from "@/lib/synology-photos";
+import { recordAuditLog } from "@/lib/supabase";
 
 interface NasPhotoGalleryProps {
   currentUser: Member;
@@ -631,6 +632,12 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
       });
 
       if (res.success) {
+        recordAuditLog(
+          currentUser?.name || "ผู้ใช้งาน",
+          `สร้างโฟลเดอร์ใน Synology Photos: ${cleanNewFolderName}`,
+          `โฟลเดอร์แม่: ${targetParentPath} (${currentSpace === "shared" ? "Shared Space" : "Personal Space"})`,
+          "success"
+        ).catch(console.warn);
         showToast(`📁 สร้างโฟลเดอร์ "${cleanNewFolderName}" ใน Synology Photos สำเร็จ`);
         setNewFolderName("");
         setShowCreateFolderModal(false);
@@ -660,6 +667,12 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
       });
 
       if (res.success) {
+        recordAuditLog(
+          currentUser?.name || "ผู้ใช้งาน",
+          `สร้างอัลบั้มภาพใน Synology Photos: ${newAlbumName.trim()}`,
+          `จำนวนรูป: ${selectedItemIds.length} รายการ`,
+          "success"
+        ).catch(console.warn);
         showToast(
           `🏷️ สร้างอัลบั้ม "${newAlbumName.trim()}" สำเร็จ (${
             selectedItemIds.length > 0 ? `เพิ่ม ${selectedItemIds.length} รูป` : "อัลบั้มเปล่า"
@@ -695,6 +708,12 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
       });
 
       if (res.success) {
+        recordAuditLog(
+          currentUser?.name || "ผู้ใช้งาน",
+          `ลบอัลบั้มภาพใน Synology Photos: ${album.name}`,
+          `รหัสอัลบั้ม: ${album.id}`,
+          "denied"
+        ).catch(console.warn);
         showToast(`🗑️ ลบอัลบั้ม "${album.name}" สำเร็จ`);
         if (selectedAlbumId === album.id) {
           setSelectedAlbumId(null);
@@ -722,6 +741,12 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
       });
 
       if (res.success) {
+        recordAuditLog(
+          currentUser?.name || "ผู้ใช้งาน",
+          `ลบรูปภาพ/สื่อใน Synology Photos: ${itemIds.length} รายการ`,
+          `พื้นที่: ${currentSpace === "shared" ? "Shared Space" : "Personal Space"}`,
+          "denied"
+        ).catch(console.warn);
         showToast(`🗑️ ลบ ${itemIds.length} รายการจาก Synology Photos สำเร็จ`);
         setItems((prev) => prev.filter((it) => !itemIds.includes(it.id)));
         setSelectedItemIds((prev) => prev.filter((id) => !itemIds.includes(id)));

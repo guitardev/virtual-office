@@ -28,6 +28,7 @@ import {
   deleteCarBooking,
   subscribeToVehicles,
   subscribeToCarBookings,
+  recordAuditLog,
 } from "@/lib/supabase";
 import { CarBookingDocumentModal } from "./CarBookingDocumentModal";
 import { ReviewBookingModal } from "./ReviewBookingModal";
@@ -307,6 +308,13 @@ export function CarBookingPage({
     const updated = [newBooking, ...bookings];
     updateAndSaveBookings(updated);
 
+    recordAuditLog(
+      currentUser.name,
+      `ยื่นคำขอจองรถยนต์ราชการ: ${newReqNo}`,
+      `พาหนะ: ${selectedVeh.name} [${selectedVeh.licensePlate}] - ปลายทาง: ${formDestination.trim()}`,
+      "success"
+    ).catch(console.warn);
+
     showToast(
       `✅ ยื่นคำขอใช้รถ ${newReqNo} สำเร็จ! และส่ง Line Notify แจ้งเตือนหัวหน้าฝ่ายบริหารทั่วไปเรียบร้อยแล้ว`
     );
@@ -360,6 +368,14 @@ export function CarBookingPage({
     });
 
     updateAndSaveBookings(updated);
+
+    recordAuditLog(
+      currentUser.name,
+      `หัวหน้าฝ่ายเห็นชอบคำขอใช้รถ: ${reqNo}`,
+      `มอบหมายคนขับ: ${assignedDriver} - หมายเหตุ: ${managerNotes || "เห็นควรอนุมัติ"}`,
+      "success"
+    ).catch(console.warn);
+
     setSelectedReviewBooking(null);
     showToast(
       `✓ หัวหน้าฝ่ายเห็นชอบคำขอ ${reqNo} เรียบร้อย และส่ง Line Notify เสนอ พมจ. เพื่อพิจารณาอนุมัติแล้ว`
@@ -458,6 +474,12 @@ export function CarBookingPage({
     updateAndSaveVehicles(updatedVehicles);
 
     setSelectedReviewBooking(null);
+    recordAuditLog(
+      currentUser.name,
+      `พมจ. อนุมัติคำขอใช้รถราชการ: ${target.requestNo}`,
+      `พาหนะ: ${target.vehicleName} [${target.licensePlate}] - ปลายทาง: ${target.destination}`,
+      "success"
+    ).catch(console.warn);
     showToast(
       `👑 พมจ.กำแพงเพชร อนุมัติเรียบร้อย! และระบบได้ส่ง Notify แจ้งเตือนไปยังผู้มีส่วนเกี่ยวข้องทุกฝ่ายแล้ว`
     );
@@ -476,6 +498,13 @@ export function CarBookingPage({
     });
 
     updateAndSaveBookings(updated);
+    const targetBooking = bookings.find((b) => b.id === bookingId);
+    recordAuditLog(
+      currentUser.name,
+      `ไม่อนุมัติ/ส่งกลับคำขอใช้รถ: ${targetBooking ? targetBooking.requestNo : bookingId}`,
+      `เหตุผล: ${reason}`,
+      "denied"
+    ).catch(console.warn);
     setSelectedReviewBooking(null);
     showToast(`✕ บันทึกการส่งกลับ/ไม่อนุมัติคำขอ ${bookingId} เรียบร้อยแล้ว`);
   };
@@ -584,6 +613,13 @@ export function CarBookingPage({
       };
     });
     updateAndSaveVehicles(updatedVehicles);
+
+    recordAuditLog(
+      currentUser.name,
+      `ส่งคืนรถยนต์ราชการ: ${targetBooking ? targetBooking.requestNo : bookingId}`,
+      `ทะเบียน: ${licensePlate} - เลขไมล์: ${report.endMileage.toLocaleString()} กม. - น้ำมัน: ${report.endFuelLevel}`,
+      "success"
+    ).catch(console.warn);
 
     setSelectedReturnBooking(null);
     showToast(

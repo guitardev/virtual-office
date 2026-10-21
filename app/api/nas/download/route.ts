@@ -1,7 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
+import fs from "fs";
+import path from "path";
 import { loginSynology } from "@/lib/synology";
 
 export const dynamic = "force-dynamic";
+
+function getFallbackPdfResponse(fileName: string, effectiveMode: string): NextResponse | null {
+  try {
+    const samplePdfPath = path.join(process.cwd(), "public", "virtual-office", "circular_docs", "sample.pdf");
+    if (fs.existsSync(samplePdfPath)) {
+      const pdfBuffer = fs.readFileSync(samplePdfPath);
+      const disposition =
+        effectiveMode === "open"
+          ? `inline; filename="${encodeURIComponent(fileName)}"`
+          : `attachment; filename="${encodeURIComponent(fileName)}"`;
+      return new NextResponse(pdfBuffer, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": disposition,
+          "Cache-Control": "public, max-age=3600",
+        },
+      });
+    }
+  } catch (err) {
+    console.warn("[NAS Download] Fallback PDF reading failed:", err);
+  }
+  return null;
+}
 
 // In-memory cache for service account session to avoid logging in on every preview request
 let cachedServiceSid: string | null = null;
@@ -54,7 +80,7 @@ function generateMockImageSvg(fileName: string): string {
 export async function GET(req: NextRequest) {
   try {
     const searchParams = req.nextUrl.searchParams;
-    const filePath = searchParams.get("path");
+    const filePath = searchParams.get("path") || searchParams.get("file_path");
     const sid = searchParams.get("sid");
     const rawMode = searchParams.get("mode");
     const nasUrl =
@@ -98,6 +124,11 @@ export async function GET(req: NextRequest) {
         });
       }
 
+      if (isPdf) {
+        const pdfRes = getFallbackPdfResponse(fileName, effectiveMode);
+        if (pdfRes) return pdfRes;
+      }
+
       const sampleContent = `สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร\nเอกสารจาก Synology NAS (Secure Storage): ${filePath}\nดาวน์โหลดสำเร็จ`;
       return new NextResponse(sampleContent, {
         status: 200,
@@ -129,6 +160,10 @@ export async function GET(req: NextRequest) {
             "Content-Disposition": `inline; filename="${encodeURIComponent(fileName)}.svg"`,
           },
         });
+      }
+      if (isPdf) {
+        const pdfRes = getFallbackPdfResponse(fileName, effectiveMode);
+        if (pdfRes) return pdfRes;
       }
       const safeErr = (fetchErr?.message || "Timeout").replace(/https?:\/\/[^\s]+/g, "NAS Server").replace(/192\.168\.\d+\.\d+(:?\d+)?/g, "Internal Network");
       const fallbackContent = `สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร\nระบบ Virtual Office & Synology NAS (Secure Storage)\n-----------------------------------------\nชื่อไฟล์: ${fileName}\nตำแหน่ง NAS: ${filePath}\nหมายเหตุ: เชื่อมต่อเซิร์ฟเวอร์ NAS ขัดข้อง (${safeErr}) ระบบจัดส่งสำเนาเอกสารราชการฉบับสำรอง`;
@@ -178,6 +213,10 @@ export async function GET(req: NextRequest) {
             "Content-Disposition": `inline; filename="${encodeURIComponent(fileName)}.svg"`,
           },
         });
+      }
+      if (isPdf) {
+        const pdfRes = getFallbackPdfResponse(fileName, effectiveMode);
+        if (pdfRes) return pdfRes;
       }
       const fallbackContent = `สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร\nระบบ Virtual Office & Synology NAS (Secure Storage)\n-----------------------------------------\nชื่อไฟล์: ${fileName}\nตำแหน่ง NAS: ${filePath}\nสถานะ: เซิร์ฟเวอร์ Synology NAS ไม่สามารถส่งไฟล์ได้ในขณะนี้\nระบบนำส่งสำเนาเอกสารสำรอง`;
       return new NextResponse(fallbackContent, {

@@ -16,6 +16,7 @@ import {
   deleteCircularDoc,
   subscribeToCircularDocs,
   isSupabaseConfigured,
+  recordAuditLog,
 } from "@/lib/supabase";
 import { GOVERNMENT_DIVISIONS } from "@/lib/rbac";
 import { NewCircularModal } from "./NewCircularModal";
@@ -207,6 +208,12 @@ export const CircularPage: React.FC<CircularPageProps> = ({
     setDocuments(updatedList);
     setViewingDoc(updatedDoc);
     await saveCircularDoc(updatedDoc);
+    recordAuditLog(
+      currentUser?.name || "เจ้าหน้าที่",
+      `ลงนามรับทราบหนังสือเวียน: ${targetDoc.docNumber}`,
+      `เรื่อง: ${targetDoc.title}`,
+      "success"
+    ).catch(console.warn);
     showToast("บันทึกการลงนามรับทราบลงฐานข้อมูลเรียบร้อยแล้ว");
   };
 
@@ -215,6 +222,12 @@ export const CircularPage: React.FC<CircularPageProps> = ({
     const updated = [newDoc, ...documents];
     setDocuments(updated);
     await saveCircularDoc(newDoc);
+    recordAuditLog(
+      currentUser?.name || newDoc.createdByName || "เจ้าหน้าที่",
+      `ออกหนังสือเวียนใหม่: ${newDoc.docNumber}`,
+      `เรื่อง: ${newDoc.title} (กลุ่มเป้าหมาย ${newDoc.totalCount} คน)`,
+      "success"
+    ).catch(console.warn);
     showToast(`ออกหนังสือเวียนเลขที่ ${newDoc.docNumber} สำเร็จ (บันทึกลงฐานข้อมูลแล้ว)`);
     onDocumentCreated?.(newDoc);
     if (typeof window !== "undefined") {
@@ -228,9 +241,16 @@ export const CircularPage: React.FC<CircularPageProps> = ({
     if (!confirm("คุณแน่ใจหรือไม่ว่าต้องการลบหนังสือเวียนฉบับนี้? การดำเนินการนี้ไม่สามารถยกเลิกได้")) {
       return;
     }
+    const targetDoc = documents.find((d) => d.id === docId);
     const updated = documents.filter((d) => d.id !== docId);
     setDocuments(updated);
     await deleteCircularDoc(docId);
+    recordAuditLog(
+      currentUser?.name || "เจ้าหน้าที่",
+      `ลบหนังสือเวียน: ${targetDoc?.docNumber || docId}`,
+      `เรื่อง: ${targetDoc?.title || "เอกสารราชการ"}`,
+      "denied"
+    ).catch(console.warn);
     showToast("ลบหนังสือเวียนจากฐานข้อมูลเรียบร้อยแล้ว");
   };
 

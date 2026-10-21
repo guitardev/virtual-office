@@ -363,7 +363,7 @@ export function NewCircularModal({
     setFileName(file.name);
     setFileSize(file.size);
     setFileType(file.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "application/octet-stream");
-    setFileUrl(`/api/nas/download?file_path=${encodeURIComponent(file.path)}`);
+    setFileUrl(`/api/nas/download?path=${encodeURIComponent(file.path)}&mode=open`);
     setScannedPages([]);
     setShowAttachmentPreview(true);
     setActivePreviewPageIndex(0);

@@ -6,6 +6,27 @@ import { DigitalSignaturePad } from "./DigitalSignaturePad";
 import { CirculationPrintSlip } from "./CirculationPrintSlip";
 import { OfficialCircularSheet } from "./OfficialCircularSheet";
 
+export function getCircularFileDisplayUrl(fileUrl?: string): string {
+  if (!fileUrl) return "/virtual-office/circular_docs/sample.pdf";
+  if (
+    fileUrl.startsWith("data:") ||
+    fileUrl.startsWith("blob:") ||
+    fileUrl.startsWith("http://") ||
+    fileUrl.startsWith("https://") ||
+    fileUrl.includes("/api/nas/download")
+  ) {
+    return fileUrl;
+  }
+  if (
+    fileUrl === "/virtual-office/circular_docs/budget_guideline_2569.pdf" ||
+    fileUrl === "/virtual-office/circular_docs/pdpa_policy_2569.pdf" ||
+    fileUrl === "/virtual-office/circular_docs/sample.pdf"
+  ) {
+    return fileUrl;
+  }
+  return `/api/nas/download?path=${encodeURIComponent(fileUrl)}&mode=open`;
+}
+
 interface CircularViewerModalProps {
   document: CircularDocument;
   currentUser: Member;
@@ -57,7 +78,7 @@ export function CircularViewerModal({
     }
   }, [doc.fileUrl]);
 
-  const activePdfUrl = blobPdfUrl || doc.fileUrl;
+  const activePdfUrl = blobPdfUrl || getCircularFileDisplayUrl(doc.fileUrl);
 
   // Check if current user is a recipient and their status
   const recipientRecord = doc.recipients.find((r) => r.memberId === currentUser.id);

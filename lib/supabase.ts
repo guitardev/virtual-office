@@ -1155,6 +1155,26 @@ export async function saveAuditLog(log: AuditLog): Promise<boolean> {
   }
 }
 
+/**
+ * Universal helper to record system and governance audit logs directly to Supabase
+ */
+export async function recordAuditLog(
+  actor: string,
+  action: string,
+  target: string,
+  status: "success" | "denied" = "success"
+): Promise<boolean> {
+  const newLog: AuditLog = {
+    id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    timestamp: "เมื่อสักครู่",
+    actor,
+    action,
+    target,
+    status,
+  };
+  return saveAuditLog(newLog);
+}
+
 export function subscribeToAuditLogs(callback: () => void) {
   if (!supabase) return () => {};
   const channel = supabase
