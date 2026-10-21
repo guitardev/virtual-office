@@ -2872,6 +2872,12 @@ export default function SmartMSOApp() {
                   toggleTaskStatus={toggleTaskStatus}
                   showToast={showToast}
                   rolePermissions={rolePermissions}
+                  circularDocs={circularDocs}
+                  carBookings={carBookings}
+                  onOpenCircularDoc={(docId) => {
+                    setDeeplinkCircularDocId(docId);
+                    setCurrentPage("circular");
+                  }}
                 />
               )}
 
