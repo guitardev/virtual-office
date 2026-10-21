@@ -90,10 +90,19 @@ export function DashboardPage({
   const systemUrgentTasks = tasks.filter((t) => t.priority === "high" && t.status !== "done");
   const pendingTasksCount = tasks.filter((t) => t.status !== "done").length;
 
-  // 3. Circular Documents pending current user's signature
-  const pendingSignDocs = circularDocs.filter((doc) =>
-    doc.recipients?.some((r) => r.memberId === currentUser.id && !r.isAcknowledged)
+  // Admin IDs set for statistics exclusion
+  const adminMemberIds = React.useMemo(
+    () => new Set(members.filter((m) => m.role === "admin").map((m) => m.id)),
+    [members]
   );
+
+  // 3. Circular Documents pending current user's signature (Exclude Admin users)
+  const pendingSignDocs =
+    currentUserRole === "admin"
+      ? []
+      : circularDocs.filter((doc) =>
+          doc.recipients?.some((r) => r.memberId === currentUser.id && !r.isAcknowledged)
+        );
 
   // 4. Upcoming meetings today
   const sortedMeetings = [...meetings].sort((a, b) => (a.timeStr || "").localeCompare(b.timeStr || ""));
@@ -256,7 +265,9 @@ export function DashboardPage({
               )}
             </div>
             <div className="text-xs text-slate-500 dark:text-slate-400 font-medium truncate">
-              {pendingSignDocs.length > 0 ? (
+              {currentUserRole === "admin" ? (
+                <span>หนังสือเวียน (ไม่คิดสถิติ Admin)</span>
+              ) : pendingSignDocs.length > 0 ? (
                 <span className="text-rose-600 dark:text-rose-400 font-bold">รอคุณลงนาม {pendingSignDocs.length} ฉบับ</span>
               ) : (
                 "หนังสือเวียนราชการ"
@@ -370,12 +381,19 @@ export function DashboardPage({
             ) : (
               <div className="space-y-3">
                 {circularDocs.slice(0, 3).map((doc) => {
-                  const isPendingMySignature = doc.recipients?.some(
-                    (r) => r.memberId === currentUser.id && !r.isAcknowledged
-                  );
-                  const isAcknowledgedByMe = doc.recipients?.some(
-                    (r) => r.memberId === currentUser.id && r.isAcknowledged
-                  );
+                  const isPendingMySignature =
+                    currentUserRole !== "admin" &&
+                    doc.recipients?.some(
+                      (r) => r.memberId === currentUser.id && !r.isAcknowledged
+                    );
+                  const isAcknowledgedByMe =
+                    currentUserRole !== "admin" &&
+                    doc.recipients?.some(
+                      (r) => r.memberId === currentUser.id && r.isAcknowledged
+                    );
+
+                  const nonAdminRecipients = (doc.recipients || []).filter((r) => !adminMemberIds.has(r.memberId));
+                  const nonAdminAckCount = nonAdminRecipients.filter((r) => r.isAcknowledged).length;
 
                   return (
                     <div
@@ -430,7 +448,7 @@ export function DashboardPage({
                           <span>ลงวันที่: {doc.issuedDate || doc.createdAt}</span>
                           <span>·</span>
                           <span>
-                            ลงนามแล้ว {doc.acknowledgedCount || 0} / {doc.totalCount || doc.recipients?.length || 0} คน
+                            ลงนามแล้ว {nonAdminAckCount} / {nonAdminRecipients.length} คน
                           </span>
                         </div>
                       </div>
@@ -448,7 +466,7 @@ export function DashboardPage({
                           </span>
                         ) : (
                           <span className="px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 text-xs font-semibold border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100">
-                            เปิดดูเอกสาร →
+                            {currentUserRole === "admin" ? "เปิดดูเอกสาร (Admin) →" : "เปิดดูเอกสาร →"}
                           </span>
                         )}
                       </div>

@@ -16,8 +16,9 @@ export function resolveTargetRecipients(
   criteria: CircularTargetCriteria,
   availableMembers: Member[]
 ): CircularRecipientStatus[] {
+  // Exclude Admin users from circular document recipients and statistics
   const activeMembers = availableMembers.filter(
-    (m) => m.status === "active" || m.status === undefined
+    (m) => (m.status === "active" || m.status === undefined) && m.role !== "admin"
   );
 
   let targetMembers: Member[] = [];
@@ -44,9 +45,11 @@ export function resolveTargetRecipients(
         }
       }
 
-      // Match Specific Member IDs
+      // Match Specific Member IDs (exclude Admin)
       if (criteria.specificMemberIds && criteria.specificMemberIds.includes(member.id)) {
-        isMatch = true;
+        if (member.role !== "admin") {
+          isMatch = true;
+        }
       }
 
       if (isMatch && !memberIdSet.has(member.id)) {
@@ -64,6 +67,22 @@ export function resolveTargetRecipients(
     position: m.position,
     isAcknowledged: false,
   }));
+}
+
+/**
+ * Helper to get only non-admin recipients for accurate statistics calculation
+ */
+export function getNonAdminRecipients(
+  recipients: CircularRecipientStatus[],
+  availableMembers?: Member[]
+): CircularRecipientStatus[] {
+  if (!availableMembers || availableMembers.length === 0) {
+    return recipients;
+  }
+  const adminIds = new Set(
+    availableMembers.filter((m) => m.role === "admin").map((m) => m.id)
+  );
+  return recipients.filter((r) => !adminIds.has(r.memberId));
 }
 
 /**

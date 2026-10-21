@@ -9,6 +9,7 @@ import {
 } from "@/lib/types";
 import {
   loadStoredCircularDocs,
+  getNonAdminRecipients,
 } from "@/lib/circular-data";
 import {
   fetchCircularDocs,
@@ -44,7 +45,9 @@ export const CircularPage: React.FC<CircularPageProps> = ({
   const [documents, setDocuments] = useState<CircularDocument[]>([]);
   const [isLiveConnected, setIsLiveConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<TabType>("inbox");
+  const [activeTab, setActiveTab] = useState<TabType>(
+    currentUser?.role === "admin" ? "all" : "inbox"
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [urgencyFilter, setUrgencyFilter] = useState<CircularUrgency | "all">("all");
   const [divisionFilter, setDivisionFilter] = useState<string>("all");
@@ -98,7 +101,13 @@ export const CircularPage: React.FC<CircularPageProps> = ({
     return doc.recipients.find((r) => r.memberId === currentUser.id);
   };
 
-  // Stats calculation
+  // Admin IDs set for statistics exclusion
+  const adminIdSet = useMemo(
+    () => new Set(members.filter((m) => m.role === "admin").map((m) => m.id)),
+    [members]
+  );
+
+  // Stats calculation (Exclude Admin users from statistics)
   const stats = useMemo(() => {
     const total = documents.length;
     let pendingMyAck = 0;
@@ -107,10 +116,13 @@ export const CircularPage: React.FC<CircularPageProps> = ({
     let totalAcknowledged = 0;
 
     documents.forEach((doc) => {
-      totalTargetedRecipients += doc.recipients.length;
-      totalAcknowledged += doc.recipients.filter((r) => r.isAcknowledged).length;
+      // Exclude admin members from recipient statistics
+      const nonAdminRecipients = doc.recipients.filter((r) => !adminIdSet.has(r.memberId));
+      totalTargetedRecipients += nonAdminRecipients.length;
+      totalAcknowledged += nonAdminRecipients.filter((r) => r.isAcknowledged).length;
 
-      if (currentUser) {
+      // Do NOT count pendingMyAck / completedByMe for Admin users
+      if (currentUser && currentUser.role !== "admin") {
         const userStatus = doc.recipients.find((r) => r.memberId === currentUser.id);
         if (userStatus) {
           if (userStatus.isAcknowledged) {
@@ -132,7 +144,7 @@ export const CircularPage: React.FC<CircularPageProps> = ({
       completedByMe,
       overallRate,
     };
-  }, [documents, currentUser]);
+  }, [documents, currentUser, adminIdSet]);
 
   // Filtering documents
   const filteredDocuments = useMemo(() => {
@@ -164,7 +176,12 @@ export const CircularPage: React.FC<CircularPageProps> = ({
 
       // Tab specific filter
       if (activeTab === "inbox") {
-        if (!currentUser) return true;
+        if (!currentUser || currentUser.role === "admin") {
+          // Admin has administrative oversight of all documents without being a signing recipient
+          if (statusFilter === "pending" && isDocFullyAcked) return false;
+          if (statusFilter === "completed" && !isDocFullyAcked) return false;
+          return true;
+        }
         const myStatus = doc.recipients.find((r) => r.memberId === currentUser.id);
         if (!myStatus) return false; // not targeted
 
@@ -325,6 +342,7 @@ export const CircularPage: React.FC<CircularPageProps> = ({
       <CircularViewerModal
         document={viewingDoc}
         currentUser={currentUser}
+        availableMembers={members}
         inPage={true}
         onClose={() => {
           setViewingDoc(null);
@@ -351,6 +369,7 @@ export const CircularPage: React.FC<CircularPageProps> = ({
     return (
       <CirculationPrintSlip
         document={printingDoc}
+        availableMembers={members}
         inPage={true}
         onClose={() => {
           setPrintingDoc(null);
@@ -446,6 +465,10 @@ export const CircularPage: React.FC<CircularPageProps> = ({
             <p className="text-xs font-medium text-amber-600">รอฉันลงนามรับทราบ</p>
             {isLoading ? (
               <div className="h-8 w-16 bg-amber-100/80 rounded-lg animate-pulse mt-1" />
+            ) : currentUser?.role === "admin" ? (
+              <p className="text-xl font-bold text-slate-500 mt-1">
+                - <span className="text-xs text-slate-400 font-normal">(ยกเว้นสิทธิ์ Admin)</span>
+              </p>
             ) : (
               <p className="text-2xl font-bold text-amber-600 mt-1">{stats.pendingMyAck} <span className="text-xs text-amber-500 font-normal">ฉบับ</span></p>
             )}
@@ -460,6 +483,10 @@ export const CircularPage: React.FC<CircularPageProps> = ({
             <p className="text-xs font-medium text-emerald-600">ฉันรับทราบแล้ว</p>
             {isLoading ? (
               <div className="h-8 w-16 bg-emerald-100/80 rounded-lg animate-pulse mt-1" />
+            ) : currentUser?.role === "admin" ? (
+              <p className="text-xl font-bold text-slate-500 mt-1">
+                - <span className="text-xs text-slate-400 font-normal">(ไม่นับสถิติ Admin)</span>
+              </p>
             ) : (
               <p className="text-2xl font-bold text-emerald-600 mt-1">{stats.completedByMe} <span className="text-xs text-emerald-500 font-normal">ฉบับ</span></p>
             )}
@@ -702,15 +729,17 @@ export const CircularPage: React.FC<CircularPageProps> = ({
             <div className="grid grid-cols-1 gap-4">
               {filteredDocuments.map((doc) => {
                 const userStatus = getUserRecipientStatus(doc);
-                const ackCount = doc.recipients.filter((r) => r.isAcknowledged).length;
-                const totalCount = doc.recipients.length;
+                const nonAdminRecipients = doc.recipients.filter((r) => !adminIdSet.has(r.memberId));
+                const ackCount = nonAdminRecipients.filter((r) => r.isAcknowledged).length;
+                const totalCount = nonAdminRecipients.length;
                 const percent = totalCount > 0 ? Math.round((ackCount / totalCount) * 100) : 100;
-                const isTargeted = !!userStatus;
+                const isTargeted = currentUser?.role !== "admin" && !!userStatus;
                 const isSigned = userStatus?.isAcknowledged;
 
                 return (
                   <div
                     key={doc.id}
+                    data-testid={`circular-doc-card-${doc.id}`}
                     onClick={() => handleOpenViewer(doc)}
                     className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-4 group hover:border-indigo-300"
                   >
@@ -775,7 +804,11 @@ export const CircularPage: React.FC<CircularPageProps> = ({
 
                     {/* Right: User personal status & Action Buttons */}
                     <div className="flex flex-row md:flex-col items-center md:items-end justify-between gap-2 shrink-0">
-                      {isTargeted ? (
+                      {currentUser?.role === "admin" ? (
+                        <span className="px-2.5 py-0.5 bg-indigo-50 text-indigo-700 text-xs font-semibold rounded-full border border-indigo-200">
+                          🛡️ สิทธิ์ผู้ดูแลระบบ (ไม่คิดสถิติ)
+                        </span>
+                      ) : isTargeted ? (
                         isSigned ? (
                           <span className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full border border-emerald-200">
                             <span>✅</span> รับทราบแล้ว
@@ -900,8 +933,9 @@ export const CircularPage: React.FC<CircularPageProps> = ({
                     </tr>
                   ) : (
                     filteredDocuments.map((doc) => {
-                    const ackCount = doc.recipients.filter((r) => r.isAcknowledged).length;
-                    const totalCount = doc.recipients.length;
+                    const nonAdminRecipients = doc.recipients.filter((r) => !adminIdSet.has(r.memberId));
+                    const ackCount = nonAdminRecipients.filter((r) => r.isAcknowledged).length;
+                    const totalCount = nonAdminRecipients.length;
                     const percent = totalCount > 0 ? Math.round((ackCount / totalCount) * 100) : 100;
 
                     return (

@@ -1,16 +1,18 @@
 "use client";
 
-import React from "react";
-import { CircularDocument } from "@/lib/types";
+import React, { useMemo } from "react";
+import { CircularDocument, Member } from "@/lib/types";
 
 interface CirculationPrintSlipProps {
   document: CircularDocument;
+  availableMembers?: Member[];
   onClose: () => void;
   inPage?: boolean;
 }
 
 export function CirculationPrintSlip({
   document: doc,
+  availableMembers,
   onClose,
   inPage = true,
 }: CirculationPrintSlipProps) {
@@ -18,9 +20,18 @@ export function CirculationPrintSlip({
     window.print();
   };
 
-  const acknowledgedList = doc.recipients.filter((r) => r.isAcknowledged);
-  const pendingList = doc.recipients.filter((r) => !r.isAcknowledged);
-  const percent = Math.round((doc.acknowledgedCount / Math.max(1, doc.totalCount)) * 100);
+  const adminIdSet = useMemo(() => {
+    return new Set(availableMembers?.filter((m) => m.role === "admin").map((m) => m.id) || []);
+  }, [availableMembers]);
+
+  const nonAdminRecipients = useMemo(() => {
+    return doc.recipients.filter((r) => !adminIdSet.has(r.memberId));
+  }, [doc.recipients, adminIdSet]);
+
+  const acknowledgedList = nonAdminRecipients.filter((r) => r.isAcknowledged);
+  const pendingList = nonAdminRecipients.filter((r) => !r.isAcknowledged);
+  const effectiveTotal = nonAdminRecipients.length;
+  const percent = effectiveTotal > 0 ? Math.round((acknowledgedList.length / effectiveTotal) * 100) : 0;
 
   const printDate = new Date().toLocaleDateString("th-TH", {
     year: "numeric",
@@ -82,13 +93,14 @@ export function CirculationPrintSlip({
             {/* Statistics Row */}
             <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-xs">
               <div>
-                <strong>จำนวนผู้รับการเวียนทั้งหมด:</strong> {doc.totalCount} คน
+                <strong>จำนวนผู้รับการเวียนทั้งหมด:</strong> {effectiveTotal} คน{" "}
+                <span className="text-[10px] text-slate-500 font-normal">(ไม่นับสิทธิ์ Admin)</span>
               </div>
               <div className="text-emerald-700 font-bold">
-                <strong>รับทราบแล้ว:</strong> {doc.acknowledgedCount} คน ({percent}%)
+                <strong>รับทราบแล้ว:</strong> {acknowledgedList.length} คน ({percent}%)
               </div>
               <div className="text-rose-700 font-bold">
-                <strong>ยังไม่รับทราบ:</strong> {doc.totalCount - doc.acknowledgedCount} คน
+                <strong>ยังไม่รับทราบ:</strong> {pendingList.length} คน
               </div>
             </div>
           </div>

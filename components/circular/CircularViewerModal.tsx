@@ -30,6 +30,7 @@ export function getCircularFileDisplayUrl(fileUrl?: string): string {
 interface CircularViewerModalProps {
   document: CircularDocument;
   currentUser: Member;
+  availableMembers?: Member[];
   onAcknowledge: (docId: string, signatureUrl?: string, endorsementNote?: string) => void;
   onClose: () => void;
   onPrintSlip?: () => void;
@@ -40,6 +41,7 @@ interface CircularViewerModalProps {
 export function CircularViewerModal({
   document: doc,
   currentUser,
+  availableMembers = [],
   onAcknowledge,
   onClose,
   onPrintSlip,
@@ -54,6 +56,15 @@ export function CircularViewerModal({
   const [showSignaturePad, setShowSignaturePad] = useState<boolean>(false);
   const [showPrintSlip, setShowPrintSlip] = useState<boolean>(false);
   const [blobPdfUrl, setBlobPdfUrl] = useState<string | null>(null);
+
+  // Admin IDs set for statistics exclusion
+  const adminIdSet = React.useMemo(
+    () => new Set(availableMembers.filter((m) => m.role === "admin").map((m) => m.id)),
+    [availableMembers]
+  );
+  const nonAdminRecipients = doc.recipients.filter((r) => !adminIdSet.has(r.memberId));
+  const nonAdminAckCount = nonAdminRecipients.filter((r) => r.isAcknowledged).length;
+  const percent = Math.round((nonAdminAckCount / Math.max(1, nonAdminRecipients.length)) * 100);
 
   // Safely convert Base64 PDF data URL into Blob URL for Chrome/Edge PDF rendering
   useEffect(() => {
@@ -94,8 +105,6 @@ export function CircularViewerModal({
     onAcknowledge(doc.id, undefined, "รับทราบ");
   };
 
-  const percent = Math.round((doc.acknowledgedCount / Math.max(1, doc.totalCount)) * 100);
-
   const viewerBodyAndFooter = (
     <>
       {/* Tab Switcher & Status Bar */}
@@ -123,13 +132,20 @@ export function CircularViewerModal({
             >
               <span>📊 การรับทราบ</span>
               <span className="px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-700 text-[10px]">
-                {doc.acknowledgedCount}/{doc.totalCount}
+                {nonAdminAckCount}/{nonAdminRecipients.length}
               </span>
             </button>
           </div>
 
           {/* User Acknowledgment Quick Badge */}
-          {isRecipient && (
+          {currentUser.role === "admin" ? (
+            <div>
+              <span className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 text-[11px] font-bold flex items-center gap-1.5">
+                <span>🛡️</span>
+                <span>สิทธิ์ผู้ดูแลระบบ (ไม่คิดสถิติการรับทราบ)</span>
+              </span>
+            </div>
+          ) : isRecipient ? (
             <div>
               {hasAcknowledged ? (
                 <span className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-300 text-[11px] font-bold flex items-center gap-1.5">
@@ -143,7 +159,7 @@ export function CircularViewerModal({
                 </span>
               )}
             </div>
-          )}
+          ) : null}
         </div>
 
         {/* Body Content */}
@@ -396,8 +412,8 @@ export function CircularViewerModal({
               {/* Progress Summary Bar */}
               <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-2">
                 <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-                  <span>ความคืบหน้าการรับทราบโดยรวม</span>
-                  <span className="text-indigo-600">{percent}% ({doc.acknowledgedCount}/{doc.totalCount} คน)</span>
+                  <span>ความคืบหน้าการรับทราบโดยรวม (ไม่นับสิทธิ์ Admin)</span>
+                  <span className="text-indigo-600">{percent}% ({nonAdminAckCount}/{nonAdminRecipients.length} คน)</span>
                 </div>
                 <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
                   <div
@@ -433,7 +449,11 @@ export function CircularViewerModal({
                           </span>
                         </td>
                         <td className="py-2.5 px-3 text-center">
-                          {rec.isAcknowledged ? (
+                          {adminIdSet.has(rec.memberId) ? (
+                            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-bold">
+                              🛡️ ผู้ดูแลระบบ (ไม่คิดสถิติ)
+                            </span>
+                          ) : rec.isAcknowledged ? (
                             <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
                               ✓ รับทราบแล้ว
                             </span>
@@ -609,7 +629,11 @@ export function CircularViewerModal({
 
         {/* Print Slip Submodal */}
         {showPrintSlip && (
-          <CirculationPrintSlip document={doc} onClose={() => setShowPrintSlip(false)} />
+          <CirculationPrintSlip
+            document={doc}
+            availableMembers={availableMembers}
+            onClose={() => setShowPrintSlip(false)}
+          />
         )}
       </div>
     );
@@ -686,7 +710,11 @@ export function CircularViewerModal({
 
       {/* Print Slip Submodal */}
       {showPrintSlip && (
-        <CirculationPrintSlip document={doc} onClose={() => setShowPrintSlip(false)} />
+        <CirculationPrintSlip
+          document={doc}
+          availableMembers={availableMembers}
+          onClose={() => setShowPrintSlip(false)}
+        />
       )}
     </div>
   );
