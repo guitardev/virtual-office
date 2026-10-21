@@ -1883,11 +1883,8 @@ export default function SmartMSOApp() {
     return (
       <nav className="flex-1 px-2.5 py-3 space-y-3 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-slate-800">
         {!isCollapsed && (
-          <div className="px-2.5 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
+          <div className="px-2.5 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
             <span>เมนูระบบราชการ</span>
-            <span className="text-[9px] lowercase text-indigo-400 font-mono bg-indigo-950/60 px-1.5 py-0.2 rounded border border-indigo-800/40">
-              rbac active
-            </span>
           </div>
         )}
 
