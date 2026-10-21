@@ -385,30 +385,149 @@ export async function POST(req: NextRequest) {
       }
 
       const itemIds = body.itemIds || body.item_ids || [];
-      let itemParam = "";
-      if (Array.isArray(itemIds) && itemIds.length > 0) {
-        itemParam = `&item_id=${encodeURIComponent(JSON.stringify(itemIds))}`;
+      const itemJson = Array.isArray(itemIds) && itemIds.length > 0 ? JSON.stringify(itemIds) : "";
+
+      // In DSM 7 Synology Photos, normal manual albums are created via SYNO.Foto.Browse.NormalAlbum
+      const queryParams = new URLSearchParams({
+        api: "SYNO.Foto.Browse.NormalAlbum",
+        version: "1",
+        method: "create",
+        name,
+        _sid: sid,
+      });
+      if (itemJson) {
+        queryParams.set("item", itemJson);
       }
 
-      const createUrl = `${cleanUrl}/webapi/entry.cgi?api=SYNO.Foto.Browse.Album&version=1&method=create&name=${encodeURIComponent(
-        name
-      )}${itemParam}&_sid=${encodeURIComponent(sid)}`;
+      // Attempt 1: GET with item parameter
+      let res = await fetch(`${cleanUrl}/webapi/entry.cgi?${queryParams.toString()}`, {
+        method: "GET",
+        signal: AbortSignal.timeout(10000),
+      });
+      let data = await safeParseJsonResponse(res);
 
-      const res = await fetch(createUrl, { method: "GET", signal: AbortSignal.timeout(10000) });
-      const data = await safeParseJsonResponse(res);
+      // Attempt 2: If code 101/120, retry with item_id parameter
+      if (!data.success && (data.error?.code === 101 || data.error?.code === 120 || data.code === 101) && itemJson) {
+        queryParams.delete("item");
+        queryParams.set("item_id", itemJson);
+        res = await fetch(`${cleanUrl}/webapi/entry.cgi?${queryParams.toString()}`, {
+          method: "GET",
+          signal: AbortSignal.timeout(10000),
+        });
+        data = await safeParseJsonResponse(res);
+      }
+
+      // Attempt 3: If still failing and itemIds were provided, create empty album first, then attach items
+      if (!data.success && itemJson) {
+        queryParams.delete("item");
+        queryParams.delete("item_id");
+        res = await fetch(`${cleanUrl}/webapi/entry.cgi?${queryParams.toString()}`, {
+          method: "GET",
+          signal: AbortSignal.timeout(10000),
+        });
+        data = await safeParseJsonResponse(res);
+      }
+
+      // Attempt 4: If still failing, try POST form-encoded
+      if (!data.success) {
+        const postBody = new URLSearchParams({
+          api: "SYNO.Foto.Browse.NormalAlbum",
+          version: "1",
+          method: "create",
+          name,
+          _sid: sid,
+        });
+        res = await fetch(`${cleanUrl}/webapi/entry.cgi`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: postBody.toString(),
+          signal: AbortSignal.timeout(10000),
+        });
+        data = await safeParseJsonResponse(res);
+      }
+
+      if (data.success) {
+        const albumData = data.data?.album || data.data || {};
+        const albumId = albumData.id || data.data?.id;
+
+        // If items need to be attached and album was created, call add_item
+        if (albumId && Array.isArray(itemIds) && itemIds.length > 0) {
+          try {
+            const addUrl = `${cleanUrl}/webapi/entry.cgi?api=SYNO.Foto.Browse.NormalAlbum&version=1&method=add_item&id=${encodeURIComponent(
+              String(albumId)
+            )}&item=${encodeURIComponent(JSON.stringify(itemIds))}&_sid=${encodeURIComponent(sid)}`;
+            await fetch(addUrl, { method: "GET", signal: AbortSignal.timeout(8000) });
+          } catch (addErr) {
+            console.warn("[NAS Photos] Added items to album warning:", addErr);
+          }
+        }
+
+        return NextResponse.json({
+          success: true,
+          album: {
+            id: albumId,
+            name: albumData.name || name,
+            item_count: itemIds.length,
+          },
+          message: `สร้างอัลบั้ม "${name}" เรียบร้อยแล้ว`,
+        });
+      }
+
+      const errorCode = data.error?.code || data.code;
+      let errorMsg = "ไม่สามารถสร้างอัลบั้มบน Synology Photos ได้";
+      if (errorCode === 101) {
+        errorMsg = "พารามิเตอร์ของ Synology Photos API ไม่ถูกต้อง (Code 101)";
+      } else if (errorCode === 102 || errorCode === 103) {
+        errorMsg = "ไม่พบ API หรือฟังก์ชันสร้างอัลบั้มบน Synology NAS (Code 102/103)";
+      } else if (errorCode === 105 || errorCode === 403) {
+        errorMsg = "บัญชี Synology DSM ของท่านไม่มีสิทธิ์สร้างอัลบั้มภาพ (ต้องการสิทธิ์แก้ไข/จัดการ)";
+      } else if (errorCode === 119) {
+        errorMsg = "เซสชัน Synology NAS หมดอายุ กรุณาออกจากระบบและเข้าสู่ระบบใหม่อีกครั้ง";
+      } else if (errorCode === 400 || errorCode === 414) {
+        errorMsg = `มีอัลบั้มชื่อ "${name}" อยู่แล้ว หรือรูปแบบชื่อไม่ถูกต้อง`;
+      }
+
+      return NextResponse.json({
+        success: false,
+        error: errorMsg,
+        code: errorCode,
+      });
+    }
+
+    // ─── ACTION 2.1: DELETE ALBUM ───
+    if (action === "delete_album") {
+      const albumId = body.albumId || body.id || body.album_id;
+      if (!albumId) {
+        return NextResponse.json({ success: false, error: "กรุณาระบุรหัสอัลบั้มที่ต้องการลบ" }, { status: 400 });
+      }
+
+      // SYNO.Foto.Browse.Album method=delete
+      const delUrl = `${cleanUrl}/webapi/entry.cgi?api=SYNO.Foto.Browse.Album&version=1&method=delete&id=${encodeURIComponent(
+        JSON.stringify([Number(albumId)])
+      )}&_sid=${encodeURIComponent(sid)}`;
+
+      let res = await fetch(delUrl, { method: "GET", signal: AbortSignal.timeout(10000) });
+      let data = await safeParseJsonResponse(res);
+
+      if (!data.success && (data.error?.code === 101 || data.error?.code === 120)) {
+        const delUrl2 = `${cleanUrl}/webapi/entry.cgi?api=SYNO.Foto.Browse.Album&version=1&method=delete&id=${encodeURIComponent(
+          String(albumId)
+        )}&_sid=${encodeURIComponent(sid)}`;
+        res = await fetch(delUrl2, { method: "GET", signal: AbortSignal.timeout(10000) });
+        data = await safeParseJsonResponse(res);
+      }
 
       if (data.success) {
         return NextResponse.json({
           success: true,
-          album: data.data?.album || data.data,
-          message: `สร้างอัลบั้ม "${name}" เรียบร้อยแล้ว`,
+          message: "ลบอัลบั้มเรียบร้อยแล้ว",
         });
       }
 
       return NextResponse.json({
         success: false,
-        error: data.error?.message || "ไม่สามารถสร้างอัลบั้มบน Synology Photos ได้",
-        code: data.error?.code,
+        error: "ไม่สามารถลบอัลบั้มได้ (สิทธิ์ไม่เพียงพอ หรืออัลบั้มไม่มีอยู่จริง)",
+        code: data.error?.code || data.code,
       });
     }
 

@@ -582,6 +582,88 @@ test.describe("ระบบคลังภาพและสื่อราช�
     const folderUploadBtn = page.locator("button:has-text('อัปโหลดภาพเข้าโฟลเดอร์นี้')").first();
     await expect(folderUploadBtn).toBeVisible();
   });
+
+  test("การสร้างอัลบั้มภาพใหม่: เปิดหน้าต่างสร้างอัลบั้ม ส่ง API create_album และอัปเดตแท็บอัลบั้ม", async ({
+    page,
+  }) => {
+    let createdAlbumName = "";
+    await page.route("**/api/nas/photos*", async (route) => {
+      const method = route.request().method();
+      if (method === "POST") {
+        const body = route.request().postDataJSON();
+        if (body.action === "create_album") {
+          createdAlbumName = body.name;
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              success: true,
+              album: { id: 99, name: body.name, item_count: 0 },
+              message: `สร้างอัลบั้ม "${body.name}" เรียบร้อยแล้ว`,
+            }),
+          });
+          return;
+        }
+      }
+      const url = new URL(route.request().url());
+      const action = url.searchParams.get("action");
+      if (action === "list_albums") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            albums: [
+              { id: 1, name: "กิจกรรม พมจ. กำแพงเพชร 2569", item_count: 12 },
+              ...(createdAlbumName ? [{ id: 99, name: createdAlbumName, item_count: 0 }] : []),
+            ],
+          }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ success: true, items: [], total: 0 }),
+      });
+    });
+
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    await page.evaluate(() => {
+      localStorage.setItem("omnioffice_nas_user_sid", "mock_valid_photos_sid");
+      localStorage.setItem("omnioffice_nas_user_account", "itadmin");
+      sessionStorage.setItem("omnioffice_nas_user_sid", "mock_valid_photos_sid");
+      sessionStorage.setItem("omnioffice_nas_user_account", "itadmin");
+    });
+
+    const galleryNav = page
+      .locator("aside button:has-text('คลังภาพและสื่อ'), nav button:has-text('คลังภาพและสื่อ')")
+      .first();
+    await galleryNav.click();
+
+    // ไปที่แท็บอัลบั้ม
+    const albumsTab = page.locator("button:has-text('อัลบั้ม')").first();
+    await albumsTab.click();
+
+    // กดปุ่มสร้างอัลบั้ม
+    const createAlbumBtn = page.locator("button:has-text('สร้างอัลบั้ม')").first();
+    await expect(createAlbumBtn).toBeVisible();
+    await createAlbumBtn.click();
+
+    // กรอกชื่ออัลบั้ม
+    const nameInput = page.locator("input[placeholder*='ภาพเด่นกิจกรรม']").first();
+    await expect(nameInput).toBeVisible();
+    await nameInput.fill("อัลบั้มโครงการเฉลิมพระเกียรติ 2569");
+
+    // บันทึกสร้างอัลบั้ม
+    const submitBtn = page.locator("button[type='submit']:has-text('สร้างอัลบั้ม')").first();
+    await submitBtn.click();
+
+    // ตรวจสอบข้อความแจ้งเตือนสำเร็จ
+    await expect(page.locator("text=สร้างอัลบั้ม \"อัลบั้มโครงการเฉลิมพระเกียรติ 2569\" สำเร็จ").first()).toBeVisible();
+  });
 });
 
 

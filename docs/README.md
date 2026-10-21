@@ -538,7 +538,8 @@ npx tsc --noEmit
 - 📈 **ยกระดับโมดูลรายงานและสถิติ (Computed Analytics & Audit Export):** คำนวณสรุปผลสดจากฐานข้อมูลจริง พร้อมระบบส่งออกรายงาน CSV ตามมาตรฐาน สตง.
 - ⚙️ **ระบบแจ้งเตือน Dynamic Navigation Badges:** คำนวณตัวเลขแจ้งเตือนงานค้าง นัดหมายวันนี้ และคำขอจองรถยนต์ตามสิทธิ์ RBAC จากข้อมูลสด
 
-### **v1.9.1 (2026-10-21) — Synology Photos Upload Path Sanitization & Error 407 Fix**
+### **v1.9.1 (2026-10-21) — Synology Photos Upload Path Sanitization & Album Creation Fix**
+- 🏷️ **แก้ไขระบบสร้างอัลบั้มภาพ Synology Photos (`SYNO.Foto.Browse.NormalAlbum`):** แก้ไขปัญหาการสร้างอัลบั้มภาพล้มเหลว (เดิมเรียกผิด API เป็น `SYNO.Foto.Browse.Album` ซึ่งไม่มีเมธอด `create` และส่งรหัส 103) ปรับมาใช้ `SYNO.Foto.Browse.NormalAlbum` พร้อมกลไก `add_item` และรองรับการลบอัลบั้มภาพ
 - 🛡️ **แก้ไขปัญหา Double-Slash Path บน Synology Photos:** แก้ไขบั๊กการต่อสตริงโฟลเดอร์ปลายทางที่ทำให้เกิด `"/photo//2570"` ซึ่งทำให้ระบบไฟล์ของ Synology DSM ปฏิเสธการเขียนด้วยรหัส 407 (File operation failed)
 - 🧹 **Robust Path Sanitizer (`resolvePhotoFolderPath`):** ทำความสะอาดเส้นทางโฟลเดอร์ทุกกรณี ตัดเครื่องหมายสแลชซ้ำซ้อน (`//+` ➔ `/`) รองรับทั้งการระบุชื่อโฟลเดอร์และ Path เต็ม
 - 📁 **Proactive Directory Verification:** ตรวจสอบและสร้างโฟลเดอร์บน NAS อัตโนมัติ (`ensureDirectoryExists`) ก่อนเริ่มขั้นตอนอัปโหลดไฟล์ภาพ

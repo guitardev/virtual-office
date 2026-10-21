@@ -2228,5 +2228,44 @@ Failed to load resource: the server responded with a status of 500 () xkeiuyhkok
 - `npx tsc --noEmit` ผ่านสมบูรณ์ **0 errors**
 - การทดสอบฟังก์ชัน `resolvePhotoFolderPath` และ Sanitization Edge Cases ผ่าน 100% (แปลง `"/photo//2570"` ➔ `"/photo/2570"`)
 
+---
+
+## 46. การแก้ไขปัญหาระบบสร้างอัลบั้มภาพใน Synology Photos (Migrating to `SYNO.Foto.Browse.NormalAlbum`) (วันที่ 21 ตุลาคม 2569)
+
+### 46.1 รายละเอียดปัญหา (Issue Description)
+เมื่อผู้ใช้งานพยายามสร้างอัลบั้มภาพใหม่ (ทั้งอัลบั้มเปล่า และการเลือกรูปแล้วกด "สร้างอัลบั้มจากรูปที่เลือก") ระบบแจ้งเตือนว่าไม่สามารถสร้างอัลบั้มบน Synology Photos ได้
+
+### 46.2 สาเหตุของปัญหา (Root Cause Analysis)
+1. **API Endpoint Mismatch (`SYNO.Foto.Browse.Album` vs `SYNO.Foto.Browse.NormalAlbum`):**
+   - โค้ดเดิมใน [app/api/nas/photos/route.ts](file:///c:/Users/GuitarDev/virtual-office/app/api/nas/photos/route.ts) เรียกใช้ API `SYNO.Foto.Browse.Album` ร่วมกับ `method=create`
+   - จากการตรวจสอบ API Metadata จริงบน Synology NAS (`192.168.162.26:5000`) พบว่า `SYNO.Foto.Browse.Album` รองรับเฉพาะเมธอด `list`, `get`, และ `delete` เท่านั้น เมื่อส่ง `method=create` ระบบของ DSM จะปฏิเสธทันทีด้วยรหัส **103 (Method not allowed / No such method)**
+   - API ที่ถูกต้องสำหรับการสร้างและจัดการอัลบั้มปกติ (Manual/Normal Album) ใน Synology Photos บน DSM 7+ คือ **`SYNO.Foto.Browse.NormalAlbum`**
+2. **การแนบรูปภาพเข้าสู่อัลบั้มใหม่ (Item Attachment Flow):**
+   - ใน DSM 7 การสร้างอัลบั้มที่มีรูปภาพแนบ จำเป็นต้องรองรับทั้งการส่งพารามิเตอร์ `item` ควบคู่กับการเรียกเมธอด `add_item` เมื่ออัลบั้มถูกสร้างขึ้น เพื่อรับประกันว่ารูปภาพที่เลือกจะถูกบันทึกเข้าสู่อัลบั้มอย่างแน่นอน
+3. **การขาดระบบลบอัลบั้ม (Missing Album Delete Workflow):**
+   - เดิมไม่มีเมธอดและปุ่มสำหรับลบอัลบั้มภาพที่สร้างขึ้น ทำให้เมื่อผู้ใช้สร้างผิดพลาดจะไม่สามารถจัดการลบได้
+
+### 46.3 การแก้ไขและการพัฒนา (Implementation Details)
+1. **อัปเกรด Action `create_album` ใน [app/api/nas/photos/route.ts](file:///c:/Users/GuitarDev/virtual-office/app/api/nas/photos/route.ts):**
+   - เปลี่ยน Endpoint หลักเป็น `api=SYNO.Foto.Browse.NormalAlbum`
+   - ปรับกลยุทธ์ Multi-Attempt Resilient Calling:
+     - Attempt 1: GET ด้วย `item=[id1, id2]`
+     - Attempt 2: GET ด้วย `item_id=[id1, id2]`
+     - Attempt 3: สร้างอัลบั้มเปล่าก่อน แล้วตามด้วยการเรียก `add_item`
+     - Attempt 4: POST Form-encoded หาก GET ถูกจำกัด
+   - แปลงรหัสข้อผิดพลาดของ DSM (101, 102, 103, 105, 119, 400, 414) ให้เป็นข้อความภาษาไทยที่เข้าใจง่าย
+2. **เพิ่ม Action `delete_album` ใน Backend และ Client Library:**
+   - พัฒนา `delete_album` ใน [app/api/nas/photos/route.ts](file:///c:/Users/GuitarDev/virtual-office/app/api/nas/photos/route.ts) เรียกใช้ `SYNO.Foto.Browse.Album` method `delete`
+   - ส่งออกฟังก์ชัน `deleteSynologyAlbum` ใน [lib/synology-photos.ts](file:///c:/Users/GuitarDev/virtual-office/lib/synology-photos.ts)
+3. **ยกระดับ UI จัดการอัลบั้มใน [NasPhotoGallery.tsx](file:///c:/Users/GuitarDev/virtual-office/components/gallery/NasPhotoGallery.tsx):**
+   - เพิ่มปุ่มถังขยะ `🗑️` บนการ์ดอัลบั้ม (แสดงผลเมื่อ Hover) พร้อม Modal ยืนยันก่อนลบ (แจ้งเตือนชัดเจนว่ารูปภาพต้นฉบับจะไม่สูญหาย)
+   - ฟังก์ชัน `handleDeleteAlbum` เคลียร์ State และโหลดรายการอัลบั้มใหม่ทันที
+
+### 46.4 ผลการทดสอบ (Verification)
+- `npx tsc --noEmit` ผ่านสมบูรณ์ **0 errors**
+- Playwright E2E Test Suite [tests/nas-photo-gallery.spec.ts](file:///c:/Users/GuitarDev/virtual-office/tests/nas-photo-gallery.spec.ts) **ผ่านครบทั้ง 7 กรณีทดสอบ (7/7 passed, 1.2m)**
+  - รวมถึงการทดสอบใหม่: *การสร้างอัลบั้มภาพใหม่: เปิดหน้าต่างสร้างอัลบั้ม ส่ง API create_album และอัปเดตแท็บอัลบั้ม*
+
+
 
 

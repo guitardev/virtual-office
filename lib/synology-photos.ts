@@ -505,6 +505,39 @@ export async function createSynologyAlbum(params: {
 }
 
 /**
+ * Delete an album from Synology Photos
+ */
+export async function deleteSynologyAlbum(params: {
+  albumId: number | string;
+  sid: string;
+  nasUrl?: string;
+}): Promise<{
+  success: boolean;
+  message?: string;
+  error?: string;
+  code?: number;
+}> {
+  try {
+    const res = await fetch("/api/nas/photos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "delete_album",
+        albumId: params.albumId,
+        sid: params.sid,
+        nasUrl: params.nasUrl || getClientSynologyConfig().nasUrl,
+      }),
+    });
+    return await safeParseJsonResponse(res);
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || "ไม่สามารถเชื่อมต่อเพื่อลบอัลบั้มบน Synology Photos ได้",
+    };
+  }
+}
+
+/**
  * Create a new photo directory / activity folder under /photo or /home/Photos
  */
 export async function createSynologyPhotoFolder(params: {

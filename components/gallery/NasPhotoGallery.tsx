@@ -32,6 +32,7 @@ import {
   PhotoMonthGroup,
   deleteSynologyPhotoItems,
   createSynologyAlbum,
+  deleteSynologyAlbum,
   createSynologyPhotoFolder,
   deleteSynologyPhotoFolder,
 } from "@/lib/synology-photos";
@@ -674,6 +675,34 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
       showToast(`❌ เกิดข้อผิดพลาด: ${err?.message}`);
     } finally {
       setIsCreatingAlbum(false);
+    }
+  };
+
+  // Delete album handler
+  const handleDeleteAlbum = async (album: SynologyPhotoAlbum) => {
+    if (!album || !userSid) return;
+    if (!confirm(`ท่านต้องการลบอัลบั้ม "${album.name}" หรือไม่?\n(รูปภาพต้นฉบับในคลังภาพจะไม่ถูกลบ)`)) {
+      return;
+    }
+
+    try {
+      const res = await deleteSynologyAlbum({
+        albumId: album.id,
+        sid: userSid,
+        nasUrl: config.nasUrl,
+      });
+
+      if (res.success) {
+        showToast(`🗑️ ลบอัลบั้ม "${album.name}" สำเร็จ`);
+        if (selectedAlbumId === album.id) {
+          setSelectedAlbumId(null);
+        }
+        loadAlbums(userSid, currentSpace);
+      } else {
+        showToast(`❌ ลบอัลบั้มไม่สำเร็จ: ${res.error || "เกิดข้อผิดพลาด"}`);
+      }
+    } catch (err: any) {
+      showToast(`❌ เกิดข้อผิดพลาด: ${err?.message}`);
     }
   };
 
@@ -1939,6 +1968,17 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                         <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-full bg-black/60 text-white text-[10px] font-bold backdrop-blur-xs">
                           {album.item_count} รายการ
                         </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteAlbum(album);
+                          }}
+                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1.5 rounded-xl bg-white/90 hover:bg-red-50 text-slate-400 hover:text-red-600 transition-all shadow-xs cursor-pointer"
+                          title={`ลบอัลบั้ม "${album.name}"`}
+                        >
+                          🗑️
+                        </button>
                       </div>
                       <div className="p-3.5">
                         <div className="font-bold text-sm text-slate-800 truncate group-hover:text-cyan-700 transition-colors">
