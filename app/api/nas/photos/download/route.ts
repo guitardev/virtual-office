@@ -1,4 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
+import { loginSynology } from "@/lib/synology";
+
+export const dynamic = "force-dynamic";
+
+let cachedServiceSid: string | null = null;
+let cachedServiceSidTime = 0;
+
+async function getServiceAccountSid(nasUrl: string): Promise<string | null> {
+  const serviceAccount = process.env.SYNOLOGY_SERVICE_ACCOUNT;
+  const servicePassword = process.env.SYNOLOGY_SERVICE_PASSWORD;
+  if (!serviceAccount || !servicePassword) return null;
+
+  const now = Date.now();
+  if (cachedServiceSid && now - cachedServiceSidTime < 30 * 60 * 1000) {
+    return cachedServiceSid;
+  }
+
+  try {
+    const auth = await loginSynology(serviceAccount, servicePassword, nasUrl);
+    if (auth.success && auth.sid) {
+      cachedServiceSid = auth.sid;
+      cachedServiceSidTime = now;
+      return auth.sid;
+    }
+  } catch (err: any) {
+    console.warn("[Photos Download] Auto-authenticate service account failed:", err?.message);
+  }
+  return null;
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -6,26 +35,39 @@ export async function GET(req: NextRequest) {
     const id = searchParams.get("id");
     const filename = searchParams.get("filename") || `photo_${id}.jpg`;
     const space = searchParams.get("space") || "shared";
-    const sid = searchParams.get("sid");
+    const rawSid = searchParams.get("sid");
     const nasUrl =
       searchParams.get("nasUrl") ||
       process.env.SYNOLOGY_NAS_URL ||
       process.env.NEXT_PUBLIC_SYNOLOGY_NAS_URL ||
       "https://nas.smso.site";
 
-    if (!id || !sid) {
-      return new NextResponse("Missing id or sid", { status: 400 });
+    if (!id) {
+      return new NextResponse("Missing item id", { status: 400 });
+    }
+
+    let effectiveSid =
+      rawSid && rawSid !== "null" && rawSid !== "undefined" && rawSid.trim() !== ""
+        ? rawSid.trim()
+        : null;
+
+    if (!effectiveSid || effectiveSid === "system_chat_session") {
+      effectiveSid = process.env.SYNOLOGY_SERVICE_SID || (await getServiceAccountSid(nasUrl));
+    }
+
+    if (!effectiveSid) {
+      return new NextResponse("Missing authentication session for Synology Photos", { status: 401 });
     }
 
     const cleanUrl = nasUrl.replace(/\/+$/, "");
     const cacheKey = searchParams.get("cache_key");
     const rawMode = searchParams.get("mode");
-    const isVideo = /\.(mp4|mov|webm|avi|mkv|m4v|3gp)$/i.test(filename);
+    const isVideo = /\.(mp4|mov|webm|avi|mkv|m4v|3gp|wmv|flv)$/i.test(filename);
     const isImage = /\.(jpe?g|png|gif|webp|svg|bmp)$/i.test(filename);
     const mode = rawMode || (isVideo || isImage ? "open" : "download");
 
     // If mock session, provide mock media stream
-    if (sid.startsWith("mock_")) {
+    if (effectiveSid.startsWith("mock_")) {
       const dummyBuffer = Buffer.alloc(1024, 0);
       const mime = isVideo ? "video/mp4" : isImage ? "image/jpeg" : "application/octet-stream";
       return new NextResponse(dummyBuffer, {
@@ -43,7 +85,7 @@ export async function GET(req: NextRequest) {
     const unitIdParam = encodeURIComponent(`[${id}]`);
 
     let downloadUrl = `${cleanUrl}/webapi/entry.cgi?api=${apiName}&version=1&method=download&unit_id=${unitIdParam}&_sid=${encodeURIComponent(
-      sid
+      effectiveSid
     )}`;
     if (cacheKey) {
       downloadUrl += `&cache_key=${encodeURIComponent(cacheKey)}`;
@@ -57,7 +99,7 @@ export async function GET(req: NextRequest) {
     // Fallback to version 2 (DSM 7.2+) if version 1 fails
     if (!res.ok) {
       const v2Url = `${cleanUrl}/webapi/entry.cgi?api=${apiName}&version=2&method=download&unit_id=${unitIdParam}&_sid=${encodeURIComponent(
-        sid
+        effectiveSid
       )}${cacheKey ? `&cache_key=${encodeURIComponent(cacheKey)}` : ""}`;
       const v2Res = await fetch(v2Url, {
         method: "GET",

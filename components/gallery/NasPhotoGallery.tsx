@@ -28,6 +28,7 @@ import {
   listSynologyAlbums,
   listSynologyFolders,
   getPhotoThumbnailUrl,
+  resolveThumbnailCacheKey,
   getPhotoMediaUrl,
   formatBytes,
   formatPhotoTime,
@@ -75,7 +76,7 @@ function FolderCardItem({
               src={getPhotoThumbnailUrl(
                 coverId,
                 "m",
-                folder.cover?.cache_key,
+                resolveThumbnailCacheKey(folder.cover, "m"),
                 currentSpace,
                 userSid
               )}
@@ -147,6 +148,141 @@ function FolderCardItem({
           <div className="w-7 h-7 rounded-full bg-slate-50 group-hover:bg-cyan-50 text-slate-400 group-hover:text-cyan-600 flex items-center justify-center text-xs transition-colors shadow-2xs">
             ➔
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PhotoGridCardItem({
+  item,
+  overallIdx,
+  isSelected,
+  isSelecting,
+  gridSize,
+  currentSpace,
+  userSid,
+  onSelect,
+  onClick,
+  onSingleDownload,
+  onCopyShareLink,
+  onDelete,
+}: {
+  item: SynologyPhotoItem;
+  overallIdx: number;
+  isSelected: boolean;
+  isSelecting: boolean;
+  gridSize: "sm" | "md" | "lg";
+  currentSpace: PhotoSpace;
+  userSid: string | null;
+  onSelect: (id: number, e: React.MouseEvent) => void;
+  onClick: () => void;
+  onSingleDownload: (item: SynologyPhotoItem, e: React.MouseEvent) => void;
+  onCopyShareLink: (item: SynologyPhotoItem, e: React.MouseEvent) => void;
+  onDelete: (item: SynologyPhotoItem) => void;
+}) {
+  const [thumbError, setThumbError] = useState(false);
+  const isVideo = item.type === "video" || /\.(mp4|mov|webm|avi|mkv|m4v|3gp|wmv|flv|ogv)$/i.test(item.filename);
+  const cacheKey = resolveThumbnailCacheKey(item.thumbnail, gridSize === "sm" ? "sm" : "m");
+
+  return (
+    <div
+      onClick={onClick}
+      className={`group relative bg-slate-900 rounded-2xl overflow-hidden shadow-xs hover:shadow-xl transition-all cursor-pointer aspect-square ${
+        isSelected ? "ring-3 ring-cyan-500 ring-offset-2" : ""
+      }`}
+    >
+      {/* Multi-selection Checkbox */}
+      <div
+        onClick={(e) => onSelect(item.id, e)}
+        className={`absolute top-2 left-2 z-10 w-6 h-6 rounded-lg flex items-center justify-center transition-all cursor-pointer text-xs font-bold ${
+          isSelected
+            ? "bg-cyan-600 text-white shadow-md ring-2 ring-white scale-105"
+            : isSelecting
+            ? "bg-black/40 text-transparent hover:bg-black/60 border border-white/50"
+            : "opacity-0 group-hover:opacity-100 bg-black/40 text-transparent hover:bg-black/60 border border-white/50"
+        }`}
+        title={isSelected ? "ยกเลิกเลือก" : "เลือกรูปนี้"}
+      >
+        {isSelected ? "✓" : ""}
+      </div>
+
+      {!thumbError ? (
+        <img
+          src={getPhotoThumbnailUrl(
+            item.id,
+            gridSize === "sm" ? "sm" : "m",
+            cacheKey,
+            currentSpace,
+            userSid
+          )}
+          alt={item.filename}
+          onError={() => setThumbError(true)}
+          className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-300 opacity-90 group-hover:opacity-100"
+          loading="lazy"
+        />
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-3 text-center space-y-1.5 select-none">
+          <div className="text-3xl drop-shadow">{isVideo ? "🎥" : "🖼️"}</div>
+          <div className="text-[11px] font-bold text-white truncate max-w-full px-1">{item.filename}</div>
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-800/50">
+            {isVideo ? "วิดีโอ" : "ภาพถ่าย"}
+          </span>
+        </div>
+      )}
+
+      {/* Video Badge & Center Play Overlay */}
+      {isVideo && (
+        <>
+          <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-black/75 text-white text-[10px] font-bold backdrop-blur-xs flex items-center gap-1 shadow-md group-hover:opacity-0 transition-opacity">
+            <span className="text-cyan-400">▶</span>
+            <span>วิดีโอ</span>
+          </div>
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none group-hover:scale-110 transition-transform">
+            <div className="w-12 h-12 rounded-full bg-black/60 backdrop-blur-md flex items-center justify-center text-white text-lg shadow-xl border border-white/20 group-hover:bg-cyan-600 transition-colors">
+              ▶
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Card Hover Action Buttons (Single Download, Share Link, Delete) */}
+      <div className="absolute top-2 right-2 z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          type="button"
+          onClick={(e) => onSingleDownload(item, e)}
+          title="ดาวน์โหลดภาพนี้"
+          className="w-7 h-7 rounded-lg bg-black/60 hover:bg-cyan-600 text-white flex items-center justify-center text-xs backdrop-blur-md transition-all shadow-md cursor-pointer"
+        >
+          📥
+        </button>
+        <button
+          type="button"
+          onClick={(e) => onCopyShareLink(item, e)}
+          title="คัดลอกลิงก์ดาวน์โหลด"
+          className="w-7 h-7 rounded-lg bg-black/60 hover:bg-cyan-600 text-white flex items-center justify-center text-xs backdrop-blur-md transition-all shadow-md cursor-pointer"
+        >
+          📋
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(item);
+          }}
+          title="ลบภาพนี้ (ตามสิทธิ์ NAS)"
+          className="w-7 h-7 rounded-lg bg-black/60 hover:bg-rose-600 text-white flex items-center justify-center text-xs backdrop-blur-md transition-all shadow-md cursor-pointer"
+        >
+          🗑️
+        </button>
+      </div>
+
+      {/* Hover Info Overlay */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-2.5 flex flex-col justify-end text-white pointer-events-none">
+        <div className="text-xs font-bold truncate leading-tight drop-shadow-xs">{item.filename}</div>
+        <div className="text-[10px] text-slate-300 mt-0.5 flex items-center justify-between">
+          <span>{formatPhotoTime(item.time).split(" ")[0]}</span>
+          <span className="font-mono">{formatBytes(item.filesize)}</span>
         </div>
       </div>
     </div>
@@ -1004,8 +1140,16 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
           const isSelected = selectedItemIds.includes(item.id);
 
           return (
-            <div
+            <PhotoGridCardItem
               key={item.id}
+              item={item}
+              overallIdx={overallIdx}
+              isSelected={isSelected}
+              isSelecting={isSelecting}
+              gridSize={gridSize}
+              currentSpace={currentSpace}
+              userSid={userSid}
+              onSelect={handleToggleSelectItem}
               onClick={() => {
                 if (isSelecting) {
                   setSelectedItemIds((prev) =>
@@ -1015,93 +1159,10 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                   setLightboxIndex(overallIdx >= 0 ? overallIdx : 0);
                 }
               }}
-              className={`group relative bg-slate-900 rounded-2xl overflow-hidden shadow-xs hover:shadow-xl transition-all cursor-pointer aspect-square ${
-                isSelected ? "ring-3 ring-cyan-500 ring-offset-2" : ""
-              }`}
-            >
-              {/* Multi-selection Checkbox */}
-              <div
-                onClick={(e) => handleToggleSelectItem(item.id, e)}
-                className={`absolute top-2 left-2 z-10 w-6 h-6 rounded-lg flex items-center justify-center transition-all cursor-pointer text-xs font-bold ${
-                  isSelected
-                    ? "bg-cyan-600 text-white shadow-md ring-2 ring-white scale-105"
-                    : isSelecting
-                    ? "bg-black/40 text-transparent hover:bg-black/60 border border-white/50"
-                    : "opacity-0 group-hover:opacity-100 bg-black/40 text-transparent hover:bg-black/60 border border-white/50"
-                }`}
-                title={isSelected ? "ยกเลิกเลือก" : "เลือกรูปนี้"}
-              >
-                {isSelected ? "✓" : ""}
-              </div>
-
-              <img
-                src={getPhotoThumbnailUrl(
-                  item.id,
-                  gridSize === "sm" ? "sm" : "m",
-                  item.thumbnail?.cache_key,
-                  currentSpace,
-                  userSid
-                )}
-                alt={item.filename}
-                className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-300 opacity-90 group-hover:opacity-100"
-                loading="lazy"
-              />
-
-              {/* Video Badge & Center Play Overlay */}
-              {(item.type === "video" || /\.(mp4|mov|webm|avi|mkv|m4v|3gp)$/i.test(item.filename)) && (
-                <>
-                  <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-black/75 text-white text-[10px] font-bold backdrop-blur-xs flex items-center gap-1 shadow-md group-hover:opacity-0 transition-opacity">
-                    <span className="text-cyan-400">▶</span>
-                    <span>วิดีโอ</span>
-                  </div>
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none group-hover:scale-110 transition-transform">
-                    <div className="w-12 h-12 rounded-full bg-black/60 backdrop-blur-md flex items-center justify-center text-white text-lg shadow-xl border border-white/20 group-hover:bg-cyan-600 transition-colors">
-                      ▶
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* Card Hover Action Buttons (Single Download, Share Link, Delete) */}
-              <div className="absolute top-2 right-2 z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                  type="button"
-                  onClick={(e) => handleSingleDownload(item, e)}
-                  title="ดาวน์โหลดภาพนี้"
-                  className="w-7 h-7 rounded-lg bg-black/60 hover:bg-cyan-600 text-white flex items-center justify-center text-xs backdrop-blur-md transition-all shadow-md cursor-pointer"
-                >
-                  📥
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => handleCopyShareLink(item, e)}
-                  title="คัดลอกลิงก์ดาวน์โหลด"
-                  className="w-7 h-7 rounded-lg bg-black/60 hover:bg-cyan-600 text-white flex items-center justify-center text-xs backdrop-blur-md transition-all shadow-md cursor-pointer"
-                >
-                  📋
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setDeleteConfirmItem(item);
-                  }}
-                  title="ลบภาพนี้ (ตามสิทธิ์ NAS)"
-                  className="w-7 h-7 rounded-lg bg-black/60 hover:bg-rose-600 text-white flex items-center justify-center text-xs backdrop-blur-md transition-all shadow-md cursor-pointer"
-                >
-                  🗑️
-                </button>
-              </div>
-
-              {/* Hover Info Overlay */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-2.5 flex flex-col justify-end text-white">
-                <div className="text-xs font-bold truncate leading-tight drop-shadow-xs">{item.filename}</div>
-                <div className="text-[10px] text-slate-300 mt-0.5 flex items-center justify-between">
-                  <span>{formatPhotoTime(item.time).split(" ")[0]}</span>
-                  <span>{formatBytes(item.filesize)}</span>
-                </div>
-              </div>
-            </div>
+              onSingleDownload={handleSingleDownload}
+              onCopyShareLink={handleCopyShareLink}
+              onDelete={(target) => setDeleteConfirmItem(target)}
+            />
           );
         })}
       </div>
@@ -1992,7 +2053,13 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                       <div className="h-40 bg-slate-100 flex items-center justify-center relative overflow-hidden">
                         {album.cover ? (
                           <img
-                            src={getPhotoThumbnailUrl(album.cover.id, "m", album.cover.cache_key, currentSpace, userSid)}
+                            src={getPhotoThumbnailUrl(
+                              album.cover.id,
+                              "m",
+                              resolveThumbnailCacheKey(album.cover, "m"),
+                              currentSpace,
+                              userSid
+                            )}
                             alt={album.name}
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                             loading="lazy"
@@ -2279,7 +2346,7 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                     poster={getPhotoThumbnailUrl(
                       activeLightboxItem.id,
                       "xl",
-                      activeLightboxItem.thumbnail?.cache_key,
+                      resolveThumbnailCacheKey(activeLightboxItem.thumbnail, "xl"),
                       currentSpace,
                       userSid
                     )}
@@ -2302,14 +2369,24 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                   </video>
                 ) : (
                   <img
-                    src={getPhotoThumbnailUrl(
+                    src={getPhotoMediaUrl(
                       activeLightboxItem.id,
-                      "xl",
-                      activeLightboxItem.thumbnail?.cache_key,
+                      activeLightboxItem.filename,
                       currentSpace,
-                      userSid
+                      userSid,
+                      "open"
                     )}
                     alt={activeLightboxItem.filename}
+                    onError={(e) => {
+                      // Fallback to xl thumbnail if direct download has any issue
+                      (e.currentTarget as HTMLImageElement).src = getPhotoThumbnailUrl(
+                        activeLightboxItem.id,
+                        "xl",
+                        resolveThumbnailCacheKey(activeLightboxItem.thumbnail, "xl"),
+                        currentSpace,
+                        userSid
+                      );
+                    }}
                     style={{
                       transform: `rotate(${photoRotation}deg) scale(${photoZoom})`,
                       transition: "transform 0.2s ease-out",
@@ -2509,7 +2586,13 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                   }`}
                 >
                   <img
-                    src={getPhotoThumbnailUrl(item.id, "sm", item.thumbnail?.cache_key, currentSpace, userSid)}
+                    src={getPhotoThumbnailUrl(
+                      item.id,
+                      "sm",
+                      resolveThumbnailCacheKey(item.thumbnail, "sm"),
+                      currentSpace,
+                      userSid
+                    )}
                     alt={item.filename}
                     className="w-full h-full object-cover"
                   />
@@ -2887,7 +2970,7 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                   src={getPhotoThumbnailUrl(
                     deleteConfirmItem.id,
                     "sm",
-                    deleteConfirmItem.thumbnail?.cache_key,
+                    resolveThumbnailCacheKey(deleteConfirmItem.thumbnail, "sm"),
                     currentSpace,
                     userSid
                   )}

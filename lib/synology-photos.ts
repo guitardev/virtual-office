@@ -346,6 +346,25 @@ export async function listSynologyFolders(params: {
 }
 
 /**
+ * Helper to resolve thumbnail cache key from Synology DSM 7 thumbnail object
+ * Handles both cache_key property and size-specific keys (sm, m, xl)
+ */
+export function resolveThumbnailCacheKey(
+  thumbnail?: SynologyPhotoItem["thumbnail"] | any,
+  size: "sm" | "m" | "xl" = "m"
+): string | undefined {
+  if (!thumbnail) return undefined;
+  if (typeof thumbnail === "string") return thumbnail;
+  return (
+    thumbnail.cache_key ||
+    (size === "sm" ? thumbnail.sm : size === "xl" ? thumbnail.xl : thumbnail.m) ||
+    thumbnail.m ||
+    thumbnail.sm ||
+    thumbnail.xl
+  );
+}
+
+/**
  * Build thumbnail URL for photo item
  */
 export function getPhotoThumbnailUrl(
@@ -360,8 +379,12 @@ export function getPhotoThumbnailUrl(
     size,
     space,
   });
-  if (cacheKey) params.set("cache_key", cacheKey);
-  if (sid) params.set("sid", sid);
+  if (cacheKey && cacheKey !== "undefined" && cacheKey !== "null") {
+    params.set("cache_key", cacheKey);
+  }
+  if (sid && sid !== "null" && sid !== "undefined" && sid.trim() !== "") {
+    params.set("sid", sid.trim());
+  }
 
   return `/api/nas/photos/thumbnail?${params.toString()}`;
 }
