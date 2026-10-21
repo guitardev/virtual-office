@@ -505,15 +505,16 @@ export function ChatPage({
 
         if (syncToNas) {
           const uploadRes = await uploadAttachmentToNas(file);
+          const isInline = type === "image" || type === "pdf";
           if (uploadRes.success && uploadRes.path) {
             nasPath = uploadRes.path;
             storageType = "nas";
-            downloadUrl = `/api/nas/download?path=${encodeURIComponent(uploadRes.path)}`;
+            downloadUrl = `/api/nas/download?path=${encodeURIComponent(uploadRes.path)}${isInline ? "&mode=open" : ""}`;
           } else {
             console.warn("NAS Upload not completed:", uploadRes.error);
             nasPath = `/chat_attachments/${file.name}`;
             storageType = "nas";
-            downloadUrl = `/api/nas/download?path=${encodeURIComponent(`/chat_attachments/${file.name}`)}`;
+            downloadUrl = `/api/nas/download?path=${encodeURIComponent(`/chat_attachments/${file.name}`)}${isInline ? "&mode=open" : ""}`;
           }
         }
 
@@ -593,17 +594,63 @@ export function ChatPage({
     setAttachedFiles([]);
   };
 
-  const handleDownloadAttachment = async (att: ChatAttachment) => {
-    // 1. If att has a Synology NAS path, attempt download via File Station API proxy
-    if (att.nasPath) {
-      try {
-        const config = getClientSynologyConfig();
-        const sid = nasSid || getUserNasSid() || "system_chat_session";
-        const nasDownloadUrl = `/api/nas/download?path=${encodeURIComponent(
-          att.nasPath
-        )}&sid=${encodeURIComponent(sid)}&mode=download&url=${encodeURIComponent(config.nasUrl)}`;
+  // ─── ATTACHMENT DISPLAY URL RESOLVER ───
+  const getAttachmentDisplayUrl = (
+    att?: ChatAttachment | null,
+    mode: "open" | "download" = "open"
+  ): string => {
+    if (!att) return "";
+    // If local base64 preview is available (e.g. sender's active session)
+    if (mode === "open" && att.dataUrl) return att.dataUrl;
 
-        const res = await fetch(nasDownloadUrl);
+    const currentSid = nasSid || getUserNasSid();
+    const config = getClientSynologyConfig();
+
+    if (att.url) {
+      try {
+        const isRelative = att.url.startsWith("/");
+        const urlObj = isRelative
+          ? new URL(att.url, typeof window !== "undefined" ? window.location.origin : "http://localhost:3000")
+          : new URL(att.url);
+
+        if (urlObj.pathname.startsWith("/api/nas/download")) {
+          if (!urlObj.searchParams.has("mode")) {
+            urlObj.searchParams.set("mode", mode);
+          }
+          if (!urlObj.searchParams.has("sid") && currentSid) {
+            urlObj.searchParams.set("sid", currentSid);
+          }
+          if (!urlObj.searchParams.has("url") && config.nasUrl) {
+            urlObj.searchParams.set("url", config.nasUrl);
+          }
+          return isRelative ? `${urlObj.pathname}?${urlObj.searchParams.toString()}` : urlObj.toString();
+        }
+        return att.url;
+      } catch {
+        return att.url;
+      }
+    }
+
+    const path = att.nasPath || (att.name ? `/chat_attachments/${att.name}` : "");
+    if (path) {
+      const params = new URLSearchParams({
+        path,
+        mode,
+      });
+      if (currentSid) params.set("sid", currentSid);
+      if (config.nasUrl) params.set("url", config.nasUrl);
+      return `/api/nas/download?${params.toString()}`;
+    }
+
+    return "";
+  };
+
+  const handleDownloadAttachment = async (att: ChatAttachment) => {
+    // 1. If att has a Synology NAS path or download URL, attempt download via File Station API proxy
+    const resolvedUrl = getAttachmentDisplayUrl(att, "download");
+    if (resolvedUrl) {
+      try {
+        const res = await fetch(resolvedUrl);
         if (res.ok) {
           const blob = await res.blob();
           const blobUrl = URL.createObjectURL(blob);
@@ -1357,7 +1404,9 @@ export function ChatPage({
                         <div className="mt-2.5 space-y-2">
                           {messageAttachments.map((att) => {
                             const config = ATTACHMENT_TYPE_CONFIG[att.type] || ATTACHMENT_TYPE_CONFIG.other;
-                            const isImg = att.type === "image" && (att.dataUrl || att.url);
+                            const isImg =
+                              (att.type === "image" || /\.(jpe?g|png|gif|webp|svg|bmp)$/i.test(att.name)) &&
+                              Boolean(att.dataUrl || att.url || att.nasPath);
 
                             if (isImg) {
                               return (
@@ -1374,11 +1423,12 @@ export function ChatPage({
                                     onClick={() => setPreviewImage(att)}
                                   >
                                     <img
-                                      src={att.dataUrl || att.url}
+                                      src={getAttachmentDisplayUrl(att, "open")}
                                       alt={att.name}
                                       className="w-full h-auto object-cover max-h-48 group-hover/img:scale-105 transition-transform duration-200"
+                                      loading="lazy"
                                     />
-                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center gap-2 text-white text-xs font-semibold">
+                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center gap-2 text-white text-xs font-semibold pointer-events-none">
                                       <span>🔍 คลิกเพื่อขยาย</span>
                                     </div>
                                   </div>
@@ -1710,7 +1760,9 @@ export function ChatPage({
                   <div className="flex flex-wrap gap-2">
                     {attachedFiles.map((att) => {
                       const cfg = ATTACHMENT_TYPE_CONFIG[att.type] || ATTACHMENT_TYPE_CONFIG.other;
-                      const isImg = att.type === "image" && (att.dataUrl || att.url);
+                      const isImg =
+                        (att.type === "image" || /\.(jpe?g|png|gif|webp|svg|bmp)$/i.test(att.name)) &&
+                        Boolean(att.dataUrl || att.url || att.nasPath);
 
                       return (
                         <div
@@ -1719,7 +1771,7 @@ export function ChatPage({
                         >
                           {isImg ? (
                             <img
-                              src={att.dataUrl || att.url}
+                              src={getAttachmentDisplayUrl(att, "open")}
                               alt={att.name}
                               className="w-7 h-7 rounded-lg object-cover border border-slate-200 shrink-0"
                             />
@@ -1832,6 +1884,9 @@ export function ChatPage({
                 <span className="text-lg">🖼️</span>
                 <span className="font-bold text-xs truncate">{previewImage.name}</span>
                 <span className="text-[10px] text-slate-400 font-mono">({previewImage.size})</span>
+                <span className="px-2 py-0.5 rounded-md bg-indigo-500/30 text-indigo-200 text-[10px] font-semibold border border-indigo-400/30 shrink-0">
+                  พรีวิวไฟล์แนบ
+                </span>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -1855,7 +1910,7 @@ export function ChatPage({
             {/* Image display */}
             <div className="p-4 flex items-center justify-center overflow-auto max-h-[calc(90vh-100px)] bg-black/40">
               <img
-                src={previewImage.dataUrl || previewImage.url}
+                src={getAttachmentDisplayUrl(previewImage, "open")}
                 alt={previewImage.name}
                 className="max-w-full max-h-[75vh] object-contain rounded-xl"
               />

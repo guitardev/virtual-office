@@ -286,5 +286,76 @@ test.describe("ระบบแชทกลุ่มทางการของ�
     await expect(drawerSummary).toBeVisible();
     await expect(drawerSummary).not.toContainText("สมาชิกทั้งหมด 0 คน");
   });
+
+  test("ควรรองรับการแสดงภาพพรีวิวกรณีที่ user อื่นส่งเข้ามาในแชท (Other user image preview via /api/nas/download)", async ({
+    page,
+  }) => {
+    // กำหนดข้อความแชทล่วงหน้าใน localStorage โดยจำลองข้อความจากผู้ใช้อื่นที่มีรูปภาพแนบ
+    await page.addInitScript(() => {
+      const otherUserMsg = {
+        id: "msg_test_other_user_img",
+        groupId: "ch_all_staff",
+        senderId: "syno_somchai_other",
+        senderName: "นายสมชาย ใจดี",
+        senderRole: "member",
+        senderPosition: "เจ้าพนักงานพัฒนาสังคมชำนาญงาน",
+        text: "ส่งภาพกิจกรรมเปิดงานโครงการเฉลิมพระเกียรติครับ",
+        timestamp: "10:30 น.",
+        attachmentName: "activity_ceremony_2569.jpg",
+        attachmentType: "image",
+        attachmentSize: "2.5 MB",
+        attachmentUrl: "/api/nas/download?path=%2Fchat_attachments%2Factivity_ceremony_2569.jpg",
+        attachments: [
+          {
+            id: "att_other_img_1",
+            name: "activity_ceremony_2569.jpg",
+            type: "image",
+            size: "2.5 MB",
+            nasPath: "/chat_attachments/activity_ceremony_2569.jpg",
+            url: "/api/nas/download?path=%2Fchat_attachments%2Factivity_ceremony_2569.jpg",
+            storageType: "nas",
+            uploadedToNas: true,
+          },
+        ],
+      };
+      localStorage.setItem("smartmso_chat_messages_v2", JSON.stringify([otherUserMsg]));
+      localStorage.setItem("omnioffice_chat_messages_v2", JSON.stringify([otherUserMsg]));
+      localStorage.setItem("smartmso_chat_messages", JSON.stringify([otherUserMsg]));
+      localStorage.setItem("omnioffice_chat_messages", JSON.stringify([otherUserMsg]));
+    });
+
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    // 1. ไปที่เมนู แชททีม
+    const chatNav = page.locator("aside button:has-text('แชททีม'), nav button:has-text('แชททีม')").first();
+    await chatNav.click();
+
+    // 2. ตรวจสอบว่าข้อความจากผู้ใช้อื่นแสดงผล
+    const otherMsgText = page.locator("text=ส่งภาพกิจกรรมเปิดงานโครงการเฉลิมพระเกียรติครับ").first();
+    await expect(otherMsgText).toBeVisible();
+
+    // 3. ตรวจสอบว่ารูปภาพของ user อื่นแสดงผล (tag img แสดงและ src เชื่อมโยงไปที่ api/nas/download พร้อม mode=open)
+    const imgEl = page.locator("img[alt='activity_ceremony_2569.jpg']").first();
+    await expect(imgEl).toBeVisible();
+
+    const imgSrc = await imgEl.getAttribute("src");
+    expect(imgSrc).toContain("/api/nas/download");
+    expect(imgSrc).toContain("mode=open");
+
+    // 4. ทดสอบคลิกที่รูปภาพเพื่อเปิด Lightbox ขยายภาพพรีวิว
+    await imgEl.click();
+
+    // 5. ตรวจสอบว่า Modal Lightbox ขยายภาพเปิดขึ้นมาอย่างสมบูรณ์
+    const lightboxModal = page.locator("div.fixed.inset-0:has-text('พรีวิวไฟล์แนบ')").first();
+    await expect(lightboxModal).toBeVisible();
+    await expect(lightboxModal.locator("text=activity_ceremony_2569.jpg").first()).toBeVisible();
+
+    // 6. ปิด Modal
+    const closeBtn = lightboxModal.locator("button:has-text('✕')").first();
+    await closeBtn.click();
+    await expect(lightboxModal).toBeHidden();
+  });
 });
+
 
