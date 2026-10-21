@@ -17,6 +17,9 @@ ingress:
       connectTimeout: 60s
       keepAliveConnections: 100
       noChunkedEncoding: true
+    # หมายเหตุ CORS: เพื่อให้เบราว์เซอร์สามารถส่งไฟล์ตรงเข้า NAS ได้ (Direct Client Upload สูงสุด 100 MB)
+    # แนะนำให้ตั้งค่า Response Headers ผ่าน Cloudflare Dashboard > Rules > Transform Rules > Modify Response Header
+    # (หรือหาก Tunnel เป็น Locally-Managed สามารถจัดการผ่าน Reverse Proxy ของ DSM ได้เช่นกัน)
 
   # (ทางเลือกเสริม) หากในอนาคตต้องการรัน Web App สำรองในวง LAN ด้วย:
   # - hostname: office-local.yourdomain.com
@@ -24,3 +27,4 @@ ingress:
 
   # 🛡️ Catch-all: ปฏิเสธคำขอที่ไม่ตรงกับ Hostname
   - service: http_status:404
+
