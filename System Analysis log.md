@@ -2184,4 +2184,49 @@ Failed to load resource: the server responded with a status of 500 () xkeiuyhkok
   - ผ่านครบทั้ง 5 กรณีทดสอบ (5/5 passed, 17.3s)
 - **All Previous Test Suites:** Unified Notifications (5/5), Typing Indicator (1/1), Circular Workflow (10/10) ผ่านครบ 100% ปราศจากข้อผิดพลาดตกค้าง
 
+---
+
+## 45. การแก้ไขปัญหาการอัปโหลดไฟล์สู่ Synology Photos ล้มเหลว (รหัส 407 จาก Path ที่มี Double-Slash เช่น `/photo//2570`) (วันที่ 21 ตุลาคม 2569)
+
+### 45.1 รายละเอียดปัญหา (Issue Description)
+ผู้ใช้ทดสอบการอัปโหลดไฟล์ภาพเข้าสู่คลังภาพและสื่อราชการ (Synology Photos) ในพื้นที่ส่วนกลาง (Shared Space) แล้วระบบแสดงข้อความแจ้งเตือน:
+`"อัปโหลดไฟล์ล้มเหลว: เกิดข้อผิดพลาดของระบบไฟล์ภายใน Synology NAS (รหัส 407: ไม่สามารถเขียนลงในโฟลเดอร์ "/photo//2570" กรุณาตรวจสอบว่ามีโฟลเดอร์นี้และมีสิทธิ์ Read/Write บน dsm)"`
+
+### 45.2 สาเหตุของปัญหา (Root Cause Analysis)
+1. **Double-Slash ในการประกอบ Path ฝั่ง Client ([NasPhotoGallery.tsx](file:///c:/Users/GuitarDev/virtual-office/components/gallery/NasPhotoGallery.tsx)):**
+   - ใน `uploadFileList` เดิมมีการประกอบสตริง `${basePath}/${selectedFolder.name}` หาก `selectedFolder.name` มีเครื่องหมายสแลชนำหน้า (เช่น `"/2570"`) หรือ `selectedFolder.path` เป็นค่าว่าง จะส่งผลให้ได้สตริง `"/photo//2570"`
+2. **การ Sanitize ไม่คลุม Slashing ซ้ำซ้อนฝั่ง Server ([app/api/nas/upload/route.ts](file:///c:/Users/GuitarDev/virtual-office/app/api/nas/upload/route.ts)):**
+   - โค้ดเดิม `let cleanFolderPath = "/" + rawFolderPath.replace(/^\/+|\/+$/g, "");` ตัดเฉพาะสแลชตัวแรกและตัวท้าย แต่ไม่ได้แปลงเครื่องหมายสแลชซ้ำซ้อนภายใน (`//+` ➔ `/`) ทำให้ค่าที่ส่งไปยัง `SYNO.FileStation.Upload` ยังคงเป็น `"/photo//2570"`
+   - Synology FileStation VFS บน DSM ปฏิเสธเส้นทางที่มี Double-Slash ส่งผลให้การอัปโหลดล้มเหลวด้วยรหัส `407` (File operation failed)
+3. **การ Retry ใน Fallback 3 ส่ง Path ซ้ำซ้อนเดิม:**
+   - เมื่อเกิดรหัส 407 แม้ระบบพยายามเรียก `ensureDirectoryExists` แต่เมื่อ Retried `attemptUpload(cleanFolderPath)` ค่า `cleanFolderPath` ก็ยังคงมี `//` ส่งผลให้การ Retry ล้มเหลวด้วย 407 ซ้ำอีกครั้ง
+4. **ขาดการรับประกันการมีอยู่ของโฟลเดอร์ก่อนการอัปโหลดภาพ (Pre-emptive Directory Existence):**
+   - ใน DSM 7 Photos การส่งคำขอ `create_parents=true` บน API Upload บางครั้งไม่สามารถสร้างโฟลเดอร์ปลายทางได้ทันท่วงทีหากโฟลเดอร์นั้นยังไม่เคยถูกสร้างขึ้นใน File Station
+
+### 45.3 การแก้ไขและการพัฒนา (Implementation Details)
+1. **พัฒนายูทิลิตี้ `resolvePhotoFolderPath` ใน [NasPhotoGallery.tsx](file:///c:/Users/GuitarDev/virtual-office/components/gallery/NasPhotoGallery.tsx):**
+   - ตรวจสอบและทำความสะอาด Path ของโฟลเดอร์ทั้งในกรณีส่ง `path` และส่ง `name`
+   - แปลง Backslashes, ตัดสแลชซ้ำซ้อน (`/\/+/g ➔ "/"`), และเพิ่ม Prefixes `/photo` หรือ `/home/Photos` อย่างถูกต้อง 100%
+   - นำไปใช้งานครอบคลุมทั้ง: `uploadFileList`, `handleCreateFolder`, `handleDeleteFolder`, และแถบ Preview ตำแหน่งปลายทางใน Create Folder Modal
+2. **ปรับปรุงการ Normalize Path ใน [app/api/nas/upload/route.ts](file:///c:/Users/GuitarDev/virtual-office/app/api/nas/upload/route.ts):**
+   - ปรับใช้:
+     ```ts
+     let cleanFolderPath = ("/" + rawFolderPath.trim())
+       .replace(/\\/g, "/")
+       .replace(/\/+/g, "/")
+       .replace(/\/+$/, "");
+     ```
+   - เพิ่มการเรียก `await ensureDirectoryExists(cleanFolderPath, effectiveSid, cleanUrl);` แบบ Proactive ก่อนการอัปโหลดภาพเข้าสู่ `/photo/*` และ `/home/Photos/*`
+   - อัปเดต `ensureDirectoryExists` ให้ทำความสะอาด Slashing ก่อนประมวลผล Parent และ Child Folder Name
+3. **ป้องกัน Path และ Folder Name ใน [lib/synology.ts](file:///c:/Users/GuitarDev/virtual-office/lib/synology.ts) และ [app/api/nas/photos/route.ts](file:///c:/Users/GuitarDev/virtual-office/app/api/nas/photos/route.ts):**
+   - ตัดสแลชทั้งหัวและท้ายออกจาก `folderName` ก่อนส่งคำสั่ง `SYNO.FileStation.CreateFolder` บน DSM ป้องกันการตั้งชื่อโฟลเดอร์ที่มี `/` ติดเข้าไป
+   - Sanitize รายการ `paths` ใน `deleteNasFiles` ทุกรายการ
+4. **ปรับปรุงข้อความแจ้งเตือน Error Code 407:**
+   - แนะนำเพิ่มเติมอย่างชัดเจนเกี่ยวกับการตรวจสอบสิทธิ์ Management / Full Access / Upload ในเมนู Synology Photos ➔ Settings ➔ Shared Space ➔ Set Access Permissions บน DSM
+
+### 45.4 ผลการทดสอบ (Verification)
+- `npx tsc --noEmit` ผ่านสมบูรณ์ **0 errors**
+- การทดสอบฟังก์ชัน `resolvePhotoFolderPath` และ Sanitization Edge Cases ผ่าน 100% (แปลง `"/photo//2570"` ➔ `"/photo/2570"`)
+
+
 

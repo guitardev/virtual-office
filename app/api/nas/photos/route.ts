@@ -414,21 +414,24 @@ export async function POST(req: NextRequest) {
 
     // ─── ACTION 3: CREATE FOLDER IN PHOTO STORAGE ───
     if (action === "create_folder") {
-      const folderPath = body.folderPath || body.folder_path;
-      const folderName = (body.folderName || body.folder_name || "").trim();
+      const rawFolderPath = body.folderPath || body.folder_path;
+      const rawFolderName = (body.folderName || body.folder_name || "").trim();
+      const folderName = rawFolderName.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/^\/+|\/+$/g, "");
       if (!folderName) {
         return NextResponse.json({ success: false, error: "กรุณาระบุชื่อโฟลเดอร์" }, { status: 400 });
       }
 
       // If no folderPath provided, default to root of selected space
-      const targetPath = folderPath || (space === "shared" ? "/photo" : "/home/Photos");
+      let targetPath = rawFolderPath || (space === "shared" ? "/photo" : "/home/Photos");
+      targetPath = ("/" + targetPath.trim()).replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/+$/, "");
       const result = await createNasFolder(sid, targetPath, folderName, cleanUrl);
       return NextResponse.json(result);
     }
 
     // ─── ACTION 4: DELETE FOLDER IN PHOTO STORAGE ───
     if (action === "delete_folder") {
-      const folderPath = body.folderPath || body.folder_path;
+      const rawFolderPath = body.folderPath || body.folder_path;
+      const folderPath = ("/" + (rawFolderPath || "").trim()).replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/+$/, "");
       if (!folderPath || folderPath === "/photo" || folderPath === "/home/Photos" || folderPath === "/") {
         return NextResponse.json(
           { success: false, error: "ไม่สามารถลบโฟลเดอร์ราก (Root Folder) ของระบบได้" },

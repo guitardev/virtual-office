@@ -728,8 +728,8 @@ export async function createNasFolder(
       };
     }
 
-    const cleanName = name.trim();
-    const cleanFolderPath = folderPath.replace(/\/+$/, "");
+    const cleanName = name.trim().replace(/\\/g, "/").replace(/\/+/g, "/").replace(/^\/+|\/+$/g, "");
+    const cleanFolderPath = ("/" + folderPath.trim()).replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/+$/, "");
 
     // If in browser, proxy through POST /api/nas/files
     if (typeof window !== "undefined") {
@@ -821,8 +821,14 @@ export async function deleteNasFiles(
       return await safeParseJsonResponse(res);
     }
 
+    const cleanPaths = paths.map((p) =>
+      ("/" + p.trim())
+        .replace(/\\/g, "/")
+        .replace(/\/+/g, "/")
+        .replace(/\/+$/, "")
+    );
     const cleanUrl = nasUrl.replace(/\/+$/, "");
-    const pathParam = JSON.stringify(paths);
+    const pathParam = JSON.stringify(cleanPaths);
     const url = `${cleanUrl}/webapi/entry.cgi?api=SYNO.FileStation.Delete&version=2&method=start&path=${encodeURIComponent(
       pathParam
     )}&accurate_progress=true&_sid=${encodeURIComponent(sid)}`;

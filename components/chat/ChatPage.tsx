@@ -89,7 +89,7 @@ export function ChatPage({
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [previewImage, setPreviewImage] = useState<ChatAttachment | null>(null);
 
-  // Synology NAS File Station Integration (/chat_attachments on 192.168.162.21)
+  // Synology NAS File Station Integration (/chat_attachments on 192.168.162.26)
   const [nasSid, setNasSid] = useState<string | null>(null);
   const [nasAccount, setNasAccount] = useState<string | null>(null);
   const [syncToNas, setSyncToNas] = useState<boolean>(true);

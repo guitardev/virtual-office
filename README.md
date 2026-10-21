@@ -2,7 +2,7 @@
 
 ระบบสื่อสาร ทำงานร่วมกัน และบริหารจัดการทรัพยากรภายในองค์กรและหน่วยงานราชการ พัฒนาด้วย **Next.js 16 (App Router)**, **React 19**, **TypeScript** และ **Tailwind CSS v4** เชื่อมต่อฐานข้อมูลคลาวด์สด **Supabase PostgreSQL & Supabase Auth** พร้อมระบบยืนยันตัวตนผ่าน **Google OAuth** และ **LINE Login SSO**, สถาปัตยกรรมการจัดการสิทธิ์ขั้นสูง (**Granular Role-Based Access Control - RBAC**), ระบบบริหารคำขอสิทธิ์เข้าใช้งานใหม่ (Access Requests E-Workflow) และโครงสร้างข้อมูลบุคลากรตามระเบียบงานสารบรรณภาครัฐ
 
-> 🌐 **Production URL:** [https://virtual-office-ten-chi.vercel.app](https://virtual-office-ten-chi.vercel.app)  
+> 🌐 **Production URL:** [https://www.smso.site](https://www.smso.site)  
 > 📖 **คู่มือระบบฉบับสมบูรณ์:** [docs/README.md](file:///c:/Users/GuitarDev/virtual-office/docs/README.md)
 
 ---
@@ -140,5 +140,5 @@ npm run build
 - 💻 **Lead Developer:** GuitarDev
 - 🏛️ **หน่วยงานต้นแบบ:** สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร (พมจ.กำแพงเพชร)
 - 🔒 **มาตรฐาน:** Enterprise Role-Based Access Control & Government Electronic Workflow
-- 🌐 **Deploy Production:** [https://virtual-office-ten-chi.vercel.app](https://virtual-office-ten-chi.vercel.app)
+- 🌐 **Deploy Production:** [https://www.smso.site](https://www.smso.site)
 - 📖 **เอกสารฉบับสมบูรณ์:** [docs/README.md](file:///c:/Users/GuitarDev/virtual-office/docs/README.md)

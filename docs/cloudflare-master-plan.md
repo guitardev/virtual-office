@@ -1,4 +1,4 @@
-# 🛡️ แผนแม่บทสถาปัตยกรรม Cloudflare Integration (Smart MSO & Synology NAS)
+﻿# 🛡️ แผนแม่บทสถาปัตยกรรม Cloudflare Integration (Smart MSO & Synology NAS)
 
 > **เวอร์ชัน:** v1.0.0 (Enterprise Cloudflare Integration Suite)  
 > **เป้าหมาย:** ปกป้องระบบ Virtual Office ด้วยเครือข่ายระดับโลกของ Cloudflare, เชื่อมต่อ On-Premise Synology NAS ผ่าน Zero Trust Tunnel โดยไม่ต้องเปิด Port Forwarding และป้องกันการโจมตี/บอทด้วย WAF Geo-blocking และ Cloudflare Turnstile
@@ -17,14 +17,14 @@ graph TD
         Turnstile --> CDN["Edge Cache (Static Assets & Cached NAS Media)"]
     end
     
-    CDN -->|office.yourdomain.com (CNAME)| Vercel["Vercel Cloud Platform (Next.js 16 Web App)"]
+    CDN -->|www.smso.site (CNAME)| Vercel["Vercel Cloud Platform (Next.js 16 Web App)"]
     Vercel --> Supabase["Supabase Cloud Database & GoTrue Auth"]
     
-    Vercel -->|REST API via https://nas.yourdomain.com| CF_Edge
-    CDN -->|nas.yourdomain.com (Tunnel)| Tunnel_NAS["Cloudflare Tunnel (cloudflared daemon)"]
+    Vercel -->|REST API via https://nas.smso.site| CF_Edge
+    CDN -->|nas.smso.site (Tunnel)| Tunnel_NAS["Cloudflare Tunnel (cloudflared daemon)"]
     
     subgraph On-Premise Office LAN (192.168.162.x)
-        Tunnel_NAS --> Synology["Synology NAS DSM 7+ (192.168.162.21:5000)"]
+        Tunnel_NAS --> Synology["Synology NAS DSM 7+ (192.168.162.26:5000)"]
     end
 ```
 
@@ -36,10 +36,10 @@ graph TD
 |---|---|---|
 | **สถาปัตยกรรมการโฮสต์** | **Vercel (Global Edge) + Cloudflare Proxy** | Web App รันบน Vercel 100% พร้อม CDN และ Auto-scaling โดยมี Cloudflare คลุมหน้า |
 | **Cloudflare Tunnel** | **Dedicated NAS Ingress** | รัน `cloudflared` บน Synology NAS เพื่อให้ Vercel และผู้ใช้ภายนอกเข้าถึง DMS/Photos อย่างปลอดภัย |
-| **โครงสร้างโดเมน** | **แยก Subdomain ชัดเจน** | `office.yourdomain.com` (Vercel CNAME) และ `nas.yourdomain.com` (Cloudflare Tunnel) |
+| **โครงสร้างโดเมน** | **แยก Subdomain ชัดเจน** | `www.smso.site` (Vercel CNAME) และ `nas.smso.site` (Cloudflare Tunnel) |
 | **Bot Protection** | **Cloudflare Turnstile** | ฝัง Turnstile Widget บนหน้า Login (ทั้งแบบ Synology Auth และ Supabase Auth) |
 | **WAF & Security** | **Geo-blocking (TH Only)** | อนุญาตทราฟฟิกหลักจากประเทศไทย (TH) และสกัดกั้นกลุ่ม IP อันตรายจากต่างประเทศ |
-| **การจัดเก็บไฟล์** | **Synology NAS + Edge Cache** | จัดเก็บไฟล์ลงเครื่อง NAS ที่สำนักงานเหมือนเดิม โดย Vercel เรียกผ่าน `https://nas.yourdomain.com` |
+| **การจัดเก็บไฟล์** | **Synology NAS + Edge Cache** | จัดเก็บไฟล์ลงเครื่อง NAS ที่สำนักงานเหมือนเดิม โดย Vercel เรียกผ่าน `https://nas.smso.site` |
 
 ---
 
@@ -60,7 +60,7 @@ graph TD
 1. ไปที่ Cloudflare Dashboard > **Zero Trust** > **Networks** > **Tunnels**
 2. กด **Create a Tunnel** > เลือกชื่อเช่น `smartmso-lan-tunnel`
 3. เลือกสภาพแวดล้อมเป็น **Docker** และคัดลอกคำสั่งที่มี `token`
-4. SSH เข้า Synology NAS (`ssh admin@192.168.162.21`) แล้วรันสคริปต์ที่เตรียมไว้ให้:
+4. SSH เข้า Synology NAS (`ssh admin@192.168.162.26`) แล้วรันสคริปต์ที่เตรียมไว้ให้:
    ```bash
    chmod +x cloudflare/synology-cloudflared-setup.sh
    ./cloudflare/synology-cloudflared-setup.sh <YOUR_CLOUDFLARE_TUNNEL_TOKEN>
@@ -72,15 +72,15 @@ graph TD
 
 #### วิธีที่ 2.2: กำหนด Public Hostname ใน Zero Trust Dashboard
 - **Service 1 (Web App):**
-  - Subdomain: `office`
-  - Domain: `yourdomain.com`
+  - Subdomain: `www` (หรือ `@`)
+  - Domain: `smso.site`
   - Type: `HTTP`
   - URL: `localhost:3000` (หรือ IP เครื่องเซิร์ฟเวอร์ที่รัน Next.js)
 - **Service 2 (Synology DSM):**
   - Subdomain: `nas`
-  - Domain: `yourdomain.com`
+  - Domain: `smso.site`
   - Type: `HTTP`
-  - URL: `192.168.162.21:5000`
+  - URL: `192.168.162.26:5000`
   - Additional settings > HTTP Settings > เปิด **No TLS Verify** (หากใช้ HTTPS:5001)
 
 ---
@@ -88,7 +88,7 @@ graph TD
 ### 📌 ขั้นตอนที่ 3: เปิดใช้งาน Cloudflare Turnstile
 1. ไปที่ Cloudflare Dashboard > **Turnstile** > **Add Site**
 2. ตั้งชื่อ Site Name: `Smart MSO Login Guard`
-3. ใส่ Domain: `office.yourdomain.com` (และ `localhost` สำหรับการทดสอบในเครื่อง)
+3. ใส่ Domain: `www.smso.site` (และ `localhost` สำหรับการทดสอบในเครื่อง)
 4. เลือกโหมด: **Managed** (ตรวจจับอัตโนมัติ ไม่รบกวนผู้ใช้งาน)
 5. รับค่า Site Key และ Secret Key แล้วนำมากำหนดใน `.env.local` หรือ Vercel Environment Variables:
    ```env
@@ -121,8 +121,8 @@ graph TD
    - **Rule Name:** `Cache Synology Media & Chat Attachments`
    - **Expression:**
      ```text
-     (http.host eq "office.yourdomain.com" and starts_with(http.request.uri.path, "/api/nas/photos")) or
-     (http.host eq "nas.yourdomain.com" and starts_with(http.request.uri.path, "/webapi/entry.cgi"))
+     (http.host eq "www.smso.site" and starts_with(http.request.uri.path, "/api/nas/photos")) or
+     (http.host eq "nas.smso.site" and starts_with(http.request.uri.path, "/webapi/entry.cgi"))
      ```
    - **Edge TTL:** `Override origin` -> กำหนด `7 Days`
    - **Browser TTL:** `4 Hours`

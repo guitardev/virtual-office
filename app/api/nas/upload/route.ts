@@ -5,7 +5,10 @@ export const dynamic = "force-dynamic";
 
 async function ensureDirectoryExists(folderPath: string, sid: string, nasUrl: string): Promise<boolean> {
   try {
-    const cleanPath = folderPath.replace(/\/+$/, "");
+    const cleanPath = ("/" + folderPath.trim())
+      .replace(/\\/g, "/")
+      .replace(/\/+/g, "/")
+      .replace(/\/+$/, "");
     const lastSlashIndex = cleanPath.lastIndexOf("/");
     if (lastSlashIndex <= 0) {
       return true;
@@ -47,7 +50,7 @@ function getSynologyUploadErrorMessage(code?: number, folderPath?: string): stri
       if (folderPath === "/photo") {
         return "ไม่สามารถอัปโหลดไฟล์ไปที่โฟลเดอร์ราก /photo ได้โดยตรง (Synology Photos กำหนดให้บันทึกในโฟลเดอร์ย่อย เช่น /photo/General หรือสร้างอัลบั้มก่อน)";
       }
-      return `เกิดข้อผิดพลาดของระบบไฟล์ภายใน Synology NAS (รหัส 407: ไม่สามารถเขียนลงในโฟลเดอร์ "${folderPath || "ไม่ระบุ"}" กรุณาตรวจสอบว่ามีโฟลเดอร์นี้และมีสิทธิ์ Read/Write บน DSM)`;
+      return `เกิดข้อผิดพลาดของระบบไฟล์ภายใน Synology NAS (รหัส 407: ไม่สามารถเขียนลงในโฟลเดอร์ "${folderPath || "ไม่ระบุ"}" กรุณาตรวจสอบว่ามีโฟลเดอร์นี้และผู้ใช้ได้รับสิทธิ์ Management หรือ Upload ใน Synology Photos -> Settings -> Shared Space -> Set Access Permissions บน DSM)`;
     case 408:
       if (folderPath?.includes("/home")) {
         return `ไม่พบโฟลเดอร์ "${folderPath}" บน NAS (สำหรับพื้นที่ส่วนบุคคล กรุณาตรวจสอบว่าได้เปิด "User Home service" ใน DSM Control Panel > User & Group > Advanced แล้วหรือไม่)`;
@@ -121,8 +124,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Normalize folder path: ensure leading slash and remove any trailing slashes
-    let cleanFolderPath = "/" + rawFolderPath.replace(/^\/+|\/+$/g, "");
+    // Normalize folder path: ensure single leading slash, convert backslashes, collapse multiple slashes, and strip trailing slashes
+    let cleanFolderPath = ("/" + rawFolderPath.trim())
+      .replace(/\\/g, "/")
+      .replace(/\/+/g, "/")
+      .replace(/\/+$/, "");
     if (cleanFolderPath === "/" || cleanFolderPath === "") {
       return NextResponse.json(
         {
@@ -208,6 +214,9 @@ export async function POST(req: NextRequest) {
     if (cleanFolderPath === "/photo") {
       cleanFolderPath = "/photo/General";
       await ensureDirectoryExists("/photo/General", effectiveSid, cleanUrl);
+    } else if (cleanFolderPath.startsWith("/photo/") || cleanFolderPath.startsWith("/home/Photos/")) {
+      // Proactively ensure target folder exists on DSM filesystem before uploading to avoid error 407/408
+      await ensureDirectoryExists(cleanFolderPath, effectiveSid, cleanUrl);
     }
 
     let result = await attemptUpload(cleanFolderPath);

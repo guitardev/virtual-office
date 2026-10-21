@@ -2,6 +2,9 @@
 
 ระบบสื่อสาร ทำงานร่วมกัน และบริหารจัดการทรัพยากรภายในองค์กรและหน่วยงานราชการ พัฒนาด้วย **Next.js 16 (App Router)**, **React 19**, **TypeScript** และ **Tailwind CSS v4** พร้อมสถาปัตยกรรมการจัดการสิทธิ์ขั้นสูง (**Granular Role-Based Access Control - RBAC**), ระบบควบคุมวงจรชีวิตโมดูล (Module Lifecycle Management) และโครงสร้างข้อมูลบุคลากรตามระเบียบงานสารบรรณภาครัฐ
 
+> 🌐 **Production URL:** [https://www.smso.site](https://www.smso.site)  
+> 📖 **คู่มือระบบฉบับสมบูรณ์:** [docs/README.md](file:///c:/Users/GuitarDev/virtual-office/docs/README.md)
+
 ---
 
 ## 📑 สารบัญ (Table of Contents)
@@ -534,6 +537,35 @@ npx tsc --noEmit
 - 🚗 **ยกระดับระบบรถยนต์ราชการ (Car Booking Live Integration):** เชื่อมโยงยานพาหนะจริง 5 คัน และคิวจองรถยนต์ลงตาราง `car_bookings` พร้อม Realtime Listener อัปเดตตัวเลขแจ้งเตือนบน Sidebar ทันที
 - 📈 **ยกระดับโมดูลรายงานและสถิติ (Computed Analytics & Audit Export):** คำนวณสรุปผลสดจากฐานข้อมูลจริง พร้อมระบบส่งออกรายงาน CSV ตามมาตรฐาน สตง.
 - ⚙️ **ระบบแจ้งเตือน Dynamic Navigation Badges:** คำนวณตัวเลขแจ้งเตือนงานค้าง นัดหมายวันนี้ และคำขอจองรถยนต์ตามสิทธิ์ RBAC จากข้อมูลสด
+
+### **v1.9.1 (2026-10-21) — Synology Photos Upload Path Sanitization & Error 407 Fix**
+- 🛡️ **แก้ไขปัญหา Double-Slash Path บน Synology Photos:** แก้ไขบั๊กการต่อสตริงโฟลเดอร์ปลายทางที่ทำให้เกิด `"/photo//2570"` ซึ่งทำให้ระบบไฟล์ของ Synology DSM ปฏิเสธการเขียนด้วยรหัส 407 (File operation failed)
+- 🧹 **Robust Path Sanitizer (`resolvePhotoFolderPath`):** ทำความสะอาดเส้นทางโฟลเดอร์ทุกกรณี ตัดเครื่องหมายสแลชซ้ำซ้อน (`//+` ➔ `/`) รองรับทั้งการระบุชื่อโฟลเดอร์และ Path เต็ม
+- 📁 **Proactive Directory Verification:** ตรวจสอบและสร้างโฟลเดอร์บน NAS อัตโนมัติ (`ensureDirectoryExists`) ก่อนเริ่มขั้นตอนอัปโหลดไฟล์ภาพ
+- 💡 **ข้อความวินิจฉัยสิทธิ์ DSM 407:** แนะนำขั้นตอนตรวจสอบสิทธิ์ Management / Full Access บน Synology Photos Shared Space สำหรับผู้ดูแลระบบอย่างชัดเจน
+
+### **v1.9.0 (2026-10-21) — Production Domain Cutover (www.smso.site) & Hardware Ready**
+- 🌐 **เปิดใช้งานโดเมน Production ทางการ (`https://www.smso.site`):** ตัดสลับชี้โดเมนหลักของระบบเข้าสู่ Vercel Production พร้อมเปิดใช้งาน SSL/TLS มาตรฐานสากล
+- 🛡️ **ผสานรวม Cloudflare Tunnel & WAF Protection:** ชี้โดเมนเชื่อมโยง Synology NAS ไปยัง `https://nas.smso.site` อย่างสมบูรณ์
+- 🖐️ **Network Hardware Discovery:** สแกนตรวจสอบระบบเครือข่ายภายในสำนักงาน พบและเตรียมความพร้อมในการเชื่อมโยงเครื่องสแกนลายนิ้วมือ HIP CMi681S (IP `192.168.162.15:5005`)
+
+### **v1.8.0 (2026-10-19) — Synology NAS & Cloudflare Integration Suite**
+- 📁 **ระบบเชื่อมต่อ Synology File Station & Photos Gallery:** เชื่อมต่อระบบเอกสารและแกลเลอรีภาพกิจกรรมของสำนักงานผ่าน Synology DSM 7+ WebAPI
+- 🛡️ **ระบบสลับเส้นทางสำรองอัตโนมัติ (Resilient LAN / Tunnel Failover):** ตรวจจับสถานะการเชื่อมต่อ หากเกิดข้อผิดพลาด 502/530 บนโดเมน `nas.smso.site` ระบบจะสลับเส้นทางไปยัง LAN IP สำนักงาน (`http://192.168.162.26:5000`) ให้อัตโนมัติแบบไร้รอยต่อ
+- 🤖 **Cloudflare Turnstile Bot Defense:** ผสานวิดเจ็ต Turnstile ป้องกันการยิงรหัสผ่านและบอทบนหน้าจอเข้าสู่ระบบ
+
+### **v1.7.0 (2026-10-17) — Access Requests E-Workflow & Admin Review Panel**
+- 📬 **ระบบยื่นคำขอสิทธิ์ใช้งานใหม่ (Self-Service Access Request):** บุคลากรภายนอกหรือข้าราชการบรรจุใหม่สามารถกรอกแบบฟอร์มยื่นคำขอเข้าใช้งานระบบได้จากหน้า Login
+- 🔔 **แผงพิจารณาคำขอและกระดิ่งแจ้งเตือน (Admin E-Workflow):** แท็บ "คำขอสิทธิ์เข้าใช้งานใหม่" ในหน้า Admin Console พร้อมตัวเลขแจ้งเตือนและระบบอนุมัติบรรจุเข้าทำเนียบ / ปฏิเสธคำขอพร้อมระบุเหตุผล
+
+### **v1.6.0 (2026-10-15) — LINE Login SSO, Google OAuth & PDPA Suite**
+- 💬 **LINE Login SSO (OpenID Connect / OAuth 2.0):** เข้าสู่ระบบด้วย LINE Account ทางการ (`#06C755`) พร้อม API Route แลกเปลี่ยน Token และดึงโปรไฟล์/รูปอัตโนมัติ
+- 🔑 **Google OAuth 2.0 Integration:** เข้าสู่ระบบด้วยบัญชี Google
+- 📜 **PDPA Compliance:** จัดทำหน้านโยบายความเป็นส่วนตัว (`/policy`) และข้อกำหนดการใช้งาน (`/term`) ตามระเบียบข้อบังคับด้านข้อมูลส่วนบุคคล
+
+### **v1.5.0 (2026-10-13) — Live Supabase Cloud Database & Zero Demo Data Cutover**
+- 🗄️ **เชื่อมต่อ Supabase Live จริง (`xkeiuyhkokmecefzzynb.supabase.co`):** ถ่ายโอนฐานข้อมูลขึ้นระบบคลาวด์สด พร้อมเปิดใช้งาน Realtime WebSocket Synchronization
+- 🧹 **Zero Demo Data Migration:** ล้างข้อมูลทดสอบ (Demo Mock Data) ออกทั้งหมด และเชื่อมต่อข้อมูลจริงจากฐานข้อมูลในทุกโมดูล (รถยนต์ราชการ, แชท, กระดานงาน, บันทึกการตรวจสอบ)
 
 ### **v1.4.4 (2026-10-11) — Fullscreen Modal Experience & Prominent Close Controls**
 - ⛶ **โหมด Modal เต็มหน้าจอ (Fullscreen Modal Design):** ปรับโฉมหน้าต่าง Modal ให้สามารถขยายเต็มหน้าจอ (`isFullscreen`) เพื่อใช้พื้นที่หน้าจอคอมพิวเตอร์ (PC / Ultrawide) ได้อย่างเต็มประสิทธิภาพ ไม่ถูกจำกัดในกรอบแคบ พร้อมปุ่มสลับ `⛶ เต็มหน้าจอ` / `🗗 ย่อหน้าต่าง`

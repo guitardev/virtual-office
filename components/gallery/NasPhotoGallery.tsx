@@ -570,40 +570,65 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
     showToast(`📋 คัดลอกลิงก์ดาวน์โหลดรูปภาพ "${item.filename}" แล้ว`);
   };
 
+  // Helper to safely format and normalize photo folder paths without accidental duplicate slashes
+  const resolvePhotoFolderPath = (
+    folder: { id?: number; name?: string; path?: string } | null,
+    space: PhotoSpace
+  ): string => {
+    const basePath = space === "shared" ? "/photo" : "/home/Photos";
+    if (!folder) return basePath;
+
+    if (folder.path) {
+      const cleanP = folder.path.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/^\/+|\/+$/g, "");
+      if (cleanP.startsWith("photo") || cleanP.startsWith("home/Photos")) {
+        return "/" + cleanP;
+      }
+      return `${basePath}/${cleanP}`;
+    }
+
+    const cleanName = (folder.name || "").replace(/\\/g, "/").replace(/\/+/g, "/").replace(/^\/+|\/+$/g, "");
+    if (!cleanName) return basePath;
+    if (cleanName.startsWith("photo") || cleanName.startsWith("home/Photos")) {
+      return "/" + cleanName;
+    }
+    return `${basePath}/${cleanName}`;
+  };
+
   // Create photo folder handler
   const handleCreateFolder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newFolderName.trim() || !userSid) return;
+    const cleanNewFolderName = newFolderName.trim().replace(/\\/g, "/").replace(/\/+/g, "/").replace(/^\/+|\/+$/g, "");
+    if (!cleanNewFolderName || !userSid) return;
 
     setIsCreatingFolder(true);
     const basePath = currentSpace === "shared" ? "/photo" : "/home/Photos";
     let targetParentPath: string;
-    if (selectedFolder?.path) {
-      targetParentPath = selectedFolder.path.startsWith("/")
-        ? selectedFolder.path
-        : `${basePath}/${selectedFolder.path}`;
+    if (selectedFolder) {
+      targetParentPath = resolvePhotoFolderPath(selectedFolder, currentSpace);
     } else {
       const subPath =
         folderBreadcrumbs.length > 1
           ? folderBreadcrumbs
               .slice(1)
-              .map((b) => b.name)
+              .map((b) => b.name.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/^\/+|\/+$/g, ""))
+              .filter(Boolean)
               .join("/")
-          : selectedFolder?.name || "";
+          : "";
       targetParentPath = subPath ? `${basePath}/${subPath}` : basePath;
     }
+    targetParentPath = ("/" + targetParentPath).replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/+$/, "");
 
     try {
       const res = await createSynologyPhotoFolder({
         space: currentSpace,
         folderPath: targetParentPath,
-        folderName: newFolderName.trim(),
+        folderName: cleanNewFolderName,
         sid: userSid,
         nasUrl: config.nasUrl,
       });
 
       if (res.success) {
-        showToast(`📁 สร้างโฟลเดอร์ "${newFolderName.trim()}" ใน Synology Photos สำเร็จ`);
+        showToast(`📁 สร้างโฟลเดอร์ "${cleanNewFolderName}" ใน Synology Photos สำเร็จ`);
         setNewFolderName("");
         setShowCreateFolderModal(false);
         loadFolders(userSid, currentSpace, selectedFolder?.id || 0);
@@ -693,8 +718,7 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
   const handleDeleteFolder = async (folder: SynologyPhotoFolder) => {
     if (!folder || !userSid) return;
 
-    const basePath = currentSpace === "shared" ? "/photo" : "/home/Photos";
-    const targetPath = folder.path || `${basePath}/${folder.name}`;
+    const targetPath = resolvePhotoFolderPath(folder, currentSpace);
 
     setIsDeleting(true);
     try {
@@ -763,10 +787,7 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
     setIsUploading(true);
     showToast(`⏳ กำลังอัปโหลด ${validMedia.length} ไฟล์เข้าสู่ Synology Photos...`);
 
-    const basePath = currentSpace === "shared" ? "/photo" : "/home/Photos";
-    const destFolderPath = selectedFolder.path?.startsWith("/")
-      ? selectedFolder.path
-      : `${basePath}/${selectedFolder.name}`;
+    const destFolderPath = resolvePhotoFolderPath(selectedFolder, currentSpace);
 
     try {
       let successCount = 0;
@@ -2578,14 +2599,22 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                 <div className="px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 font-mono flex items-center gap-1.5 truncate">
                   <span className="text-cyan-700 font-bold">📂</span>
                   <span className="truncate">
-                    {selectedFolder?.path ||
-                      (currentSpace === "shared"
-                        ? folderBreadcrumbs.length > 1
-                          ? `/photo/${folderBreadcrumbs.slice(1).map((b) => b.name).join("/")}`
-                          : "/photo"
-                        : folderBreadcrumbs.length > 1
-                        ? `/home/Photos/${folderBreadcrumbs.slice(1).map((b) => b.name).join("/")}`
-                        : "/home/Photos")}
+                    {(() => {
+                      if (selectedFolder) {
+                        return resolvePhotoFolderPath(selectedFolder, currentSpace);
+                      }
+                      const basePath = currentSpace === "shared" ? "/photo" : "/home/Photos";
+                      const subPath =
+                        folderBreadcrumbs.length > 1
+                          ? folderBreadcrumbs
+                              .slice(1)
+                              .map((b) => b.name.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/^\/+|\/+$/g, ""))
+                              .filter(Boolean)
+                              .join("/")
+                          : "";
+                      const p = subPath ? `${basePath}/${subPath}` : basePath;
+                      return ("/" + p).replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/+$/, "");
+                    })()}
                   </span>
                 </div>
               </div>

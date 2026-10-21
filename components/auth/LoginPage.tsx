@@ -819,9 +819,9 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
                   <div className="font-mono bg-white px-2 py-1 rounded border border-emerald-200 text-[10px] select-all break-all text-emerald-800">
                     http://localhost:3000
                   </div>
-                  <div className="text-[10px] font-bold text-slate-600">สำหรับใช้งานบน Production (Vercel):</div>
+                  <div className="text-[10px] font-bold text-slate-600">สำหรับใช้งานบน Production:</div>
                   <div className="font-mono bg-white px-2 py-1 rounded border border-emerald-200 text-[10px] select-all break-all text-emerald-800">
-                    https://virtual-office-ten-chi.vercel.app
+                    https://www.smso.site
                   </div>
                 </div>
 
