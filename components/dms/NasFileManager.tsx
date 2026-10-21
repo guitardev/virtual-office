@@ -711,7 +711,25 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
                       {displayedFiles.map((item, idx) => (
                         <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
                           <td className="py-2.5 px-3 font-medium flex items-center gap-2 text-slate-800">
-                            <span className="text-base">{item.isdir ? "📁" : "📄"}</span>
+                            <span className="text-base">
+                              {item.isdir
+                                ? "📁"
+                                : /\.(mp4|webm|mov|m4v|mkv|avi|3gp)$/i.test(item.name)
+                                ? "🎥"
+                                : /\.(mp3|wav|ogg|m4a|flac)$/i.test(item.name)
+                                ? "🎵"
+                                : /\.(jpe?g|png|gif|webp|svg|bmp)$/i.test(item.name)
+                                ? "🖼️"
+                                : /\.pdf$/i.test(item.name)
+                                ? "📑"
+                                : /\.(xlsx?|csv)$/i.test(item.name)
+                                ? "📊"
+                                : /\.(docx?|rtf)$/i.test(item.name)
+                                ? "📝"
+                                : /\.(zip|rar|7z|tar|gz)$/i.test(item.name)
+                                ? "📦"
+                                : "📄"}
+                            </span>
                             {item.isdir ? (
                               <button
                                 type="button"
@@ -921,8 +939,28 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
           <div className="w-full max-w-4xl h-[85vh] rounded-2xl bg-white shadow-2xl flex flex-col overflow-hidden">
             <div className="flex items-center justify-between p-4 bg-slate-900 text-white">
               <div className="flex items-center gap-2 truncate">
-                <span>📄</span>
+                <span className="text-base">
+                  {/\.(mp4|webm|mov|m4v|mkv|avi|3gp)$/i.test(previewFile.name)
+                    ? "🎥"
+                    : /\.(mp3|wav|ogg|m4a|flac)$/i.test(previewFile.name)
+                    ? "🎵"
+                    : /\.(jpe?g|png|gif|webp|svg|bmp)$/i.test(previewFile.name)
+                    ? "🖼️"
+                    : /\.pdf$/i.test(previewFile.name)
+                    ? "📑"
+                    : "📄"}
+                </span>
                 <span className="font-bold text-xs truncate">{previewFile.name}</span>
+                {/\.(mp4|webm|mov|m4v|mkv|avi|3gp)$/i.test(previewFile.name) && (
+                  <span className="px-1.5 py-0.5 rounded-md bg-indigo-500/30 text-indigo-300 text-[10px] font-bold">
+                    วิดีโอ
+                  </span>
+                )}
+                {/\.(mp3|wav|ogg|m4a|flac)$/i.test(previewFile.name) && (
+                  <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/30 text-emerald-300 text-[10px] font-bold">
+                    เสียง/ดนตรี
+                  </span>
+                )}
                 <span className="text-[10px] text-slate-400 font-mono">
                   ({Math.round((previewFile.size || 0) / 1024)} KB)
                 </span>
@@ -946,21 +984,58 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
             </div>
 
             <div className="flex-1 bg-slate-100 p-2 overflow-hidden flex items-center justify-center">
-              {previewFile.name.endsWith(".pdf") ? (
+              {previewFile.name.toLowerCase().endsWith(".pdf") ? (
                 <iframe
                   src={`/api/nas/download?sid=${encodeURIComponent(userSid || "")}&path=${encodeURIComponent(
                     previewFile.path
                   )}&mode=open&url=${encodeURIComponent(config.nasUrl)}`}
-                  className="w-full h-full rounded border-0"
+                  className="w-full h-full rounded border-0 bg-white"
                   title="PDF Preview"
                 />
-              ) : previewFile.name.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
+              ) : previewFile.name.match(/\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i) ? (
                 <img
                   src={`/api/nas/download?sid=${encodeURIComponent(userSid || "")}&path=${encodeURIComponent(
                     previewFile.path
                   )}&mode=open&url=${encodeURIComponent(config.nasUrl)}`}
                   alt={previewFile.name}
                   className="max-w-full max-h-full object-contain rounded shadow"
+                />
+              ) : previewFile.name.match(/\.(mp4|webm|mov|m4v|mkv|avi|3gp)$/i) ? (
+                <video
+                  key={previewFile.path}
+                  controls
+                  autoPlay
+                  playsInline
+                  preload="metadata"
+                  className="max-w-full max-h-full rounded-xl shadow-2xl bg-black"
+                  src={`/api/nas/download?sid=${encodeURIComponent(userSid || "")}&path=${encodeURIComponent(
+                    previewFile.path
+                  )}&mode=open&url=${encodeURIComponent(config.nasUrl)}`}
+                >
+                  <p className="text-slate-700 text-xs p-4">
+                    เบราว์เซอร์ของคุณไม่รองรับการเล่นวิดีโอ HTML5 กรุณาดาวน์โหลดไฟล์เพื่อรับชม
+                  </p>
+                </video>
+              ) : previewFile.name.match(/\.(mp3|wav|ogg|m4a|flac)$/i) ? (
+                <div className="p-8 bg-white rounded-2xl shadow-xl text-center space-y-4 max-w-md w-full">
+                  <div className="text-5xl">🎵</div>
+                  <div className="font-bold text-slate-800 text-sm truncate">{previewFile.name}</div>
+                  <audio
+                    controls
+                    autoPlay
+                    className="w-full"
+                    src={`/api/nas/download?sid=${encodeURIComponent(userSid || "")}&path=${encodeURIComponent(
+                      previewFile.path
+                    )}&mode=open&url=${encodeURIComponent(config.nasUrl)}`}
+                  />
+                </div>
+              ) : previewFile.name.match(/\.(txt|log|csv|json|md)$/i) ? (
+                <iframe
+                  src={`/api/nas/download?sid=${encodeURIComponent(userSid || "")}&path=${encodeURIComponent(
+                    previewFile.path
+                  )}&mode=open&url=${encodeURIComponent(config.nasUrl)}`}
+                  className="w-full h-full rounded-xl border border-slate-200 bg-white font-mono text-xs p-4"
+                  title="Document Preview"
                 />
               ) : (
                 <div className="text-center space-y-3">

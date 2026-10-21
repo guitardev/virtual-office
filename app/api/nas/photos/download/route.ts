@@ -19,6 +19,26 @@ export async function GET(req: NextRequest) {
 
     const cleanUrl = nasUrl.replace(/\/+$/, "");
     const cacheKey = searchParams.get("cache_key");
+    const rawMode = searchParams.get("mode");
+    const isVideo = /\.(mp4|mov|webm|avi|mkv|m4v|3gp)$/i.test(filename);
+    const isImage = /\.(jpe?g|png|gif|webp|svg|bmp)$/i.test(filename);
+    const mode = rawMode || (isVideo || isImage ? "open" : "download");
+
+    // If mock session, provide mock media stream
+    if (sid.startsWith("mock_")) {
+      const dummyBuffer = Buffer.alloc(1024, 0);
+      const mime = isVideo ? "video/mp4" : isImage ? "image/jpeg" : "application/octet-stream";
+      return new NextResponse(dummyBuffer, {
+        status: 200,
+        headers: {
+          "Content-Type": mime,
+          "Content-Disposition": `${mode === "open" ? "inline" : "attachment"}; filename="${encodeURIComponent(filename)}"`,
+          "Accept-Ranges": "bytes",
+          "Content-Length": String(dummyBuffer.byteLength),
+        },
+      });
+    }
+
     const apiName = space === "shared" ? "SYNO.FotoTeam.Download" : "SYNO.Foto.Download";
     const unitIdParam = encodeURIComponent(`[${id}]`);
 
@@ -52,14 +72,72 @@ export async function GET(req: NextRequest) {
       return new NextResponse(`Download error: HTTP ${res.status}`, { status: res.status });
     }
 
-    const contentType = res.headers.get("content-type") || "application/octet-stream";
+    let contentType = res.headers.get("content-type") || "application/octet-stream";
+    const ext = filename.split(".").pop()?.toLowerCase();
+    const mimeMap: Record<string, string> = {
+      mp4: "video/mp4",
+      m4v: "video/mp4",
+      webm: "video/webm",
+      mov: "video/quicktime",
+      mkv: "video/x-matroska",
+      avi: "video/x-msvideo",
+      "3gp": "video/3gpp",
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      png: "image/png",
+      gif: "image/gif",
+      webp: "image/webp",
+      svg: "image/svg+xml",
+      pdf: "application/pdf",
+      mp3: "audio/mpeg",
+      wav: "audio/wav",
+      ogg: "audio/ogg",
+    };
+
+    if (ext && mimeMap[ext]) {
+      contentType = mimeMap[ext];
+    }
+
     const arrayBuffer = await res.arrayBuffer();
+    const totalBytes = arrayBuffer.byteLength;
+    const disposition =
+      mode === "open"
+        ? `inline; filename="${encodeURIComponent(filename)}"`
+        : `attachment; filename="${encodeURIComponent(filename)}"`;
+
+    // Support HTTP Range requests for video seeking in browsers
+    const rangeHeader = req.headers.get("range");
+    if (rangeHeader && totalBytes > 0) {
+      const parts = rangeHeader.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : totalBytes - 1;
+
+      if (!isNaN(start) && start < totalBytes) {
+        const safeEnd = Math.min(isNaN(end) ? totalBytes - 1 : end, totalBytes - 1);
+        const chunk = arrayBuffer.slice(start, safeEnd + 1);
+
+        return new NextResponse(chunk, {
+          status: 206,
+          headers: {
+            "Content-Type": contentType,
+            "Content-Range": `bytes ${start}-${safeEnd}/${totalBytes}`,
+            "Accept-Ranges": "bytes",
+            "Content-Length": String(chunk.byteLength),
+            "Content-Disposition": disposition,
+            "Cache-Control": "public, max-age=3600",
+          },
+        });
+      }
+    }
 
     return new NextResponse(arrayBuffer, {
       status: 200,
       headers: {
         "Content-Type": contentType,
-        "Content-Disposition": `attachment; filename="${encodeURIComponent(filename)}"`,
+        "Content-Disposition": disposition,
+        "Accept-Ranges": "bytes",
+        "Content-Length": String(totalBytes),
+        "Cache-Control": mode === "open" ? "public, max-age=3600" : "no-cache",
       },
     });
   } catch (err: any) {

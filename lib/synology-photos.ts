@@ -367,6 +367,26 @@ export function getPhotoThumbnailUrl(
 }
 
 /**
+ * Build download or inline stream URL for photo/video item
+ */
+export function getPhotoMediaUrl(
+  itemId: number,
+  filename: string,
+  space: PhotoSpace = "shared",
+  sid?: string | null,
+  mode: "open" | "download" = "open"
+): string {
+  const params = new URLSearchParams({
+    id: String(itemId),
+    filename,
+    space,
+    mode,
+  });
+  if (sid) params.set("sid", sid);
+  return `/api/nas/photos/download?${params.toString()}`;
+}
+
+/**
  * Format file size helper
  */
 export function formatBytes(bytes: number, decimals: number = 2): string {

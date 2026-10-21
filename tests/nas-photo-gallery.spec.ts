@@ -735,6 +735,96 @@ test.describe("ระบบคลังภาพและสื่อราช�
       page.locator("text=อัปโหลดสำเร็จทั้ง 1 ไฟล์ เข้าสู่ \"/photo/2570\"").first()
     ).toBeVisible({ timeout: 10000 });
   });
+
+  test("การดูวิดีโอในคลังภาพและสื่อ (Video Playback in Lightbox): แสดงป้ายวิดีโอบนการ์ด และเมื่อคลิกจะเปิดเล่นด้วย HTML5 Video Player", async ({
+    page,
+  }) => {
+    // Mock items list with a video item
+    await page.route("**/api/nas/photos?*", async (route) => {
+      const url = new URL(route.request().url());
+      const action = url.searchParams.get("action");
+
+      if (action === "list_items") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            items: [
+              {
+                id: 888,
+                filename: "mso_activity_video_2569.mp4",
+                filesize: 45 * 1024 * 1024,
+                time: Math.floor(Date.now() / 1000),
+                type: "video",
+                thumbnail: {
+                  cache_key: "cache_key_888",
+                  unit_id: 888,
+                },
+                additional: {
+                  resolution: { width: 1920, height: 1080 },
+                },
+              },
+            ],
+            total: 1,
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ success: true, folders: [], albums: [], items: [] }),
+        });
+      }
+    });
+
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    await page.evaluate(() => {
+      localStorage.setItem("omnioffice_nas_user_sid", "mock_valid_photos_sid");
+      localStorage.setItem("omnioffice_nas_user_account", "itadmin");
+      sessionStorage.setItem("omnioffice_nas_user_sid", "mock_valid_photos_sid");
+      sessionStorage.setItem("omnioffice_nas_user_account", "itadmin");
+    });
+
+    const galleryNav = page
+      .locator("aside button:has-text('คลังภาพและสื่อ'), nav button:has-text('คลังภาพและสื่อ')")
+      .first();
+    await galleryNav.click();
+
+    // 1. ไปที่แท็บ 'ทั้งหมด' เพื่อดูการ์ดวิดีโอ
+    const allTab = page.locator("button:has-text('ทั้งหมด')").first();
+    await allTab.click();
+
+    // 2. ตรวจสอบการ์ดวิดีโอ: ต้องมีป้าย "วิดีโอ" และปุ่ม Play "▶"
+    const videoCard = page.locator("div.group:has-text('mso_activity_video_2569.mp4')").first();
+    await expect(videoCard).toBeVisible();
+    await expect(videoCard.locator("text=วิดีโอ")).toBeVisible();
+    await expect(videoCard.locator("text=▶").first()).toBeVisible();
+
+    // 3. คลิกการ์ดเพื่อเปิด Lightbox
+    await videoCard.click();
+
+    // 4. ตรวจสอบว่าใน Lightbox มีแท็ก <video> พร้อม controls
+    const lightbox = page.locator("div.fixed:has-text('mso_activity_video_2569.mp4')").first();
+    await expect(lightbox).toBeVisible();
+
+    const videoPlayer = lightbox.locator("video").first();
+    await expect(videoPlayer).toBeVisible();
+
+    const videoSrc = await videoPlayer.getAttribute("src");
+    expect(videoSrc).toContain("/api/nas/photos/download");
+    expect(videoSrc).toContain("id=888");
+    expect(videoSrc).toContain("mode=open");
+    expect(videoSrc).toContain("mso_activity_video_2569.mp4");
+
+    // 5. ปิด Lightbox
+    const closeBtn = lightbox.locator("button[title*='ปิดหน้าต่าง']").first();
+    await closeBtn.click();
+    await expect(videoPlayer).toBeHidden();
+  });
 });
+
 
 

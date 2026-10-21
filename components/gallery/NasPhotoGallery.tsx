@@ -28,6 +28,7 @@ import {
   listSynologyAlbums,
   listSynologyFolders,
   getPhotoThumbnailUrl,
+  getPhotoMediaUrl,
   formatBytes,
   formatPhotoTime,
   groupPhotosByMonth,
@@ -1046,12 +1047,19 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                 loading="lazy"
               />
 
-              {/* Video Badge */}
-              {item.type === "video" && (
-                <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded-full bg-black/70 text-white text-[10px] font-bold backdrop-blur-xs flex items-center gap-1 group-hover:opacity-0 transition-opacity">
-                  <span>▶</span>
-                  <span>วิดีโอ</span>
-                </div>
+              {/* Video Badge & Center Play Overlay */}
+              {(item.type === "video" || /\.(mp4|mov|webm|avi|mkv|m4v|3gp)$/i.test(item.filename)) && (
+                <>
+                  <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-black/75 text-white text-[10px] font-bold backdrop-blur-xs flex items-center gap-1 shadow-md group-hover:opacity-0 transition-opacity">
+                    <span className="text-cyan-400">▶</span>
+                    <span>วิดีโอ</span>
+                  </div>
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none group-hover:scale-110 transition-transform">
+                    <div className="w-12 h-12 rounded-full bg-black/60 backdrop-blur-md flex items-center justify-center text-white text-lg shadow-xl border border-white/20 group-hover:bg-cyan-600 transition-colors">
+                      ▶
+                    </div>
+                  </div>
+                </>
               )}
 
               {/* Card Hover Action Buttons (Single Download, Share Link, Delete) */}
@@ -2119,9 +2127,20 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
           {/* Top Bar with Pro Controls */}
           <div className="p-3.5 px-6 flex items-center justify-between text-white border-b border-white/10 shrink-0 gap-4 flex-wrap">
             <div className="flex items-center gap-3 truncate min-w-0">
-              <span className="text-xl shrink-0">{activeLightboxItem.type === "video" ? "🎥" : "🖼️"}</span>
+              <span className="text-xl shrink-0">
+                {activeLightboxItem.type === "video" || /\.(mp4|mov|webm|avi|mkv|m4v|3gp)$/i.test(activeLightboxItem.filename)
+                  ? "🎥"
+                  : "🖼️"}
+              </span>
               <div className="truncate">
-                <div className="font-bold text-sm truncate">{activeLightboxItem.filename}</div>
+                <div className="font-bold text-sm truncate flex items-center gap-2">
+                  <span>{activeLightboxItem.filename}</span>
+                  {(activeLightboxItem.type === "video" || /\.(mp4|mov|webm|avi|mkv|m4v|3gp)$/i.test(activeLightboxItem.filename)) && (
+                    <span className="px-1.5 py-0.5 rounded-md bg-cyan-500/20 text-cyan-300 text-[10px] font-bold">
+                      วิดีโอ
+                    </span>
+                  )}
+                </div>
                 <div className="text-[11px] text-slate-400">
                   {formatPhotoTime(activeLightboxItem.time)} · {formatBytes(activeLightboxItem.filesize)}
                   {activeLightboxItem.additional?.resolution && (
@@ -2247,23 +2266,57 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                 ‹
               </button>
 
-              {/* Media Content with Rotation & Zoom */}
+              {/* Media Content with HTML5 Video Player or Image Viewer with Rotation & Zoom */}
               <div className="max-w-5xl max-h-[75vh] flex items-center justify-center overflow-hidden">
-                <img
-                  src={getPhotoThumbnailUrl(
-                    activeLightboxItem.id,
-                    "xl",
-                    activeLightboxItem.thumbnail?.cache_key,
-                    currentSpace,
-                    userSid
-                  )}
-                  alt={activeLightboxItem.filename}
-                  style={{
-                    transform: `rotate(${photoRotation}deg) scale(${photoZoom})`,
-                    transition: "transform 0.2s ease-out",
-                  }}
-                  className="max-w-full max-h-[75vh] object-contain rounded-xl shadow-2xl origin-center"
-                />
+                {activeLightboxItem.type === "video" ||
+                /\.(mp4|mov|webm|avi|mkv|m4v|3gp)$/i.test(activeLightboxItem.filename) ? (
+                  <video
+                    key={activeLightboxItem.id}
+                    controls
+                    autoPlay
+                    playsInline
+                    preload="metadata"
+                    poster={getPhotoThumbnailUrl(
+                      activeLightboxItem.id,
+                      "xl",
+                      activeLightboxItem.thumbnail?.cache_key,
+                      currentSpace,
+                      userSid
+                    )}
+                    style={{
+                      transform: `rotate(${photoRotation}deg) scale(${photoZoom})`,
+                      transition: "transform 0.2s ease-out",
+                    }}
+                    className="max-w-full max-h-[75vh] rounded-2xl shadow-2xl bg-black"
+                    src={getPhotoMediaUrl(
+                      activeLightboxItem.id,
+                      activeLightboxItem.filename,
+                      currentSpace,
+                      userSid,
+                      "open"
+                    )}
+                  >
+                    <p className="text-white text-xs p-4">
+                      เบราว์เซอร์ของคุณไม่รองรับการเล่นวิดีโอ HTML5 กรุณาดาวน์โหลดไฟล์เพื่อรับชม
+                    </p>
+                  </video>
+                ) : (
+                  <img
+                    src={getPhotoThumbnailUrl(
+                      activeLightboxItem.id,
+                      "xl",
+                      activeLightboxItem.thumbnail?.cache_key,
+                      currentSpace,
+                      userSid
+                    )}
+                    alt={activeLightboxItem.filename}
+                    style={{
+                      transform: `rotate(${photoRotation}deg) scale(${photoZoom})`,
+                      transition: "transform 0.2s ease-out",
+                    }}
+                    className="max-w-full max-h-[75vh] object-contain rounded-xl shadow-2xl origin-center"
+                  />
+                )}
               </div>
 
               {/* Next Button */}

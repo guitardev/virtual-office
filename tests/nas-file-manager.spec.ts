@@ -117,4 +117,100 @@ test.describe("ระบบคลังเอกสาร Synology NAS (NAS File
     const shareItem2 = page.locator("text=strategy-plans").first();
     await expect(shareItem2).toBeVisible();
   });
+
+  test("การพรีวิวไฟล์และดูวิดีโอ (Inline Video / Media Player): สามารถกด 'เปิดดู' วิดีโอ .mp4 และแสดง HTML5 video player", async ({
+    page,
+  }) => {
+    // ดัก API จำลองรายการไฟล์ในโฟลเดอร์ มีไฟล์วิดีโอและเอกสาร
+    await page.route("**/api/nas/files*", async (route) => {
+      const url = new URL(route.request().url());
+      const folderPath = url.searchParams.get("folder_path");
+      if (folderPath) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            files: [
+              {
+                path: "/public-documents/presentation_2569.mp4",
+                name: "presentation_2569.mp4",
+                isdir: false,
+                size: 15 * 1024 * 1024,
+              },
+              {
+                path: "/public-documents/annual_report.pdf",
+                name: "annual_report.pdf",
+                isdir: false,
+                size: 2 * 1024 * 1024,
+              },
+            ],
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            shares: [
+              {
+                path: "/public-documents",
+                name: "public-documents",
+                isdir: true,
+                size: 0,
+              },
+            ],
+          }),
+        });
+      }
+    });
+
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    await page.evaluate(() => {
+      localStorage.setItem("omnioffice_nas_user_sid", "mock_valid_dsm_sid");
+      localStorage.setItem("omnioffice_nas_user_account", "itadmin");
+      sessionStorage.setItem("omnioffice_nas_user_sid", "mock_valid_dsm_sid");
+      sessionStorage.setItem("omnioffice_nas_user_account", "itadmin");
+    });
+
+    const nasNav = page
+      .locator("aside button:has-text('คลังเอกสาร NAS'), nav button:has-text('คลังเอกสาร NAS')")
+      .first();
+    await nasNav.click();
+
+    // 1. คลิกเปิดโฟลเดอร์แชร์ public-documents
+    const shareFolder = page.locator("text=public-documents").first();
+    await expect(shareFolder).toBeVisible();
+    await shareFolder.click();
+
+    // 2. ตรวจสอบว่ามีแถวไฟล์วิดีโอ presentation_2569.mp4 และไอคอน 🎥
+    const videoRow = page.locator("tr:has-text('presentation_2569.mp4')").first();
+    await expect(videoRow).toBeVisible();
+    await expect(videoRow.locator("text=🎥")).toBeVisible();
+
+    // กดปุ่ม 'เปิดดู' ในแถววิดีโอ
+    const previewBtn = videoRow.locator("button:has-text('เปิดดู')").first();
+    await previewBtn.click();
+
+    // ตรวจสอบว่าเปิด Modal พรีวิว และมีแท็ก <video>
+    const videoModal = page.locator("div.fixed:has-text('presentation_2569.mp4')").first();
+    await expect(videoModal).toBeVisible();
+    await expect(videoModal.locator("span:has-text('วิดีโอ')")).toBeVisible();
+
+    const videoElement = videoModal.locator("video").first();
+    await expect(videoElement).toBeVisible();
+    const videoSrc = await videoElement.getAttribute("src");
+    expect(videoSrc).toContain("/api/nas/download");
+    expect(videoSrc).toContain("mode=open");
+    expect(videoSrc).toContain("presentation_2569.mp4");
+
+    // ปิด Modal
+    const closeBtn = videoModal.locator("button:has-text('✕')").first();
+    await closeBtn.click();
+    await expect(videoElement).toBeHidden();
+  });
 });
+

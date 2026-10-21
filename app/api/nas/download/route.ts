@@ -99,9 +99,12 @@ export async function GET(req: NextRequest) {
     const fileName = filePath.split("/").filter(Boolean).pop() || "downloaded-file";
     const isImage = /\.(jpe?g|png|gif|webp|svg|bmp)$/i.test(fileName);
     const isPdf = /\.pdf$/i.test(fileName);
+    const isVideo = /\.(mp4|webm|mov|m4v|mkv|avi|3gp)$/i.test(fileName);
+    const isAudio = /\.(mp3|wav|ogg|m4a|flac)$/i.test(fileName);
+    const isText = /\.(txt|log|csv|json|md)$/i.test(fileName);
 
-    // Auto-detect mode: images and PDFs default to "open" (inline preview) unless explicitly requested as "download"
-    const effectiveMode = rawMode || (isImage || isPdf ? "open" : "download");
+    // Auto-detect mode: media and documents default to "open" (inline preview) unless explicitly requested as "download"
+    const effectiveMode = rawMode || (isImage || isPdf || isVideo || isAudio || isText ? "open" : "download");
 
     // Resolve effective session: user's SID > env Service SID > auto-login Service Account
     let effectiveSid = sid && sid !== "null" && sid !== "undefined" && sid.trim() !== "" ? sid.trim() : null;
@@ -235,6 +238,16 @@ export async function GET(req: NextRequest) {
     else if (fileName.endsWith(".webp")) contentType = "image/webp";
     else if (fileName.endsWith(".gif")) contentType = "image/gif";
     else if (fileName.endsWith(".svg")) contentType = "image/svg+xml";
+    else if (/\.(mp4|m4v)$/i.test(fileName)) contentType = "video/mp4";
+    else if (/\.webm$/i.test(fileName)) contentType = "video/webm";
+    else if (/\.mov$/i.test(fileName)) contentType = "video/quicktime";
+    else if (/\.mkv$/i.test(fileName)) contentType = "video/x-matroska";
+    else if (/\.avi$/i.test(fileName)) contentType = "video/x-msvideo";
+    else if (/\.3gp$/i.test(fileName)) contentType = "video/3gpp";
+    else if (/\.mp3$/i.test(fileName)) contentType = "audio/mpeg";
+    else if (/\.wav$/i.test(fileName)) contentType = "audio/wav";
+    else if (/\.ogg$/i.test(fileName)) contentType = "audio/ogg";
+    else if (/\.m4a$/i.test(fileName)) contentType = "audio/mp4";
     else if (fileName.endsWith(".xlsx")) contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     else if (fileName.endsWith(".docx")) contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     else if (fileName.endsWith(".zip")) contentType = "application/zip";
@@ -242,6 +255,7 @@ export async function GET(req: NextRequest) {
 
     // Read arrayBuffer to safely stream binary without socket hang up
     const arrayBuffer = await nasRes.arrayBuffer();
+    const totalBytes = arrayBuffer.byteLength;
 
     // Build disposition header
     const disposition =
@@ -249,13 +263,39 @@ export async function GET(req: NextRequest) {
         ? `inline; filename="${encodeURIComponent(fileName)}"`
         : `attachment; filename="${encodeURIComponent(fileName)}"`;
 
+    // Support HTTP Range requests for video/audio seeking in browsers
+    const rangeHeader = req.headers.get("range");
+    if (rangeHeader && totalBytes > 0) {
+      const parts = rangeHeader.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : totalBytes - 1;
+
+      if (!isNaN(start) && start < totalBytes) {
+        const safeEnd = Math.min(isNaN(end) ? totalBytes - 1 : end, totalBytes - 1);
+        const chunk = arrayBuffer.slice(start, safeEnd + 1);
+
+        return new NextResponse(chunk, {
+          status: 206,
+          headers: {
+            "Content-Type": contentType,
+            "Content-Range": `bytes ${start}-${safeEnd}/${totalBytes}`,
+            "Accept-Ranges": "bytes",
+            "Content-Length": String(chunk.byteLength),
+            "Content-Disposition": disposition,
+            "Cache-Control": isImage ? "public, max-age=86400, stale-while-revalidate=3600" : "public, max-age=3600",
+          },
+        });
+      }
+    }
+
     return new NextResponse(arrayBuffer, {
       status: 200,
       headers: {
         "Content-Type": contentType,
         "Content-Disposition": disposition,
-        "Content-Length": String(arrayBuffer.byteLength),
-        "Cache-Control": isImage ? "public, max-age=86400, stale-while-revalidate=3600" : "no-cache",
+        "Accept-Ranges": "bytes",
+        "Content-Length": String(totalBytes),
+        "Cache-Control": isImage ? "public, max-age=86400, stale-while-revalidate=3600" : isVideo || isAudio ? "public, max-age=3600" : "no-cache",
       },
     });
   } catch (err: any) {
