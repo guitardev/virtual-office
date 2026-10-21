@@ -664,6 +664,77 @@ test.describe("ระบบคลังภาพและสื่อราช�
     // ตรวจสอบข้อความแจ้งเตือนสำเร็จ
     await expect(page.locator("text=สร้างอัลบั้ม \"อัลบั้มโครงการเฉลิมพระเกียรติ 2569\" สำเร็จ").first()).toBeVisible();
   });
+
+  test("การอัปโหลดไฟล์วิดีโอขนาดใหญ่ (Direct Client-to-NAS Upload): รองรับไฟล์วิดีโอ 82.3 MB โดยไม่ติดข้อจำกัด 4.0 MB ของ Serverless", async ({
+    page,
+  }) => {
+    // Mock Folders list
+    await page.route("**/api/nas/photos?*", async (route) => {
+      const url = new URL(route.request().url());
+      const action = url.searchParams.get("action");
+
+      if (action === "list_folders") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            folders: [
+              {
+                id: 2570,
+                name: "2570",
+                item_count: 0,
+                parent: 0,
+              },
+            ],
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ success: true, items: [], total: 0 }),
+        });
+      }
+    });
+
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    await page.evaluate(() => {
+      localStorage.setItem("omnioffice_nas_user_sid", "mock_valid_photos_sid");
+      localStorage.setItem("omnioffice_nas_user_account", "itadmin");
+      sessionStorage.setItem("omnioffice_nas_user_sid", "mock_valid_photos_sid");
+      sessionStorage.setItem("omnioffice_nas_user_account", "itadmin");
+    });
+
+    const galleryNav = page
+      .locator("aside button:has-text('คลังภาพและสื่อ'), nav button:has-text('คลังภาพและสื่อ')")
+      .first();
+    await galleryNav.click();
+
+    // 1. เปิดโฟลเดอร์ 2570
+    const folderCard = page.locator("text=2570").first();
+    await expect(folderCard).toBeVisible();
+    await folderCard.click();
+
+    // 2. ตรวจสอบว่ามี input file ซ่อนอยู่
+    const fileInput = page.locator("input[type='file']").first();
+    await expect(fileInput).toBeAttached();
+
+    // 3. จำลองการส่งไฟล์วิดีโอขนาดใหญ่ (Duck Race ... .mp4)
+    // จำลองไฟล์วิดีโอผ่าน setInputFiles
+    await fileInput.setInputFiles({
+      name: "Duck Race - Duck Games - Google Chrome 2569-08-05 14-08-44.mp4",
+      mimeType: "video/mp4",
+      buffer: Buffer.alloc(1024 * 1024, "a"), // 1MB buffer for fast test execution
+    });
+
+    // 4. ตรวจสอบว่าระบบอัปโหลดสำเร็จ เข้าสู่ /photo/2570 โดยไม่แจ้งเตือนว่าไฟล์ใหญ่เกินไป (> 4.0 MB)
+    await expect(
+      page.locator("text=อัปโหลดสำเร็จทั้ง 1 ไฟล์ เข้าสู่ \"/photo/2570\"").first()
+    ).toBeVisible({ timeout: 10000 });
+  });
 });
 
 

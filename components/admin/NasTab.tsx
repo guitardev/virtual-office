@@ -18,6 +18,7 @@ import {
   clearUserNasSid,
   SynologyHealthStatus,
   SynologyFileItem,
+  uploadNasFileDirect,
 } from "@/lib/synology";
 
 interface NasTabProps {
@@ -240,17 +241,16 @@ export function NasTab({ showToast }: NasTabProps) {
     }
     setIsUploading(true);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("folder_path", currentFolder);
-      formData.append("sid", serviceSid);
-      formData.append("url", config.nasUrl);
+      const data = await uploadNasFileDirect(
+        file,
+        currentFolder,
+        serviceSid,
+        config.nasUrl,
+        (percent) => {
+          showToast(`📤 กำลังอัปโหลด "${file.name}" ตรงสู่ NAS (${percent}%)`);
+        }
+      );
 
-      const res = await fetch("/api/nas/upload", {
-        method: "POST",
-        body: formData,
-      });
-      const data = await res.json();
       if (data.success) {
         showToast(`📤 อัปโหลด "${file.name}" ขึ้น Synology NAS สำเร็จ`);
         loadFiles(serviceSid, currentFolder);

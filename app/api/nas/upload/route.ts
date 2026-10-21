@@ -166,13 +166,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Limit upload file size to 4.2MB to prevent Vercel Serverless Function 4.5MB payload crashes
-    const MAX_SIZE = 4.2 * 1024 * 1024;
+    // Limit upload file size: 4.2MB to prevent Vercel Serverless Function 4.5MB payload crashes, or 100MB on local/custom server
+    const isVercel = !!process.env.VERCEL;
+    const MAX_SIZE = isVercel ? 4.2 * 1024 * 1024 : 100 * 1024 * 1024;
     if (file.size > MAX_SIZE) {
       return NextResponse.json(
         {
           success: false,
-          error: `ขนาดไฟล์ (${(file.size / (1024 * 1024)).toFixed(1)}MB) เกินขีดจำกัดสูงสุดของระบบคลาวด์ (4.2MB ต่อไฟล์) กรุณาลดขนาดไฟล์ หรือใช้ภาพถ่ายความละเอียดปกติ`,
+          error: `ขนาดไฟล์ (${(file.size / (1024 * 1024)).toFixed(1)}MB) เกินขีดจำกัดสูงสุด (${isVercel ? "4.2MB ต่อไฟล์ผ่านคลาวด์ Vercel" : "100MB"}) กรุณาลดขนาดไฟล์ หรือใช้ Direct Client-to-NAS Upload`,
           code: 413,
         },
         { status: 413 }

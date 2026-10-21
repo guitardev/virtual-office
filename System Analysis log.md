@@ -2266,6 +2266,44 @@ Failed to load resource: the server responded with a status of 500 () xkeiuyhkok
 - Playwright E2E Test Suite [tests/nas-photo-gallery.spec.ts](file:///c:/Users/GuitarDev/virtual-office/tests/nas-photo-gallery.spec.ts) **ผ่านครบทั้ง 7 กรณีทดสอบ (7/7 passed, 1.2m)**
   - รวมถึงการทดสอบใหม่: *การสร้างอัลบั้มภาพใหม่: เปิดหน้าต่างสร้างอัลบั้ม ส่ง API create_album และอัปเดตแท็บอัลบั้ม*
 
+---
+
+## 47. ยกระดับการอัปโหลดทุกชนิดสู่แนวทางที่ 1: Direct Client-to-NAS Upload (วันที่ 21 ตุลาคม 2569)
+
+### 47.1 รายละเอียดปัญหา (Issue Description)
+เมื่อผู้ใช้งานพยายามอัปโหลดไฟล์วิดีโอหรือสื่อขนาดใหญ่ เช่น ไฟล์ `"Duck Race - Duck Games - Google Chrome 2569-08-05 14-08-44.mp4"` ขนาด 82.3 MB ผ่านหน้าคลังภาพ Synology Photos หรือคลังเอกสาร File Station ระบบแจ้งเตือนว่า:
+> `อัปโหลดไฟล์ล้มเหลว: ไฟล์ "...mp4" มีขนาดใหญ่เกินไป (82.3 MB > สูงสุด 4.0 MB ต่อไฟล์ผ่านคลาวด์) กรุณาลดขนาดไฟล์ หรืออัปโหลดผ่าน Synology Photos App หรือใช้งานผ่านวง LAN สำนักงาน`
+
+### 47.2 สาเหตุของปัญหา (Root Cause Analysis)
+1. **ข้อจำกัด Vercel Serverless Function 4.5MB Payload Limit:**
+   - การอัปโหลดแบบเดิมวิ่งผ่าน Next.js API Route (`/api/nas/upload`) ซึ่งรันบน Vercel Cloud Platform
+   - Vercel มีเพดานจำกัดขนาด Request Body ไม่เกิน 4.5 MB ต่อ Request (หากส่งเกินจะเกิดข้อผิดพลาด `HTTP 413 FUNCTION_PAYLOAD_TOO_LARGE`)
+2. **ตัวตรวจจับขนาดไฟล์เดิม (Client Pre-flight Blocker):**
+   - มีการกำหนด `MAX_SERVERLESS_UPLOAD_SIZE = 4.0 MB` ในทุกโมดูล ทำให้ไฟล์สื่อขนาดใหญ่หรือวิดีโอถูกตัดสิทธิ์ตั้งแต่ฝั่งเบราว์เซอร์
+
+### 47.3 การแก้ไขและการพัฒนา (Implementation Details)
+ได้เปลี่ยนสถาปัตยกรรมการอัปโหลดทั้งหมดทั่วทั้งระบบไปใช้ **แนวทางที่ 1: Direct Client-to-NAS Upload** ตามที่ได้รับมอบหมาย:
+1. **พัฒนา Core Engine `uploadNasFileDirect` ใน [lib/synology.ts](file:///c:/Users/GuitarDev/virtual-office/lib/synology.ts):**
+   - ส่งข้อมูล `FormData` จากเบราว์เซอร์ตรงเข้าสู่ `https://nas.smso.site/webapi/entry.cgi?api=SYNO.FileStation.Upload&version=2&method=upload&_sid=...` โดยไม่ผ่าน Vercel Proxy
+   - กำหนดค่าคงที่ใหม่ `MAX_DIRECT_UPLOAD_SIZE = 100 * 1024 * 1024` (100 MB ตามสเปก Cloudflare Tunnel)
+   - ใช้ `XMLHttpRequest` (XHR) พร้อมฟังก์ชัน Callback `onProgress` เพื่อคำนวณและแสดงเปอร์เซ็นต์ความคืบหน้าการส่งข้อมูลแบบเรียลไทม์ (0% - 100%)
+   - มีระบบ Fallback อัตโนมัติ: หากพบข้อผิดพลาด CORS บนไฟล์ขนาดเล็ก (<= 4.2 MB) ระบบจะสลับไปใช้ `/api/nas/upload` โดยผู้ใช้ไม่สะดุด
+2. **ปรับปรุงคลังภาพและสื่อ Synology Photos ([NasPhotoGallery.tsx](file:///c:/Users/GuitarDev/virtual-office/components/gallery/NasPhotoGallery.tsx)):**
+   - สลับไปใช้ `uploadNasFileDirect` ปลดล็อกเพดานอัปโหลดเป็น 100 MB รองรับไฟล์คลิปวิดีโอ 82.3 MB ทันที
+   - แสดงสถานะอัปโหลดพร้อมเปอร์เซ็นต์สด `⏳ กำลังอัปโหลดตรงสู่ NAS (1/1): Duck Race ... (xx%)`
+3. **ปรับปรุงคลังเอกสาร File Station ([NasFileManager.tsx](file:///c:/Users/GuitarDev/virtual-office/components/dms/NasFileManager.tsx)):**
+   - รองรับการอัปโหลดไฟล์เอกสาร, แฟ้ม ZIP, และงานนำเสนอขนาดใหญ่สูงสุด 100 MB ตรงสู่ Synology NAS
+4. **ปรับปรุงระบบแชทและเอกสารเวียน ([ChatPage.tsx](file:///c:/Users/GuitarDev/virtual-office/components/chat/ChatPage.tsx), [NewCircularModal.tsx](file:///c:/Users/GuitarDev/virtual-office/components/circular/NewCircularModal.tsx), [NasTab.tsx](file:///c:/Users/GuitarDev/virtual-office/components/admin/NasTab.tsx)):**
+   - อัปเกรดการส่งไฟล์แนบในแชท (`/chat_attachments`), เอกสารเวียน (`/virtual-office/circular_docs`), และหน้า Admin NAS Tab ให้ใช้ `uploadNasFileDirect` ทั้งหมด
+5. **ผ่อนปรน Proxy ฝั่ง Server ([app/api/nas/upload/route.ts](file:///c:/Users/GuitarDev/virtual-office/app/api/nas/upload/route.ts)):**
+   - ตรวจจับว่าหากรันบน Local Development / Private Server ที่ไม่ใช่ Vercel Serverless (`!process.env.VERCEL`) จะยอมรับไฟล์ขนาดสูงสุด 100 MB
+
+### 47.4 ผลการทดสอบ (Verification)
+- `npx tsc --noEmit` ผ่านสมบูรณ์ **0 errors**
+- Playwright E2E Test Suite [tests/nas-photo-gallery.spec.ts](file:///c:/Users/GuitarDev/virtual-office/tests/nas-photo-gallery.spec.ts) **ผ่านครบทั้ง 8 กรณีทดสอบ (8/8 passed, 1.3m)**
+  - รวมถึงการทดสอบใหม่: *การอัปโหลดไฟล์วิดีโอขนาดใหญ่ (Direct Client-to-NAS Upload): รองรับไฟล์วิดีโอ 82.3 MB โดยไม่ติดข้อจำกัด 4.0 MB ของ Serverless*
+
+
 
 
 

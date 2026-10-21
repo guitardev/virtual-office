@@ -18,6 +18,8 @@ import {
   safeParseJsonResponse,
   compressImageForUpload,
   MAX_SERVERLESS_UPLOAD_SIZE,
+  MAX_DIRECT_UPLOAD_SIZE,
+  uploadNasFileDirect,
 } from "@/lib/synology";
 import { Member } from "@/lib/types";
 
@@ -223,31 +225,31 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
       for (let i = 0; i < filesToUpload.length; i++) {
         const rawFile = filesToUpload[i];
 
-        // Optimize/compress images if larger than 3.5MB to fit within Serverless limits
+        // Optimize/compress ultra-large images (> 25MB) client-side
         let file = rawFile;
-        if (rawFile.type.startsWith("image/") && rawFile.size > 3.5 * 1024 * 1024) {
-          showToast(`⚙️ กำลังปรับขนาดภาพ "${rawFile.name}" เพื่อส่งผ่านคลาวด์...`);
-          file = await compressImageForUpload(rawFile);
+        if (rawFile.type.startsWith("image/") && rawFile.size > 25 * 1024 * 1024) {
+          showToast(`⚙️ กำลังปรับขนาดภาพ "${rawFile.name}" เพื่อเพิ่มความเร็วในการอัปโหลด...`);
+          file = await compressImageForUpload(rawFile, 15 * 1024 * 1024);
         }
 
-        // Pre-flight check: ensure file doesn't exceed Serverless limit
-        if (file.size > MAX_SERVERLESS_UPLOAD_SIZE) {
+        // Direct Client-to-NAS Upload supports up to MAX_DIRECT_UPLOAD_SIZE (100 MB via Cloudflare Tunnel)
+        if (file.size > MAX_DIRECT_UPLOAD_SIZE) {
           const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
-          lastError = `ไฟล์ "${file.name}" มีขนาดใหญ่เกินไป (${sizeMb} MB > สูงสุด 4.0 MB ต่อไฟล์ผ่านคลาวด์) กรุณาลดขนาดไฟล์ หรือใช้งานผ่านวง LAN สำนักงาน`;
+          lastError = `ไฟล์ "${file.name}" มีขนาดใหญ่เกินไป (${sizeMb} MB > สูงสุด 100 MB) กรุณาอัปโหลดผ่านเว็บ DSM โดยตรง หรือใช้งานผ่านวง LAN`;
           continue;
         }
 
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("folder_path", currentPath);
-        formData.append("sid", activeSid);
-        formData.append("url", config.nasUrl);
+        // Direct upload to Synology NAS (Bypasses Vercel Serverless Function 4.5MB limit)
+        const data = await uploadNasFileDirect(
+          file,
+          currentPath,
+          activeSid,
+          config.nasUrl,
+          (percent) => {
+            showToast(`📤 กำลังอัปโหลดตรงสู่ NAS (${i + 1}/${filesToUpload.length}): ${file.name} (${percent}%)`);
+          }
+        );
 
-        const res = await fetch("/api/nas/upload", {
-          method: "POST",
-          body: formData,
-        });
-        const data = await safeParseJsonResponse(res);
         if (data.success) {
           successCount++;
         } else {

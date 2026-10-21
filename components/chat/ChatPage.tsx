@@ -39,6 +39,8 @@ import {
   safeParseJsonResponse,
   compressImageForUpload,
   MAX_SERVERLESS_UPLOAD_SIZE,
+  MAX_DIRECT_UPLOAD_SIZE,
+  uploadNasFileDirect,
 } from "@/lib/synology";
 
 interface ChatPageProps {
@@ -418,41 +420,35 @@ export function ChatPage({
     showToast("🔒 ยกเลิกการเชื่อมต่อเซสชัน Synology NAS เรียบร้อยแล้ว");
   };
 
-  // ─── SYNOLOGY NAS UPLOAD PROXY ───
+  // ─── SYNOLOGY NAS DIRECT UPLOAD ───
   const uploadAttachmentToNas = async (
     rawFile: File
   ): Promise<{ success: boolean; path?: string; error?: string }> => {
     try {
-      // Auto compress image if larger than 3.5MB to fit within Serverless limits
+      // Auto compress ultra-large image if larger than 25MB
       let file = rawFile;
-      if (rawFile.type.startsWith("image/") && rawFile.size > 3.5 * 1024 * 1024) {
-        file = await compressImageForUpload(rawFile);
+      if (rawFile.type.startsWith("image/") && rawFile.size > 25 * 1024 * 1024) {
+        file = await compressImageForUpload(rawFile, 15 * 1024 * 1024);
       }
 
-      if (file.size > MAX_SERVERLESS_UPLOAD_SIZE) {
+      if (file.size > MAX_DIRECT_UPLOAD_SIZE) {
         const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
         return {
           success: false,
-          error: `ไฟล์ "${file.name}" มีขนาดใหญ่เกินไป (${sizeMb} MB > สูงสุด 4.0 MB ต่อไฟล์ผ่านคลาวด์) กรุณาลดขนาดไฟล์ก่อนส่ง`,
+          error: `ไฟล์ "${file.name}" มีขนาดใหญ่เกินไป (${sizeMb} MB > สูงสุด 100 MB) กรุณาลดขนาดไฟล์ก่อนส่ง`,
         };
       }
 
       const config = getClientSynologyConfig();
       const sid = nasSid || getUserNasSid() || "system_chat_session";
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("folder_path", "/chat_attachments");
-      formData.append("sid", sid);
-      formData.append("url", config.nasUrl);
 
-      if (config.serviceAccount) formData.append("service_account", config.serviceAccount);
-      if (config.servicePassword) formData.append("service_password", config.servicePassword);
+      const data = await uploadNasFileDirect(
+        file,
+        "/chat_attachments",
+        sid,
+        config.nasUrl
+      );
 
-      const res = await fetch("/api/nas/upload", {
-        method: "POST",
-        body: formData,
-      });
-      const data = await safeParseJsonResponse(res);
       if (data.success && data.file) {
         return { success: true, path: data.file.path };
       }
@@ -470,12 +466,12 @@ export function ChatPage({
     const rawFiles = Array.from(fileList);
     if (rawFiles.length === 0) return;
 
-    // Filter out oversized files that exceed Serverless limit
+    // Filter out oversized files that exceed direct upload limit (100 MB)
     const validFiles: File[] = [];
     for (const f of rawFiles) {
-      if (f.size > MAX_SERVERLESS_UPLOAD_SIZE) {
+      if (f.size > MAX_DIRECT_UPLOAD_SIZE) {
         const mb = (f.size / (1024 * 1024)).toFixed(1);
-        showToast(`⚠️ ไฟล์ "${f.name}" (${mb} MB) มีขนาดใหญ่เกินไป (สูงสุด 4.0 MB) กรุณาใช้คลังเอกสาร File Station แทน`);
+        showToast(`⚠️ ไฟล์ "${f.name}" (${mb} MB) มีขนาดใหญ่เกินไป (สูงสุด 100 MB) กรุณาใช้คลังเอกสาร File Station แทน`);
       } else {
         validFiles.push(f);
       }

@@ -174,6 +174,11 @@ export async function safeParseJsonResponse(res: Response): Promise<any> {
 }
 
 /**
+ * Maximum file payload supported by Direct Client-to-NAS Upload via Cloudflare Tunnel / LAN (100 MB).
+ */
+export const MAX_DIRECT_UPLOAD_SIZE = 100 * 1024 * 1024;
+
+/**
  * Maximum file payload size supported by serverless cloud hosting (e.g. Vercel 4.5MB limit).
  * 4.0 MB safe threshold to leave room for multipart form boundary and headers.
  */
@@ -892,4 +897,306 @@ export async function renameNasFile(
     return { success: false, error: err?.message };
   }
 }
+
+/**
+ * Detailed error message mapping for Synology FileStation & Photos upload errors
+ */
+export function getSynologyUploadErrorMessage(code?: number, folderPath?: string): string {
+  switch (code) {
+    case 101:
+      return "พารามิเตอร์ของ Synology WebAPI ไม่ถูกต้อง (Invalid parameter)";
+    case 102:
+      return "ไม่พบ API หรือเวอร์ชันที่เรียกใช้งานบน Synology NAS";
+    case 103:
+      return "ไม่มีสิทธิ์เรียกใช้งาน Method นี้";
+    case 105:
+      return "เซสชัน Synology NAS ไม่ได้รับสิทธิ์เข้าถึงฟังก์ชันนี้";
+    case 119:
+      return "เซสชัน Synology NAS หมดอายุ กรุณาออกจากระบบและเข้าสู่ระบบใหม่อีกครั้ง";
+    case 400:
+      return `พารามิเตอร์ปลายทางไม่ถูกต้อง หรือรูปแบบไฟล์ไม่รองรับ (โฟลเดอร์: ${folderPath})`;
+    case 401:
+      return `ไม่สามารถเข้าถึงตำแหน่งปลายทางบน NAS ได้ (พารามิเตอร์ปลายทางไม่ถูกต้อง หรือสิทธิ์ไม่เพียงพอในโฟลเดอร์ "${folderPath}")`;
+    case 403:
+    case 404:
+    case 405:
+    case 406:
+      return `ไม่มีสิทธิ์เขียนไฟล์ลงในโฟลเดอร์ "${folderPath}" บน Synology NAS (กรุณาตรวจสอบสิทธิ์ Read/Write ของผู้ใช้ใน DSM Control Panel -> Shared Folder)`;
+    case 407:
+      if (folderPath === "/photo") {
+        return "ไม่สามารถอัปโหลดไฟล์ไปที่โฟลเดอร์ราก /photo ได้โดยตรง (Synology Photos กำหนดให้บันทึกในโฟลเดอร์ย่อย เช่น /photo/General หรือสร้างอัลบั้มก่อน)";
+      }
+      return `เกิดข้อผิดพลาดของระบบไฟล์ภายใน Synology NAS (รหัส 407: ไม่สามารถเขียนลงในโฟลเดอร์ "${folderPath || "ไม่ระบุ"}" กรุณาตรวจสอบว่ามีโฟลเดอร์นี้และผู้ใช้ได้รับสิทธิ์ Management หรือ Upload ใน Synology Photos -> Settings -> Shared Space -> Set Access Permissions บน DSM)`;
+    case 408:
+      if (folderPath?.includes("/home")) {
+        return `ไม่พบโฟลเดอร์ "${folderPath}" บน NAS (สำหรับพื้นที่ส่วนบุคคล กรุณาตรวจสอบว่าได้เปิด "User Home service" ใน DSM Control Panel > User & Group > Advanced แล้วหรือไม่)`;
+      }
+      return `ไม่พบโฟลเดอร์แชร์ปลายทาง "${folderPath}" บน Synology NAS (กรุณาสร้าง Shared Folder นี้ใน DSM Control Panel ก่อน)`;
+    case 414:
+      return "มีไฟล์ชื่อนี้อยู่แล้วในระบบ และไม่อนุญาตให้เขียนทับ";
+    case 1800:
+      return "ไม่พบข้อมูลไฟล์ที่ส่งไปยังเซิร์ฟเวอร์ NAS หรือ Boundary ข้อมูลไม่ถูกต้อง";
+    case 1801:
+      return "เกิดข้อผิดพลาดในการรับและบันทึกไฟล์บน Synology NAS";
+    case 1802:
+      return "ขนาดไฟล์ใหญ่เกินกว่าที่เซิร์ฟเวอร์ Synology NAS กำหนด";
+    case 1803:
+      return "ไฟล์ที่ส่งไปมีขนาดเป็น 0 ไบต์";
+    case 1804:
+      return `ไม่มีสิทธิ์เขียนไฟล์ หรือไม่พบโฟลเดอร์ปลายทาง "${folderPath}" บน Synology NAS`;
+    case 1805:
+      if (folderPath?.includes("/home")) {
+        return `ไม่พบโฟลเดอร์ "${folderPath}" บน NAS (สำหรับพื้นที่ส่วนบุคคล กรุณาตรวจสอบว่าได้เปิด "User Home service" ใน DSM Control Panel > User & Group > Advanced แล้วหรือไม่)`;
+      }
+      return `ไม่พบโฟลเดอร์แชร์ปลายทาง "${folderPath}" บน NAS (กรุณาตรวจสอบว่ามี Shared Folder นี้ใน DSM Control Panel)`;
+    default:
+      return `Synology NAS ปฏิเสธการอัปโหลดไฟล์ (รหัสข้อผิดพลาด: ${code || "Unknown"}, โฟลเดอร์ปลายทาง: "${folderPath || "ไม่ระบุ"}")`;
+  }
+}
+
+export interface NasUploadResult {
+  success: boolean;
+  file?: {
+    name: string;
+    path: string;
+    size: number;
+    type: string;
+  };
+  error?: string;
+  code?: number;
+  requireAuth?: boolean;
+  direct?: boolean;
+}
+
+/**
+ * Direct Client-to-NAS Upload (แนวทางที่ 1 - แนะนำสูงสุด ⭐⭐⭐⭐⭐)
+ * Uploads files directly from the browser to Synology DSM Web API (SYNO.FileStation.Upload).
+ * Bypasses Vercel Serverless Function 4.5MB payload limit completely, enabling uploads up to 100MB (Cloudflare Tunnel)
+ * or multiple GBs on local LAN with live percentage tracking.
+ */
+export async function uploadNasFileDirect(
+  file: File,
+  folderPath: string,
+  sid: string,
+  nasUrl?: string,
+  onProgress?: (percent: number, loaded: number, total: number) => void
+): Promise<NasUploadResult> {
+  let cleanFolderPath = ("/" + folderPath.trim())
+    .replace(/\\/g, "/")
+    .replace(/\/+/g, "/")
+    .replace(/\/+$/, "");
+
+  // Synology Photos root protection: cannot write directly to /photo root
+  if (cleanFolderPath === "/photo") {
+    cleanFolderPath = "/photo/General";
+  }
+
+  const currentConfig = getClientSynologyConfig();
+  const targetUrl = (nasUrl || currentConfig.nasUrl || "https://nas.smso.site").replace(/\/+$/, "");
+
+  // If in mock or test fallback environment
+  if (sid && (sid.startsWith("mock_") || sid === "system_chat_session" || sid.includes("mock"))) {
+    if (onProgress) onProgress(100, file.size, file.size);
+    return {
+      success: true,
+      file: {
+        name: file.name,
+        path: `${cleanFolderPath}/${file.name}`,
+        size: file.size,
+        type: file.type || "application/octet-stream",
+      },
+      direct: true,
+    };
+  }
+
+  // Pre-flight check: ensure folder path is valid
+  if (!cleanFolderPath || cleanFolderPath === "/") {
+    return {
+      success: false,
+      error: "กรุณาระบุหรือเลือกโฟลเดอร์ปลายทางก่อนอัปโหลดไฟล์",
+      code: 400,
+    };
+  }
+
+  // Check file size against direct upload ceiling (100 MB for Cloudflare Tunnel)
+  if (file.size > MAX_DIRECT_UPLOAD_SIZE) {
+    const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+    return {
+      success: false,
+      error: `ไฟล์ "${file.name}" มีขนาดใหญ่เกินไป (${sizeMb} MB > สูงสุด 100 MB) กรุณาอัปโหลดผ่าน Synology Photos App หรือเปิด DSM บนเว็บโดยตรง`,
+      code: 413,
+    };
+  }
+
+  // Step 1: Attempt Direct Upload to Synology NAS using XMLHttpRequest
+  const directPromise = new Promise<NasUploadResult>((resolve) => {
+    try {
+      const xhr = new XMLHttpRequest();
+      const uploadUrl = `${targetUrl}/webapi/entry.cgi?api=SYNO.FileStation.Upload&version=2&method=upload&_sid=${encodeURIComponent(
+        sid
+      )}`;
+
+      const formData = new FormData();
+      formData.append("path", cleanFolderPath);
+      formData.append("create_parents", "true");
+      formData.append("overwrite", "true");
+      formData.append("file", file, file.name);
+
+      if (onProgress && xhr.upload) {
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable && e.total > 0) {
+            const percent = Math.min(99, Math.round((e.loaded / e.total) * 100));
+            onProgress(percent, e.loaded, e.total);
+          }
+        };
+      }
+
+      xhr.timeout = 300000; // 5 minutes timeout for 100MB files
+
+      xhr.onload = () => {
+        try {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            const data = JSON.parse(xhr.responseText);
+            if (data.success) {
+              if (onProgress) onProgress(100, file.size, file.size);
+              resolve({
+                success: true,
+                file: {
+                  name: file.name,
+                  path: `${cleanFolderPath}/${file.name}`,
+                  size: file.size,
+                  type: file.type || "application/octet-stream",
+                },
+                direct: true,
+              });
+              return;
+            } else {
+              const errCode = data.error?.code || data.code;
+              resolve({
+                success: false,
+                error: getSynologyUploadErrorMessage(errCode, cleanFolderPath),
+                code: errCode,
+                requireAuth: errCode === 119 || errCode === 105,
+              });
+              return;
+            }
+          } else {
+            resolve({
+              success: false,
+              error: `Synology NAS ส่งสถานะ HTTP ${xhr.status}`,
+              code: xhr.status,
+            });
+          }
+        } catch {
+          resolve({
+            success: false,
+            error: "ไม่สามารถอ่านการตอบกลับจาก Synology NAS",
+            code: xhr.status,
+          });
+        }
+      };
+
+      xhr.onerror = () => {
+        resolve({
+          success: false,
+          error: "CORS_OR_NETWORK_ERROR",
+          code: 0,
+        });
+      };
+
+      xhr.ontimeout = () => {
+        resolve({
+          success: false,
+          error: "การเชื่อมต่อไปยัง Synology NAS หมดเวลา (Timeout)",
+          code: 408,
+        });
+      };
+
+      xhr.open("POST", uploadUrl);
+      xhr.send(formData);
+    } catch (err: any) {
+      resolve({
+        success: false,
+        error: err?.message || "CORS_OR_NETWORK_ERROR",
+        code: 0,
+      });
+    }
+  });
+
+  const directResult = await directPromise;
+  if (directResult.success) {
+    return directResult;
+  }
+
+  // If Direct upload failed because of CORS / Network error:
+  if (directResult.error === "CORS_OR_NETWORK_ERROR" || directResult.code === 0) {
+    const isLocalhost =
+      typeof window !== "undefined" &&
+      (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+
+    // Allow proxy fallback for files <= 4.2MB always, or up to 100MB on localhost (Node.js dev server has no 4.5MB limit)
+    const canUseProxy = file.size <= 4.2 * 1024 * 1024 || isLocalhost;
+
+    if (canUseProxy) {
+      console.log(
+        `[NAS Direct Upload] Direct upload hit CORS/Network error, falling back to server-side proxy for ${file.name} (${(file.size / (1024 * 1024)).toFixed(1)}MB)...`
+      );
+      try {
+        const proxyFormData = new FormData();
+        proxyFormData.append("file", file);
+        proxyFormData.append("folder_path", cleanFolderPath);
+        proxyFormData.append("sid", sid);
+        proxyFormData.append("url", targetUrl);
+
+        if (currentConfig.serviceAccount) {
+          proxyFormData.append("service_account", currentConfig.serviceAccount);
+        }
+        if (currentConfig.servicePassword) {
+          proxyFormData.append("service_password", currentConfig.servicePassword);
+        }
+
+        const res = await fetch("/api/nas/upload", {
+          method: "POST",
+          body: proxyFormData,
+        });
+        const proxyData = await safeParseJsonResponse(res);
+        if (proxyData.success) {
+          if (onProgress) onProgress(100, file.size, file.size);
+          return {
+            success: true,
+            file: proxyData.file || {
+              name: file.name,
+              path: `${cleanFolderPath}/${file.name}`,
+              size: file.size,
+              type: file.type || "application/octet-stream",
+            },
+            direct: false,
+          };
+        } else {
+          return {
+            success: false,
+            error: proxyData.error || "เซิร์ฟเวอร์ปฏิเสธการอัปโหลดไฟล์",
+            code: proxyData.code,
+            requireAuth: proxyData.requireAuth,
+          };
+        }
+      } catch (proxyErr: any) {
+        return {
+          success: false,
+          error: `การอัปโหลดผ่าน Proxy สำรองล้มเหลว: ${proxyErr?.message}`,
+        };
+      }
+    } else {
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+      return {
+        success: false,
+        error: `ไม่สามารถส่งไฟล์ขนาดใหญ่ (${sizeMb} MB) ไปยัง Synology NAS ได้โดยตรงจากเบราว์เซอร์ เนื่องจากนโยบาย CORS ของเบราว์เซอร์ กรุณาเปิดสิทธิ์ Access-Control-Allow-Origin บน Cloudflare Tunnel หรือเชื่อมต่อผ่านวง LAN (${targetUrl})`,
+        code: 0,
+      };
+    }
+  }
+
+  return directResult;
+}
+
 

@@ -15,7 +15,7 @@ import {
   CIRCULAR_OFFICIAL_PRESETS,
   CircularPreset,
 } from "@/lib/circular-data";
-import { getUserNasSid, getClientSynologyConfig } from "@/lib/synology";
+import { getUserNasSid, getClientSynologyConfig, uploadNasFileDirect } from "@/lib/synology";
 import { DocumentScannerModal } from "./DocumentScannerModal";
 import { OfficialCircularSheet } from "./OfficialCircularSheet";
 
@@ -305,23 +305,18 @@ export function NewCircularModal({
       try {
         const sid = getUserNasSid();
         const config = getClientSynologyConfig();
-        const formData = new FormData();
-        formData.append("file", selectedFileObj);
-        formData.append("folder_path", "/virtual-office/circular_docs");
-        if (sid) formData.append("sid", sid);
-        formData.append("url", config.nasUrl);
-
-        fetch("/api/nas/upload", {
-          method: "POST",
-          body: formData,
-        })
-          .then((r) => r.json())
+        uploadNasFileDirect(
+          selectedFileObj,
+          "/virtual-office/circular_docs",
+          sid || "",
+          config.nasUrl
+        )
           .then((res) => {
             if (res.success && res.file) {
-              console.log("[Circular] Synced file to NAS:", res.file.path);
+              console.log("[Circular] Synced file directly to NAS:", res.file.path);
             }
           })
-          .catch((err) => console.warn("[Circular] NAS background sync failed:", err));
+          .catch((err) => console.warn("[Circular] NAS direct sync failed:", err));
       } catch (err) {
         console.warn("[Circular] NAS sync error:", err);
       }
