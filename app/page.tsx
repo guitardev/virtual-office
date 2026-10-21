@@ -172,6 +172,42 @@ export default function SmartMSOApp() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Sync theme preference with localStorage and html.dark class
+  useEffect(() => {
+    try {
+      const savedTheme = localStorage.getItem("smart_mso_theme");
+      if (savedTheme) {
+        setIsDarkMode(savedTheme === "dark");
+      } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+        setIsDarkMode(true);
+      }
+    } catch {
+      // Fallback
+    }
+  }, []);
+
+  const handleToggleTheme = () => {
+    setIsDarkMode((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("smart_mso_theme", next ? "dark" : "light");
+      } catch {
+        // Fallback
+      }
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      if (isDarkMode) {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+    }
+  }, [isDarkMode]);
+
   // ─── RBAC STATE ───
   const [currentUserRole, setCurrentUserRole] = useState<Role>("admin");
   const [rolePermissions, setRolePermissions] = useState<Record<Role, Record<ModuleId, boolean>>>(
@@ -2204,7 +2240,7 @@ export default function SmartMSOApp() {
   };
 
   return (
-    <div className={`flex h-screen w-screen overflow-hidden ${isDarkMode ? "bg-gray-950 text-gray-100" : "bg-[#F8FAFC] text-slate-800"}`}>
+    <div className={`flex h-screen w-screen overflow-hidden transition-colors duration-200 ${isDarkMode ? "dark bg-[#030712] text-slate-100" : "bg-[#F8FAFC] text-slate-800"}`}>
       {/* ─── TOAST NOTIFICATION ─── */}
       {toastMessage && (
         <div className="fixed top-5 right-5 z-50 flex items-center gap-3 px-5 py-3.5 rounded-2xl bg-slate-900/95 text-white text-sm font-medium shadow-2xl border border-slate-700/60 backdrop-blur-md animate-fade-in">
@@ -2215,9 +2251,11 @@ export default function SmartMSOApp() {
 
       {/* ─── DESKTOP SIDEBAR ─── */}
       <aside
-        className={`hidden md:flex shrink-0 bg-[#0F172A] text-slate-300 flex-col h-screen border-r border-slate-800/80 select-none shadow-xl z-20 transition-all duration-300 ease-in-out ${
-          isSidebarCollapsed ? "w-20" : "w-64"
-        }`}
+        className={`hidden md:flex shrink-0 flex-col h-screen select-none shadow-xl z-20 transition-all duration-300 ease-in-out border-r ${
+          isDarkMode
+            ? "bg-[#090D16] border-slate-800/90 text-slate-300"
+            : "bg-[#0F172A] border-slate-800/80 text-slate-300"
+        } ${isSidebarCollapsed ? "w-20" : "w-64"}`}
       >
         {/* Brand & Collapse Button */}
         <div className="flex items-center justify-between h-16 px-4 border-b border-slate-800 shrink-0">
@@ -2281,7 +2319,9 @@ export default function SmartMSOApp() {
             className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
             onClick={() => setSidebarOpen(false)}
           />
-          <aside className="relative w-72 bg-[#0F172A] text-slate-300 flex flex-col h-full z-10 shadow-2xl">
+          <aside className={`relative w-72 flex flex-col h-full z-10 shadow-2xl transition-colors ${
+            isDarkMode ? "bg-[#090D16] text-slate-300 border-r border-slate-800" : "bg-[#0F172A] text-slate-300"
+          }`}>
             <div className="flex items-center justify-between h-16 px-6 border-b border-slate-800">
               <div className="flex items-center space-x-3">
                 <img
@@ -2308,12 +2348,18 @@ export default function SmartMSOApp() {
       {/* ─── MAIN CONTENT VIEWPORT ─── */}
       <div className="flex-1 min-w-0 flex flex-col h-screen overflow-hidden">
         {/* Top Header */}
-        <header className="h-16 px-6 md:px-8 border-b border-slate-200/80 bg-white/90 backdrop-blur-md flex items-center justify-between shrink-0 shadow-xs z-30">
+        <header className={`h-16 px-6 md:px-8 border-b flex items-center justify-between shrink-0 shadow-xs z-30 transition-colors backdrop-blur-md ${
+          isDarkMode
+            ? "bg-slate-900/90 border-slate-800 text-slate-100 shadow-slate-950/40"
+            : "bg-white/90 border-slate-200/80 text-slate-800"
+        }`}>
           <div className="flex items-center space-x-4 flex-1 max-w-2xl">
             <button
               type="button"
               onClick={() => setSidebarOpen(true)}
-              className="md:hidden p-2 rounded-xl text-slate-600 hover:bg-slate-100"
+              className={`md:hidden p-2 rounded-xl transition-colors ${
+                isDarkMode ? "text-slate-300 hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100"
+              }`}
               aria-label="Toggle Navigation"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2326,18 +2372,44 @@ export default function SmartMSOApp() {
                 placeholder="ค้นหาข้อมูล, เอกสาร, งาน, หรือเพื่อนร่วมงาน..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/15 transition-all text-slate-800 placeholder-slate-400"
+                className={`w-full pl-10 pr-4 py-2 text-sm border rounded-xl transition-all ${
+                  isDarkMode
+                    ? "bg-slate-800/90 border-slate-700 text-slate-100 placeholder-slate-400 focus:bg-slate-800 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
+                    : "bg-slate-50 border-slate-200 text-slate-800 placeholder-slate-400 focus:bg-white focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/15"
+                }`}
               />
               <span className="absolute left-3.5 top-2.5 text-slate-400 text-sm">🔍</span>
             </div>
           </div>
 
-          <div className="flex items-center space-x-3 shrink-0">
+          <div className="flex items-center space-x-2.5 sm:space-x-3 shrink-0">
+            {/* Quick Theme Toggle (Light / Dark) */}
+            <button
+              type="button"
+              onClick={handleToggleTheme}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                isDarkMode
+                  ? "bg-slate-800 text-amber-300 border-slate-700 hover:bg-slate-750 hover:text-amber-200 shadow-xs"
+                  : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200/80 hover:text-slate-800"
+              }`}
+              title={isDarkMode ? "สลับเป็นโหมดสว่าง (Light Mode)" : "สลับเป็นโหมดกลางคืน (Dark Theme)"}
+              aria-label="Toggle Dark Mode"
+            >
+              <span className="text-sm leading-none">{isDarkMode ? "☀️" : "🌙"}</span>
+              <span className="hidden sm:inline">
+                {isDarkMode ? "โหมดสว่าง" : "โหมดกลางคืน"}
+              </span>
+            </button>
+
             {/* Supabase Live Status Indicator */}
             <div
               className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
                 isLiveConnected
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200 shadow-2xs"
+                  ? isDarkMode
+                    ? "bg-emerald-950/60 text-emerald-400 border-emerald-800/80 shadow-2xs"
+                    : "bg-emerald-50 text-emerald-700 border-emerald-200 shadow-2xs"
+                  : isDarkMode
+                  ? "bg-slate-800 text-slate-400 border-slate-700"
                   : "bg-slate-100 text-slate-600 border-slate-200"
               }`}
               title={
@@ -2356,13 +2428,14 @@ export default function SmartMSOApp() {
               </span>
             </div>
 
-
             {/* ─── UNIFIED NOTIFICATION CENTER BELL & DROPDOWN ─── */}
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setShowNotificationDropdown(!showNotificationDropdown)}
-                className="relative p-2.5 rounded-xl hover:bg-slate-100 transition-colors text-slate-600 cursor-pointer"
+                className={`relative p-2.5 rounded-xl transition-colors cursor-pointer ${
+                  isDarkMode ? "hover:bg-slate-800 text-slate-300" : "hover:bg-slate-100 text-slate-600"
+                }`}
                 title="ศูนย์การแจ้งเตือนราชการ (Notifications)"
                 aria-label="การแจ้งเตือน"
               >
@@ -2375,9 +2448,15 @@ export default function SmartMSOApp() {
               </button>
 
               {showNotificationDropdown && (
-                <div className="absolute right-0 mt-2 w-84 sm:w-[420px] bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden animate-fade-in text-slate-800">
+                <div className={`absolute right-0 mt-2 w-84 sm:w-[420px] rounded-2xl shadow-2xl border z-50 overflow-hidden animate-fade-in ${
+                  isDarkMode
+                    ? "bg-slate-900 border-slate-700/80 text-slate-100 shadow-black/80"
+                    : "bg-white border-slate-200 text-slate-800"
+                }`}>
                   {/* Dropdown Header */}
-                  <div className="p-3.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                  <div className={`p-3.5 border-b flex items-center justify-between ${
+                    isDarkMode ? "bg-slate-800/90 border-slate-700" : "bg-slate-50 border-slate-100"
+                  }`}>
                     <div className="flex items-center gap-2">
                       <span className="text-base">🔔</span>
                       <span className="font-bold text-xs text-slate-800">
@@ -2626,12 +2705,16 @@ export default function SmartMSOApp() {
 
               {/* Popover Menu */}
               {showUserDropdown && (
-                <div className="absolute right-0 top-12 w-64 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-50 animate-fade-in">
-                  <div className="px-4 py-3 border-b border-slate-100">
-                    <div className="text-xs font-bold text-slate-800 truncate">
+                <div className={`absolute right-0 top-12 w-64 rounded-2xl shadow-xl border py-2 z-50 animate-fade-in ${
+                  isDarkMode
+                    ? "bg-slate-900 border-slate-700/80 text-slate-100 shadow-black/70"
+                    : "bg-white border-slate-200 text-slate-800"
+                }`}>
+                  <div className={`px-4 py-3 border-b ${isDarkMode ? "border-slate-800" : "border-slate-100"}`}>
+                    <div className="text-xs font-bold truncate">
                       {currentUser.name}
                     </div>
-                    <div className="text-[11px] text-slate-500 truncate">{currentUser.email}</div>
+                    <div className="text-[11px] text-slate-400 truncate">{currentUser.email}</div>
                     <div className="mt-2 flex items-center justify-between">
                       <span
                         className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${ROLE_CONFIG[currentUserRole].badgeColor}`}
@@ -2649,10 +2732,30 @@ export default function SmartMSOApp() {
                         setCurrentPage("user");
                         setShowUserDropdown(false);
                       }}
-                      className="w-full px-4 py-2 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 transition-colors cursor-pointer"
+                      className={`w-full px-4 py-2 text-left flex items-center gap-2.5 transition-colors cursor-pointer ${
+                        isDarkMode ? "text-slate-200 hover:bg-slate-800" : "text-slate-700 hover:bg-slate-50"
+                      }`}
                     >
                       <span>👤</span>
                       <span>ข้อมูลส่วนตัวและความปลอดภัย</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleToggleTheme}
+                      className={`w-full px-4 py-2 text-left flex items-center justify-between transition-colors cursor-pointer ${
+                        isDarkMode ? "text-slate-200 hover:bg-slate-800" : "text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <span>{isDarkMode ? "☀️" : "🌙"}</span>
+                        <span>{isDarkMode ? "สลับเป็นโหมดสว่าง" : "สลับเป็นโหมดกลางคืน"}</span>
+                      </span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                        isDarkMode ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" : "bg-slate-100 text-slate-700 border border-slate-200"
+                      }`}>
+                        {isDarkMode ? "Dark" : "Light"}
+                      </span>
                     </button>
 
                     {canAccess("admin") && (
@@ -2662,7 +2765,9 @@ export default function SmartMSOApp() {
                           setCurrentPage("admin");
                           setShowUserDropdown(false);
                         }}
-                        className="w-full px-4 py-2 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 transition-colors cursor-pointer"
+                        className={`w-full px-4 py-2 text-left flex items-center gap-2.5 transition-colors cursor-pointer ${
+                          isDarkMode ? "text-slate-200 hover:bg-slate-800" : "text-slate-700 hover:bg-slate-50"
+                        }`}
                       >
                         <span>⚙️</span>
                         <span>ระบบจัดการ & สิทธิ์ RBAC</span>
@@ -2670,11 +2775,13 @@ export default function SmartMSOApp() {
                     )}
                   </div>
 
-                  <div className="border-t border-slate-100 pt-1">
+                  <div className={`border-t pt-1 ${isDarkMode ? "border-slate-800" : "border-slate-100"}`}>
                     <button
                       type="button"
                       onClick={handleInitiateLogout}
-                      className="w-full px-4 py-2 text-left text-rose-600 hover:bg-rose-50 flex items-center gap-2.5 text-xs font-semibold transition-colors cursor-pointer group"
+                      className={`w-full px-4 py-2 text-left text-rose-500 flex items-center gap-2.5 text-xs font-semibold transition-colors cursor-pointer group ${
+                        isDarkMode ? "hover:bg-rose-950/40" : "hover:bg-rose-50"
+                      }`}
                     >
                       <svg
                         className="w-4 h-4 text-rose-500 group-hover:text-rose-600 transition-colors stroke-[2]"
@@ -2698,7 +2805,9 @@ export default function SmartMSOApp() {
             <button
               type="button"
               onClick={handleInitiateLogout}
-              className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer group"
+              className={`p-2 text-slate-400 hover:text-rose-600 rounded-xl transition-all cursor-pointer group ${
+                isDarkMode ? "hover:bg-rose-950/40" : "hover:bg-rose-50"
+              }`}
               title="ออกจากระบบ (Logout)"
               aria-label="ออกจากระบบ"
             >
@@ -2719,7 +2828,9 @@ export default function SmartMSOApp() {
         </header>
 
         {/* Main Content Area with RBAC Guard & System Maintenance Check */}
-        <main className="flex-1 overflow-y-auto p-6 md:p-8 bg-[#F8FAFC]">
+        <main className={`flex-1 overflow-y-auto p-6 md:p-8 transition-colors ${
+          isDarkMode ? "bg-[#030712] text-slate-100" : "bg-[#F8FAFC] text-slate-800"
+        }`}>
           {!canAccess(currentPage) ? (
             renderAccessDenied(currentPage)
           ) : !systemModules[currentPage]?.enabled && currentUserRole !== "admin" ? (

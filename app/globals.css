@@ -109,6 +109,148 @@
   }
 }
 
+/* ─── DARK THEME STYLING SYSTEM ─── */
+:root.dark,
+.dark {
+  color-scheme: dark;
+  --bg: #030712;
+  --surface: #0f172a;
+  --text: #f8fafc;
+  --text-secondary: #94a3b8;
+  --border: #1e293b;
+  --sidebar: #030712;
+  --sidebar-text: #94a3b8;
+}
+
+/* Root background & text */
+.dark body {
+  background-color: #030712;
+  color: #f8fafc;
+}
+
+/* Page, Card & Container Dark Mode Support */
+.dark .bg-white:not(img):not([class*="keep-white"]):not([class*="bg-gradient"]):not([class*="from-"]):not([class*="to-"]) {
+  background-color: #0f172a !important;
+  color: #f8fafc;
+}
+
+.dark .bg-slate-50:not([class*="gradient"]) {
+  background-color: #1e293b !important;
+  color: #f1f5f9;
+}
+
+.dark .bg-slate-100:not([class*="gradient"]) {
+  background-color: #1e293b !important;
+  color: #f1f5f9;
+}
+
+.dark .hover\:bg-slate-50:hover {
+  background-color: #1e293b !important;
+}
+
+.dark .hover\:bg-slate-100:hover {
+  background-color: #334155 !important;
+}
+
+.dark .hover\:bg-slate-200:hover {
+  background-color: #334155 !important;
+}
+
+/* Borders in Dark Theme */
+.dark .border-slate-100 {
+  border-color: #1e293b !important;
+}
+
+.dark .border-slate-200,
+.dark .border-slate-200\/80,
+.dark .border-slate-200\/70 {
+  border-color: #334155 !important;
+}
+
+.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #1e293b !important;
+}
+
+.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #334155 !important;
+}
+
+/* Typography in Dark Theme */
+.dark .text-slate-900,
+.dark .text-slate-800 {
+  color: #f8fafc !important;
+}
+
+.dark .text-slate-700 {
+  color: #cbd5e1 !important;
+}
+
+.dark .text-slate-600 {
+  color: #94a3b8 !important;
+}
+
+.dark .text-slate-500 {
+  color: #94a3b8 !important;
+}
+
+.dark .text-slate-400 {
+  color: #64748b !important;
+}
+
+/* Form Controls in Dark Theme */
+.dark input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="range"]),
+.dark textarea,
+.dark select {
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+  border-color: #334155 !important;
+}
+
+.dark select option,
+.dark select optgroup {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+}
+
+.dark ::placeholder {
+  color: #64748b !important;
+}
+
+.dark label:not([class*="flex"]) {
+  color: #cbd5e1 !important;
+}
+
+/* Table Headers & Rows */
+.dark table thead tr {
+  background-color: #1e293b !important;
+  color: #cbd5e1 !important;
+}
+
+.dark table th {
+  color: #cbd5e1 !important;
+}
+
+.dark table tr.hover\:bg-slate-50\/80:hover,
+.dark table tr.hover\:bg-slate-50:hover,
+.dark table tbody tr:hover {
+  background-color: rgba(30, 41, 59, 0.7) !important;
+}
+
+/* Ensure banner buttons remain legible */
+.dark [class*="bg-gradient"] button.bg-white,
+.dark [class*="from-"] button.bg-white {
+  background-color: #ffffff !important;
+  color: #4f46e5 !important;
+}
+
+/* Scrollbars in Dark Mode */
+.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 4px; }
