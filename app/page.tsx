@@ -2234,7 +2234,7 @@ export default function SmartMSOApp() {
                     Smart MSO
                   </span>
                   <span className="text-[10px] text-indigo-400 font-medium tracking-wide block truncate">
-                    RBAC WORKSPACE
+                    ระบบสำนักงานอัจฉริยะ
                   </span>
                 </div>
               </div>

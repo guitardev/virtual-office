@@ -17,7 +17,10 @@ export function Sidebar({ open, onClose }) {
       <div className="flex items-center justify-center h-16 border-b border-border">
         <div className="flex items-center space-x-3">
           <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center text-white font-bold">M</div>
-          <span className="text-lg font-bold text-white font-heading">Smart MSO</span>
+          <div>
+            <span className="text-lg font-bold text-white font-heading block leading-tight">Smart MSO</span>
+            <span className="text-[10px] text-indigo-400 font-medium tracking-wide block">ระบบสำนักงานอัจฉริยะ</span>
+          </div>
         </div>
       </div>
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
