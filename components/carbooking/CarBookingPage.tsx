@@ -76,6 +76,7 @@ export function CarBookingPage({
   const [formDepartureTime, setFormDepartureTime] = useState<string>("");
   const [formReturnTime, setFormReturnTime] = useState<string>("");
   const [formPassengerCount, setFormPassengerCount] = useState<number>(1);
+  const [formEstimatedDistance, setFormEstimatedDistance] = useState<number>(150);
   const [formPassengersList, setFormPassengersList] = useState<string>("");
   const [formRequireDriver, setFormRequireDriver] = useState<boolean>(true);
 
@@ -295,6 +296,7 @@ export function CarBookingPage({
       returnTime: formReturnTime,
       passengerCount: Number(formPassengerCount) || 1,
       passengersList: formPassengersList.trim() || `${currentUser.name}`,
+      estimatedDistance: Number(formEstimatedDistance) || undefined,
       requireDriver: formRequireDriver,
       // Fuel Budget fields
       fuelBudgetRequested: formFuelBudgetRequested,
@@ -1903,7 +1905,7 @@ export function CarBookingPage({
                 </div>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     จำนวนผู้โดยสาร (คน)
@@ -1914,6 +1916,20 @@ export function CarBookingPage({
                     max={20}
                     value={formPassengerCount}
                     onChange={(e) => setFormPassengerCount(Number(e.target.value))}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:border-teal-500 transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    ระยะทางโดยประมาณ (กม.)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={formEstimatedDistance}
+                    onChange={(e) => setFormEstimatedDistance(Number(e.target.value))}
+                    placeholder="เช่น 150"
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:border-teal-500 transition-colors"
                   />
                 </div>

@@ -316,6 +316,7 @@ export interface CarBookingRequest {
   returnTime: string;
   passengerCount: number;
   passengersList: string;
+  estimatedDistance?: number;
   requireDriver: boolean;
   assignedDriver?: string;
   
