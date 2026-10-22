@@ -234,7 +234,7 @@ create policy "Allow all read vehicles" on vehicles for select using (true);
 create policy "Allow all write vehicles" on vehicles for all using (true);
 
 -- ===============================
--- 11. Car Bookings (ระบบคำขอจองรถยนต์ราชการ 3 ขั้นตอน)
+-- 11. Car Bookings (ระบบคำขอจองรถยนต์ราชการ 7 ขั้นตอน)
 -- ===============================
 create table car_bookings (
   id text primary key,
@@ -243,7 +243,7 @@ create table car_bookings (
   vehicle_name text not null,
   license_plate text not null,
   
-  -- ผู้ขอใช้รถ (Tier 1: Requestor)
+  -- ผู้ขอใช้รถ (ขั้นตอนที่ 1)
   requester_id text references users(id) on delete set null,
   requester_name text not null,
   requester_position text,
@@ -258,6 +258,7 @@ create table car_bookings (
   return_time text not null,
   passenger_count integer not null default 1,
   passengers_list text,
+  estimated_distance numeric(10, 2),
   require_driver boolean not null default true,
   assigned_driver text,
   
@@ -266,25 +267,62 @@ create table car_bookings (
   fuel_budget_amount numeric(10, 2),
   fuel_budget_source text,
   
-  -- สถานะคำขอ 3 ขั้น
-  status text not null default 'pending_review' check (status in ('pending_review', 'endorsed', 'approved', 'rejected', 'completed')),
+  -- สถานะคำขอ 7 ขั้นตอน
+  status text not null default 'pending_division_head' check (status in (
+    'pending_division_head',
+    'pending_fleet_assignment',
+    'pending_admin_head',
+    'pending_provincial',
+    'pending_review',
+    'endorsed',
+    'approved',
+    'rejected',
+    'completed'
+  )),
   created_at text not null,
   
-  -- ขั้นที่ 2: ความเห็นชอบของหัวหน้าฝ่าย (Manager)
+  -- ขั้นตอนที่ 1 & 2: ความเห็นชอบของหัวหน้ากลุ่ม/ฝ่าย หรือ ข้าราชการในกลุ่มตนเอง
+  division_reviewer_id text,
+  division_reviewer_name text,
+  division_reviewer_position text,
+  division_reviewer_role text,
+  division_reviewer_notes text,
+  division_reviewer_action_at text,
+
+  -- ขั้นตอนที่ 3: บุคคลฝ่ายบริหาร จัดสรรรถและคนขับ
+  fleet_dispatcher_id text,
+  fleet_dispatcher_name text,
+  fleet_dispatcher_position text,
+  fleet_dispatcher_notes text,
+  fleet_dispatcher_action_at text,
+  
+  -- ขั้นตอนที่ 4.1: หัวหน้าฝ่ายบริหารทั่วไป เพื่อเห็นชอบ
+  admin_head_id text,
+  admin_head_name text,
+  admin_head_notes text,
+  admin_head_action_at text,
+
+  -- ข้อมูลเดิม (Backward-compatibility)
   manager_id text,
   manager_name text,
   manager_notes text,
   manager_action_at text,
   
-  -- ขั้นที่ 3: การอนุมัติของ พมจ. (Admin)
+  -- ขั้นตอนที่ 4.2: การอนุมัติของ พมจ.กำแพงเพชร
   approver_id text,
   approver_name text,
   approver_notes text,
   approver_action_at text,
   
-  -- บันทึกการปฏิเสธ
+  -- บันทึกการปฏิเสธ / ส่งกลับ
   reject_reason text,
   rejected_by text,
+  
+  -- ขั้นตอนที่ 5 & 7: รายละเอียดการส่งคืนกุญแจ และการแจ้งปัญหาซ่อมบำรุง
+  key_returned boolean default false,
+  has_issue_reported boolean default false,
+  issue_report_details text,
+  needs_maintenance boolean default false,
   
   -- รายงานส่งคืนและตรวจสภาพรถ (JSON)
   return_report jsonb,

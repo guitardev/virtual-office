@@ -375,6 +375,12 @@ export interface CarBookingRequest {
   rejectedBy?: string;
   rejectedAtStage?: string;
 
+  // ขั้นที่ 5 & 7: รายละเอียดการส่งคืนกุญแจ และการแจ้งปัญหาซ่อมบำรุง
+  keyReturned?: boolean;
+  hasIssueReported?: boolean;
+  issueReportDetails?: string;
+  needsMaintenance?: boolean;
+
   // รายงานการส่งคืนและตรวจสภาพรถ
   returnReport?: VehicleReturnReport;
 

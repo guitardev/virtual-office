@@ -761,6 +761,10 @@ export function mapRowToCarBooking(row: any): CarBookingRequest {
     approverActionAt: row.approver_action_at || undefined,
     rejectReason: row.reject_reason || undefined,
     rejectedBy: row.rejected_by || undefined,
+    keyReturned: row.key_returned !== undefined ? Boolean(row.key_returned) : undefined,
+    hasIssueReported: Boolean(row.has_issue_reported),
+    issueReportDetails: row.issue_report_details || undefined,
+    needsMaintenance: Boolean(row.needs_maintenance),
     returnReport: row.return_report || undefined,
     notifications: Array.isArray(row.notifications) ? row.notifications : undefined,
   };
@@ -818,6 +822,10 @@ export function mapCarBookingToRow(b: CarBookingRequest): any {
     approver_action_at: b.approverActionAt || null,
     reject_reason: b.rejectReason || null,
     rejected_by: b.rejectedBy || null,
+    key_returned: b.keyReturned ?? false,
+    has_issue_reported: b.hasIssueReported ?? false,
+    issue_report_details: b.issueReportDetails || null,
+    needs_maintenance: b.needsMaintenance ?? false,
     return_report: b.returnReport || null,
     notifications: b.notifications || [],
   };
