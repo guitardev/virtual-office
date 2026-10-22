@@ -350,10 +350,18 @@ export default function SmartMSOApp() {
         }
       }
 
+      try {
+        const PURGE_V2_KEY = "smartmso_purged_mock_requests_v2";
+        if (!localStorage.getItem(PURGE_V2_KEY)) {
+          localStorage.removeItem("smartmso_access_requests");
+          localStorage.removeItem("omnioffice_access_requests");
+          localStorage.removeItem("smartmso_access_requests_cache_v1");
+          localStorage.setItem(PURGE_V2_KEY, "true");
+        }
+      } catch {}
+
       const cachedRequests = getLocalAccessRequests();
-      if (cachedRequests && cachedRequests.length > 0) {
-        setAccessRequests(cachedRequests);
-      }
+      setAccessRequests(cachedRequests);
 
       // Load saved sidebar collapse preferences
       const storedSidebar = localStorage.getItem("smartmso_sidebar_collapsed");
@@ -565,9 +573,7 @@ export default function SmartMSOApp() {
       });
 
       fetchAccessRequests().then((liveReqs) => {
-        if (liveReqs && liveReqs.length > 0) {
-          setAccessRequests(liveReqs);
-        }
+        setAccessRequests(liveReqs || []);
       });
 
       fetchAuditLogs().then((logs) => {
@@ -1002,6 +1008,47 @@ export default function SmartMSOApp() {
       "success"
     );
     showToast(`✅ อัปเดตสิทธิ์ของสมาชิกเรียบร้อยแล้ว`);
+  };
+
+  // Toggle member active/inactive status
+  const handleToggleMemberStatus = (member: Member) => {
+    const nextStatus: "active" | "inactive" = member.status === "active" ? "inactive" : "active";
+    const updatedMember: Member = { ...member, status: nextStatus };
+
+    setMembers((prev) =>
+      prev.map((m) => (m.id === member.id ? updatedMember : m))
+    );
+    saveMember(updatedMember).catch(console.error);
+
+    // If target member is the currently logged-in user, synchronize current session
+    if (currentUser && currentUser.id === member.id) {
+      setCurrentUser(updatedMember);
+      if (typeof window !== "undefined") {
+        try {
+          const savedSession = localStorage.getItem("smartmso_auth_session");
+          if (savedSession) {
+            const parsed = JSON.parse(savedSession);
+            localStorage.setItem(
+              "smartmso_auth_session",
+              JSON.stringify({ ...parsed, user: updatedMember })
+            );
+          }
+        } catch {}
+      }
+    }
+
+    addAuditLog(
+      currentUser ? currentUser.name : "Admin",
+      `${nextStatus === "active" ? "เปิดใช้งาน" : "ระงับการใช้งาน"} บัญชีของ ${member.name} (${ROLE_CONFIG[member.role]?.label || member.role})`,
+      "Member Status Toggle",
+      "success"
+    );
+
+    showToast(
+      nextStatus === "active"
+        ? `🟢 เปิดใช้งานบัญชี ${member.name} เรียบร้อยแล้ว`
+        : `⚪ ระงับการใช้งานบัญชี ${member.name} เรียบร้อยแล้ว`
+    );
   };
 
   // Toggle permission in matrix
@@ -3006,6 +3053,7 @@ export default function SmartMSOApp() {
                   handleOpenAdminEdit={handleOpenAdminEdit}
                   setMemberToDelete={setMemberToDelete}
                   handleChangeMemberRole={handleChangeMemberRole}
+                  handleToggleMemberStatus={handleToggleMemberStatus}
                   setSelectedRequest={setSelectedRequest}
                   setShowRequestDetailModal={setShowRequestDetailModal}
                   handleOpenEditRequest={handleOpenEditRequest}

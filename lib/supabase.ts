@@ -362,16 +362,39 @@ export const ACCESS_REQUESTS_STORAGE_KEY = "smartmso_access_requests_cache_v1";
 export const LEGACY_ACCESS_REQUESTS_STORAGE_KEY = "smartmso_access_requests";
 export const PREV_LEGACY_ACCESS_REQUESTS_STORAGE_KEY = "omnioffice_access_requests";
 
+export function isMockAccessRequest(r: any): boolean {
+  if (!r) return true;
+  const name = r.name || "";
+  const id = r.id || "";
+  const email = r.email || "";
+  return (
+    id === "req_1" ||
+    id === "req_2" ||
+    name.includes("พงษ์ศักดิ์") ||
+    name.includes("กานดา") ||
+    email.includes("pongsak.r") ||
+    email.includes("kanda.t")
+  );
+}
+
 export function getLocalAccessRequests(): AccessRequest[] {
   if (typeof window === "undefined") return INITIAL_ACCESS_REQUESTS;
   try {
-    const raw =
-      localStorage.getItem(ACCESS_REQUESTS_STORAGE_KEY) ||
-      localStorage.getItem(LEGACY_ACCESS_REQUESTS_STORAGE_KEY) ||
-      localStorage.getItem(PREV_LEGACY_ACCESS_REQUESTS_STORAGE_KEY);
+    // Purge old legacy keys that held previous mock/demo requests
+    localStorage.removeItem(LEGACY_ACCESS_REQUESTS_STORAGE_KEY);
+    localStorage.removeItem(PREV_LEGACY_ACCESS_REQUESTS_STORAGE_KEY);
+
+    const raw = localStorage.getItem(ACCESS_REQUESTS_STORAGE_KEY);
     if (!raw) return INITIAL_ACCESS_REQUESTS;
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_ACCESS_REQUESTS;
+    if (Array.isArray(parsed)) {
+      const cleaned = parsed.filter((r) => r && r.id && !isMockAccessRequest(r));
+      if (cleaned.length !== parsed.length) {
+        localStorage.setItem(ACCESS_REQUESTS_STORAGE_KEY, JSON.stringify(cleaned));
+      }
+      return cleaned;
+    }
+    return INITIAL_ACCESS_REQUESTS;
   } catch {
     return INITIAL_ACCESS_REQUESTS;
   }
@@ -380,11 +403,12 @@ export function getLocalAccessRequests(): AccessRequest[] {
 export function saveLocalAccessRequests(requests: AccessRequest[]) {
   if (typeof window === "undefined") return;
   try {
-    const serialized = JSON.stringify(requests);
-    // Persist to both standard key and legacy key for backward compatibility
+    const cleaned = requests.filter((r) => !isMockAccessRequest(r));
+    const serialized = JSON.stringify(cleaned);
     localStorage.setItem(ACCESS_REQUESTS_STORAGE_KEY, serialized);
-    localStorage.setItem(LEGACY_ACCESS_REQUESTS_STORAGE_KEY, serialized);
-    localStorage.setItem(PREV_LEGACY_ACCESS_REQUESTS_STORAGE_KEY, serialized);
+    // Ensure legacy keys are removed permanently
+    localStorage.removeItem(LEGACY_ACCESS_REQUESTS_STORAGE_KEY);
+    localStorage.removeItem(PREV_LEGACY_ACCESS_REQUESTS_STORAGE_KEY);
   } catch (e) {
     console.warn("Could not save access requests to localStorage:", e);
   }
@@ -403,18 +427,14 @@ export async function fetchAccessRequests(): Promise<AccessRequest[]> {
       .select("*")
       .order("created_at", { ascending: false });
 
-    if (error || !data || data.length === 0) {
+    if (error || !data) {
       return localList;
     }
 
-    const liveList = data.map(mapRowToAccessRequest);
-    const liveIds = new Set(liveList.map((r) => r.id));
-    // Preserve any local-only requests that were created offline
-    const localOnly = localList.filter((r) => !liveIds.has(r.id));
-    const mergedList = [...liveList, ...localOnly];
-
-    saveLocalAccessRequests(mergedList);
-    return mergedList;
+    const liveList = data.map(mapRowToAccessRequest).filter((r) => !isMockAccessRequest(r));
+    // Live database is single source of truth; synchronize cache
+    saveLocalAccessRequests(liveList);
+    return liveList;
   } catch {
     return localList;
   }
@@ -489,6 +509,160 @@ export function subscribeToAccessRequests(callback: (requests: AccessRequest[]) 
   return () => {
     supabase.removeChannel(channel);
   };
+}
+
+// ==========================================
+// AUDIT LOGS (Security & Activity Tracking)
+// ==========================================
+
+/**
+ * Map Supabase audit_logs row to AuditLog object
+ */
+export function mapRowToAuditLog(row: any): AuditLog {
+  return {
+    id: row.id,
+    timestamp: row.timestamp
+      ? new Date(row.timestamp).toLocaleString("th-TH", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        })
+      : new Date().toLocaleString("th-TH"),
+    actor: row.actor_name || "ระบบ",
+    action: row.action,
+    target: row.target,
+    status: (row.status as "success" | "denied") || "success",
+    // Keep raw ISO for sorting
+    _rawTimestamp: row.timestamp || new Date().toISOString(),
+  } as AuditLog & { _rawTimestamp: string };
+}
+
+/**
+ * Insert a new audit log entry into Supabase
+ */
+export async function insertAuditLog(params: {
+  actorId?: string;
+  actorName: string;
+  action: string;
+  target: string;
+  status?: "success" | "denied";
+  metadata?: Record<string, unknown>;
+}): Promise<boolean> {
+  if (!supabase) return false;
+
+  try {
+    const { error } = await supabase.from("audit_logs").insert({
+      actor_id: params.actorId || null,
+      actor_name: params.actorName,
+      action: params.action,
+      target: params.target,
+      status: params.status || "success",
+      metadata: params.metadata || null,
+    });
+
+    if (error) {
+      console.warn("Could not insert audit log:", error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn("Error inserting audit log:", err);
+    return false;
+  }
+}
+
+/**
+ * Fetch audit logs from Supabase with optional filters
+ */
+export async function fetchAuditLogs(options?: {
+  limit?: number;
+  actorName?: string;
+  status?: "success" | "denied";
+  search?: string;
+}): Promise<AuditLog[]> {
+  if (!supabase) return INITIAL_AUDIT_LOGS;
+
+  try {
+    let query = supabase
+      .from("audit_logs")
+      .select("*")
+      .order("timestamp", { ascending: false })
+      .limit(options?.limit ?? 200);
+
+    if (options?.status) {
+      query = query.eq("status", options.status);
+    }
+    if (options?.actorName) {
+      query = query.ilike("actor_name", `%${options.actorName}%`);
+    }
+    if (options?.search) {
+      query = query.or(
+        `action.ilike.%${options.search}%,target.ilike.%${options.search}%,actor_name.ilike.%${options.search}%`
+      );
+    }
+
+    const { data, error } = await query;
+
+    if (error || !data) {
+      console.warn("Could not fetch audit logs:", error?.message);
+      return INITIAL_AUDIT_LOGS;
+    }
+
+    return data.map(mapRowToAuditLog);
+  } catch (err) {
+    console.warn("Error fetching audit logs:", err);
+    return INITIAL_AUDIT_LOGS;
+  }
+}
+
+/**
+ * Setup Realtime subscription for audit_logs
+ */
+export function subscribeToAuditLogs(callback: (logs: AuditLog[]) => void) {
+  if (!supabase) return () => {};
+
+  const channel = supabase
+    .channel(`public:audit_logs_${Math.random().toString(36).slice(2, 8)}`)
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "audit_logs" },
+      async () => {
+        const updated = await fetchAuditLogs();
+        callback(updated);
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+/**
+ * Backward-compatible wrapper — save a full AuditLog object to Supabase
+ */
+export async function saveAuditLog(log: AuditLog): Promise<boolean> {
+  return insertAuditLog({
+    actorName: log.actor,
+    action: log.action,
+    target: log.target,
+    status: log.status,
+  });
+}
+
+/**
+ * Universal helper to record audit logs — used throughout page.tsx
+ */
+export async function recordAuditLog(
+  actor: string,
+  action: string,
+  target: string,
+  status: "success" | "denied" = "success"
+): Promise<boolean> {
+  return insertAuditLog({ actorName: actor, action, target, status });
 }
 
 // ==========================================
@@ -1095,99 +1269,6 @@ export function subscribeToOnlinePresence(
 
   return () => {
     channel.untrack().catch(() => {});
-    supabase.removeChannel(channel);
-  };
-}
-
-// ==========================================
-// AUDIT LOGS (Activity & Governance Logs)
-// ==========================================
-
-export function mapRowToAuditLog(row: any): AuditLog {
-  const ts = row.timestamp
-    ? new Date(row.timestamp).toLocaleDateString("th-TH", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      }) + " น."
-    : "เมื่อสักครู่";
-
-  return {
-    id: String(row.id),
-    timestamp: ts,
-    actor: row.actor_name || row.actor || "ผู้ใช้งาน",
-    action: row.action,
-    target: row.target,
-    status: row.status === "denied" ? "denied" : "success",
-  };
-}
-
-export async function fetchAuditLogs(): Promise<AuditLog[]> {
-  if (!supabase) return INITIAL_AUDIT_LOGS;
-  try {
-    const { data, error } = await supabase
-      .from("audit_logs")
-      .select("*")
-      .order("timestamp", { ascending: false })
-      .limit(100);
-    if (error || !data || data.length === 0) return INITIAL_AUDIT_LOGS;
-    return data.map(mapRowToAuditLog);
-  } catch {
-    return INITIAL_AUDIT_LOGS;
-  }
-}
-
-export async function saveAuditLog(log: AuditLog): Promise<boolean> {
-  if (!supabase) return true;
-  try {
-    const row = {
-      actor_name: log.actor,
-      action: log.action,
-      target: log.target,
-      status: log.status,
-    };
-    const { error } = await supabase.from("audit_logs").insert(row);
-    return !error;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Universal helper to record system and governance audit logs directly to Supabase
- */
-export async function recordAuditLog(
-  actor: string,
-  action: string,
-  target: string,
-  status: "success" | "denied" = "success"
-): Promise<boolean> {
-  const newLog: AuditLog = {
-    id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-    timestamp: "เมื่อสักครู่",
-    actor,
-    action,
-    target,
-    status,
-  };
-  return saveAuditLog(newLog);
-}
-
-export function subscribeToAuditLogs(callback: () => void) {
-  if (!supabase) return () => {};
-  const channel = supabase
-    .channel(`public:audit_logs_${Math.random().toString(36).slice(2, 8)}`)
-    .on(
-      "postgres_changes",
-      { event: "INSERT", schema: "public", table: "audit_logs" },
-      () => {
-        callback();
-      }
-    )
-    .subscribe();
-  return () => {
     supabase.removeChannel(channel);
   };
 }
