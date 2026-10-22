@@ -17,40 +17,33 @@ export function CarBookingDocumentModal({
   };
 
   // Helper to extract Thai Day, Month, Year, Time
-  const parseThaiDate = (dateStr?: string) => {
-    if (!dateStr) return { day: "...", month: "....................", year: "........", time: ".............", fullDate: "........................................" };
+  const parseThaiDateParts = (dateStr?: string) => {
+    if (!dateStr) return { day: "", month: "", year: "", time: "", fullDate: "" };
     try {
       const d = new Date(dateStr);
       if (!isNaN(d.getTime())) {
         const day = d.getDate().toString();
         const month = d.toLocaleDateString("th-TH", { month: "long" });
         const year = (d.getFullYear() + 543).toString();
-        const time = d.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
+        const hours = d.getHours().toString().padStart(2, "0");
+        const mins = d.getMinutes().toString().padStart(2, "0");
         return {
           day,
           month,
           year,
-          time,
+          time: `${hours}.${mins}`,
           fullDate: `${day} ${month} ${year}`,
         };
       }
     } catch {}
 
-    // Fallback: If formatted as Thai date string
-    return {
-      day: "...",
-      month: "....................",
-      year: "........",
-      time: ".............",
-      fullDate: dateStr,
-    };
+    return { day: "", month: "", year: "", time: "", fullDate: dateStr || "" };
   };
 
-  const createdDate = parseThaiDate(booking.createdAt);
-  const depDate = parseThaiDate(booking.departureTime);
-  const retDate = parseThaiDate(booking.returnTime);
+  const createdDate = parseThaiDateParts(booking.createdAt);
+  const depDate = parseThaiDateParts(booking.departureTime);
+  const retDate = parseThaiDateParts(booking.returnTime);
 
-  // Parse approval / action dates if present
   const parseShortDate = (dateStr?: string) => {
     if (!dateStr) return { d: "...", m: "...", y: "....." };
     try {
@@ -71,16 +64,16 @@ export function CarBookingDocumentModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto print:p-0 print:bg-white print:static print:overflow-visible">
-      <div className="relative w-full max-w-3xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[calc(100vh-2rem)] md:max-h-[95vh] flex flex-col print:max-h-none print:shadow-none print:border-none print:m-0 print:rounded-none">
+      <div className="relative w-full max-w-4xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[calc(100vh-2rem)] md:max-h-[96vh] flex flex-col print:max-h-none print:shadow-none print:border-none print:m-0 print:rounded-none">
         
-        {/* Top Actions Bar (Hidden when printing) */}
-        <div className="flex items-center justify-between px-6 py-3 bg-slate-50 border-b border-slate-200 print:hidden shrink-0">
+        {/* Top Control Bar (Hidden in print) */}
+        <div className="flex items-center justify-between px-6 py-3 bg-slate-100/90 border-b border-slate-200 print:hidden shrink-0">
           <div className="flex items-center gap-2">
-            <span className="text-xl">📄</span>
+            <span className="text-lg">📄</span>
             <span className="font-bold text-slate-800 text-sm">
-              ใบขออนุญาตใช้รถราชการ (ตามระเบียบ พมจ.กำแพงเพชร)
+              ใบขออนุญาตใช้รถราชการ (ตรงตามแบบฟอร์มเอกสาร 100%)
             </span>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-indigo-100 text-indigo-700">
+            <span className="px-2 py-0.5 rounded text-xs font-mono font-bold bg-slate-200 text-slate-800">
               {booking.requestNo}
             </span>
           </div>
@@ -92,7 +85,7 @@ export function CarBookingDocumentModal({
               className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#4F46E5] hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
             >
               <span>🖨️</span>
-              <span>พิมพ์เอกสารราชการ (A4)</span>
+              <span>พิมพ์เอกสาร (A4)</span>
             </button>
             <button
               type="button"
@@ -104,229 +97,252 @@ export function CarBookingDocumentModal({
           </div>
         </div>
 
-        {/* Official Document Paper - A4 Style */}
-        <div className="p-8 sm:p-14 text-slate-900 font-body print:p-0 print:text-black leading-[2.2] overflow-y-auto flex-1 min-h-0 print:overflow-visible print:h-auto select-text text-[15px] sm:text-[16px]">
+        {/* Scrollable Document Preview / A4 Sheet */}
+        <div className="overflow-y-auto flex-1 min-h-0 bg-slate-200/50 p-4 sm:p-8 print:p-0 print:bg-white print:overflow-visible">
           
-          {/* Header Title */}
-          <div className="text-center mb-8">
-            <h1 className="text-xl sm:text-2xl font-bold tracking-wide text-slate-900 print:text-black">
-              ใบขออนุญาตใช้รถราชการ
-            </h1>
-          </div>
-
-          {/* Date Line (Right Aligned) */}
-          <div className="flex justify-end mb-6 text-sm sm:text-base">
-            <div className="inline-flex items-baseline gap-1">
-              <span>วันที่</span>
-              <span className="min-w-[40px] text-center border-b border-dotted border-slate-900 font-semibold px-1">
-                {createdDate.day !== "..." ? createdDate.day : "\u00A0\u00A0\u00A0\u00A0"}
-              </span>
-              <span>เดือน</span>
-              <span className="min-w-[120px] text-center border-b border-dotted border-slate-900 font-semibold px-2">
-                {createdDate.month !== "...................." ? createdDate.month : "\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0"}
-              </span>
-              <span>พ.ศ.</span>
-              <span className="min-w-[60px] text-center border-b border-dotted border-slate-900 font-semibold px-1">
-                {createdDate.year !== "........" ? createdDate.year : "\u00A0\u00A0\u00A0\u00A0"}
-              </span>
-            </div>
-          </div>
-
-          {/* Salutation */}
-          <div className="mb-4">
-            <span className="font-semibold">เรียน</span>{" "}
-            <span>พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร</span>
-          </div>
-
-          {/* Body Paragraphs */}
-          <div className="space-y-2 text-justify">
+          {/* A4 Paper Canvas */}
+          <div className="w-[794px] max-w-full min-h-[1050px] bg-white mx-auto p-10 sm:p-14 md:p-16 shadow-lg border border-slate-300 text-black font-body text-[15.5px] sm:text-[16px] leading-[2.1] print:shadow-none print:border-none print:m-0 print:p-[20mm_18mm_20mm_22mm] print:w-full print:max-w-none print:min-h-0 select-text">
             
-            {/* Paragraph 1: ข้าพเจ้า */}
-            <div className="leading-[2.4]">
-              <span className="inline-block w-14"></span>
-              <span>ข้าพเจ้า</span>
-              <span className="inline-block mx-1.5 px-2 border-b border-dotted border-slate-900 font-semibold text-slate-950 min-w-[200px] text-center">
-                {booking.requesterName}
-              </span>
-              <span>ตำแหน่ง</span>
-              <span className="inline-block mx-1.5 px-2 border-b border-dotted border-slate-900 font-semibold text-slate-950 min-w-[180px] text-center">
-                {booking.requesterPosition}
-              </span>
-              <br className="hidden sm:inline" />
-              <span>ขออนุญาตใช้รถยนต์หมายเลขทะเบียน</span>
-              <span className="inline-block mx-1.5 px-2 border-b border-dotted border-slate-900 font-semibold font-mono text-slate-950 min-w-[120px] text-center">
-                {booking.licensePlate}
-              </span>
-              <span>โดยมี</span>
-              <span className="inline-block mx-1.5 px-2 border-b border-dotted border-slate-900 font-semibold text-slate-950 min-w-[180px] text-center">
-                {booking.assignedDriver || "พนักงานขับรถส่วนกลาง"}
-              </span>
-              <br className="hidden sm:inline" />
-              <span>เป็นพนักงานขับรถยนต์ไปราชการที่</span>
-              <span className="inline-block mx-1.5 px-2 border-b border-dotted border-slate-900 font-semibold text-slate-950 min-w-[280px]">
-                {booking.destination}
-              </span>
+            {/* Header: ใบขออนุญาตใช้รถราชการ */}
+            <div className="text-center mb-6 pt-2">
+              <h1 className="text-xl sm:text-2xl font-bold tracking-wide text-black">
+                ใบขออนุญาตใช้รถราชการ
+              </h1>
             </div>
 
-            {/* Paragraph 2: เพื่อ */}
-            <div className="leading-[2.4] pt-1">
-              <span>เพื่อ</span>
-              <span className="inline-block mx-1.5 px-2 border-b border-dotted border-slate-900 font-semibold text-slate-950 w-[calc(100%-45px)]">
-                {booking.purpose}
-              </span>
+            {/* Date Line (Right Aligned) */}
+            <div className="flex justify-end mb-6 text-[15px] sm:text-[16px]">
+              <div className="inline-flex items-baseline">
+                <span>วันที่</span>
+                <span className="min-w-[48px] text-center border-b border-dotted border-black px-1 font-normal">
+                  {createdDate.day ? createdDate.day : "\u00A0"}
+                </span>
+                <span>เดือน</span>
+                <span className="min-w-[130px] text-center border-b border-dotted border-black px-2 font-normal">
+                  {createdDate.month ? createdDate.month : "\u00A0"}
+                </span>
+                <span>พ.ศ.</span>
+                <span className="min-w-[70px] text-center border-b border-dotted border-black px-1 font-normal">
+                  {createdDate.year ? createdDate.year : "\u00A0"}
+                </span>
+              </div>
+            </div>
+
+            {/* Salutation */}
+            <div className="mb-4 text-[15.5px] sm:text-[16px]">
+              <span>เรียน  พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร</span>
+            </div>
+
+            {/* Paragraph 1: ข้าพเจ้า... */}
+            <div className="space-y-1 mb-2">
+              <div className="flex items-baseline">
+                <span className="w-16 shrink-0"></span>
+                <span className="shrink-0">ข้าพเจ้า</span>
+                <span className="flex-1 mx-1.5 border-b border-dotted border-black px-2 text-center font-normal">
+                  {booking.requesterName || "\u00A0"}
+                </span>
+                <span className="shrink-0">ตำแหน่ง</span>
+                <span className="w-64 shrink-0 mx-1.5 border-b border-dotted border-black px-2 text-center font-normal">
+                  {booking.requesterPosition || "\u00A0"}
+                </span>
+              </div>
+
+              <div className="flex items-baseline">
+                <span className="shrink-0">ขออนุญาตใช้รถยนต์หมายเลขทะเบียน</span>
+                <span className="w-48 shrink-0 mx-1.5 border-b border-dotted border-black px-2 text-center font-normal font-mono">
+                  {booking.licensePlate || "\u00A0"}
+                </span>
+                <span className="shrink-0">โดยมี</span>
+                <span className="flex-1 mx-1.5 border-b border-dotted border-black px-2 text-center font-normal">
+                  {booking.assignedDriver || "\u00A0"}
+                </span>
+              </div>
+
+              <div className="flex items-baseline">
+                <span className="shrink-0">เป็นพนักงานขับรถยนต์ไปราชการที่</span>
+                <span className="flex-1 mx-1.5 border-b border-dotted border-black px-2 font-normal">
+                  {booking.destination || "\u00A0"}
+                </span>
+              </div>
+
+              {/* Full line of dots */}
+              <div className="w-full border-b border-dotted border-black h-5"></div>
+            </div>
+
+            {/* Paragraph 2: เพื่อ... */}
+            <div className="space-y-1 mb-2 pt-1">
+              <div className="flex items-baseline">
+                <span className="shrink-0">เพื่อ</span>
+                <span className="flex-1 ml-1.5 border-b border-dotted border-black px-2 font-normal">
+                  {booking.purpose || "\u00A0"}
+                </span>
+              </div>
+              {/* Full line of dots */}
+              <div className="w-full border-b border-dotted border-black h-5"></div>
             </div>
 
             {/* Paragraph 3: มีคนนั่ง, ในวันที่, ถึงวันที่ */}
-            <div className="leading-[2.4] pt-1">
-              <span>มีคนนั่ง</span>
-              <span className="inline-block mx-1.5 px-3 border-b border-dotted border-slate-900 font-semibold text-slate-950 min-w-[80px] text-center">
-                {booking.passengerCount}
-              </span>
-              <span>คน</span>
-              <br />
-              <span>ในวันที่</span>
-              <span className="inline-block mx-1.5 px-2 border-b border-dotted border-slate-900 font-semibold text-slate-950 min-w-[200px] text-center">
-                {depDate.fullDate}
-              </span>
-              <span>เวลา</span>
-              <span className="inline-block mx-1.5 px-2 border-b border-dotted border-slate-900 font-semibold text-slate-950 min-w-[120px] text-center">
-                {depDate.time !== "............." ? `${depDate.time} น.` : "........................."}
-              </span>
-              <br />
-              <span>ถึงวันที่</span>
-              <span className="inline-block mx-1.5 px-2 border-b border-dotted border-slate-900 font-semibold text-slate-950 min-w-[200px] text-center">
-                {retDate.fullDate}
-              </span>
-              <span>เวลา</span>
-              <span className="inline-block mx-1.5 px-2 border-b border-dotted border-slate-900 font-semibold text-slate-950 min-w-[120px] text-center">
-                {retDate.time !== "............." ? `${retDate.time} น.` : "........................."}
-              </span>
+            <div className="space-y-1 mb-2 pt-1">
+              <div className="flex items-baseline">
+                <span className="shrink-0">มีคนนั่ง</span>
+                <span className="w-44 mx-2 border-b border-dotted border-black text-center font-normal">
+                  {booking.passengerCount || "\u00A0"}
+                </span>
+                <span className="shrink-0">คน</span>
+              </div>
+
+              <div className="flex items-baseline">
+                <span className="shrink-0">ในวันที่</span>
+                <span className="w-72 mx-2 border-b border-dotted border-black text-center font-normal">
+                  {depDate.fullDate || "\u00A0"}
+                </span>
+                <span className="shrink-0">เวลา</span>
+                <span className="flex-1 mx-2 border-b border-dotted border-black text-center font-normal">
+                  {depDate.time ? `${depDate.time}` : "\u00A0"}
+                </span>
+                <span className="shrink-0">น.</span>
+              </div>
+
+              <div className="flex items-baseline">
+                <span className="shrink-0">ถึงวันที่</span>
+                <span className="w-72 mx-2 border-b border-dotted border-black text-center font-normal">
+                  {retDate.fullDate || "\u00A0"}
+                </span>
+                <span className="shrink-0">เวลา</span>
+                <span className="flex-1 mx-2 border-b border-dotted border-black text-center font-normal">
+                  {retDate.time ? `${retDate.time}` : "\u00A0"}
+                </span>
+                <span className="shrink-0">น.</span>
+              </div>
             </div>
 
-            {/* Paragraph 4: ขอเบิกน้ำมัน */}
-            <div className="leading-[2.4] pt-1">
-              <span>ขอเบิกน้ำมันเชื้อเพลิงและหล่อลื่น จำนวน</span>
-              <span className="inline-block mx-1.5 px-2 border-b border-dotted border-slate-900 font-semibold text-slate-950 min-w-[160px] text-center">
+            {/* Paragraph 4: ขอเบิกน้ำมันเชื้อเพลิง */}
+            <div className="pt-1 mb-6 flex items-baseline">
+              <span className="shrink-0">ขอเบิกน้ำมันเชื้อเพลิงและหล่อลื่น จำนวน</span>
+              <span className="flex-1 mx-2 border-b border-dotted border-black text-center font-normal">
                 {booking.fuelBudgetRequested && booking.fuelBudgetAmount
                   ? booking.fuelBudgetAmount.toLocaleString()
-                  : "\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0-\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0"}
+                  : "\u00A0"}
               </span>
-              <span>บาท</span>
+              <span className="shrink-0">บาท</span>
             </div>
-          </div>
 
-          {/* Signature 1: ผู้ขออนุญาต (Right Aligned) */}
-          <div className="flex justify-end mt-8 mb-6">
-            <div className="w-72 sm:w-80 text-center space-y-1 text-sm sm:text-base leading-relaxed">
-              <div>
-                <span>ลงชื่อ</span>
-                <span className="inline-block w-40 border-b border-dotted border-slate-900 mx-1">
-                  &nbsp;
-                </span>
-                <span>ผู้ขออนุญาต</span>
-              </div>
-              <div className="font-semibold text-slate-950">
-                ( {booking.requesterName} )
-              </div>
-              <div>
-                <span>ตำแหน่ง</span>
-                <span className="inline-block border-b border-dotted border-slate-900 px-2 font-semibold text-slate-950 min-w-[150px]">
-                  {booking.requesterPosition}
-                </span>
-              </div>
-              <div className="text-xs sm:text-sm text-slate-600">
-                <span>......../......../........</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Signature 2: ความเห็นหัวหน้าฝ่าย (Left + Right Aligned) */}
-          <div className="mb-6 pt-2">
-            <div className="mb-2">
-              <span>ความเห็น</span>
-              <span className="inline-block ml-2 border-b border-dotted border-slate-900 w-[calc(100%-70px)] font-medium text-slate-800 px-2">
-                {booking.managerNotes || (booking.status === "endorsed" || booking.status === "approved" ? "เห็นควรอนุญาตให้ใช้รถยนต์ส่วนกลางไปราชการตามที่ขอ" : "\u00A0")}
-              </span>
-            </div>
-            <div className="w-full border-b border-dotted border-slate-900 mb-4 h-4"></div>
-
-            <div className="flex justify-end">
-              <div className="w-72 sm:w-80 text-center space-y-1 text-sm sm:text-base leading-relaxed">
-                <div>
-                  <span>ลงชื่อ</span>
-                  <span className="inline-block w-48 border-b border-dotted border-slate-900 mx-1">
-                    &nbsp;
+            {/* Signature 1: ผู้ขออนุญาต */}
+            <div className="flex justify-end mt-10 mb-6">
+              <div className="w-[340px] text-center space-y-1.5">
+                <div className="flex items-baseline justify-center">
+                  <span className="shrink-0">ลงชื่อ</span>
+                  <span className="w-48 border-b border-dotted border-black mx-1"></span>
+                  <span className="shrink-0">ผู้ขออนุญาต</span>
+                </div>
+                <div className="flex items-baseline justify-center">
+                  <span>(</span>
+                  <span className="min-w-[210px] px-2 font-normal text-center">
+                    {booking.requesterName || "................................................................"}
+                  </span>
+                  <span>)</span>
+                </div>
+                <div className="flex items-baseline justify-center">
+                  <span className="shrink-0">ตำแหน่ง</span>
+                  <span className="border-b border-dotted border-black px-2 flex-1 text-center font-normal">
+                    {booking.requesterPosition || "\u00A0"}
                   </span>
                 </div>
-                <div className="font-semibold text-slate-950">
-                  ( {booking.managerName || "นายเสกพล ดิษฐโชติ"} )
-                </div>
-                <div>
-                  <span>ตำแหน่ง</span>
-                  <span className="inline-block border-b border-dotted border-slate-900 px-2 font-semibold text-slate-950 min-w-[150px]">
-                    หัวหน้าฝ่ายบริหารทั่วไป
-                  </span>
-                </div>
-                <div className="text-xs sm:text-sm text-slate-600">
-                  {booking.managerActionAt ? (
-                    <span>{managerDate.d} / {managerDate.m} / {managerDate.y}</span>
-                  ) : (
-                    <span>......../......../........</span>
-                  )}
+                <div className="text-center tracking-widest text-black pt-0.5">
+                  ............../............../..............
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* Signature 3: คำสั่งการ / ผู้อนุญาต (พมจ.) */}
-          <div className="mb-4 pt-2">
-            <div className="flex items-center gap-10 mb-4 font-semibold text-sm sm:text-base">
-              <div className="flex items-center gap-2">
-                <span>(</span>
-                <span className="inline-block w-6 text-center font-bold text-indigo-900">
-                  {booking.status === "approved" ? "✓" : "\u00A0"}
+            {/* Signature 2: ความเห็นหัวหน้าฝ่าย */}
+            <div className="mb-6 pt-2">
+              <div className="flex items-baseline">
+                <span className="shrink-0">ความเห็น</span>
+                <span className="flex-1 ml-2 border-b border-dotted border-black px-2 font-normal">
+                  {booking.managerNotes || "\u00A0"}
                 </span>
-                <span>)</span>
-                <span>อนุญาต</span>
               </div>
-              <div className="flex items-center gap-2">
-                <span>(</span>
-                <span className="inline-block w-6 text-center font-bold text-rose-700">
-                  {booking.status === "rejected" ? "✓" : "\u00A0"}
-                </span>
-                <span>)</span>
-                <span>ไม่อนุญาต</span>
+              <div className="w-full border-b border-dotted border-black h-5 mb-5"></div>
+
+              <div className="flex justify-end">
+                <div className="w-[340px] text-center space-y-1.5">
+                  <div className="flex items-baseline justify-center">
+                    <span className="shrink-0">ลงชื่อ</span>
+                    <span className="w-56 border-b border-dotted border-black mx-1"></span>
+                  </div>
+                  <div className="flex items-baseline justify-center">
+                    <span>(</span>
+                    <span className="min-w-[210px] px-2 font-normal text-center">
+                      {booking.managerName || "................................................................"}
+                    </span>
+                    <span>)</span>
+                  </div>
+                  <div className="flex items-baseline justify-center">
+                    <span className="shrink-0">ตำแหน่ง</span>
+                    <span className="border-b border-dotted border-black px-2 flex-1 text-center font-normal">
+                      {booking.managerName ? "หัวหน้าฝ่ายบริหารทั่วไป" : "\u00A0"}
+                    </span>
+                  </div>
+                  <div className="text-center tracking-widest text-black pt-0.5">
+                    {booking.managerActionAt && managerDate.d !== "..." ? (
+                      <span>{managerDate.d} / {managerDate.m} / {managerDate.y}</span>
+                    ) : (
+                      <span>............../............../..............</span>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="flex justify-end">
-              <div className="w-72 sm:w-80 text-center space-y-1 text-sm sm:text-base leading-relaxed">
-                <div>
-                  <span>ลงชื่อ</span>
-                  <span className="inline-block w-40 border-b border-dotted border-slate-900 mx-1">
-                    &nbsp;
+            {/* Signature 3: คำสั่งการ / ผู้อนุญาต (พมจ.) */}
+            <div className="mb-2 pt-2">
+              <div className="flex items-center gap-12 font-normal text-[15.5px] sm:text-[16px] mb-4">
+                <div className="flex items-center gap-1.5">
+                  <span>(</span>
+                  <span className="w-8 text-center font-bold text-black">
+                    {booking.status === "approved" ? "✓" : "........"}
                   </span>
-                  <span>ผู้อนุญาต</span>
+                  <span>)</span>
+                  <span className="ml-1">อนุญาต</span>
                 </div>
-                <div className="font-semibold text-slate-950">
-                  ( {booking.approverName || "นางสาวมะลิวัน สิทธิโยธี"} )
-                </div>
-                <div>
-                  <span className="text-xs sm:text-sm text-slate-700">
-                    พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร
+                <div className="flex items-center gap-1.5">
+                  <span>(</span>
+                  <span className="w-8 text-center font-bold text-black">
+                    {booking.status === "rejected" ? "✓" : "........"}
                   </span>
+                  <span>)</span>
+                  <span className="ml-1">ไม่อนุญาต</span>
                 </div>
-                <div className="text-xs sm:text-sm text-slate-600">
-                  {booking.approverActionAt ? (
-                    <span>{approverDate.d} / {approverDate.m} / {approverDate.y}</span>
-                  ) : (
-                    <span>......../......../........</span>
-                  )}
+              </div>
+
+              <div className="flex justify-end">
+                <div className="w-[340px] text-center space-y-1.5">
+                  <div className="flex items-baseline justify-center">
+                    <span className="shrink-0">ลงชื่อ</span>
+                    <span className="w-48 border-b border-dotted border-black mx-1"></span>
+                    <span className="shrink-0">ผู้อนุญาต</span>
+                  </div>
+                  <div className="flex items-baseline justify-center">
+                    <span>(</span>
+                    <span className="min-w-[210px] px-2 font-normal text-center">
+                      {booking.status === "approved" && booking.approverName
+                        ? booking.approverName
+                        : "................................................................"}
+                    </span>
+                    <span>)</span>
+                  </div>
+                  <div className="text-center tracking-widest text-black pt-0.5">
+                    {booking.approverActionAt && approverDate.d !== "..." ? (
+                      <span>{approverDate.d} / {approverDate.m} / {approverDate.y}</span>
+                    ) : (
+                      <span>............../............../..............</span>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
+
           </div>
-
         </div>
       </div>
     </div>
