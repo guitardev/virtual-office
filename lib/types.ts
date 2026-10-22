@@ -267,6 +267,9 @@ export interface VehicleReturnReport {
   airConditioner: "แอร์เย็นปกติ" | "แอร์ไม่ค่อยเย็น/มีกลิ่น";
   issuesFound?: string;
   notes?: string;
+  keyReturned?: boolean; // ยืนยันส่งมอบกุญแจคืน
+  hasIssue?: boolean; // พบข้อบกพร่อง/สภาพปัญหา
+  needsMaintenance?: boolean; // ส่งซ่อมบำรุงเร่งด่วน
 }
 
 export interface Vehicle {
@@ -288,11 +291,16 @@ export interface Vehicle {
 }
 
 export type BookingStatus =
-  | "pending_review"   // ขั้นที่ 1: รอหัวหน้าฝ่ายบริหารทั่วไป (Manager) ตรวจสอบและมอบหมายคนขับ
-  | "endorsed"         // ขั้นที่ 2: หัวหน้าฝ่ายเห็นชอบแล้ว: รอ พมจ. (Admin) อนุมัติ
-  | "approved"         // ขั้นที่ 3: พมจ. (Admin) อนุมัติเรียบร้อย ออกใบขอใช้รถได้
-  | "rejected"         // ไม่อนุมัติ / ส่งกลับ
-  | "completed";       // สิ้นสุดภารกิจ และบันทึกรายงานส่งคืนรถแล้ว
+  | "pending_division_head"     // ขั้นที่ 1: ยื่นคำขอ -> รอหัวหน้ากลุ่ม/ฝ่าย หรือ ข้าราชการในกลุ่มตนเองเห็นชอบ
+  | "pending_fleet_assignment"  // ขั้นที่ 2: เห็นชอบแล้ว -> รอเจ้าหน้าที่ฝ่ายบริหารจัดสรรรถและพนักงานขับรถ
+  | "pending_admin_head"        // ขั้นที่ 3: จัดรถ/คนขับแล้ว -> รอหัวหน้าฝ่ายบริหารทั่วไปเห็นชอบ
+  | "pending_provincial"        // ขั้นที่ 4: เสนอ พมจ. ขออนุมัติ & พิจารณาอนุมัติ
+  | "approved"                  // อนุมัติแล้ว: พร้อมปฏิบัติภารกิจ
+  | "rejected"                  // ไม่อนุมัติ / ส่งกลับแก้ไข
+  | "completed"                 // สิ้นสุดภารกิจ และบันทึกรายงานส่งคืนรถแล้ว (เคลียร์สถานะพร้อมใช้งาน)
+  // Legacy aliases
+  | "pending_review"
+  | "endorsed";
 
 export interface CarBookingRequest {
   id: string;
@@ -325,17 +333,38 @@ export interface CarBookingRequest {
   fuelBudgetAmount?: number;
   fuelBudgetSource?: string;
   
-  // สถานะและกระบวนการอนุมัติ 3 ขั้น
+  // สถานะและกระบวนการอนุมัติ 4 ขั้น (7-Step Workflow)
   status: BookingStatus;
   createdAt: string;
   
-  // ขั้นที่ 2: ความเห็นชอบของหัวหน้าฝ่าย (Manager)
+  // ขั้นที่ 1: การพิจารณาของหัวหน้ากลุ่ม/ฝ่าย หรือ ข้าราชการในกลุ่ม
+  divisionReviewerId?: string;
+  divisionReviewerName?: string;
+  divisionReviewerPosition?: string;
+  divisionReviewerRole?: "head" | "official";
+  divisionReviewerNotes?: string;
+  divisionReviewerActionAt?: string;
+
+  // ขั้นที่ 2: บุคคลฝ่ายบริหารผู้จัดสรรทรัพยากรรถ/คนขับ
+  fleetDispatcherId?: string;
+  fleetDispatcherName?: string;
+  fleetDispatcherPosition?: string;
+  fleetDispatcherNotes?: string;
+  fleetDispatcherActionAt?: string;
+
+  // ขั้นที่ 3: หัวหน้าฝ่ายบริหารทั่วไป
+  adminHeadId?: string;
+  adminHeadName?: string;
+  adminHeadNotes?: string;
+  adminHeadActionAt?: string;
+
+  // Legacy manager aliases
   managerId?: string;
   managerName?: string;
   managerNotes?: string;
   managerActionAt?: string;
   
-  // ขั้นที่ 3: การอนุมัติของ พมจ. (Admin)
+  // ขั้นที่ 4: การอนุมัติของ พมจ. (Admin)
   approverId?: string;
   approverName?: string;
   approverNotes?: string;
@@ -344,6 +373,7 @@ export interface CarBookingRequest {
   // บันทึกการปฏิเสธ
   rejectReason?: string;
   rejectedBy?: string;
+  rejectedAtStage?: string;
 
   // รายงานการส่งคืนและตรวจสภาพรถ
   returnReport?: VehicleReturnReport;
@@ -355,10 +385,19 @@ export interface CarBookingRequest {
 export interface BookingNotificationLog {
   id: string;
   timestamp: string;
-  type: "request_submitted" | "endorsed" | "approved" | "rejected" | "return_reminder" | "return_completed";
+  type: 
+    | "request_submitted"
+    | "division_endorsed"
+    | "fleet_assigned"
+    | "admin_head_endorsed"
+    | "approved"
+    | "rejected"
+    | "return_completed"
+    | "maintenance_alert"
+    | "return_reminder";
   title: string;
   message: string;
-  recipientRole: string; // เช่น "ผู้ขอใช้รถ", "หัวหน้าฝ่ายบริหารทั่วไป", "พมจ.กำแพงเพชร", "พนักงานขับรถ", "เจ้าหน้าที่ยานพาหนะ"
+  recipientRole: string; // เช่น "ผู้ขอใช้รถ", "หัวหน้ากลุ่ม", "เจ้าหน้าที่ฝ่ายบริหาร (จัดสรรรถ)", "หัวหน้าฝ่ายบริหารทั่วไป", "พมจ.กำแพงเพชร"
   recipientName: string;
   channel: "line_notify" | "system_alert";
   status: "sent" | "delivered";

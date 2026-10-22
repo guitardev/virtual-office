@@ -85,6 +85,68 @@ export function CarBookingPage({
   const [formFuelBudgetAmount, setFormFuelBudgetAmount] = useState<number>(1000);
   const [formFuelBudgetSource, setFormFuelBudgetSource] = useState<string>("งบดำเนินงานสำนักงาน");
 
+  // Step 1 & 2 Workflow States: Reviewer Selection & Designated Fleet Dispatcher
+  const [formReviewerType, setFormReviewerType] = useState<"head" | "official">("head");
+  const [formSelectedReviewerId, setFormSelectedReviewerId] = useState<string>("");
+  const [formDispatcherId, setFormDispatcherId] = useState<string>("");
+
+  // Step 1: Detect Division Head for Current User
+  const detectedDivisionHead = useMemo(() => {
+    const userDiv = currentUser?.division || "";
+    const head = members.find((m) => m.division === userDiv && (m.role === "manager" || m.position.includes("หัวหน้า")));
+    if (head) return head;
+    if (userDiv.includes("พัฒนาสังคม")) {
+      return members.find(m => m.name.includes("วรวุฒิ")) || {
+        id: "usr_head_dev",
+        name: "นายวรวุฒิ พึ่งพัก",
+        position: "นักพัฒนาสังคมชำนาญการพิเศษ (หัวหน้ากลุ่มการพัฒนาสังคมและสวัสดิการ)",
+        division: "กลุ่มการพัฒนาสังคมและสวัสดิการ",
+      };
+    }
+    if (userDiv.includes("นโยบาย")) {
+      return members.find(m => m.name.includes("พนมศักย์")) || {
+        id: "usr_head_policy",
+        name: "นายพนมศักย์ บริภัทรจิรากร",
+        position: "นักวิเคราะห์นโยบายและแผนชำนาญการ (หัวหน้ากลุ่มนโยบายและวิชาการ)",
+        division: "กลุ่มนโยบายและวิชาการ",
+      };
+    }
+    return members.find(m => m.name.includes("เสกพล")) || {
+      id: "usr_2",
+      name: "นายเสกพล ดิษฐโชติ",
+      position: "นักพัฒนาสังคมชำนาญการ (หัวหน้าฝ่ายบริหารทั่วไป)",
+      division: "ฝ่ายบริหารทั่วไป",
+    };
+  }, [members, currentUser]);
+
+  // Step 1: Filter Government Officials (ข้าราชการ) in the same division
+  const divisionOfficials = useMemo(() => {
+    const userDiv = currentUser?.division || "กลุ่มการพัฒนาสังคมและสวัสดิการ";
+    const inDiv = members.filter((m) => m.division === userDiv && m.id !== currentUser?.id);
+    const officials = inDiv.filter((m) => m.personnelType === "ข้าราชการ" || m.role === "manager");
+    return officials.length > 0 ? officials : (inDiv.length > 0 ? inDiv : [detectedDivisionHead as any]);
+  }, [members, currentUser, detectedDivisionHead]);
+
+  // Step 2: Designated Fleet Dispatchers in ฝ่ายบริหารทั่วไป
+  const fleetDispatchers = useMemo(() => {
+    const adminMembers = members.filter((m) => m.division?.includes("ฝ่ายบริหารทั่วไป"));
+    if (adminMembers.length > 0) return adminMembers;
+    return [
+      {
+        id: "disp_1",
+        name: "นายอนุชา พลแสน",
+        position: "พนักงานขับรถยนต์ / งานยานพาหนะ ฝ่ายบริหารทั่วไป",
+        division: "ฝ่ายบริหารทั่วไป",
+      },
+      {
+        id: "disp_2",
+        name: "นายเสกพล ดิษฐโชติ",
+        position: "นักพัฒนาสังคมชำนาญการ (หัวหน้าฝ่ายบริหารทั่วไป)",
+        division: "ฝ่ายบริหารทั่วไป",
+      },
+    ];
+  }, [members]);
+
   // Real-time Conflict Guard calculations
   const conflictDetails = useMemo(() => {
     return getConflictingBookings(
@@ -207,7 +269,20 @@ export function CarBookingPage({
   // Filtered bookings
   const filteredBookings = useMemo(() => {
     return bookings.filter((b) => {
-      if (statusFilter !== "all" && b.status !== statusFilter) return false;
+      if (statusFilter !== "all") {
+        if (statusFilter === "pending") {
+          const isPending =
+            b.status === "pending_division_head" ||
+            b.status === "pending_fleet_assignment" ||
+            b.status === "pending_admin_head" ||
+            b.status === "pending_provincial" ||
+            b.status === "pending_review" ||
+            b.status === "endorsed";
+          if (!isPending) return false;
+        } else if (b.status !== statusFilter) {
+          return false;
+        }
+      }
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchNo = b.requestNo.toLowerCase().includes(q);
@@ -261,19 +336,29 @@ export function CarBookingPage({
         minute: "2-digit",
       }) + " น.";
 
-    // Initial Notification to Manager (หัวหน้าฝ่ายบริหารทั่วไป)
+    // Step 1: Determine initial reviewer (head or official)
+    const chosenReviewer =
+      formReviewerType === "head"
+        ? detectedDivisionHead
+        : members.find((m) => m.id === formSelectedReviewerId) || divisionOfficials[0] || detectedDivisionHead;
+
+    // Step 2: Determine designated fleet dispatcher in ฝ่ายบริหารทั่วไป
+    const chosenDispatcher =
+      fleetDispatchers.find((d) => d.id === formDispatcherId) || fleetDispatchers[0];
+
+    // Step 1 Notification: ส่ง Notifications ไปยัง หัวหน้ากลุ่มหรือข้าราชการในกลุ่มที่เลือก
     const initialNotification: BookingNotificationLog = {
       id: `notif_${Date.now()}_sub`,
       timestamp: nowFormatted,
       type: "request_submitted",
-      title: "ยื่นคำขอใช้รถราชการใหม่",
+      title: "ยื่นคำขอใช้รถราชการใหม่ (รอพิจารณาชั้นต้น)",
       message: `[Line Notify] 📩 มีคำขอใช้รถใหม่ ${newReqNo} จาก ${currentUser.name} (${currentUser.division}) ปลายทาง: ${formDestination.trim()} ${
         formFuelBudgetRequested
           ? `(ของบประมาณค่าน้ำมัน: ${formFuelBudgetAmount.toLocaleString()} บาท)`
           : "(ไม่ของบค่าน้ำมัน)"
-      } รอหัวหน้าฝ่ายบริหารทั่วไปตรวจสอบและมอบหมายคนขับ`,
-      recipientRole: "หัวหน้าฝ่ายบริหารทั่วไป",
-      recipientName: "นายเสกพล ดิษฐโชติ",
+      } รอ ${chosenReviewer.name} (${formReviewerType === "head" ? "หัวหน้ากลุ่ม/ฝ่าย" : "ข้าราชการในกลุ่ม"}) ตรวจสอบและให้ความเห็นชอบชั้นต้น`,
+      recipientRole: formReviewerType === "head" ? "หัวหน้ากลุ่ม/ฝ่าย" : "ข้าราชการในกลุ่มตนเอง",
+      recipientName: chosenReviewer.name,
       channel: "line_notify",
       status: "delivered",
     };
@@ -296,14 +381,21 @@ export function CarBookingPage({
       returnTime: formReturnTime,
       passengerCount: Number(formPassengerCount) || 1,
       passengersList: formPassengersList.trim() || `${currentUser.name}`,
-      estimatedDistance: Number(formEstimatedDistance) || undefined,
+      estimatedDistance: Number(formEstimatedDistance) || 150,
       requireDriver: formRequireDriver,
-      // Fuel Budget fields
+      assignedDriver: formRequireDriver ? "รอฝ่ายบริหารจัดสรร" : "ขับขี่เองโดยผู้ขอใช้รถ",
       fuelBudgetRequested: formFuelBudgetRequested,
       fuelBudgetAmount: formFuelBudgetRequested ? Number(formFuelBudgetAmount) : undefined,
       fuelBudgetSource: formFuelBudgetRequested ? formFuelBudgetSource.trim() : undefined,
-      status: "pending_review",
+      status: "pending_division_head",
       createdAt: nowFormatted,
+      divisionReviewerId: chosenReviewer.id,
+      divisionReviewerName: chosenReviewer.name,
+      divisionReviewerPosition: chosenReviewer.position,
+      divisionReviewerRole: formReviewerType,
+      fleetDispatcherId: chosenDispatcher.id,
+      fleetDispatcherName: chosenDispatcher.name,
+      fleetDispatcherPosition: (chosenDispatcher as any).position,
       notifications: [initialNotification],
     };
 
@@ -313,12 +405,12 @@ export function CarBookingPage({
     recordAuditLog(
       currentUser.name,
       `ยื่นคำขอจองรถยนต์ราชการ: ${newReqNo}`,
-      `พาหนะ: ${selectedVeh.name} [${selectedVeh.licensePlate}] - ปลายทาง: ${formDestination.trim()}`,
+      `เสนอ ${chosenReviewer.name} (${formReviewerType === "head" ? "หัวหน้ากลุ่ม" : "ข้าราชการ"}) ตรวจสอบชั้นต้น - ปลายทาง: ${formDestination.trim()}`,
       "success"
     ).catch(console.warn);
 
     showToast(
-      `✅ ยื่นคำขอใช้รถ ${newReqNo} สำเร็จ! และส่ง Line Notify แจ้งเตือนหัวหน้าฝ่ายบริหารทั่วไปเรียบร้อยแล้ว`
+      `✅ ยื่นคำขอใช้รถ ${newReqNo} สำเร็จ! ส่ง Line Notify ไปยัง ${chosenReviewer.name} เรียบร้อยแล้ว`
     );
     setActiveTab("requests");
 
@@ -329,8 +421,9 @@ export function CarBookingPage({
     setFormFuelBudgetRequested(false);
   };
 
-  // 2. Handle Endorsement (Manager Tier 2: เห็นชอบและเสนอ พมจ. พร้อม Notify)
-  const handleEndorse = (bookingId: string, assignedDriver: string, managerNotes: string) => {
+  // ─── STEP 2: Division Head / Peer Official Endorsement ───
+  // หัวหน้ากลุ่ม/ฝ่ายหรือข้าราชการในกลุ่ม ที่สังกัด เห็นชอบ -> Notifications ไปยัง บุคคลในฝ่ายบริหารที่กำหนด(มีหน้าที่จัดสรรทรัพยากรรถ)
+  const handleDivisionEndorse = (bookingId: string, notes: string) => {
     const nowFormatted =
       new Date().toLocaleDateString("th-TH", {
         year: "numeric",
@@ -340,15 +433,145 @@ export function CarBookingPage({
         minute: "2-digit",
       }) + " น.";
 
-    const targetBooking = bookings.find((b) => b.id === bookingId);
-    const reqNo = targetBooking ? targetBooking.requestNo : bookingId;
+    const target = bookings.find((b) => b.id === bookingId);
+    if (!target) return;
 
-    const endorseNotif: BookingNotificationLog = {
-      id: `notif_${Date.now()}_end`,
+    const dispatcherName = target.fleetDispatcherName || "เจ้าหน้าที่งานยานพาหนะ ฝ่ายบริหารทั่วไป";
+
+    const notif: BookingNotificationLog = {
+      id: `notif_${Date.now()}_div_end`,
       timestamp: nowFormatted,
-      type: "endorsed",
-      title: "หัวหน้าฝ่ายเห็นชอบคำขอใช้รถ",
-      message: `[Line Notify] 👔 คำขอ ${reqNo} ผ่านความเห็นชอบจากหัวหน้าฝ่ายแล้ว มอบหมายคนขับ: ${assignedDriver} เสนอ พมจ.กำแพงเพชร เพื่อโปรดพิจารณาอนุมัติ`,
+      type: "division_endorsed",
+      title: "หัวหน้ากลุ่ม/ผู้แทนกลุ่มเห็นชอบคำขอใช้รถ",
+      message: `[Line Notify] 📋 คำขอใช้รถ ${target.requestNo} ผ่านความเห็นชอบจาก ${currentUser.name} (${currentUser.position}) เรียบร้อยแล้ว แจ้งเตือนไปยัง ${dispatcherName} เพื่อดำเนินการจัดสรรรถยนต์และพนักงานขับรถต่อไป`,
+      recipientRole: "เจ้าหน้าที่จัดสรรรถ ฝ่ายบริหารทั่วไป",
+      recipientName: dispatcherName,
+      channel: "line_notify",
+      status: "delivered",
+    };
+
+    const updated = bookings.map((b) => {
+      if (b.id !== bookingId) return b;
+      return {
+        ...b,
+        status: "pending_fleet_assignment" as BookingStatus,
+        divisionReviewerId: currentUser.id,
+        divisionReviewerName: `${currentUser.name} (${currentUser.position})`,
+        divisionReviewerNotes: notes,
+        divisionReviewerActionAt: nowFormatted,
+        // Legacy fallback
+        managerId: currentUser.id,
+        managerName: `${currentUser.name} (${currentUser.position})`,
+        managerNotes: notes,
+        managerActionAt: nowFormatted,
+        notifications: [...(b.notifications || []), notif],
+      };
+    });
+
+    updateAndSaveBookings(updated);
+
+    recordAuditLog(
+      currentUser.name,
+      `เห็นชอบคำขอใช้รถขั้นต้น: ${target.requestNo}`,
+      `ความเห็น: ${notes || "เห็นชอบ"} - ส่งต่อฝ่ายบริหารจัดสรรรถ`,
+      "success"
+    ).catch(console.warn);
+
+    setSelectedReviewBooking(null);
+    showToast(`✓ เห็นชอบคำขอ ${target.requestNo} เรียบร้อยแล้ว! ส่ง Line Notify ไปยัง ${dispatcherName}`);
+  };
+
+  // ─── STEP 3: Fleet Dispatcher Resource Assignment ───
+  // บุคคลฝ่ายบริหาร จัดรถ / จัดพนักงานขับรถยนต์ -> Notifications -> เสนอหัวหน้าฝ่ายบริหาร เพื่อเห็นชอบ
+  const handleFleetAssign = (
+    bookingId: string,
+    vehicleId: string,
+    assignedDriver: string,
+    notes: string
+  ) => {
+    const nowFormatted =
+      new Date().toLocaleDateString("th-TH", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }) + " น.";
+
+    const target = bookings.find((b) => b.id === bookingId);
+    if (!target) return;
+
+    const assignedVeh = vehicles.find((v) => v.id === vehicleId) || {
+      id: vehicleId,
+      name: target.vehicleName,
+      licensePlate: target.licensePlate,
+    };
+
+    const adminHeadName = "นายเสกพล ดิษฐโชติ (หัวหน้าฝ่ายบริหารทั่วไป)";
+
+    const notif: BookingNotificationLog = {
+      id: `notif_${Date.now()}_flt_asg`,
+      timestamp: nowFormatted,
+      type: "fleet_assigned",
+      title: "จัดสรรรถและพนักงานขับรถเรียบร้อย",
+      message: `[Line Notify] 🚗 คำขอ ${target.requestNo} ได้รับการจัดสรรพาหนะ: ${assignedVeh.name} [${assignedVeh.licensePlate}] พนักงานขับรถ: ${assignedDriver} เสนอ ${adminHeadName} เพื่อโปรดพิจารณาเห็นชอบ`,
+      recipientRole: "หัวหน้าฝ่ายบริหารทั่วไป",
+      recipientName: "นายเสกพล ดิษฐโชติ",
+      channel: "line_notify",
+      status: "delivered",
+    };
+
+    const updated = bookings.map((b) => {
+      if (b.id !== bookingId) return b;
+      return {
+        ...b,
+        status: "pending_admin_head" as BookingStatus,
+        vehicleId: assignedVeh.id,
+        vehicleName: assignedVeh.name,
+        licensePlate: assignedVeh.licensePlate,
+        assignedDriver,
+        fleetDispatcherId: currentUser.id,
+        fleetDispatcherName: `${currentUser.name} (${currentUser.position})`,
+        fleetDispatcherNotes: notes,
+        fleetDispatcherActionAt: nowFormatted,
+        notifications: [...(b.notifications || []), notif],
+      };
+    });
+
+    updateAndSaveBookings(updated);
+
+    recordAuditLog(
+      currentUser.name,
+      `จัดสรรยานพาหนะและคนขับ: ${target.requestNo}`,
+      `รถ: ${assignedVeh.licensePlate} - คนขับ: ${assignedDriver} - เสนอหัวหน้าฝ่ายบริหารทั่วไป`,
+      "success"
+    ).catch(console.warn);
+
+    setSelectedReviewBooking(null);
+    showToast(`✓ จัดสรรรถและคนขับสำหรับคำขอ ${target.requestNo} สำเร็จ! ส่ง Line Notify เสนอหัวหน้าฝ่ายบริหารทั่วไปแล้ว`);
+  };
+
+  // ─── STEP 4.1: Admin Head Endorsement ───
+  // หัวหน้าฝ่ายบริหาร เพื่อเห็นชอบ -> Notifications ไปยัง พมจ. ขออนุมัติ
+  const handleAdminHeadEndorse = (bookingId: string, notes: string) => {
+    const nowFormatted =
+      new Date().toLocaleDateString("th-TH", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }) + " น.";
+
+    const target = bookings.find((b) => b.id === bookingId);
+    if (!target) return;
+
+    const notif: BookingNotificationLog = {
+      id: `notif_${Date.now()}_adm_head`,
+      timestamp: nowFormatted,
+      type: "admin_head_endorsed",
+      title: "หัวหน้าฝ่ายบริหารทั่วไปเห็นชอบคำขอใช้รถ",
+      message: `[Line Notify] 👔 คำขอใช้รถ ${target.requestNo} ผ่านความเห็นชอบจากหัวหน้าฝ่ายบริหารทั่วไป (${currentUser.name}) เสนอ พมจ.กำแพงเพชร (นางสาวมะลิวัน สิทธิโยธี) เพื่อโปรดพิจารณาอนุมัติ`,
       recipientRole: "พมจ.กำแพงเพชร",
       recipientName: "นางสาวมะลิวัน สิทธิโยธี",
       channel: "line_notify",
@@ -359,13 +582,12 @@ export function CarBookingPage({
       if (b.id !== bookingId) return b;
       return {
         ...b,
-        status: "endorsed" as BookingStatus,
-        assignedDriver,
-        managerId: currentUser.id,
-        managerName: `${currentUser.name} (${currentUser.position})`,
-        managerNotes,
-        managerActionAt: nowFormatted,
-        notifications: [...(b.notifications || []), endorseNotif],
+        status: "pending_provincial" as BookingStatus,
+        adminHeadId: currentUser.id,
+        adminHeadName: `${currentUser.name} (${currentUser.position})`,
+        adminHeadNotes: notes,
+        adminHeadActionAt: nowFormatted,
+        notifications: [...(b.notifications || []), notif],
       };
     });
 
@@ -373,19 +595,18 @@ export function CarBookingPage({
 
     recordAuditLog(
       currentUser.name,
-      `หัวหน้าฝ่ายเห็นชอบคำขอใช้รถ: ${reqNo}`,
-      `มอบหมายคนขับ: ${assignedDriver} - หมายเหตุ: ${managerNotes || "เห็นควรอนุมัติ"}`,
+      `หัวหน้าฝ่ายบริหารเห็นชอบคำขอใช้รถ: ${target.requestNo}`,
+      `ความเห็น: ${notes || "เห็นชอบ"} - เสนอ พมจ. ขออนุมัติ`,
       "success"
     ).catch(console.warn);
 
     setSelectedReviewBooking(null);
-    showToast(
-      `✓ หัวหน้าฝ่ายเห็นชอบคำขอ ${reqNo} เรียบร้อย และส่ง Line Notify เสนอ พมจ. เพื่อพิจารณาอนุมัติแล้ว`
-    );
+    showToast(`✓ หัวหน้าฝ่ายบริหารเห็นชอบคำขอ ${target.requestNo} แล้ว! ส่ง Line Notify เสนอ พมจ.กำแพงเพชร`);
   };
 
-  // 3. Handle Final Approval (Admin Tier 3: พมจ. อนุมัติ พร้อม Notify ผู้มีส่วนเกี่ยวข้องทุกฝ่าย)
-  const handleApprove = (bookingId: string, approverNotes: string) => {
+  // ─── STEP 4.2: Provincial Final Approval ───
+  // พมจ. ขออนุมัติ & อนุมัติ -> Notifications ไปที่ผู้ขอใช้รถ
+  const handleProvincialApprove = (bookingId: string, notes: string) => {
     const nowFormatted =
       new Date().toLocaleDateString("th-TH", {
         year: "numeric",
@@ -404,10 +625,8 @@ export function CarBookingPage({
       id: `notif_${Date.now()}_req`,
       timestamp: nowFormatted,
       type: "approved",
-      title: "อนุมัติคำขอใช้รถยนต์ราชการเรียบร้อย",
-      message: `[Line Notify] 🎉 คำขอ ${target.requestNo} ได้รับการอนุมัติแล้วจาก พมจ.กำแพงเพชร พร้อมออกเดินทางได้ พนักงานขับรถ: ${
-        target.assignedDriver || "พนักงานขับรถเวร"
-      } สามารถเปิดพิมพ์แบบขอใช้รถได้ทันที`,
+      title: "พมจ.กำแพงเพชร อนุมัติคำขอใช้รถยนต์ราชการ",
+      message: `[Line Notify] 🎉 คำขอ ${target.requestNo} ได้รับการอนุมัติแล้วจาก พมจ.กำแพงเพชร พาหนะ: ${target.vehicleName} [${target.licensePlate}] พนักงานขับรถ: ${target.assignedDriver || "พนักงานขับรถเวร"} พร้อมออกเดินทางได้`,
       recipientRole: "ผู้ขอใช้รถ",
       recipientName: target.requesterName,
       channel: "line_notify",
@@ -460,7 +679,7 @@ export function CarBookingPage({
         status: "approved" as BookingStatus,
         approverId: currentUser.id,
         approverName: `${currentUser.name} (พมจ.กำแพงเพชร)`,
-        approverNotes,
+        approverNotes: notes,
         approverActionAt: nowFormatted,
         notifications: [...(b.notifications || []), ...newNotifs],
       };
@@ -482,9 +701,19 @@ export function CarBookingPage({
       `พาหนะ: ${target.vehicleName} [${target.licensePlate}] - ปลายทาง: ${target.destination}`,
       "success"
     ).catch(console.warn);
+
     showToast(
-      `👑 พมจ.กำแพงเพชร อนุมัติเรียบร้อย! และระบบได้ส่ง Notify แจ้งเตือนไปยังผู้มีส่วนเกี่ยวข้องทุกฝ่ายแล้ว`
+      `👑 พมจ.กำแพงเพชร อนุมัติเรียบร้อย! และระบบได้ส่ง Line Notify แจ้งเตือนไปยังคุณ ${target.requesterName} และพนักงานขับรถแล้ว`
     );
+  };
+
+  // Backwards compatibility wrappers
+  const handleEndorse = (bookingId: string, assignedDriver: string, managerNotes: string) => {
+    handleDivisionEndorse(bookingId, managerNotes);
+  };
+
+  const handleApprove = (bookingId: string, approverNotes: string) => {
+    handleProvincialApprove(bookingId, approverNotes);
   };
 
   // Handle Rejection
@@ -557,7 +786,10 @@ export function CarBookingPage({
     showToast(`ยกเลิกคำขอ ${booking.requestNo} สำเร็จ`);
   };
 
-  // 4. Return Vehicle Report submission & Revert Vehicle Status (Item 2: รายงานคืนรถ & คืนสถานะรถ)
+  // ─── STEP 5, 6, 7: Return Vehicle Report & Revert Vehicle Status ───
+  // 5. ผู้ขอใช้รถ บันทึกข้อมูล เลขไมล์ ระดับน้ำมัน -> ส่งกุญแจคืน
+  // 6. ระบบบันทึกข้อมูลการใช้งาน และคำนวนระยะทั้งหมดที่ใช้งาน เคลียร์สถานะพร้อมใช้งาน
+  // 7. ระบบคืนรถ มีช่องกรอก สภาพปัญหาที่พบ (แจ้งซ่อม) -> กรณีพบปัญหา -> Notifications ไปยังหัวหน้าฝ่ายบริหาร
   const handleReturnVehicle = (
     bookingId: string,
     vehicleId: string,
@@ -574,44 +806,69 @@ export function CarBookingPage({
 
     const targetBooking = bookings.find((b) => b.id === bookingId);
     const licensePlate = targetBooking ? targetBooking.licensePlate : "รถราชการ";
+    const hasDefect = !!(report.hasIssue || report.needsMaintenance);
 
-    // Create Return Completed Notification
+    const notifs: BookingNotificationLog[] = [];
+
+    // Notification 1: Normal Return Completion Notice
     const returnCompletedNotif: BookingNotificationLog = {
       id: `notif_${Date.now()}_ret`,
       timestamp: nowFormatted,
       type: "return_completed",
-      title: "ส่งคืนรถยนต์และตรวจสภาพเรียบร้อย (คืนสถานะรถ)",
-      message: `[Line Notify] 🏁 ส่งคืนรถยนต์ ${licensePlate} เรียบร้อยแล้ว เลขไมล์: ${report.endMileage.toLocaleString()} กม. (วิ่งจริง ${report.totalDistance.toLocaleString()} กม.) เกจน้ำมัน: ${
+      title: "ส่งคืนรถยนต์และกุญแจเรียบร้อย",
+      message: `[Line Notify] 🏁 ส่งคืนรถยนต์ ${licensePlate} เรียบร้อยแล้ว (กุญแจรถ: ${report.keyReturned ? "ส่งคืนแล้ว" : "ยังไม่ส่งคืน"}) เลขไมล์: ${report.endMileage.toLocaleString()} กม. (ระยะวิ่งจริง ${report.totalDistance.toLocaleString()} กม.) เกจน้ำมัน: ${
         report.endFuelLevel
-      } ผลตรวจสภาพ: ${report.vehicleCleanliness} ผู้ตรวจรับ: ${
-        report.inspectorName
-      } ระบบได้คืนสถานะรถเป็น "พร้อมใช้งาน" เรียบร้อย`,
+      } ผู้ตรวจรับ: ${report.inspectorName}`,
       recipientRole: "เจ้าหน้าที่ยานพาหนะ",
       recipientName: "ฝ่ายบริหารทั่วไป (งานยานพาหนะ)",
       channel: "line_notify",
       status: "delivered",
     };
+    notifs.push(returnCompletedNotif);
 
-    // 1. Update Booking status to completed and attach report & notif
+    // Notification 2 (Step 7): Maintenance / Defect Alert to Head of Admin
+    if (hasDefect) {
+      const maintenanceAlertNotif: BookingNotificationLog = {
+        id: `notif_${Date.now()}_maint`,
+        timestamp: nowFormatted,
+        type: "maintenance_alert",
+        title: "⚠️ แจ้งซ่อมบำรุงเร่งด่วน: ตรวจพบปัญหาจากการใช้งานรถยนต์ราชการ",
+        message: `[Line Notify ด่วน] 🚨 รถยนต์ ${licensePlate} ถูกรายงานปัญหาหลังการใช้งาน: "${report.issuesFound}". ระบบได้ปรับสถานะรถยนต์เป็น "ซ่อมบำรุง (Maintenance)" โดยอัตโนมัติ แจ้งเตือนไปยัง นายเสกพล ดิษฐโชติ (หัวหน้าฝ่ายบริหารทั่วไป) เพื่อโปรดพิจารณาอนุมัติส่งซ่อมบำรุง`,
+        recipientRole: "หัวหน้าฝ่ายบริหารทั่วไป",
+        recipientName: "นายเสกพล ดิษฐโชติ",
+        channel: "line_notify",
+        status: "delivered",
+      };
+      notifs.push(maintenanceAlertNotif);
+    }
+
+    // 1. Update Booking status to completed and attach report & notifs
     const updatedBookings = bookings.map((b) => {
       if (b.id !== bookingId) return b;
       return {
         ...b,
         status: "completed" as BookingStatus,
+        keyReturned: report.keyReturned ?? true,
+        hasIssueReported: hasDefect,
+        issueReportDetails: hasDefect ? report.issuesFound : undefined,
+        needsMaintenance: hasDefect,
         returnReport: report,
-        notifications: [...(b.notifications || []), returnCompletedNotif],
+        notifications: [...(b.notifications || []), ...notifs],
       };
     });
     updateAndSaveBookings(updatedBookings);
 
-    // 2. Revert Vehicle Status & Update odometer and fuel level (คืนสถานะรถ)
+    // 2. Step 6 & 7: Revert Vehicle Status & Update odometer and fuel level
+    // If defect found -> "maintenance", else -> "available" (เคลียร์สถานะพร้อมใช้งาน)
+    const nextVehicleStatus: VehicleStatus = hasDefect ? "maintenance" : "available";
+
     const updatedVehicles = vehicles.map((v) => {
       if (v.id !== vehicleId) return v;
       return {
         ...v,
         mileage: report.endMileage,
         fuelLevel: report.endFuelLevel as FuelLevel,
-        status: "available" as VehicleStatus, // คืนสถานะความพร้อมของรถ
+        status: nextVehicleStatus,
       };
     });
     updateAndSaveVehicles(updatedVehicles);
@@ -619,14 +876,21 @@ export function CarBookingPage({
     recordAuditLog(
       currentUser.name,
       `ส่งคืนรถยนต์ราชการ: ${targetBooking ? targetBooking.requestNo : bookingId}`,
-      `ทะเบียน: ${licensePlate} - เลขไมล์: ${report.endMileage.toLocaleString()} กม. - น้ำมัน: ${report.endFuelLevel}`,
-      "success"
+      `ทะเบียน: ${licensePlate} - ไมล์: ${report.endMileage.toLocaleString()} กม. (ระยะวิ่ง ${report.totalDistance.toLocaleString()} กม.) - สถานะรถ: ${nextVehicleStatus} ${hasDefect ? `(แจ้งซ่อม: ${report.issuesFound})` : ""}`,
+      hasDefect ? "denied" : "success"
     ).catch(console.warn);
 
     setSelectedReturnBooking(null);
-    showToast(
-      `✅ ส่งคืนรถยนต์ราชการ [${licensePlate}] และคืนสถานะเป็น "พร้อมใช้งาน" เรียบร้อยแล้ว! (เลขไมล์: ${report.endMileage.toLocaleString()} กม.)`
-    );
+
+    if (hasDefect) {
+      showToast(
+        `⚠️ บันทึกการส่งคืนรถ [${licensePlate}] และรายงานแจ้งซ่อมสำเร็จ! ระบบได้ปรับสถานะเป็น "ซ่อมบำรุง" และส่ง Line Notify ด่วนไปยังหัวหน้าฝ่ายบริหารทั่วไปแล้ว`
+      );
+    } else {
+      showToast(
+        `✅ ส่งคืนรถยนต์ราชการ [${licensePlate}] พร้อมส่งกุญแจคืนเรียบร้อย! ระบบคำนวณระยะวิ่งจริง ${report.totalDistance.toLocaleString()} กม. และเคลียร์สถานะเป็น "พร้อมใช้งาน"`
+      );
+    }
   };
 
   // Vehicle Management (CRUD)
@@ -681,24 +945,40 @@ export function CarBookingPage({
 
   const getStatusBadge = (status: BookingStatus) => {
     switch (status) {
+      case "pending_division_head":
       case "pending_review":
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
             <span>⏳</span>
-            <span>รอหัวหน้าฝ่ายตรวจ (ขั้น 1)</span>
+            <span>รอหน.กลุ่ม/ผู้แทนกลุ่มเห็นชอบ (ขั้น 1/4)</span>
           </span>
         );
+      case "pending_fleet_assignment":
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200">
+            <span>🚗</span>
+            <span>รอจัดสรรรถ/คนขับ (ขั้น 2/4)</span>
+          </span>
+        );
+      case "pending_admin_head":
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
+            <span>👔</span>
+            <span>รอหน.ฝ่ายบริหารเห็นชอบ (ขั้น 3/4)</span>
+          </span>
+        );
+      case "pending_provincial":
       case "endorsed":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-teal-100 text-teal-800 border border-teal-200">
-            <span>✓</span>
-            <span>รอ พมจ. อนุมัติ (ขั้น 2)</span>
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-200">
+            <span>👑</span>
+            <span>รอ พมจ. อนุมัติ (ขั้น 4/4)</span>
           </span>
         );
       case "approved":
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-            <span>👑</span>
+            <span>✓</span>
             <span>อนุมัติแล้ว (พร้อมเดินทาง)</span>
           </span>
         );
@@ -1226,8 +1506,7 @@ export function CarBookingPage({
             <div className="flex flex-wrap items-center gap-1.5">
               {[
                 { id: "all", label: "ทั้งหมด" },
-                { id: "pending_review", label: "รอหัวหน้าฝ่ายตรวจ" },
-                { id: "endorsed", label: "รอ พมจ. อนุมัติ" },
+                { id: "pending", label: "รอพิจารณา (ขั้นตอน 1-4)" },
                 { id: "approved", label: "อนุมัติแล้ว" },
                 { id: "completed", label: "ส่งคืนแล้ว" },
                 { id: "rejected", label: "ไม่อนุมัติ" },
@@ -1271,14 +1550,38 @@ export function CarBookingPage({
           ) : (
             <div className="space-y-4">
               {filteredBookings.map((b) => {
-                const canReviewAsManager =
-                  (currentUser.role === "manager" || currentUser.role === "admin") &&
-                  b.status === "pending_review";
-                const canApproveAsAdmin = currentUser.role === "admin" && b.status === "endorsed";
                 const isMyBooking = b.requesterId === currentUser.id;
                 const canReportReturn =
                   b.status === "approved" &&
                   (isMyBooking || currentUser.role === "admin" || currentUser.role === "manager");
+
+                // Step 1: หัวหน้ากลุ่มหรือข้าราชการในกลุ่มเห็นชอบ
+                const canReviewStage1 =
+                  (b.status === "pending_division_head" || b.status === "pending_review") &&
+                  (currentUser.role === "admin" ||
+                    currentUser.role === "manager" ||
+                    currentUser.id === b.divisionReviewerId ||
+                    currentUser.division === b.requesterDivision);
+
+                // Step 2: เจ้าหน้าที่ฝ่ายบริหารจัดสรรรถและคนขับ
+                const canReviewStage2 =
+                  b.status === "pending_fleet_assignment" &&
+                  (currentUser.role === "admin" ||
+                    currentUser.role === "manager" ||
+                    currentUser.id === b.fleetDispatcherId ||
+                    currentUser.division?.includes("ฝ่ายบริหารทั่วไป"));
+
+                // Step 3: หัวหน้าฝ่ายบริหารเห็นชอบ
+                const canReviewStage3 =
+                  b.status === "pending_admin_head" &&
+                  (currentUser.role === "admin" ||
+                    currentUser.role === "manager" ||
+                    currentUser.division?.includes("ฝ่ายบริหารทั่วไป"));
+
+                // Step 4: พมจ. พิจารณาอนุมัติ
+                const canReviewStage4 =
+                  (b.status === "pending_provincial" || b.status === "endorsed") &&
+                  currentUser.role === "admin";
 
                 return (
                   <div
@@ -1410,60 +1713,107 @@ export function CarBookingPage({
                       </div>
                     )}
 
-                    {/* 4-Step Progress Indicator */}
-                    <div className="p-3 bg-slate-50/70 rounded-2xl border border-slate-200/50 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
-                      {/* Step 1 */}
-                      <div className="flex items-center gap-2 text-emerald-700 font-semibold">
+                    {/* 5-Stage Workflow Progress Indicator */}
+                    <div className="p-3 bg-slate-50/70 rounded-2xl border border-slate-200/50 flex flex-wrap items-center justify-between gap-2 text-xs">
+                      {/* Step 1: ยื่นคำขอ */}
+                      <div className="flex items-center gap-1.5 text-emerald-700 font-semibold">
                         <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold">
                           ✓
                         </span>
                         <span>1. ยื่นคำขอ ({b.requesterName.split(" ")[0]})</span>
                       </div>
 
-                      <span className="text-slate-300 hidden sm:inline">→</span>
+                      <span className="text-slate-300 hidden md:inline">→</span>
 
-                      {/* Step 2 */}
+                      {/* Step 2: หน.กลุ่ม/ผู้แทนกลุ่มเห็นชอบ */}
                       <div
-                        className={`flex items-center gap-2 font-semibold ${
-                          b.status === "endorsed" ||
-                          b.status === "approved" ||
-                          b.status === "completed"
+                        className={`flex items-center gap-1.5 font-semibold ${
+                          b.status !== "pending_division_head" && b.status !== "pending_review" && b.status !== "rejected"
                             ? "text-emerald-700"
-                            : b.status === "pending_review"
+                            : b.status === "pending_division_head" || b.status === "pending_review"
                             ? "text-amber-700"
                             : "text-slate-400"
                         }`}
                       >
                         <span
                           className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                            b.status === "endorsed" ||
-                            b.status === "approved" ||
-                            b.status === "completed"
+                            b.status !== "pending_division_head" && b.status !== "pending_review" && b.status !== "rejected"
                               ? "bg-emerald-100 text-emerald-700"
-                              : b.status === "pending_review"
+                              : b.status === "pending_division_head" || b.status === "pending_review"
                               ? "bg-amber-100 text-amber-700"
                               : "bg-slate-200 text-slate-600"
                           }`}
                         >
-                          {b.status === "endorsed" ||
-                          b.status === "approved" ||
-                          b.status === "completed"
-                            ? "✓"
-                            : "2"}
+                          {b.status !== "pending_division_head" && b.status !== "pending_review" && b.status !== "rejected" ? "✓" : "2"}
                         </span>
                         <span>
-                          2. หัวหน้าฝ่ายเห็นชอบ{" "}
-                          {b.managerName ? `(${b.managerName.split(" ")[0]})` : ""}
+                          2. หน.กลุ่มเห็นชอบ {b.divisionReviewerName ? `(${b.divisionReviewerName.split(" ")[0]})` : ""}
                         </span>
                       </div>
 
-                      <span className="text-slate-300 hidden sm:inline">→</span>
+                      <span className="text-slate-300 hidden md:inline">→</span>
 
-                      {/* Step 3 */}
+                      {/* Step 3: จัดสรรรถและคนขับ */}
                       <div
-                        className={`flex items-center gap-2 font-semibold ${
+                        className={`flex items-center gap-1.5 font-semibold ${
+                          b.status === "pending_admin_head" || b.status === "pending_provincial" || b.status === "endorsed" || b.status === "approved" || b.status === "completed"
+                            ? "text-emerald-700"
+                            : b.status === "pending_fleet_assignment"
+                            ? "text-blue-700"
+                            : "text-slate-400"
+                        }`}
+                      >
+                        <span
+                          className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                            b.status === "pending_admin_head" || b.status === "pending_provincial" || b.status === "endorsed" || b.status === "approved" || b.status === "completed"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : b.status === "pending_fleet_assignment"
+                              ? "bg-blue-100 text-blue-700"
+                              : "bg-slate-200 text-slate-600"
+                          }`}
+                        >
+                          {b.status === "pending_admin_head" || b.status === "pending_provincial" || b.status === "endorsed" || b.status === "approved" || b.status === "completed" ? "✓" : "3"}
+                        </span>
+                        <span>
+                          3. จัดสรรรถ/คนขับ {b.assignedDriver ? `(${b.assignedDriver.split(" ")[0]})` : ""}
+                        </span>
+                      </div>
+
+                      <span className="text-slate-300 hidden md:inline">→</span>
+
+                      {/* Step 4: หน.ฝ่ายบริหารเห็นชอบ */}
+                      <div
+                        className={`flex items-center gap-1.5 font-semibold ${
+                          b.status === "pending_provincial" || b.status === "endorsed" || b.status === "approved" || b.status === "completed"
+                            ? "text-emerald-700"
+                            : b.status === "pending_admin_head"
+                            ? "text-indigo-700"
+                            : "text-slate-400"
+                        }`}
+                      >
+                        <span
+                          className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                            b.status === "pending_provincial" || b.status === "endorsed" || b.status === "approved" || b.status === "completed"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : b.status === "pending_admin_head"
+                              ? "bg-indigo-100 text-indigo-700"
+                              : "bg-slate-200 text-slate-600"
+                          }`}
+                        >
+                          {b.status === "pending_provincial" || b.status === "endorsed" || b.status === "approved" || b.status === "completed" ? "✓" : "4"}
+                        </span>
+                        <span>4. หน.ฝ่ายบริหารเห็นชอบ</span>
+                      </div>
+
+                      <span className="text-slate-300 hidden md:inline">→</span>
+
+                      {/* Step 5: พมจ. อนุมัติ */}
+                      <div
+                        className={`flex items-center gap-1.5 font-semibold ${
                           b.status === "approved" || b.status === "completed"
                             ? "text-emerald-700"
+                            : b.status === "pending_provincial" || b.status === "endorsed"
+                            ? "text-purple-700"
                             : "text-slate-400"
                         }`}
                       >
@@ -1471,19 +1821,21 @@ export function CarBookingPage({
                           className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
                             b.status === "approved" || b.status === "completed"
                               ? "bg-emerald-100 text-emerald-700"
+                              : b.status === "pending_provincial" || b.status === "endorsed"
+                              ? "bg-purple-100 text-purple-700"
                               : "bg-slate-200 text-slate-600"
                           }`}
                         >
-                          {b.status === "approved" || b.status === "completed" ? "✓" : "3"}
+                          {b.status === "approved" || b.status === "completed" ? "✓" : "5"}
                         </span>
-                        <span>3. พมจ. อนุมัติ & Notify</span>
+                        <span>5. พมจ. อนุมัติ & Notify</span>
                       </div>
 
-                      <span className="text-slate-300 hidden sm:inline">→</span>
+                      <span className="text-slate-300 hidden md:inline">→</span>
 
-                      {/* Step 4 */}
+                      {/* Step 6: ส่งคืนและตรวจรับ */}
                       <div
-                        className={`flex items-center gap-2 font-semibold ${
+                        className={`flex items-center gap-1.5 font-semibold ${
                           b.status === "completed"
                             ? "text-teal-700"
                             : "text-slate-400"
@@ -1496,9 +1848,9 @@ export function CarBookingPage({
                               : "bg-slate-200 text-slate-600"
                           }`}
                         >
-                          {b.status === "completed" ? "✓" : "4"}
+                          {b.status === "completed" ? "✓" : "6"}
                         </span>
-                        <span>4. ส่งคืน & ตรวจรับสภาพ</span>
+                        <span>6. ส่งกุญแจคืน & ตรวจรับ</span>
                       </div>
                     </div>
 
@@ -1538,7 +1890,7 @@ export function CarBookingPage({
                         )}
 
                         {/* Requester cancel option if pending */}
-                        {isMyBooking && b.status === "pending_review" && (
+                        {isMyBooking && (b.status === "pending_division_head" || b.status === "pending_review" || b.status === "pending_fleet_assignment") && (
                           <button
                             type="button"
                             onClick={() => handleCancelBooking(b)}
@@ -1571,26 +1923,52 @@ export function CarBookingPage({
                             className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
                           >
                             <span>🔄</span>
-                            <span>รายงานส่งคืนรถ (บันทึกไมล์/น้ำมัน)</span>
+                            <span>รายงานส่งคืนรถ (บันทึกไมล์/น้ำมัน/กุญแจ)</span>
                           </button>
                         )}
 
-                        {canReviewAsManager && (
+                        {/* Stage 1 Review */}
+                        {canReviewStage1 && (
                           <button
                             type="button"
                             onClick={() => setSelectedReviewBooking(b)}
-                            className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[#0D9488] hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                            className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
                           >
                             <span>👔</span>
-                            <span>ตรวจสอบ & ลงความเห็นชอบ</span>
+                            <span>พิจารณาเห็นชอบ (ขั้น 1/4)</span>
                           </button>
                         )}
 
-                        {canApproveAsAdmin && (
+                        {/* Stage 2 Review: Fleet & Driver Assignment */}
+                        {canReviewStage2 && (
                           <button
                             type="button"
                             onClick={() => setSelectedReviewBooking(b)}
-                            className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                            className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                          >
+                            <span>🚗</span>
+                            <span>จัดสรรรถและคนขับ (ขั้น 2/4)</span>
+                          </button>
+                        )}
+
+                        {/* Stage 3 Review: Head of Admin Endorsement */}
+                        {canReviewStage3 && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedReviewBooking(b)}
+                            className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                          >
+                            <span>👔</span>
+                            <span>หน.ฝ่ายบริหารเห็นชอบ (ขั้น 3/4)</span>
+                          </button>
+                        )}
+
+                        {/* Stage 4 Review: Provincial Approval */}
+                        {canReviewStage4 && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedReviewBooking(b)}
+                            className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
                           >
                             <span>👑</span>
                             <span>พิจารณาอนุมัติ (พมจ.)</span>
@@ -1646,6 +2024,115 @@ export function CarBookingPage({
                   <span className="text-slate-400">เบอร์โทรศัพท์:</span>
                   <div className="font-mono text-slate-800 mt-0.5">{currentUser.phone}</div>
                 </div>
+              </div>
+            </div>
+
+            {/* ─── Workflow Step 1 & 2 Routing Selection ─── */}
+            <div className="p-4 bg-teal-50/60 rounded-2xl border border-teal-200/80 space-y-4">
+              <div className="flex items-center gap-2">
+                <span className="w-6 h-6 rounded-full bg-teal-600 text-white flex items-center justify-center text-xs font-bold shadow-xs">
+                  1
+                </span>
+                <h3 className="text-xs font-bold text-teal-950 uppercase tracking-wide">
+                  ขั้นตอนที่ 1: เสนอผู้พิจารณาให้ความเห็นชอบชั้นต้น (ในกลุ่ม/ฝ่ายตนเอง)
+                </h3>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                {/* Radio 1: หัวหน้ากลุ่ม/ฝ่ายที่สังกัด */}
+                <label
+                  className={`p-3.5 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
+                    formReviewerType === "head"
+                      ? "bg-white border-teal-500 ring-2 ring-teal-500/20 shadow-xs"
+                      : "bg-teal-50/40 border-teal-200/60 hover:bg-white"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="reviewerType"
+                    checked={formReviewerType === "head"}
+                    onChange={() => setFormReviewerType("head")}
+                    className="mt-0.5 text-teal-600 focus:ring-teal-500 cursor-pointer"
+                  />
+                  <div className="space-y-0.5">
+                    <div className="font-bold text-slate-900">
+                      หัวหน้ากลุ่ม/ฝ่ายที่สังกัด
+                    </div>
+                    <div className="text-teal-800 font-medium">
+                      {detectedDivisionHead?.name}
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      {detectedDivisionHead?.position}
+                    </div>
+                  </div>
+                </label>
+
+                {/* Radio 2: เลือกจากข้าราชการในกลุ่มตนเอง */}
+                <label
+                  className={`p-3.5 rounded-xl border flex flex-col gap-2 cursor-pointer transition-all ${
+                    formReviewerType === "official"
+                      ? "bg-white border-teal-500 ring-2 ring-teal-500/20 shadow-xs"
+                      : "bg-teal-50/40 border-teal-200/60 hover:bg-white"
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="radio"
+                      name="reviewerType"
+                      checked={formReviewerType === "official"}
+                      onChange={() => setFormReviewerType("official")}
+                      className="mt-0.5 text-teal-600 focus:ring-teal-500 cursor-pointer"
+                    />
+                    <div className="space-y-0.5">
+                      <div className="font-bold text-slate-900">
+                        เลือกจากข้าราชการในกลุ่มตนเอง
+                      </div>
+                      <div className="text-[11px] text-slate-500">
+                        (กรณีหัวหน้ากลุ่มติดราชการ หรือมอบหมายข้าราชการพิจารณาแทน)
+                      </div>
+                    </div>
+                  </div>
+
+                  {formReviewerType === "official" && (
+                    <div className="mt-1 pl-6">
+                      <select
+                        value={formSelectedReviewerId}
+                        onChange={(e) => setFormSelectedReviewerId(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-teal-300 rounded-xl text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                      >
+                        <option value="">-- เลือกข้าราชการในกลุ่ม --</option>
+                        {divisionOfficials.map((off) => (
+                          <option key={off.id} value={off.id}>
+                            {off.name} ({off.position})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </label>
+              </div>
+
+              {/* Step 2 Dispatcher selection */}
+              <div className="pt-2 border-t border-teal-200/60 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold shadow-xs">
+                    2
+                  </span>
+                  <label className="text-xs font-bold text-slate-800">
+                    เจ้าหน้าที่ฝ่ายบริหารทั่วไป ผู้รับผิดชอบจัดสรรรถ/คนขับ (เมื่อผ่านความเห็นชอบ):
+                  </label>
+                </div>
+                <select
+                  value={formDispatcherId}
+                  onChange={(e) => setFormDispatcherId(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-white border border-teal-300 rounded-xl text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                >
+                  {fleetDispatchers.map((disp) => (
+                    <option key={disp.id} value={disp.id}>
+                      {disp.name} - {disp.position}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
@@ -2065,11 +2552,16 @@ export function CarBookingPage({
         />
       )}
 
-      {/* ─── MODAL: Tier 2 & 3 Review & Approval ─── */}
+      {/* ─── MODAL: 4-Stage Workflow Review & Approval Modal ─── */}
       {selectedReviewBooking && (
         <ReviewBookingModal
           booking={selectedReviewBooking}
           currentUser={currentUser}
+          vehicles={vehicles}
+          onDivisionEndorse={handleDivisionEndorse}
+          onFleetAssign={handleFleetAssign}
+          onAdminHeadEndorse={handleAdminHeadEndorse}
+          onProvincialApprove={handleProvincialApprove}
           onEndorse={handleEndorse}
           onApprove={handleApprove}
           onReject={handleReject}

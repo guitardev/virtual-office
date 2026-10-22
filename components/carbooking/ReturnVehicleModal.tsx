@@ -37,6 +37,11 @@ export function ReturnVehicleModal({
   const [airConditioner, setAirConditioner] = useState<"แอร์เย็นปกติ" | "แอร์ไม่ค่อยเย็น/มีกลิ่น">("แอร์เย็นปกติ");
   const [issuesFound, setIssuesFound] = useState<string>("ไม่มีข้อบกพร่อง รถยนต์และอุปกรณ์ส่วนควบอยู่ในสภาพเรียบร้อย");
   const [notes, setNotes] = useState<string>("ส่งคืนกุญแจรถ บัตรเติมน้ำมัน และเอกสารประจำรถเรียบร้อย");
+  
+  // New Step 5 & 7 states: Key return & Repair reporting
+  const [keyReturned, setKeyReturned] = useState<boolean>(true);
+  const [hasIssue, setHasIssue] = useState<boolean>(false);
+  const [needsMaintenance, setNeedsMaintenance] = useState<boolean>(false);
 
   const defaultInspector = inspectors[0] || currentUser;
   const [inspectorId, setInspectorId] = useState<string>(defaultInspector?.id || "");
@@ -51,7 +56,14 @@ export function ReturnVehicleModal({
       return;
     }
 
+    if (!keyReturned) {
+      if (!confirm("คุณยังไม่ได้ทำเครื่องหมายส่งมอบกุญแจรถคืน ต้องการดำเนินการต่อหรือไม่?")) {
+        return;
+      }
+    }
+
     const selectedInspector = inspectors.find((i) => i.id === inspectorId) || currentUser;
+    const isProblemFound = hasIssue || bodyCondition === "มีความเสียหาย" || engineCondition === "พบอาการผิดปกติ";
 
     const report: VehicleReturnReport = {
       returnedAt: new Date().toLocaleDateString("th-TH", {
@@ -77,8 +89,11 @@ export function ReturnVehicleModal({
       bodyCondition,
       engineCondition,
       airConditioner,
-      issuesFound: issuesFound.trim() || "ไม่มีข้อบกพร่อง",
+      issuesFound: issuesFound.trim() || (isProblemFound ? "พบข้อบกพร่องตามที่ระบุ" : "ไม่มีข้อบกพร่อง"),
       notes: notes.trim() || undefined,
+      keyReturned,
+      hasIssue: isProblemFound,
+      needsMaintenance: isProblemFound || needsMaintenance,
     };
 
     onSubmitReturn(booking.id, vehicle.id, report);
@@ -331,20 +346,81 @@ export function ReturnVehicleModal({
                 </select>
               </div>
             </div>
+          </div>
 
-            {/* Issues found notes */}
-            <div>
-              <label className="block text-slate-600 mb-1 font-semibold text-xs">
-                รายงานข้อบกพร่องหรือสิ่งที่ต้องดำเนินการซ่อมแซม
-              </label>
-              <textarea
-                rows={2}
-                value={issuesFound}
-                onChange={(e) => setIssuesFound(e.target.value)}
-                placeholder="ระบุข้อบกพร่องที่พบ เช่น ยางลมหน้าซ้ายอ่อน หรือ ไม่มีข้อบกพร่อง..."
-                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 resize-none focus:ring-2 focus:ring-indigo-500/20 font-body"
-              />
+          {/* Section 4: Key Return Confirmation (Step 5) */}
+          <div className="p-3.5 bg-emerald-50 rounded-2xl border border-emerald-200 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <span className="text-xl">🔑</span>
+              <div>
+                <span className="font-bold text-xs text-emerald-950">
+                  ส่งมอบกุญแจรถยนต์ บัตรเติมน้ำมัน และเอกสารประจำรถ (ขั้นตอนที่ 5)
+                </span>
+                <p className="text-[11px] text-emerald-800">
+                  ยืนยันการนำกุญแจรถส่งคืนเรียบร้อย ณ งานยานพาหนะ ฝ่ายบริหารทั่วไป
+                </p>
+              </div>
             </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={keyReturned}
+                onChange={(e) => setKeyReturned(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+            </label>
+          </div>
+
+          {/* Section 5: Issues Found & Maintenance Reporting (Step 7) */}
+          <div className={`p-4 rounded-2xl border transition-all ${
+            hasIssue || bodyCondition === "มีความเสียหาย" || engineCondition === "พบอาการผิดปกติ"
+              ? "bg-rose-50 border-rose-300"
+              : "bg-slate-50 border-slate-200"
+          }`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="font-bold font-heading text-xs text-slate-900 flex items-center gap-1.5">
+                  <span>🛠️</span>
+                  <span>รายงานสภาพปัญหาที่พบ / แจ้งซ่อมบำรุง (ขั้นตอนที่ 7)</span>
+                </h4>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  กรณีพบปัญหาชำรุด ระบบจะปรับสถานะรถเป็น "ส่งซ่อมบำรุง" และส่ง Line Notify ด่วนไปยังหัวหน้าฝ่ายบริหารทั่วไป
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={hasIssue}
+                  onChange={(e) => {
+                    setHasIssue(e.target.checked);
+                    if (e.target.checked) setNeedsMaintenance(true);
+                  }}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-600"></div>
+              </label>
+            </div>
+
+            {(hasIssue || bodyCondition === "มีความเสียหาย" || engineCondition === "พบอาการผิดปกติ") && (
+              <div className="space-y-2 pt-3 mt-3 border-t border-rose-200 text-xs">
+                <label className="block text-rose-900 font-bold">
+                  ระบุสภาพปัญหาที่พบ หรือ อาการที่ต้องดำเนินการซ่อมแซม <span className="text-rose-600">*</span>
+                </label>
+                <textarea
+                  rows={2}
+                  required
+                  value={issuesFound}
+                  onChange={(e) => setIssuesFound(e.target.value)}
+                  placeholder="เช่น ยางลมหน้าซ้ายรั่วซึม, ระบบเบรกมีเสียงดัง, แอร์ไม่เย็น หรือช่วงล่างมีเสียงผิดปกติ..."
+                  className="w-full px-3 py-2 bg-white border border-rose-300 rounded-xl text-xs text-slate-800 resize-none focus:ring-2 focus:ring-rose-500/30"
+                />
+                <div className="flex items-center gap-2 p-2 bg-rose-100/70 rounded-xl text-rose-900 text-[11px] font-bold">
+                  <span>🚨</span>
+                  <span>เมื่อยืนยัน ระบบจะส่ง Line Notify แจ้งเตือนด่วนไปยัง <strong>นายเสกพล ดิษฐโชติ (หัวหน้าฝ่ายบริหารทั่วไป)</strong> เพื่อออกใบสั่งซ่อมบำรุงทันที</span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Section 4: Returnee & Inspector */}
