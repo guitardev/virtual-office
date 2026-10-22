@@ -1539,6 +1539,14 @@ export function mapRowToMeeting(row: any): MeetingItem {
     attendees = ["ข้าราชการและเจ้าหน้าที่ พมจ."];
   }
 
+  const meetingType =
+    row.type ||
+    (row.meeting_link && row.location && !row.location.includes("ออนไลน์")
+      ? "hybrid"
+      : row.meeting_link
+      ? "online"
+      : "onsite");
+
   return {
     id: row.id,
     title: row.title,
@@ -1548,7 +1556,7 @@ export function mapRowToMeeting(row: any): MeetingItem {
     startTime: start.toISOString(),
     endTime: end.toISOString(),
     location: row.location || (row.meeting_link ? "ห้องประชุมออนไลน์ Google Meet" : "ห้องประชุมสำนักงาน พมจ."),
-    type: row.meeting_link && row.location && !row.location.includes("ออนไลน์") ? "hybrid" : (row.meeting_link ? "online" : "onsite"),
+    type: meetingType as any,
     category: (row.category as any) || "general",
     status: (row.status as any) || "confirmed",
     attendees,
@@ -1601,12 +1609,15 @@ export async function saveMeeting(meeting: MeetingItem): Promise<boolean> {
       meeting_link:
         meeting.meetingLink ||
         (meeting.type === "online" ? "https://meet.google.com/kpp-msoc" : null),
+      type: meeting.type || "hybrid",
       category: meeting.category || "general",
       status: meeting.status || "confirmed",
       attendees: Array.isArray(meeting.attendees) ? meeting.attendees : [],
       organizer: meeting.organizer || null,
     };
-    if (isUuid) row.id = meeting.id;
+    if (isUuid) {
+      row.id = meeting.id;
+    }
     const { error } = await supabase.from("meetings").upsert(row);
     if (error) {
       console.error("Supabase upsert meeting error:", error);
@@ -1622,6 +1633,13 @@ export async function saveMeeting(meeting: MeetingItem): Promise<boolean> {
 export async function deleteMeeting(id: string | number): Promise<boolean> {
   if (!supabase) return true;
   try {
+    const isUuid =
+      typeof id === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    if (!isUuid) {
+      console.warn("deleteMeeting skipped: ID is not a valid UUID:", id);
+      return true;
+    }
     const { error } = await supabase.from("meetings").delete().eq("id", id);
     return !error;
   } catch {

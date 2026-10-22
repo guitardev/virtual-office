@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import { MeetingItem, Member, MeetingCategory, MeetingType } from "@/lib/types";
-import { saveMeeting, deleteMeeting } from "@/lib/supabase";
+import { saveMeeting, deleteMeeting, recordAuditLog } from "@/lib/supabase";
 import {
   createGoogleCalendarUrl,
   createOutlookCalendarUrl,
@@ -47,6 +47,7 @@ export function MeetingsPage({
   const [calendarDropdownId, setCalendarDropdownId] = useState<string | number | null>(null);
 
   // Form State for Create/Edit Meeting
+  const [editingMeetingId, setEditingMeetingId] = useState<string | null>(null);
   const [formTitle, setFormTitle] = useState("");
   const [formCategory, setFormCategory] = useState<MeetingCategory>("general");
   const [formType, setFormType] = useState<MeetingType>("hybrid");
@@ -64,6 +65,7 @@ export function MeetingsPage({
 
   // Helper to open Add Modal with fresh defaults
   const handleOpenAddModal = () => {
+    setEditingMeetingId(null);
     setFormTitle("");
     setFormCategory("general");
     setFormType("hybrid");
@@ -83,6 +85,52 @@ export function MeetingsPage({
     setShowAddModal(true);
   };
 
+  // Helper to open Edit Modal with existing meeting data
+  const handleOpenEditModal = (meeting: MeetingItem) => {
+    setEditingMeetingId(String(meeting.id));
+    setFormTitle(meeting.title);
+    setFormCategory(meeting.category || "general");
+    setFormType(meeting.type || "hybrid");
+    setFormLocation(meeting.location || "ห้องประชุม 1 (ศาลากลางจังหวัด ชั้น 2)");
+    setFormMeetingLink(meeting.meetingLink || "");
+
+    // Extract date & times
+    let dateVal = new Date().toISOString().slice(0, 10);
+    let startVal = "09:30";
+    let endVal = "11:30";
+    if (meeting.startTime) {
+      const s = new Date(meeting.startTime);
+      if (!isNaN(s.getTime())) {
+        dateVal = s.toISOString().slice(0, 10);
+        startVal = s.toTimeString().slice(0, 5);
+      }
+    }
+    if (meeting.endTime) {
+      const e = new Date(meeting.endTime);
+      if (!isNaN(e.getTime())) {
+        endVal = e.toTimeString().slice(0, 5);
+      }
+    }
+    setFormDate(dateVal);
+    setFormStartTime(startVal);
+    setFormEndTime(endVal);
+    setFormDescription(meeting.description || "");
+
+    // Resolve attendee IDs
+    if (Array.isArray(meeting.attendees)) {
+      const ids = meeting.attendees
+        .map((a) => (typeof a === "object" ? a.id : undefined))
+        .filter(Boolean) as string[];
+      setSelectedAttendeeIds(ids);
+    } else {
+      setSelectedAttendeeIds([]);
+    }
+
+    setShowTemplatePicker(false);
+    setSelectedMeeting(null);
+    setShowAddModal(true);
+  };
+
   // Apply template
   const handleApplyTemplate = (tpl: MeetingPresetTemplate) => {
     setFormTitle(tpl.title);
@@ -95,7 +143,7 @@ export function MeetingsPage({
     showToast(`📋 นำเข้าแม่แบบ "${tpl.name}" เรียบร้อย`);
   };
 
-  // Submit new meeting
+  // Submit create or edit meeting
   const handleSaveMeetingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formTitle.trim()) {
@@ -131,8 +179,14 @@ export function MeetingsPage({
       };
     });
 
-    const newMeeting: MeetingItem = {
-      id: `mtg_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    const meetingId =
+      editingMeetingId ||
+      (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `${Date.now()}-0000-4000-8000-${Math.random().toString(16).slice(2, 14).padEnd(12, "0")}`);
+
+    const meetingPayload: MeetingItem = {
+      id: meetingId,
       title: formTitle.trim(),
       description: formDescription.trim() || undefined,
       category: formCategory,
@@ -161,14 +215,32 @@ export function MeetingsPage({
     };
 
     if (setMeetings) {
-      setMeetings((prev) => [newMeeting, ...prev]);
+      setMeetings((prev) => {
+        if (editingMeetingId) {
+          return prev.map((m) => (m.id === editingMeetingId ? meetingPayload : m));
+        }
+        return [meetingPayload, ...prev];
+      });
     }
     setShowAddModal(false);
-    showToast("✅ บันทึกนัดหมายการประชุมเรียบร้อยแล้ว (ซิงก์ขึ้น Cloud)");
+    showToast(
+      editingMeetingId
+        ? "✅ แก้ไขและบันทึกการประชุมเรียบร้อย (ซิงก์ Cloud)"
+        : "✅ บันทึกนัดหมายการประชุมเรียบร้อยแล้ว (ซิงก์ขึ้น Cloud)"
+    );
 
-    saveMeeting(newMeeting).catch((err) => {
+    saveMeeting(meetingPayload).catch((err) => {
       console.error("Failed to save meeting to Supabase:", err);
     });
+
+    recordAuditLog(
+      currentUser?.name || "เจ้าหน้าที่",
+      editingMeetingId
+        ? `แก้ไขนัดหมายการประชุม: ${meetingPayload.title}`
+        : `สร้างนัดหมายการประชุม: ${meetingPayload.title}`,
+      `วันที่: ${dateStr} (${timeStr}) - สถานที่: ${meetingPayload.location}`,
+      "success"
+    ).catch(console.warn);
   };
 
   // Delete meeting
@@ -176,6 +248,7 @@ export function MeetingsPage({
     if (e) e.stopPropagation();
     if (!confirm("คุณต้องการยกเลิกและลบนัดหมายการประชุมนี้ใช่หรือไม่?")) return;
 
+    const target = meetings.find((m) => m.id === id);
     if (setMeetings) {
       setMeetings((prev) => prev.filter((m) => m.id !== id));
     }
@@ -187,6 +260,15 @@ export function MeetingsPage({
     deleteMeeting(id).catch((err) => {
       console.error("Failed to delete meeting from Supabase:", err);
     });
+
+    if (target) {
+      recordAuditLog(
+        currentUser?.name || "เจ้าหน้าที่",
+        `ยกเลิกนัดหมายการประชุม: ${target.title}`,
+        `วันที่: ${target.dateStr} - สถานที่: ${target.location}`,
+        "denied"
+      ).catch(console.warn);
+    }
   };
 
   // Copy formal Thai meeting invitation text
@@ -612,6 +694,16 @@ export function MeetingsPage({
                     >
                       รายละเอียด
                     </button>
+
+                    {/* Edit Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditModal(m)}
+                      className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                      title="แก้ไขการประชุม"
+                    >
+                      ✏️
+                    </button>
                   </div>
 
                   {/* Standard Calendar Actions */}
@@ -912,6 +1004,17 @@ export function MeetingsPage({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
+                  onClick={() => {
+                    handleOpenEditModal(selectedMeeting);
+                    setSelectedMeeting(null);
+                  }}
+                  className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>✏️</span>
+                  <span>แก้ไขข้อมูล</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => handleDeleteMeeting(selectedMeeting.id)}
                   className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
                 >
@@ -940,16 +1043,19 @@ export function MeetingsPage({
                 <span className="text-xl">📅</span>
                 <div>
                   <h3 className="font-bold font-heading text-slate-900 text-base">
-                    สร้างการประชุมและนัดหมายใหม่
+                    {editingMeetingId ? "แก้ไขข้อมูลการประชุมและนัดหมาย" : "สร้างการประชุมและนัดหมายใหม่"}
                   </h3>
                   <p className="text-[11px] text-slate-500">
-                    กำหนดข้อมูลมาตรฐานเพื่อซิงก์ Cloud และ Calendar ภายนอก
+                    {editingMeetingId ? "อัปเดตข้อมูลและบันทึกลงฐานข้อมูล Supabase อัตโนมัติ" : "กำหนดข้อมูลมาตรฐานเพื่อซิงก์ Cloud และ Calendar ภายนอก"}
                   </p>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => setShowAddModal(false)}
+                onClick={() => {
+                  setShowAddModal(false);
+                  setEditingMeetingId(null);
+                }}
                 className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center text-sm transition-colors cursor-pointer"
               >
                 ✕
@@ -1262,7 +1368,10 @@ export function MeetingsPage({
               <div className="pt-3 flex justify-end gap-2.5 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setEditingMeetingId(null);
+                  }}
                   className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
                 >
                   ยกเลิก
@@ -1272,7 +1381,7 @@ export function MeetingsPage({
                   className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-600/20 transition-all cursor-pointer flex items-center gap-1.5"
                 >
                   <span>💾</span>
-                  <span>บันทึกนัดหมายลง Supabase</span>
+                  <span>{editingMeetingId ? "บันทึกการแก้ไข (ซิงก์ Cloud)" : "บันทึกนัดหมายลง Supabase"}</span>
                 </button>
               </div>
             </form>
