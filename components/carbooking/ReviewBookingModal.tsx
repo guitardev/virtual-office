@@ -8,6 +8,7 @@ interface ReviewBookingModalProps {
   booking: CarBookingRequest;
   currentUser: Member;
   vehicles?: Vehicle[];
+  allBookings?: CarBookingRequest[];
   onDivisionEndorse?: (bookingId: string, notes: string) => void;
   onFleetAssign?: (bookingId: string, vehicleId: string, assignedDriver: string, notes: string) => void;
   onAdminHeadEndorse?: (bookingId: string, notes: string) => void;
@@ -22,6 +23,7 @@ export function ReviewBookingModal({
   booking,
   currentUser,
   vehicles = [],
+  allBookings = [],
   onDivisionEndorse,
   onFleetAssign,
   onAdminHeadEndorse,
@@ -36,11 +38,72 @@ export function ReviewBookingModal({
   const isStage3 = booking.status === "pending_admin_head";
   const isStage4 = booking.status === "pending_provincial" || booking.status === "endorsed";
 
+  // Check vehicle status and time overlap with other active bookings
+  const getVehicleAvailability = (veh: Vehicle) => {
+    if (veh.status === "maintenance") {
+      return { available: false, reason: "อยู่ระหว่างซ่อมบำรุง" };
+    }
+    const startReq = new Date(booking.departureTime).getTime();
+    const endReq = new Date(booking.returnTime).getTime();
+
+    const conflictingBooking = (allBookings || []).find((b) => {
+      if (b.id === booking.id) return false;
+      if (b.status === "rejected" || b.status === "completed") return false;
+      if (b.vehicleId !== veh.id) return false;
+      const bStart = new Date(b.departureTime).getTime();
+      const bEnd = new Date(b.returnTime).getTime();
+      return !isNaN(startReq) && !isNaN(endReq) && !isNaN(bStart) && !isNaN(bEnd) && startReq < bEnd && endReq > bStart;
+    });
+
+    if (conflictingBooking) {
+      return {
+        available: false,
+        reason: `ติดภารกิจ (${conflictingBooking.requestNo}: ${conflictingBooking.destination})`,
+      };
+    }
+    return { available: true, reason: "ว่าง / พร้อมใช้งาน" };
+  };
+
+  // Check driver availability against overlapping bookings
+  const getDriverAvailability = (driverName: string) => {
+    if (!driverName) return { available: true, reason: "ว่าง" };
+    const startReq = new Date(booking.departureTime).getTime();
+    const endReq = new Date(booking.returnTime).getTime();
+
+    const conflictingBooking = (allBookings || []).find((b) => {
+      if (b.id === booking.id) return false;
+      if (b.status === "rejected" || b.status === "completed") return false;
+      if (b.assignedDriver !== driverName) return false;
+      const bStart = new Date(b.departureTime).getTime();
+      const bEnd = new Date(b.returnTime).getTime();
+      return !isNaN(startReq) && !isNaN(endReq) && !isNaN(bStart) && !isNaN(bEnd) && startReq < bEnd && endReq > bStart;
+    });
+
+    if (conflictingBooking) {
+      return {
+        available: false,
+        reason: `ติดภารกิจ (${conflictingBooking.requestNo}: ${conflictingBooking.destination})`,
+      };
+    }
+    return { available: true, reason: "ว่าง / พร้อมปฏิบัติหน้าที่" };
+  };
+
+  // Auto pick first truly available vehicle and driver
+  const availableVehicles = vehicles.filter((v) => getVehicleAvailability(v).available);
+  const defaultVehId =
+    booking.vehicleId && vehicles.some((v) => v.id === booking.vehicleId && getVehicleAvailability(v).available)
+      ? booking.vehicleId
+      : availableVehicles[0]?.id || vehicles[0]?.id || "";
+
+  const availableDrivers = GOVERNMENT_DRIVERS.filter((d) => getDriverAvailability(d.name).available);
+  const defaultDriver =
+    booking.assignedDriver && booking.assignedDriver !== "รอฝ่ายบริหารจัดสรร"
+      ? booking.assignedDriver
+      : availableDrivers[0]?.name || GOVERNMENT_DRIVERS[0]?.name || "นายสมชาย มั่นคง";
+
   // Form State for Stage 2 (Fleet & Driver Assignment)
-  const [selectedVehicleId, setSelectedVehicleId] = useState<string>(booking.vehicleId || vehicles[0]?.id || "");
-  const [assignedDriver, setAssignedDriver] = useState<string>(
-    booking.assignedDriver || GOVERNMENT_DRIVERS[0]?.name || "นายสมชาย มั่นคง"
-  );
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string>(defaultVehId);
+  const [assignedDriver, setAssignedDriver] = useState<string>(defaultDriver);
   const [customDriver, setCustomDriver] = useState<string>("");
   const [useCustomDriver, setUseCustomDriver] = useState<boolean>(false);
   const [requireDriver, setRequireDriver] = useState<boolean>(booking.requireDriver ?? true);
@@ -48,7 +111,7 @@ export function ReviewBookingModal({
   // Notes state initialized based on active stage
   const getDefaultNotes = () => {
     if (isStage1) return "เห็นชอบตามขอ เพื่อประโยชน์แก่ทางราชการ";
-    if (isStage2) return `ตรวจสอบความพร้อมแล้ว รถ ${booking.vehicleName} ว่าง ได้จัดสรรคนขับเรียบร้อย เสนอหัวหน้าฝ่ายบริหารทั่วไปเพื่อโปรดพิจารณา`;
+    if (isStage2) return "ตรวจสอบความพร้อมแล้ว รถและคนขับมีสถานะว่าง พร้อมจัดสรร เสนอหัวหน้าฝ่ายบริหารทั่วไปเพื่อโปรดพิจารณา";
     if (isStage3) return "ตรวจสอบความถูกต้องเรียบร้อยแล้ว เห็นควรอนุมัติเพื่อโปรดพิจารณา";
     if (isStage4) return "อนุมัติให้ใช้รถยนต์ราชการตามขอ โดยให้ปฏิบัติตามระเบียบว่าด้วยการใช้รถราชการอย่างเคร่งครัด";
     return "";
@@ -83,6 +146,20 @@ export function ReviewBookingModal({
       }
     } else if (isStage2) {
       // Step 3: Fleet Dispatcher Resource Assignment
+      if (!selectedVehicleId) {
+        alert("กรุณาเลือกยานพาหนะส่วนกลาง");
+        return;
+      }
+      const selectedVeh = vehicles.find((v) => v.id === selectedVehicleId);
+      if (selectedVeh) {
+        const vehAvail = getVehicleAvailability(selectedVeh);
+        if (!vehAvail.available) {
+          if (!confirm(`⚠️ คำเตือน: ยานพาหนะคันนี้ ${vehAvail.reason}\n\nคุณต้องการยืนยันการจัดสรรคันนี้หรือไม่?`)) {
+            return;
+          }
+        }
+      }
+
       const driverToAssign = !requireDriver
         ? "ขับขี่เองโดยผู้ขอใช้รถ"
         : useCustomDriver
@@ -92,6 +169,15 @@ export function ReviewBookingModal({
       if (requireDriver && !driverToAssign) {
         alert("กรุณาเลือกหรือระบุชื่อพนักงานขับรถ");
         return;
+      }
+
+      if (requireDriver && !useCustomDriver && driverToAssign) {
+        const drvAvail = getDriverAvailability(driverToAssign);
+        if (!drvAvail.available) {
+          if (!confirm(`⚠️ คำเตือน: พนักงานขับรถท่านนี้ ${drvAvail.reason}\n\nคุณต้องการยืนยันการมอบหมายคนขับท่านนี้หรือไม่?`)) {
+            return;
+          }
+        }
       }
 
       if (onFleetAssign) {
@@ -150,6 +236,10 @@ export function ReviewBookingModal({
   };
 
   const headerInfo = getStageHeader();
+
+  const currentVeh = vehicles.find((v) => v.id === selectedVehicleId);
+  const selectedVehAvail = currentVeh ? getVehicleAvailability(currentVeh) : null;
+  const selectedDriverAvail = requireDriver && !useCustomDriver ? getDriverAvailability(assignedDriver) : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
@@ -289,21 +379,40 @@ export function ReviewBookingModal({
               </h4>
 
               {/* Select Vehicle */}
-              <div>
-                <label className="block text-slate-700 mb-1 font-semibold">
-                  เลือกยานพาหนะส่วนกลางที่เหมาะสม <span className="text-rose-500">*</span>
-                </label>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-slate-700 font-semibold">
+                    เลือกยานพาหนะส่วนกลาง (ระบบตรวจสอบสถานะความพร้อมอัตโนมัติ) <span className="text-rose-500">*</span>
+                  </label>
+                  <span className="text-[11px] text-blue-700 font-bold bg-blue-100/70 px-2 py-0.5 rounded-md">
+                    ว่าง {availableVehicles.length}/{vehicles.length} คัน
+                  </span>
+                </div>
                 <select
                   value={selectedVehicleId}
                   onChange={(e) => setSelectedVehicleId(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-blue-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-blue-500/20"
+                  className={`w-full px-3 py-2.5 bg-white border rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-blue-500/20 ${
+                    selectedVehAvail && !selectedVehAvail.available ? "border-rose-300 ring-2 ring-rose-200" : "border-blue-300"
+                  }`}
                 >
-                  {vehicles.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.name} [{v.licensePlate}] ({v.category} • {v.capacity} ที่นั่ง • สถานะ: {v.status === "available" ? "ว่าง" : v.status})
-                    </option>
-                  ))}
+                  <option value="">-- เลือกยานพาหนะส่วนกลาง --</option>
+                  {vehicles.map((v) => {
+                    const avail = getVehicleAvailability(v);
+                    return (
+                      <option key={v.id} value={v.id}>
+                        {avail.available ? "🟢 [ว่าง] " : "🔴 [ไม่ว่าง] "}
+                        {v.name} [{v.licensePlate}] ({v.category} • {v.capacity} ที่นั่ง • {avail.reason})
+                      </option>
+                    );
+                  })}
                 </select>
+
+                {selectedVehAvail && !selectedVehAvail.available && (
+                  <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-[11px] flex items-center gap-2 animate-fade-in">
+                    <span className="text-sm">⚠️</span>
+                    <span><strong>แจ้งเตือน:</strong> ยานพาหนะคันนี้{selectedVehAvail.reason} แนะนำให้เลือกคันที่มีสัญลักษณ์ 🟢 [ว่าง]</span>
+                  </div>
+                )}
               </div>
 
               {/* Driver Requirement toggle & selection */}
@@ -325,29 +434,44 @@ export function ReviewBookingModal({
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <label className="block text-slate-700 font-semibold">
-                        มอบหมายพนักงานขับรถยนต์ <span className="text-rose-500">*</span>
+                        มอบหมายพนักงานขับรถยนต์ (ระบบตรวจสอบสถานะความพร้อมอัตโนมัติ) <span className="text-rose-500">*</span>
                       </label>
                       <button
                         type="button"
                         onClick={() => setUseCustomDriver(!useCustomDriver)}
-                        className="text-[11px] font-bold text-blue-700 hover:underline"
+                        className="text-[11px] font-bold text-blue-700 hover:underline cursor-pointer"
                       >
                         {useCustomDriver ? "← เลือกจากทำเนียบคนขับ" : "+ ระบุชื่อพนักงานอื่น"}
                       </button>
                     </div>
 
                     {!useCustomDriver ? (
-                      <select
-                        value={assignedDriver}
-                        onChange={(e) => setAssignedDriver(e.target.value)}
-                        className="w-full px-3 py-2 bg-white border border-blue-300 rounded-xl text-xs font-semibold text-slate-900"
-                      >
-                        {GOVERNMENT_DRIVERS.map((d) => (
-                          <option key={d.id} value={d.name}>
-                            {d.name} ({d.phone} • {d.license} • {d.status})
-                          </option>
-                        ))}
-                      </select>
+                      <>
+                        <select
+                          value={assignedDriver}
+                          onChange={(e) => setAssignedDriver(e.target.value)}
+                          className={`w-full px-3 py-2.5 bg-white border rounded-xl text-xs font-semibold text-slate-900 ${
+                            selectedDriverAvail && !selectedDriverAvail.available ? "border-rose-300 ring-2 ring-rose-200" : "border-blue-300"
+                          }`}
+                        >
+                          {GOVERNMENT_DRIVERS.map((d) => {
+                            const dAvail = getDriverAvailability(d.name);
+                            return (
+                              <option key={d.id} value={d.name}>
+                                {dAvail.available ? "🟢 [ว่าง] " : "🔴 [ไม่ว่าง] "}
+                                {d.name} ({d.phone} • {dAvail.reason})
+                              </option>
+                            );
+                          })}
+                        </select>
+
+                        {selectedDriverAvail && !selectedDriverAvail.available && (
+                          <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-[11px] flex items-center gap-2 animate-fade-in">
+                            <span className="text-sm">⚠️</span>
+                            <span><strong>แจ้งเตือน:</strong> {assignedDriver} {selectedDriverAvail.reason} แนะนำให้เลือกพนักงานขับรถที่มีสัญลักษณ์ 🟢 [ว่าง]</span>
+                          </div>
+                        )}
+                      </>
                     ) : (
                       <input
                         type="text"

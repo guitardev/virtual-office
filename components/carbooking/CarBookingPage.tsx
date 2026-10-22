@@ -80,6 +80,33 @@ export function CarBookingPage({
   const [formPassengersList, setFormPassengersList] = useState<string>("");
   const [formRequireDriver, setFormRequireDriver] = useState<boolean>(true);
 
+  // Selected passengers from members DropDown list
+  const [selectedPassengers, setSelectedPassengers] = useState<Member[]>([]);
+
+  const handleAddPassenger = (memberId: string) => {
+    if (!memberId) return;
+    const found = members.find((m) => m.id === memberId);
+    if (!found) return;
+    if (selectedPassengers.some((p) => p.id === memberId)) {
+      showToast(`⚠️ ${found.name} มีอยู่ในรายชื่อผู้ร่วมเดินทางแล้ว`);
+      return;
+    }
+    const updated = [...selectedPassengers, found];
+    setSelectedPassengers(updated);
+    const namesStr = updated.map((p) => `${p.name} (${p.division || p.position})`).join(", ");
+    setFormPassengersList(namesStr);
+    setFormPassengerCount(1 + updated.length);
+    showToast(`✓ เพิ่ม ${found.name} เป็นผู้ร่วมเดินทาง`);
+  };
+
+  const handleRemovePassenger = (memberId: string) => {
+    const updated = selectedPassengers.filter((p) => p.id !== memberId);
+    setSelectedPassengers(updated);
+    const namesStr = updated.map((p) => `${p.name} (${p.division || p.position})`).join(", ");
+    setFormPassengersList(namesStr);
+    setFormPassengerCount(Math.max(1, 1 + updated.length));
+  };
+
   // New Fuel Budget State (Item 1 requirement)
   const [formFuelBudgetRequested, setFormFuelBudgetRequested] = useState<boolean>(false);
   const [formFuelBudgetAmount, setFormFuelBudgetAmount] = useState<number>(1000);
@@ -313,18 +340,6 @@ export function CarBookingPage({
       return;
     }
 
-    if (conflictDetails.hasHardConflict) {
-      const firstConf = conflictDetails.conflictingBookings[0];
-      if (
-        !confirm(
-          `⚠️ คำเตือนการจองซ้อนทับ: รถยนต์คันนี้ได้รับการอนุมัติภารกิจอื่นแล้ว (${firstConf.requestNo}: ${firstConf.destination}) ในช่วงเวลาดังกล่าว\n\nคุณยังคงต้องการยืนยันการยื่นคำขอเพื่อรอการพิจารณาหรือไม่?`
-        )
-      ) {
-        return;
-      }
-    }
-
-    const selectedVeh = vehicles.find((v) => v.id === formVehicleId) || vehicles[0];
     const newReqNo = `คข-69/${String(bookings.length + 9).padStart(3, "0")}`;
 
     const nowFormatted =
@@ -366,9 +381,9 @@ export function CarBookingPage({
     const newBooking: CarBookingRequest = {
       id: `req_car_${Date.now()}`,
       requestNo: newReqNo,
-      vehicleId: selectedVeh.id,
-      vehicleName: selectedVeh.name,
-      licensePlate: selectedVeh.licensePlate,
+      vehicleId: "",
+      vehicleName: "รอฝ่ายบริหารจัดสรร",
+      licensePlate: "-",
       requesterId: currentUser.id,
       requesterName: currentUser.name,
       requesterPosition: currentUser.position,
@@ -418,6 +433,8 @@ export function CarBookingPage({
     setFormPurpose("");
     setFormDestination("");
     setFormPassengersList("");
+    setSelectedPassengers([]);
+    setFormPassengerCount(1);
     setFormFuelBudgetRequested(false);
   };
 
@@ -1595,10 +1612,16 @@ export function CarBookingPage({
                           {b.requestNo}
                         </span>
                         <div>
-                          <span className="font-bold text-slate-900 text-sm">{b.vehicleName}</span>
-                          <span className="ml-2 text-xs font-mono text-slate-500">
-                            [{b.licensePlate}]
-                          </span>
+                          <span className="font-bold text-slate-900 text-sm">{b.vehicleName || "รอฝ่ายบริหารจัดสรร"}</span>
+                          {b.licensePlate && b.licensePlate !== "-" ? (
+                            <span className="ml-2 text-xs font-mono text-slate-500">
+                              [{b.licensePlate}]
+                            </span>
+                          ) : (
+                            <span className="ml-2 text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                              รอจัดสรรรถ
+                            </span>
+                          )}
                         </div>
                       </div>
 
@@ -2136,87 +2159,34 @@ export function CarBookingPage({
               </div>
             </div>
 
-            {/* Vehicle Selection */}
-            <div className="space-y-2">
-              <label className="block text-xs font-bold text-slate-700">
-                เลือกรถยนต์ราชการที่ต้องการขอใช้ <span className="text-rose-500">*</span>
-              </label>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {vehicles.map((v) => {
-                  const isSelected = formVehicleId === v.id;
-                  const isAvailable = v.status === "available";
-
-                  return (
-                    <button
-                      key={v.id}
-                      type="button"
-                      onClick={() => setFormVehicleId(v.id)}
-                      className={`p-3 rounded-2xl text-left border transition-all cursor-pointer relative flex items-center gap-3 ${
-                        isSelected
-                          ? "border-teal-600 bg-teal-50/60 ring-2 ring-teal-600/20 shadow-xs"
-                          : "border-slate-200 hover:border-teal-300 hover:bg-slate-50/50 bg-white"
-                      }`}
-                    >
-                      {/* Thumbnail Photo */}
-                      <div className="w-16 h-16 rounded-xl overflow-hidden bg-slate-900 shrink-0 border border-slate-200/80 relative">
-                        {v.image ? (
-                          <img
-                            src={v.image}
-                            alt={v.name}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-2xl bg-slate-100">
-                            {v.category.includes("ตู้")
-                              ? "🚐"
-                              : v.category.includes("กระบะ")
-                              ? "🛻"
-                              : v.category.includes("จักรยานยนต์")
-                              ? "🏍️"
-                              : "🚗"}
-                          </div>
-                        )}
-                        {isSelected && (
-                          <div className="absolute inset-0 bg-teal-600/20 flex items-center justify-center">
-                            <span className="w-6 h-6 rounded-full bg-teal-600 text-white flex items-center justify-center text-xs font-bold shadow-md">
-                              ✓
-                            </span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Vehicle details */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="font-bold text-slate-900 text-xs truncate">
-                            {v.name}
-                          </span>
-                          <span
-                            className={`text-[9px] px-1.5 py-0.5 rounded font-bold shrink-0 ${
-                              isAvailable
-                                ? "bg-emerald-100 text-emerald-800"
-                                : "bg-slate-100 text-slate-600"
-                            }`}
-                          >
-                            {isAvailable ? "พร้อมใช้" : "มีภารกิจ"}
-                          </span>
-                        </div>
-                        <div className="mt-0.5 flex items-center gap-1.5">
-                          <span className="text-[11px] font-mono font-bold text-teal-800 bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200/60">
-                            {v.licensePlate}
-                          </span>
-                          <span className="text-[10px] text-slate-400">
-                            {v.fuelType}
-                          </span>
-                        </div>
-                        <div className="mt-1 text-[10px] text-slate-500 flex items-center justify-between">
-                          <span>{v.category}</span>
-                          <span>👥 {v.capacity} ที่นั่ง</span>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
+            {/* Vehicle Allocation Policy Banner (ผู้ขอใช้รถไม่สามารถเลือกรถเองได้) */}
+            <div className="p-4 bg-gradient-to-r from-teal-50/80 via-blue-50/60 to-indigo-50/40 rounded-2xl border border-teal-200/80 space-y-2.5">
+              <div className="flex items-start gap-3">
+                <span className="w-10 h-10 rounded-2xl bg-teal-600 text-white flex items-center justify-center text-xl shadow-xs shrink-0 mt-0.5">
+                  🚙
+                </span>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-bold text-xs text-slate-900 font-heading">
+                      การจัดสรรยานพาหนะส่วนกลาง
+                    </h4>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-200">
+                      ฝ่ายบริหารจัดสรรให้
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 leading-relaxed mt-1">
+                    ตามระเบียบการใช้รถยนต์ส่วนกลาง ผู้ขอใช้รถไม่ต้องเลือกรถยนต์เอง — <strong>เจ้าหน้าที่ฝ่ายบริหารทั่วไป (งานยานพาหนะ)</strong> จะเป็นผู้ตรวจสอบสถานะความพร้อมและจัดสรรรถยนต์และพนักงานขับรถที่เหมาะสมและว่างให้ในขั้นตอนที่ 2
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-teal-100 text-[11px] text-teal-800">
+                <span className="flex items-center gap-1.5 font-medium">
+                  <span>ℹ️</span>
+                  <span>ยานพาหนะราชการส่วนกลางทั้งหมด: {vehicles.length} คัน (สถานะพร้อมใช้งาน {vehicles.filter(v => v.status === "available").length} คัน)</span>
+                </span>
+                <span className="text-[10px] bg-white px-2.5 py-0.5 rounded-lg border border-teal-200 font-bold text-teal-700 shadow-2xs">
+                  ตรวจสอบสถานะว่างอัตโนมัติ
+                </span>
               </div>
             </div>
 
@@ -2292,110 +2262,10 @@ export function CarBookingPage({
                 </div>
               </div>
 
-              {/* Conflict Guard Warning Banner & Intelligent Recommendation */}
-              {conflictDetails.hasConflict && (
-                <div
-                  className={`p-4 rounded-2xl border-2 space-y-3 ${
-                    conflictDetails.hasHardConflict
-                      ? "bg-rose-50/90 border-rose-300 text-rose-950"
-                      : "bg-amber-50/90 border-amber-300 text-amber-950"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-2xl">
-                        {conflictDetails.hasHardConflict ? "🚨" : "⚠️"}
-                      </span>
-                      <div>
-                        <h4 className="text-xs font-bold font-heading">
-                          {conflictDetails.hasHardConflict
-                            ? "พบการจองซ้อนทับกับภารกิจที่ได้รับการอนุมัติแล้ว!"
-                            : "พบการจองซ้อนทับกับคำขอที่อยู่ระหว่างรอตรวจสอบ"}
-                        </h4>
-                        <p className="text-[11px] opacity-90">
-                          ยานพาหนะคันนี้มีภารกิจอื่นในช่วงวันและเวลาดังกล่าว ({conflictDetails.conflictingBookings.length} คำขอ)
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/90 border border-current shrink-0">
-                      {conflictDetails.hasHardConflict ? "จองซ้อน (อนุมัติแล้ว)" : "จองซ้อน (รอพิจารณา)"}
-                    </span>
-                  </div>
-
-                  {/* Conflicting bookings list */}
-                  <div className="space-y-1.5 pt-1">
-                    {conflictDetails.conflictingBookings.map((cb) => (
-                      <div
-                        key={cb.id}
-                        className="p-2.5 bg-white/90 rounded-xl border border-rose-200/60 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2"
-                      >
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono font-bold text-[11px] text-teal-800 bg-teal-50 px-1.5 py-0.5 rounded">
-                              {cb.requestNo}
-                            </span>
-                            <strong className="text-slate-800">{cb.destination}</strong>
-                            <span className="text-[10px] text-slate-500">โดย {cb.requesterName}</span>
-                          </div>
-                          <div className="text-[11px] text-slate-500 font-mono mt-0.5">
-                            ช่วงเวลา: {cb.departureTime.replace("T", " ")} ➜ {cb.returnTime.replace("T", " ")}
-                          </div>
-                        </div>
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded shrink-0 ${
-                            cb.status === "approved"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : "bg-amber-100 text-amber-800"
-                          }`}
-                        >
-                          {cb.status === "approved" ? "อนุมัติแล้ว" : "รอตรวจสอบ"}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Recommended Alternative Vehicles */}
-                  {recommendedAlternativeVehicles.length > 0 && (
-                    <div className="pt-2 border-t border-rose-200/60">
-                      <div className="text-xs font-bold text-slate-800 mb-2 flex items-center gap-1.5">
-                        <span>💡</span>
-                        <span>แนะนำยานพาหนะคันอื่นที่ว่างในช่วงเวลานี้ (คลิกเพื่อสลับคัน):</span>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                        {recommendedAlternativeVehicles.slice(0, 3).map((altCar) => (
-                          <button
-                            key={altCar.id}
-                            type="button"
-                            onClick={() => {
-                              setFormVehicleId(altCar.id);
-                              showToast(`สลับไปใช้รถ ${altCar.name} [${altCar.licensePlate}] แล้ว`);
-                            }}
-                            className="p-2 bg-white hover:bg-teal-50 border border-teal-200 rounded-xl text-left flex items-center gap-2 text-xs transition-all cursor-pointer shadow-2xs group"
-                          >
-                            <span className="text-base">🚗</span>
-                            <div className="min-w-0 flex-1">
-                              <div className="font-bold text-slate-800 truncate group-hover:text-teal-800">
-                                {altCar.name}
-                              </div>
-                              <div className="font-mono text-[10px] text-teal-700 font-bold">
-                                {altCar.licensePlate} • {altCar.category}
-                              </div>
-                            </div>
-                            <span className="text-[10px] font-bold text-teal-700 shrink-0">
-                              เลือกคันนี้ ➜
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    จำนวนผู้โดยสาร (คน)
+                    จำนวนผู้โดยสารทั้งหมด (คน)
                   </label>
                   <input
                     type="number"
@@ -2405,6 +2275,9 @@ export function CarBookingPage({
                     onChange={(e) => setFormPassengerCount(Number(e.target.value))}
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:border-teal-500 transition-colors"
                   />
+                  <span className="text-[10px] text-slate-400 mt-1 block">
+                    (รวมผู้ขอใช้รถและผู้ร่วมเดินทาง)
+                  </span>
                 </div>
 
                 <div>
@@ -2421,17 +2294,79 @@ export function CarBookingPage({
                   />
                 </div>
 
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    รายชื่อผู้ร่วมเดินทาง
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="ระบุชื่อเจ้าหน้าที่ผู้ร่วมเดินทาง (คั่นด้วยเครื่องหมายจุลภาค)"
-                    value={formPassengersList}
-                    onChange={(e) => setFormPassengersList(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-teal-500 transition-colors"
-                  />
+                <div className="md:col-span-2 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-slate-700">
+                      รายชื่อผู้ร่วมเดินทาง (เลือกจากทำเนียบเจ้าหน้าที่ พมจ.)
+                    </label>
+                    <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
+                      เลือกแล้ว {selectedPassengers.length} ท่าน
+                    </span>
+                  </div>
+
+                  {/* DropDown List from All Members */}
+                  <select
+                    value=""
+                    onChange={(e) => handleAddPassenger(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-teal-300 rounded-xl text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-teal-500 shadow-2xs font-medium"
+                  >
+                    <option value="">-- คลิกเพื่อเลือกเจ้าหน้าที่เป็นผู้ร่วมเดินทาง ({members.length} ท่าน) --</option>
+                    {members
+                      .filter((m) => m.id !== currentUser?.id)
+                      .map((m) => {
+                        const isAdded = selectedPassengers.some((p) => p.id === m.id);
+                        return (
+                          <option key={m.id} value={m.id} disabled={isAdded}>
+                            {isAdded ? "✓ (เลือกแล้ว) " : "+ "}{m.name} ({m.division || m.position})
+                          </option>
+                        );
+                      })}
+                  </select>
+
+                  {/* Selected Passenger Tags / Badges */}
+                  {selectedPassengers.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 p-2.5 bg-teal-50/70 rounded-xl border border-teal-200 max-h-32 overflow-y-auto">
+                      {selectedPassengers.map((p) => (
+                        <span
+                          key={p.id}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-teal-200 text-teal-950 rounded-lg text-xs font-medium shadow-2xs"
+                        >
+                          <span>👤 {p.name}</span>
+                          <span className="text-[10px] text-teal-600 font-normal">
+                            ({p.division || p.position})
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePassenger(p.id)}
+                            className="text-slate-400 hover:text-rose-600 font-bold ml-1 cursor-pointer text-xs"
+                            title="ลบออก"
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-slate-400">
+                      * เลือกรายชื่อเจ้าหน้าที่จาก DropDown List ด้านบน หรือหากเดินทางคนเดียวไม่ต้องเลือก
+                    </p>
+                  )}
+
+                  {selectedPassengers.length > 0 && (
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedPassengers([]);
+                          setFormPassengersList("");
+                          setFormPassengerCount(1);
+                        }}
+                        className="text-rose-600 hover:underline text-[11px] font-semibold cursor-pointer"
+                      >
+                        ล้างรายชื่อผู้ร่วมเดินทางทั้งหมด
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -2558,6 +2493,7 @@ export function CarBookingPage({
           booking={selectedReviewBooking}
           currentUser={currentUser}
           vehicles={vehicles}
+          allBookings={bookings}
           onDivisionEndorse={handleDivisionEndorse}
           onFleetAssign={handleFleetAssign}
           onAdminHeadEndorse={handleAdminHeadEndorse}
