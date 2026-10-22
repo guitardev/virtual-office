@@ -38,7 +38,7 @@ import { CarBookingPage } from "@/components/carbooking/CarBookingPage";
 import { ReportsPage } from "@/components/reports/ReportsPage";
 import { UserPage } from "@/components/user/UserPage";
 import { EditProfileModal } from "@/components/user/EditProfileModal";
-import { AdminPage } from "@/components/admin/AdminPage";
+import { AdminPage, AdminTabId } from "@/components/admin/AdminPage";
 import { AdminModals } from "@/components/admin/AdminModals";
 import { NasFileManager } from "@/components/dms/NasFileManager";
 import { NasPhotoGallery } from "@/components/gallery/NasPhotoGallery";
@@ -219,7 +219,7 @@ export default function SmartMSOApp() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [meetings, setMeetings] = useState<MeetingItem[]>([]);
   const [carBookings, setCarBookings] = useState<CarBookingRequest[]>([]);
-  const [adminTab, setAdminTab] = useState<"members" | "requests" | "matrix" | "audit" | "nas">("members");
+  const [adminTab, setAdminTab] = useState<AdminTabId>("members");
   const [memberSearch, setMemberSearch] = useState("");
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
@@ -3064,6 +3064,15 @@ export default function SmartMSOApp() {
                   handleOpenEditModule={handleOpenEditModule}
                   handleTogglePermission={handleTogglePermission}
                   showToast={showToast}
+                  meetings={meetings}
+                  setMeetings={setMeetings}
+                  setMembers={setMembers}
+                  circularDocs={circularDocs}
+                  onOpenCircularDoc={(docId) => {
+                    setDeeplinkCircularDocId(docId);
+                    setCurrentPage("circular");
+                  }}
+                  onNavigatePage={(p) => setCurrentPage(p as any)}
                 />
               )}
             </>

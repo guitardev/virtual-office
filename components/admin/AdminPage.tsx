@@ -1,12 +1,27 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { Member, Role, ModuleId, SystemModule, AccessRequest, AuditLog } from "@/lib/types";
+import { Member, Role, ModuleId, SystemModule, AccessRequest, AuditLog, MeetingItem, CircularDocument } from "@/lib/types";
 import { MembersTab } from "./MembersTab";
 import { RequestsTab } from "./RequestsTab";
 import { MatrixTab } from "./MatrixTab";
 import { AuditTab } from "./AuditTab";
 import { NasTab } from "./NasTab";
+import { VehiclesTab } from "./VehiclesTab";
+import { RoomsTab } from "./RoomsTab";
+import { DivisionsTab } from "./DivisionsTab";
+import { DocumentsTab } from "./DocumentsTab";
+
+export type AdminTabId =
+  | "members"
+  | "requests"
+  | "matrix"
+  | "vehicles"
+  | "rooms"
+  | "divisions"
+  | "documents"
+  | "audit"
+  | "nas";
 
 interface AdminPageProps {
   members: Member[];
@@ -17,8 +32,8 @@ interface AdminPageProps {
   auditLogs: AuditLog[];
   setAuditLogs: (logs: AuditLog[]) => void;
   initialAuditLogs: AuditLog[];
-  adminTab: "members" | "requests" | "matrix" | "audit" | "nas";
-  setAdminTab: (tab: "members" | "requests" | "matrix" | "audit" | "nas") => void;
+  adminTab: AdminTabId;
+  setAdminTab: (tab: AdminTabId) => void;
   memberSearch: string;
   setMemberSearch: (val: string) => void;
   requestSearch: string;
@@ -41,6 +56,12 @@ interface AdminPageProps {
   handleOpenEditModule: (modId: ModuleId) => void;
   handleTogglePermission: (role: Role, moduleId: ModuleId) => void;
   showToast: (msg: string) => void;
+  meetings?: MeetingItem[];
+  setMeetings?: (meetings: MeetingItem[]) => void;
+  setMembers?: (members: Member[]) => void;
+  circularDocs?: CircularDocument[];
+  onOpenCircularDoc?: (docId: string) => void;
+  onNavigatePage?: (page: string) => void;
 }
 
 export function AdminPage({
@@ -76,6 +97,12 @@ export function AdminPage({
   handleOpenEditModule,
   handleTogglePermission,
   showToast,
+  meetings,
+  setMeetings,
+  setMembers,
+  circularDocs,
+  onOpenCircularDoc,
+  onNavigatePage,
 }: AdminPageProps) {
   // Compute stats
   const stats = useMemo(() => {
@@ -229,21 +256,25 @@ export function AdminPage({
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
         <div className="flex border-b border-slate-200 px-6 pt-3 gap-2 bg-slate-50/50 overflow-x-auto">
           {[
-            { id: "members", label: "👥 รายชื่อสมาชิก & จัดการสิทธิ์", count: members.length },
+            { id: "members", label: "👥 สมาชิก & สิทธิ์", count: members.length },
             {
               id: "requests",
-              label: "📬 คำขอสิทธิ์เข้าใช้งานใหม่",
+              label: "📬 คำขอสิทธิ์ใหม่",
               count: accessRequests.filter((r) => r.status === "pending").length,
               highlight: accessRequests.filter((r) => r.status === "pending").length > 0,
             },
-            { id: "matrix", label: "🔒 ตารางกำหนดสิทธิ์ (RBAC Matrix)" },
+            { id: "matrix", label: "🔒 กำหนดสิทธิ์ (RBAC Matrix)" },
+            { id: "vehicles", label: "🚗 ยานพาหนะราชการ" },
+            { id: "rooms", label: "🏛️ ห้องประชุม & สถานที่" },
+            { id: "divisions", label: "🏢 โครงสร้างกลุ่มงาน" },
+            { id: "documents", label: "📜 ทะเบียนหนังสือเวียน", count: circularDocs?.length },
             { id: "audit", label: "📜 Audit Logs", count: auditLogs.length },
             { id: "nas", label: "💾 Synology NAS" },
           ].map((tab) => (
             <button
               key={tab.id}
               type="button"
-              onClick={() => setAdminTab(tab.id as any)}
+              onClick={() => setAdminTab(tab.id as AdminTabId)}
               className={`px-4 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
                 adminTab === tab.id
                   ? "border-[#4F46E5] text-[#4F46E5] bg-white rounded-t-xl"
@@ -305,6 +336,42 @@ export function AdminPage({
               handleToggleModuleStatus={handleToggleModuleStatus}
               handleOpenEditModule={handleOpenEditModule}
               handleTogglePermission={handleTogglePermission}
+            />
+          )}
+
+          {adminTab === "vehicles" && (
+            <VehiclesTab
+              currentUser={currentUser}
+              showToast={showToast}
+              members={members}
+            />
+          )}
+
+          {adminTab === "rooms" && (
+            <RoomsTab
+              currentUser={currentUser}
+              meetings={meetings || []}
+              setMeetings={setMeetings}
+              showToast={showToast}
+            />
+          )}
+
+          {adminTab === "divisions" && (
+            <DivisionsTab
+              currentUser={currentUser}
+              members={members}
+              setMembers={setMembers}
+              showToast={showToast}
+              onNavigatePage={onNavigatePage}
+            />
+          )}
+
+          {adminTab === "documents" && (
+            <DocumentsTab
+              currentUser={currentUser}
+              circularDocs={circularDocs}
+              showToast={showToast}
+              onOpenCircularDoc={onOpenCircularDoc}
             />
           )}
 
