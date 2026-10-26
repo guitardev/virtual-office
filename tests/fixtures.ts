@@ -30,6 +30,45 @@ export const test = base.extend({
       });
       localStorage.setItem("smartmso_auth_session", sessionData);
       localStorage.setItem("omnioffice_auth_session", sessionData);
+
+      const membersData = [
+        adminUser,
+        {
+          id: "usr_3",
+          prefix: "นาง",
+          firstName: "อรัญญา",
+          lastName: "เกิดสุข",
+          name: "นางอรัญญา เกิดสุข",
+          personnelType: "ข้าราชการ",
+          position: "นักวิเคราะห์นโยบายและแผนชำนาญการ",
+          division: "กลุ่มนโยบายและวิชาการ",
+          department: "กลุ่มนโยบายและวิชาการ",
+          email: "aranya.k@m-society.go.th",
+          phone: "055-705032",
+          lineId: "aranya_kpp",
+          role: "member",
+          status: "active",
+          joinedDate: "15 ก.พ. 2565",
+        },
+        {
+          id: "usr_4",
+          prefix: "นาย",
+          firstName: "ธีรเดช",
+          lastName: "สมหวัง",
+          name: "นายธีรเดช สมหวัง",
+          personnelType: "พนักงานราชการ",
+          position: "เจ้าหน้าที่พัฒนาสังคม",
+          division: "ฝ่ายบริหารทั่วไป",
+          department: "ฝ่ายบริหารทั่วไป",
+          email: "theeradej.s@m-society.go.th",
+          phone: "055-705033",
+          lineId: "theeradej_kpp",
+          role: "member",
+          status: "active",
+          joinedDate: "1 พ.ค. 2565",
+        },
+      ];
+      localStorage.setItem("smartmso_members_cache_v3", JSON.stringify(membersData));
     });
 
     await use(page);

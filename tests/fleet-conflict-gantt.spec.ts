@@ -65,10 +65,15 @@ test.describe("Phase 12: ระบบจัดการการจองรถ�
     await expect(depInput).toBeVisible();
     await expect(retInput).toBeVisible();
 
-    // หากระบบมีคำขอจองอยู่ในระบบ หรือเมื่อกรอกข้อมูลเวลา
-    // ตรวจสอบว่ามีช่องทางเลือกรถยนต์ราชการ
-    const carButtons = page.locator("button:has-text('พร้อมใช้'), button:has-text('มีภารกิจ')");
-    await expect(carButtons.first()).toBeVisible();
+    // ตรวจสอบแถบชี้แจงนโยบายการจัดสรรยานพาหนะส่วนกลาง (ฝ่ายบริหารเป็นผู้จัดสรรและตรวจสถานะว่างอัตโนมัติ)
+    await expect(page.locator("text=การจัดสรรยานพาหนะส่วนกลาง").first()).toBeVisible();
+    await expect(page.locator("text=ฝ่ายบริหารจัดสรรให้").first()).toBeVisible();
+    await expect(page.locator("text=ตรวจสอบสถานะว่างอัตโนมัติ").first()).toBeVisible();
+
+    // สลับไปยังแท็บยานพาหนะ เพื่อตรวจสอบบัญชีรถยนต์ราชการและสถานะความพร้อมใช้งาน (Conflict/Availability Guard)
+    const fleetTabBtn = page.locator("button:has-text('ยานพาหนะ')").first();
+    await fleetTabBtn.click();
+    await expect(page.locator("text=พร้อมใช้งาน").first()).toBeVisible();
   });
 
   test("ควรแสดงแบบขออนุญาตใช้รถพร้อม QR Code ตรวจรับกุญแจรถราชการ (Paperless Dispatch QR)", async ({
