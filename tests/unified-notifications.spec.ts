@@ -79,6 +79,20 @@ test.describe("ระบบแจ้งเตือนแบบรวมศู�
   });
 
   test("4. เมื่อสร้างหนังสือเวียนใหม่ ต้องเกิดการแจ้งเตือนทันที (Toast, Bell Badge, รายการในศูนย์แจ้งเตือน)", async ({ page }) => {
+    // Intercept Supabase write calls to prevent test data from polluting the live database
+    await page.route("**/rest/v1/circular_documents*", async (route) => {
+      const method = route.request().method();
+      if (method === "POST" || method === "PUT" || method === "PATCH") {
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify({}),
+        });
+      } else {
+        await route.continue();
+      }
+    });
+
     // Navigate to Circular page from sidebar
     const circularNav = page.locator("aside button:has-text('เวียนหนังสือราชการ'), nav button:has-text('เวียนหนังสือราชการ')").first();
     await circularNav.click();
@@ -126,6 +140,11 @@ test.describe("ระบบแจ้งเตือนแบบรวมศู�
     // Should display circular notification item in dropdown
     const notifItem = dropdown.locator('div[class*="transition-colors flex items-start gap-3 cursor-pointer"]').first();
     await expect(notifItem).toBeVisible();
+
+    // Clean up local test storage so it does not persist across tests or reload
+    await page.evaluate(() => {
+      localStorage.removeItem("smartmso_circular_docs");
+    });
   });
 
   test("5. ตรวจสอบการทำงานของระบบอื่นๆ (คำขอสิทธิ์, จองรถ, งานมอบหมาย) ในศูนย์แจ้งเตือน", async ({ page }) => {

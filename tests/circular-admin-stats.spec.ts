@@ -2,6 +2,49 @@ import { test, expect } from "./fixtures";
 
 test.describe("Circular Documents - Exclude Admin from Statistics", () => {
   test.beforeEach(async ({ page }) => {
+    await page.route("**/rest/v1/circular_documents*", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            id: "circ_test_stats_001",
+            doc_number: "พม ๐๐๐๕/ว ๑๐๑",
+            title: "หนังสือเวียนทดสอบระบบสถิติ",
+            issued_date: "๒๖ ตุลาคม ๒๕๖๙",
+            sender_org: "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์",
+            urgency: "normal",
+            secret_level: "normal",
+            summary: "เอกสารทดสอบการคำนวณสถิติและข้อยกเว้น Admin",
+            created_by: "usr_2",
+            created_by_name: "นายเสกพล ดิษฐโชติ",
+            created_at: new Date().toISOString(),
+            target_criteria: { scope: "all" },
+            recipients: [
+              {
+                memberId: "usr_3",
+                memberName: "นางอรัญญา เกิดสุข",
+                division: "กลุ่มนโยบายและวิชาการ",
+                personnelType: "ข้าราชการ",
+                position: "นักวิเคราะห์นโยบายและแผนชำนาญการ",
+                isAcknowledged: false,
+              },
+              {
+                memberId: "usr_4",
+                memberName: "นายธีรเดช สมหวัง",
+                division: "ฝ่ายบริหารทั่วไป",
+                personnelType: "พนักงานราชการ",
+                position: "เจ้าหน้าที่พัฒนาสังคม",
+                isAcknowledged: false,
+              },
+            ],
+            total_count: 2,
+            acknowledged_count: 0,
+            status: "active",
+          },
+        ]),
+      });
+    });
     await page.goto("http://localhost:3000");
   });
 
