@@ -10,6 +10,7 @@ interface GroupMembersDrawerProps {
   currentUser: Member | null;
   onClose: () => void;
   onUpdateGroupMembers: (groupId: string, newMemberIds: string[]) => void;
+  onDeleteGroup?: (groupId: string) => void;
   showToast: (msg: string) => void;
   onlineUserIds?: string[];
 }
@@ -20,12 +21,15 @@ export function GroupMembersDrawer({
   currentUser,
   onClose,
   onUpdateGroupMembers,
+  onDeleteGroup,
   showToast,
   onlineUserIds = [],
 }: GroupMembersDrawerProps) {
   const [search, setSearch] = useState("");
   const [showAddMember, setShowAddMember] = useState(false);
   const [selectedToAdd, setSelectedToAdd] = useState<string>("");
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const groupMembers = allMembers.filter((m) => {
     const isExplicit = Array.isArray(group.memberIds) && group.memberIds.includes(m.id);
@@ -59,6 +63,10 @@ export function GroupMembersDrawer({
     currentUser?.role === "admin" ||
     currentUser?.role === "manager" ||
     group.createdBy === currentUser?.id;
+
+  const canDeleteGroup =
+    group.type === "custom" &&
+    (currentUser?.role === "admin" || group.createdBy === currentUser?.id);
 
   const handleRemoveMember = (memberId: string) => {
     if (group.isOfficial && group.type === "division") {
@@ -253,6 +261,78 @@ export function GroupMembersDrawer({
           );
         })}
       </div>
+
+      {/* Danger Zone: Delete / Dissolve Custom Group */}
+      {canDeleteGroup && (
+        <div className="p-3 border-t border-slate-200 bg-slate-50 shrink-0">
+          <button
+            type="button"
+            onClick={() => setShowConfirmDelete(true)}
+            className="w-full py-2 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 hover:text-rose-800 text-xs font-bold border border-rose-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+          >
+            <span>🗑️</span>
+            <span>ยุบกลุ่มโครงการนี้ (ลบกลุ่ม)</span>
+          </button>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {showConfirmDelete && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-slate-200 space-y-4 animate-scale-up text-slate-800">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center text-2xl mx-auto shadow-inner">
+              ⚠️
+            </div>
+            <div className="text-center space-y-1">
+              <h4 className="font-bold font-heading text-slate-900 text-base">
+                ยืนยันการยุบกลุ่มโครงการ?
+              </h4>
+              <p className="text-xs text-slate-700 font-semibold">
+                "{group.name}"
+              </p>
+              <p className="text-[11px] text-slate-500 leading-relaxed pt-1">
+                การยุบกลุ่มจะลบห้องแชทและประวัติข้อความทั้งหมดอย่างถาวร สมาชิกทุกคนในกลุ่ม ({groupMembers.length} คน) จะไม่สามารถเข้าถึงห้องนี้ได้อีกต่อไป
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setShowConfirmDelete(false)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={async () => {
+                  setIsDeleting(true);
+                  if (onDeleteGroup) {
+                    await onDeleteGroup(group.id);
+                  }
+                  setIsDeleting(false);
+                  setShowConfirmDelete(false);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-md shadow-rose-600/20 cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                {isDeleting ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>กำลังยุบกลุ่ม...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>🗑️</span>
+                    <span>ยืนยันยุบกลุ่ม</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

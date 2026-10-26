@@ -356,6 +356,59 @@ test.describe("ระบบแชทกลุ่มทางการของ�
     await closeBtn.click();
     await expect(lightboxModal).toBeHidden();
   });
+
+  test("ควรสามารถยุบกลุ่มโครงการ (ลบกลุ่ม custom) ผ่าน GroupMembersDrawer ได้อย่างสมบูรณ์", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    // 1. ไปที่เมนู แชททีม
+    const chatNav = page.locator("aside button:has-text('แชททีม'), nav button:has-text('แชททีม')").first();
+    await chatNav.click();
+
+    // 2. คลิกสร้างกลุ่มใหม่
+    const createGroupBtn = page.locator("button:has-text('สร้างกลุ่ม')").first();
+    await expect(createGroupBtn).toBeVisible();
+    await createGroupBtn.click();
+
+    // 3. กรอกชื่อกลุ่มโครงการ
+    const nameInput = page.locator("input[placeholder*='เช่น คณะทำงาน']").first();
+    await nameInput.fill("กลุ่มทดสอบยุบโครงการ 2569");
+
+    // 4. บันทึกสร้างกลุ่ม
+    const submitBtn = page.locator("button:has-text('สร้างกลุ่มแชท')").first();
+    await submitBtn.click();
+
+    // 5. คลิกเลือกกลุ่มโครงการที่สร้างขึ้นในแถบด้านซ้าย
+    const newGroupItem = page.locator("button:has-text('กลุ่มทดสอบยุบโครงการ 2569')").first();
+    await expect(newGroupItem).toBeVisible();
+    await newGroupItem.click();
+    await page.waitForTimeout(300);
+
+    // 6. ตรวจสอบหัวห้องแชท และเปิด GroupMembersDrawer
+    await expect(page.locator("h2:has-text('กลุ่มทดสอบยุบโครงการ 2569')").first()).toBeVisible();
+    const membersBtn = page.locator("button").filter({ hasText: /สมาชิก \(/ }).first();
+    await membersBtn.click();
+
+    // 7. ตรวจสอบปุ่ม 'ยุบกลุ่มโครงการนี้ (ลบกลุ่ม)'
+    const deleteGroupBtn = page.locator("button:has-text('ยุบกลุ่มโครงการนี้')").first();
+    await expect(deleteGroupBtn).toBeVisible();
+    await deleteGroupBtn.click();
+
+    // 8. ตรวจสอบ Confirmation Modal
+    const confirmModal = page.locator("div.fixed:has-text('ยืนยันการยุบกลุ่มโครงการ?')").first();
+    await expect(confirmModal).toBeVisible();
+
+    // 9. กดยืนยันยุบกลุ่ม
+    const confirmBtn = confirmModal.locator("button:has-text('ยืนยันยุบกลุ่ม')").first();
+    await confirmBtn.click();
+
+    // 10. ตรวจสอบ Toast ยุบกลุ่ม และกลุ่มต้องถูกนำออกจากหน้าระบบ
+    await expect(page.locator("div.fixed:has-text('ยุบกลุ่มโครงการ')").first()).toBeVisible();
+    await expect(page.locator("h2:has-text('กลุ่มทดสอบยุบโครงการ 2569')")).not.toBeVisible();
+  });
 });
+
 
 

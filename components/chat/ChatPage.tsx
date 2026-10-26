@@ -17,6 +17,7 @@ import {
 import {
   fetchChatGroups,
   saveChatGroup,
+  deleteChatGroup,
   fetchChatMessages,
   sendChatMessage,
   updateChatMessagePin,
@@ -129,9 +130,14 @@ export function ChatPage({
 
     fetchChatGroups().then((remoteGroups) => {
       if (isMounted && remoteGroups && remoteGroups.length > 0) {
-        const synced = syncDivisionGroupMembers(remoteGroups, members);
-        setGroups(synced);
-        saveStoredChatGroups(synced);
+        setGroups((prev) => {
+          const remoteIds = new Set(remoteGroups.map((g) => g.id));
+          const unsynced = prev.filter((g) => !remoteIds.has(g.id));
+          const merged = [...remoteGroups, ...unsynced];
+          const synced = syncDivisionGroupMembers(merged, members);
+          saveStoredChatGroups(synced);
+          return synced;
+        });
       }
     });
 
@@ -836,6 +842,45 @@ export function ChatPage({
     const targetGroup = groups.find((g) => g.id === groupId);
     if (targetGroup) {
       saveChatGroup({ ...targetGroup, memberIds: newMemberIds }).catch(() => {});
+    }
+  };
+
+  // Delete / Dissolve custom group
+  const handleDeleteGroup = async (groupId: string) => {
+    const targetGroup = groups.find((g) => g.id === groupId);
+    if (!targetGroup) return;
+
+    if (targetGroup.type !== "custom") {
+      showToast("⚠️ ไม่สามารถยุบกลุ่มงานราชการหลักหรือกลุ่มประกาศกลางได้");
+      return;
+    }
+
+    const updatedGroups = groups.filter((g) => g.id !== groupId);
+    setGroups(updatedGroups);
+    saveStoredChatGroups(updatedGroups);
+
+    const updatedMessages = messages.filter((m) => m.groupId !== groupId);
+    setMessages(updatedMessages);
+    saveStoredChatMessages(updatedMessages);
+
+    // If currently active, switch to another accessible group
+    if (activeGroupId === groupId) {
+      const remainingAccessible = updatedGroups.filter((g) => {
+        if (currentUser?.role === "admin") return true;
+        if (g.id === "ch_all_staff") return true;
+        if (g.division && currentUser?.division && (g.division === currentUser.division || g.division.includes(currentUser.division) || currentUser.division.includes(g.division))) return true;
+        return Array.isArray(g.memberIds) && currentUser && g.memberIds.includes(currentUser.id);
+      });
+      setActiveGroupId(remainingAccessible[0]?.id || "ch_all_staff");
+    }
+
+    setShowMembersDrawer(false);
+    showToast(`🗑️ ยุบกลุ่มโครงการ "${targetGroup.name}" เรียบร้อยแล้ว`);
+
+    try {
+      await deleteChatGroup(groupId);
+    } catch (err) {
+      console.warn("deleteChatGroup error:", err);
     }
   };
 
@@ -1863,6 +1908,7 @@ export function ChatPage({
           currentUser={currentUser}
           onClose={() => setShowMembersDrawer(false)}
           onUpdateGroupMembers={handleUpdateGroupMembers}
+          onDeleteGroup={handleDeleteGroup}
           showToast={showToast}
           onlineUserIds={onlineUserIds}
         />

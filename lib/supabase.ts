@@ -1104,6 +1104,18 @@ export async function saveChatGroup(group: ChatGroup): Promise<boolean> {
   }
 }
 
+export async function deleteChatGroup(groupId: string): Promise<boolean> {
+  if (!supabase) return true;
+  try {
+    await supabase.from("messages").delete().eq("channel_id", groupId);
+    const { error } = await supabase.from("chat_channels").delete().eq("id", groupId);
+    return !error;
+  } catch (err) {
+    console.warn("deleteChatGroup error:", err);
+    return false;
+  }
+}
+
 export async function fetchChatMessages(): Promise<ChatMessage[]> {
   if (!supabase) return INITIAL_CHAT_MESSAGES;
   try {
