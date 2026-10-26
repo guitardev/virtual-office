@@ -57,21 +57,6 @@ alter table users enable row level security;
 create policy "Allow all read users" on users for select using (true);
 create policy "Allow all write users" on users for all using (true);
 
--- ===============================
--- 3. Organization Members
--- ===============================
-create table organization_members (
-  id uuid primary key default gen_random_uuid(),
-  organization_id uuid references organizations(id) on delete cascade,
-  user_id text references users(id) on delete cascade,
-  role text default 'member' check (role in ('admin', 'member', 'guest')),
-  joined_at timestamptz default now(),
-  unique (organization_id, user_id)
-);
-
-alter table organization_members enable row level security;
-create policy "Allow all read organization_members" on organization_members for select using (true);
-create policy "Allow all write organization_members" on organization_members for all using (true);
 
 -- ===============================
 -- 4. Chat Channels & Groups (ห้องสื่อสารตามกลุ่มงาน)
