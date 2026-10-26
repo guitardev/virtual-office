@@ -11,11 +11,14 @@ import { VehiclesTab } from "./VehiclesTab";
 import { RoomsTab } from "./RoomsTab";
 import { DivisionsTab } from "./DivisionsTab";
 import { DocumentsTab } from "./DocumentsTab";
+import { ChannelsTab } from "./ChannelsTab";
+import { ChatGroup } from "@/lib/types";
 
 export type AdminTabId =
   | "members"
   | "requests"
   | "matrix"
+  | "channels"
   | "vehicles"
   | "rooms"
   | "divisions"
@@ -62,6 +65,9 @@ interface AdminPageProps {
   circularDocs?: CircularDocument[];
   onOpenCircularDoc?: (docId: string) => void;
   onNavigatePage?: (page: string) => void;
+  chatGroups?: ChatGroup[];
+  setChatGroups?: (groups: ChatGroup[]) => void;
+  onSelectChatGroup?: (groupId: string) => void;
 }
 
 export function AdminPage({
@@ -103,6 +109,9 @@ export function AdminPage({
   circularDocs,
   onOpenCircularDoc,
   onNavigatePage,
+  chatGroups,
+  setChatGroups,
+  onSelectChatGroup,
 }: AdminPageProps) {
   // Compute stats
   const stats = useMemo(() => {
@@ -264,6 +273,7 @@ export function AdminPage({
               highlight: accessRequests.filter((r) => r.status === "pending").length > 0,
             },
             { id: "matrix", label: "🔒 กำหนดสิทธิ์ (RBAC Matrix)" },
+            { id: "channels", label: "💬 ห้องสื่อสารองค์กร", count: chatGroups?.length },
             { id: "vehicles", label: "🚗 ยานพาหนะราชการ" },
             { id: "rooms", label: "🏛️ ห้องประชุม & สถานที่" },
             { id: "divisions", label: "🏢 โครงสร้างกลุ่มงาน" },
@@ -336,6 +346,18 @@ export function AdminPage({
               handleToggleModuleStatus={handleToggleModuleStatus}
               handleOpenEditModule={handleOpenEditModule}
               handleTogglePermission={handleTogglePermission}
+            />
+          )}
+
+          {adminTab === "channels" && (
+            <ChannelsTab
+              currentUser={currentUser}
+              members={members}
+              chatGroups={chatGroups || []}
+              setChatGroups={setChatGroups}
+              showToast={showToast}
+              onNavigatePage={onNavigatePage}
+              onSelectGroup={onSelectChatGroup}
             />
           )}
 

@@ -3073,6 +3073,12 @@ export default function SmartMSOApp() {
                     setCurrentPage("circular");
                   }}
                   onNavigatePage={(p) => setCurrentPage(p as any)}
+                  chatGroups={chatGroups}
+                  setChatGroups={setChatGroups}
+                  onSelectChatGroup={(groupId) => {
+                    setDeeplinkChatGroupId(groupId);
+                    setCurrentPage("chat");
+                  }}
                 />
               )}
             </>
