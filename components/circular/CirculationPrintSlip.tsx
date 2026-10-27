@@ -5,6 +5,7 @@ import { CircularDocument, Member } from "@/lib/types";
 import { GarudaEmblem } from "./GarudaEmblem";
 import { DocumentVerificationQR } from "./DocumentVerificationQR";
 import { OfficialCircularSheet } from "./OfficialCircularSheet";
+import { toThaiDigits, toThaiDate, toThaiDateTime } from "@/lib/thai-numerals";
 
 export type CircularPrintMode = "all" | "letter" | "slip";
 
@@ -49,13 +50,7 @@ export function CirculationPrintSlip({
   const effectiveTotal = nonAdminRecipients.length;
   const percent = effectiveTotal > 0 ? Math.round((acknowledgedList.length / effectiveTotal) * 100) : 0;
 
-  const printDate = new Date().toLocaleDateString("th-TH", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const printDate = toThaiDateTime(new Date().toISOString());
 
   // ส่วนของใบสรุปผลการเวียนและบัญชีลงนาม (Routing & Acknowledgment Slip)
   const slipContent = (
@@ -78,23 +73,23 @@ export function CirculationPrintSlip({
         <div className="grid grid-cols-2 gap-4">
           <div>
             <span className="font-bold text-slate-900 print:text-black">เลขที่หนังสือ: </span>
-            <span className="font-mono text-indigo-900 print:text-black font-bold">{doc.docNumber}</span>
+            <span className="font-mono text-indigo-900 print:text-black font-bold">{toThaiDigits(doc.docNumber)}</span>
           </div>
           <div>
             <span className="font-bold text-slate-900 print:text-black">ลงวันที่: </span>
-            <span className="print:text-black">{doc.issuedDate}</span>
+            <span className="print:text-black">{toThaiDate(doc.issuedDate)}</span>
           </div>
         </div>
 
         <div>
           <span className="font-bold text-slate-900 print:text-black">เรื่อง: </span>
-          <span className="font-bold text-slate-900 print:text-black text-sm">{doc.title}</span>
+          <span className="font-bold text-slate-900 print:text-black text-sm">{toThaiDigits(doc.title)}</span>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
             <span className="font-bold text-slate-900 print:text-black">หน่วยงานเจ้าของเรื่อง: </span>
-            <span className="print:text-black">{doc.senderOrg || "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"}</span>
+            <span className="print:text-black">{toThaiDigits(doc.senderOrg || "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร")}</span>
           </div>
           <div>
             <span className="font-bold text-slate-900 print:text-black">ผู้ส่งเวียน: </span>
@@ -105,21 +100,21 @@ export function CirculationPrintSlip({
         {doc.summary && (
           <div className="pt-1 text-[11px] text-slate-600 print:text-black">
             <span className="font-bold text-slate-800 print:text-black">สรุปสาระสำคัญ: </span>
-            {doc.summary}
+            {toThaiDigits(doc.summary)}
           </div>
         )}
 
         {/* Statistics Row */}
         <div className="pt-2 border-t border-slate-200 print:border-slate-400 flex items-center justify-between text-xs">
           <div>
-            <strong>จำนวนผู้รับการเวียนทั้งหมด:</strong> {effectiveTotal} คน{" "}
+            <strong>จำนวนผู้รับการเวียนทั้งหมด:</strong> {toThaiDigits(effectiveTotal)} คน{" "}
             <span className="text-[10px] text-slate-500 print:text-black font-normal">(ไม่นับสิทธิ์ Admin)</span>
           </div>
           <div className="text-emerald-700 print:text-black font-bold">
-            <strong>รับทราบแล้ว:</strong> {acknowledgedList.length} คน ({percent}%)
+            <strong>รับทราบแล้ว:</strong> {toThaiDigits(acknowledgedList.length)} คน ({toThaiDigits(percent)}%)
           </div>
           <div className="text-rose-700 print:text-black font-bold">
-            <strong>ยังไม่รับทราบ:</strong> {pendingList.length} คน
+            <strong>ยังไม่รับทราบ:</strong> {toThaiDigits(pendingList.length)} คน
           </div>
         </div>
       </div>
@@ -127,7 +122,7 @@ export function CirculationPrintSlip({
       {/* Table of Acknowledged Signatures */}
       <div className="space-y-3 print-keep-together">
         <h2 className="text-xs font-bold text-slate-900 print:text-black uppercase tracking-wider flex items-center gap-2">
-          <span>บัญชีรายชื่อผู้รับทราบและลงนามดิจิทัล (จำนวน {acknowledgedList.length} คน)</span>
+          <span>บัญชีรายชื่อผู้รับทราบและลงนามดิจิทัล (จำนวน {toThaiDigits(acknowledgedList.length)} คน)</span>
         </h2>
 
         <table className="w-full text-left text-xs border border-slate-300 print:border-black divide-y divide-slate-200 print:divide-slate-400">
@@ -152,7 +147,7 @@ export function CirculationPrintSlip({
               acknowledgedList.map((rec, idx) => (
                 <tr key={rec.memberId} className="hover:bg-slate-50/50 print-keep-together">
                   <td className="py-2 px-2.5 text-center text-slate-500 print:text-black border-r border-slate-200 print:border-black">
-                    {idx + 1}
+                    {toThaiDigits(idx + 1)}
                   </td>
                   <td className="py-2 px-3 border-r border-slate-200 print:border-black">
                     <div className="font-bold text-slate-900 print:text-black">{rec.memberName}</div>
@@ -175,16 +170,8 @@ export function CirculationPrintSlip({
                       </span>
                     )}
                   </td>
-                  <td className="py-2 px-3 border-r border-slate-200 print:border-black text-[10px] text-slate-600 print:text-black font-mono">
-                    {rec.acknowledgedAt
-                      ? new Date(rec.acknowledgedAt).toLocaleString("th-TH", {
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })
-                      : "-"}
+                  <td className="py-2 px-3 border-r border-slate-200 print:border-black text-[10px] text-slate-600 print:text-black">
+                    {rec.acknowledgedAt ? toThaiDateTime(rec.acknowledgedAt) : "-"}
                   </td>
                   <td className="py-2 px-3 text-[11px] text-slate-700 print:text-black italic">
                     {rec.endorsementNote || "รับทราบ"}

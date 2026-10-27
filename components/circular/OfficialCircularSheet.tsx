@@ -4,6 +4,7 @@ import React from "react";
 import { CircularDocument } from "@/lib/types";
 import { GarudaEmblem } from "./GarudaEmblem";
 import { DocumentVerificationQR } from "./DocumentVerificationQR";
+import { toThaiDigits, toThaiDate, toThaiDateTime } from "@/lib/thai-numerals";
 
 interface OfficialCircularSheetProps {
   document: CircularDocument;
@@ -15,8 +16,10 @@ interface OfficialCircularSheetProps {
  * แบบฟอร์มบันทึกข้อความ (หนังสือเวียนราชการ) ตามระเบียบสำนักนายกรัฐมนตรีว่าด้วยงานสารบรรณ พ.ศ. ๒๕๒๖
  * และที่แก้ไขเพิ่มเติม (ฉบับที่ ๔) พ.ศ. ๒๕๖๔ ว่าด้วยสารบรรณอิเล็กทรอนิกส์
  * - ครุฑขนาด ๑.๕ เซนติเมตร วางมุมบนซ้าย
- * - คำว่า "บันทึกข้อความ" กึ่งกลางหน้ากระดาษ
- * - ฟอนต์ TH Sarabun New / Sarabun ขนาด 16pt พร้อมการเยื้องวรรค 2.5 ซม.
+ * - คำว่า "บันทึกข้อความ" กึ่งกลางหน้ากระดาษ ขนาด ๒๔ พอยท์ ตัวหนา
+ * - บรรทัด "ที่" และ "วันที่": ตำแหน่ง "วันที่" เริ่มต้นจาก "กึ่งกลางหน้ากระดาษ (50%)" บรรทัดเดียวกับ "ที่"
+ * - การใช้ตัวเลขไทย (๐-๙) ทั้งหมดตามมติ ครม. และระเบียบงานสารบรรณ
+ * - ฟอนต์ TH Sarabun New / Sarabun ๑๖ พอยท์ ตัวปกติ (หัวเรื่อง ๒๐-๒๔ พอยท์ ตัวหนา)
  */
 export function OfficialCircularSheet({
   document: doc,
@@ -25,9 +28,24 @@ export function OfficialCircularSheet({
 }: OfficialCircularSheetProps) {
   const isUrgent = doc.urgency !== "normal";
 
+  // แปลงตัวเลขในข้อมูลเอกสารให้เป็นเลขไทยทั้งหมด
+  const thaiDocNumber = toThaiDigits(doc.docNumber);
+  const thaiIssuedDate = toThaiDate(doc.issuedDate);
+  const thaiSenderOrg = toThaiDigits(
+    doc.senderOrg ||
+      "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร โทร. ๐-๕๕๗๐-๕๐๓๑"
+  );
+  const thaiTitle = toThaiDigits(doc.title);
+  const thaiSummary = doc.summary ? toThaiDigits(doc.summary) : "";
+  const thaiDeadline = doc.deadline ? toThaiDate(doc.deadline) : "";
+  const thaiTotalCount = toThaiDigits(doc.totalCount);
+  const thaiSignDate = toThaiDate(doc.createdAt);
+  const thaiCreatedAt = toThaiDateTime(doc.createdAt);
+
   return (
     <div
-      className={`w-full max-w-3xl mx-auto bg-white p-8 sm:p-12 rounded-2xl border border-slate-300 shadow-sm text-slate-900 font-serif relative print:shadow-none print:border-none print:p-0 print:m-0 print:max-w-none print:w-full print:text-black ${className}`}
+      style={{ fontFamily: "'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif" }}
+      className={`w-full max-w-3xl mx-auto bg-white p-8 sm:p-12 rounded-2xl border border-slate-300 shadow-sm text-slate-900 relative print:shadow-none print:border-none print:p-0 print:m-0 print:max-w-none print:w-full print:text-black leading-relaxed ${className}`}
     >
       {/* ─── OFFICIAL HEADER: บันทึกข้อความ ─── */}
       <div className="relative border-b-2 border-slate-900 pb-5 mb-6 print:border-black">
@@ -47,10 +65,10 @@ export function OfficialCircularSheet({
           </div>
 
           <div className="flex-1 text-center pr-24">
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-wide font-sans text-slate-900 print:text-black leading-none">
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-wide text-slate-900 print:text-black leading-none">
               บันทึกข้อความ
             </h1>
-            <p className="text-[11px] font-sans text-slate-500 print:text-slate-600 mt-1">
+            <p className="text-[12px] text-slate-500 print:text-slate-600 mt-1">
               (หนังสือเวียนราชการอิเล็กทรอนิกส์)
             </p>
           </div>
@@ -70,75 +88,80 @@ export function OfficialCircularSheet({
         )}
 
         {/* ตารางหัวเรื่องสารบรรณ: ส่วนราชการ, ที่, วันที่, เรื่อง */}
-        <div className="space-y-2 text-xs sm:text-sm font-sans pt-1">
+        <div className="space-y-2 text-sm sm:text-base pt-1">
+          {/* บรรทัด ส่วนราชการ */}
           <div className="flex flex-wrap items-baseline gap-2">
-            <strong className="text-slate-900 print:text-black whitespace-nowrap">
-              ส่วนราชการ:
+            <strong className="font-bold text-slate-900 print:text-black whitespace-nowrap text-base">
+              ส่วนราชการ
             </strong>
             <span className="text-slate-800 print:text-black flex-1 border-b border-dotted border-slate-300 print:border-transparent pb-0.5">
-              {doc.senderOrg ||
-                "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร โทร. ๐-๕๕๗๐-๕๐๓๑"}
+              {thaiSenderOrg}
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* บรรทัด 'ที่' (ซ้าย) และ 'วันที่' (เริ่มกึ่งกลางหน้ากระดาษ 50% พอดี) */}
+          <div className="grid grid-cols-2 gap-4 items-baseline">
+            {/* ซ้าย (0% - 50%): ที่ */}
             <div className="flex items-baseline gap-2">
-              <strong className="text-slate-900 print:text-black whitespace-nowrap">
-                ที่:
+              <strong className="font-bold text-slate-900 print:text-black whitespace-nowrap text-base">
+                ที่
               </strong>
-              <span className="font-mono font-bold text-slate-900 print:text-black flex-1 border-b border-dotted border-slate-300 print:border-transparent pb-0.5">
-                {doc.docNumber}
+              <span className="font-bold text-slate-900 print:text-black flex-1 border-b border-dotted border-slate-300 print:border-transparent pb-0.5">
+                {thaiDocNumber}
               </span>
             </div>
-            <div className="flex items-baseline gap-2 sm:justify-end">
-              <strong className="text-slate-900 print:text-black whitespace-nowrap">
-                วันที่:
+
+            {/* ขวา (เริ่มที่กึ่งกลางหน้ากระดาษ 50% เป๊ะ): วันที่ */}
+            <div className="flex items-baseline gap-2">
+              <strong className="font-bold text-slate-900 print:text-black whitespace-nowrap text-base">
+                วันที่
               </strong>
-              <span className="text-slate-800 print:text-black min-w-[140px] border-b border-dotted border-slate-300 print:border-transparent pb-0.5">
-                {doc.issuedDate}
+              <span className="text-slate-800 print:text-black flex-1 border-b border-dotted border-slate-300 print:border-transparent pb-0.5">
+                {thaiIssuedDate}
               </span>
             </div>
           </div>
 
+          {/* บรรทัด เรื่อง */}
           <div className="flex items-baseline gap-2 pt-1">
-            <strong className="text-slate-900 print:text-black whitespace-nowrap">
-              เรื่อง:
+            <strong className="font-bold text-slate-900 print:text-black whitespace-nowrap text-base">
+              เรื่อง
             </strong>
-            <span className="font-bold text-slate-900 print:text-black text-sm sm:text-base flex-1">
-              {doc.title}
+            <span className="font-bold text-slate-900 print:text-black text-base sm:text-lg flex-1">
+              {thaiTitle}
             </span>
           </div>
         </div>
       </div>
 
       {/* คำขึ้นต้น: เรียน */}
-      <div className="text-xs sm:text-sm font-sans mb-4 flex items-baseline gap-2">
-        <strong className="text-slate-900 print:text-black whitespace-nowrap">
-          เรียน:
+      <div className="text-sm sm:text-base mb-4 flex items-baseline gap-2">
+        <strong className="font-bold text-slate-900 print:text-black whitespace-nowrap text-base">
+          เรียน
         </strong>
         <span className="text-slate-800 print:text-black">
           {doc.targetCriteria.scope === "all"
             ? "ข้าราชการ พนักงานราชการ และเจ้าหน้าที่ในสังกัด พมจ.กำแพงเพชร ทุกคน"
-            : `ข้าราชการและเจ้าหน้าที่ผู้เกี่ยวข้อง (${doc.totalCount} ท่าน)`}
+            : `ข้าราชการและเจ้าหน้าที่ผู้เกี่ยวข้อง (${thaiTotalCount} ท่าน)`}
         </span>
       </div>
 
       {/* ─── เนื้อความหนังสือราชการ (BODY) ─── */}
-      <div className="space-y-4 text-xs sm:text-sm leading-relaxed text-slate-800 print:text-black text-justify font-sans">
+      <div className="space-y-4 text-sm sm:text-base leading-relaxed text-slate-800 print:text-black text-justify">
         <p className="indent-10">
-          ด้วย {doc.senderOrg || "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"}{" "}
-          มีความประสงค์แจ้งเวียนแนวทางและข้อกำหนด เรื่อง <strong>“{doc.title}”</strong>{" "}
+          ด้วย {thaiSenderOrg.split(" โทร.")[0]}{" "}
+          มีความประสงค์แจ้งเวียนแนวทางและข้อกำหนด เรื่อง <strong>“{thaiTitle}”</strong>{" "}
           เพื่อให้การปฏิบัติราชการของหน่วยงานและบุคลากรทุกกลุ่มงานดำเนินไปด้วยความเรียบร้อย
           ถูกต้องตามระเบียบของทางราชการ และบรรลุวัตถุประสงค์การยกระดับบริการประชาชนกลุ่มเปราะบางในพื้นที่จังหวัดกำแพงเพชร
         </p>
 
-        {doc.summary ? (
+        {thaiSummary ? (
           <div className="my-3 p-4 rounded-xl bg-slate-50 border border-slate-200 indent-0 print:bg-transparent print:border-slate-400 print:p-2">
-            <div className="font-bold text-slate-900 print:text-black text-xs mb-1">
+            <div className="font-bold text-slate-900 print:text-black text-sm mb-1">
               📌 สาระสำคัญและแนวทางถือปฏิบัติ:
             </div>
-            <p className="text-xs text-slate-700 print:text-black leading-normal">
-              {doc.summary}
+            <p className="text-sm text-slate-700 print:text-black leading-normal">
+              {thaiSummary}
             </p>
           </div>
         ) : (
@@ -148,18 +171,10 @@ export function OfficialCircularSheet({
           </p>
         )}
 
-        {doc.deadline && (
-          <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 print:bg-transparent print:text-black print:border-slate-400 text-xs indent-0 font-medium">
+        {thaiDeadline && (
+          <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 print:bg-transparent print:text-black print:border-slate-400 text-sm indent-0 font-medium">
             ⏰ <strong>กำหนดระยะเวลาดำเนินการ:</strong> ขอให้ลงนามรับทราบและถือปฏิบัติตามหนังสือเวียนฉบับนี้ภายในวันที่{" "}
-            <strong>
-              {doc.deadline.includes("T")
-                ? new Date(doc.deadline).toLocaleDateString("th-TH", {
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })
-                : doc.deadline}
-            </strong>
+            <strong>{thaiDeadline}</strong>
           </div>
         )}
 
@@ -169,8 +184,8 @@ export function OfficialCircularSheet({
       </div>
 
       {/* ─── ลายมือชื่อผู้บริหาร / ผู้สั่งการ (SIGNATURE BLOCK) ─── */}
-      <div className="mt-12 mb-8 flex flex-col items-end pr-6 text-xs sm:text-sm font-sans print-keep-together">
-        <div className="text-center space-y-1 min-w-[220px]">
+      <div className="mt-12 mb-8 flex flex-col items-end pr-6 text-sm sm:text-base print-keep-together">
+        <div className="text-center space-y-1 min-w-[240px]">
           {/* ลายมือชื่อดิจิทัล */}
           <div className="h-12 flex items-center justify-center">
             <span className="text-xs italic text-slate-400 border-b border-dotted border-slate-400 px-6 py-1 select-none print:text-black">
@@ -180,27 +195,23 @@ export function OfficialCircularSheet({
           <div className="font-bold text-slate-900 print:text-black pt-1">
             ({doc.createdByName})
           </div>
-          <div className="text-xs text-slate-600 print:text-black">
+          <div className="text-xs sm:text-sm text-slate-600 print:text-black">
             {doc.senderOrg || "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"}
           </div>
-          <div className="text-[11px] text-slate-400 print:text-black font-mono">
-            {new Date(doc.createdAt).toLocaleDateString("th-TH", {
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
+          <div className="text-xs text-slate-400 print:text-black">
+            {thaiSignDate}
           </div>
         </div>
       </div>
 
       {/* ─── ท้ายกระดาษรับรองอิเล็กทรอนิกส์ & QR CODE VERIFICATION ─── */}
       {showVerificationSeal && (
-        <div className="mt-8 pt-4 border-t border-slate-300 print:border-black flex flex-wrap items-center justify-between gap-4 text-[10px] text-slate-500 print:text-black font-sans bg-slate-50 print:bg-transparent p-3 rounded-xl print-keep-together">
+        <div className="mt-8 pt-4 border-t border-slate-300 print:border-black flex flex-wrap items-center justify-between gap-4 text-xs text-slate-500 print:text-black bg-slate-50 print:bg-transparent p-3 rounded-xl print-keep-together">
           {/* QR Code สำหรับสแกนตรวจสอบเอกสารจริงบนระบบ */}
           <DocumentVerificationQR
             docId={doc.id}
-            docNumber={doc.docNumber}
-            issuedDate={doc.issuedDate}
+            docNumber={thaiDocNumber}
+            issuedDate={thaiIssuedDate}
             size={60}
           />
 
@@ -208,11 +219,11 @@ export function OfficialCircularSheet({
             <div className="font-bold text-slate-800 print:text-black">
               ระบบสารบรรณและเวียนหนังสืออิเล็กทรอนิกส์ Smart MSO
             </div>
-            <div className="text-[9px] text-slate-500 print:text-black leading-tight mt-0.5">
+            <div className="text-[11px] text-slate-500 print:text-black leading-tight mt-0.5">
               รับรองตาม พ.ร.บ.ธุรกรรมทางอิเล็กทรอนิกส์ พ.ศ. ๒๕๔๔ และระเบียบสำนักนายกรัฐมนตรีฯ พ.ศ. ๒๕๖๔
             </div>
-            <div className="text-[9px] font-mono text-slate-400 print:text-black mt-0.5">
-              ออกเอกสาร: {new Date(doc.createdAt).toLocaleString("th-TH")}
+            <div className="text-[10px] text-slate-400 print:text-black mt-0.5">
+              ออกเอกสาร: {thaiCreatedAt}
             </div>
           </div>
         </div>
