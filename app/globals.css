@@ -198,17 +198,17 @@
     font-family: 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif !important;
   }
 
-  /* คำว่า 'เรื่อง' ของบันทึกข้อความ: ขนาด ๑๖ พอยต์ เป็นมาตรฐานตามระเบียบ */
+  /* คำว่า 'เรื่อง' ของบันทึกข้อความ: ขนาด 16px ตามความประสงค์ */
   .gov-font-subject-label {
-    font-size: 16pt !important;
+    font-size: 16px !important;
     line-height: 1.35 !important;
     font-weight: 700 !important;
     font-family: 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif !important;
   }
 
-  /* เนื้อหาหัวเรื่อง ขนาด ๑๖ พอยต์ ตัวหนา */
+  /* เนื้อหาหัวเรื่อง ขนาด 16px ตัวหนา */
   .gov-font-subject-value {
-    font-size: 16pt !important;
+    font-size: 16px !important;
     line-height: 1.4 !important;
     font-weight: 700 !important;
     font-family: 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif !important;
