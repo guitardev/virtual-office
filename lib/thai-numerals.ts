@@ -20,6 +20,21 @@ const THAI_MONTHS_FULL = [
   "ธันวาคม",
 ];
 
+export const THAI_MONTHS_SHORT = [
+  "ม.ค.",
+  "ก.พ.",
+  "มี.ค.",
+  "เม.ย.",
+  "พ.ค.",
+  "มิ.ย.",
+  "ก.ค.",
+  "ส.ค.",
+  "ก.ย.",
+  "ต.ค.",
+  "พ.ย.",
+  "ธ.ค.",
+];
+
 /**
  * แปลงตัวเลขอารบิก (0-9) ให้เป็นตัวเลขไทย (๐-๙)
  */
@@ -180,4 +195,38 @@ export function toThaiDateTime(dateStr: string | undefined | null): string {
     // fallback
   }
   return toThaiDigits(dateStr);
+}
+
+/**
+ * แปลงสตริงวันที่หรือ ISO string ให้เป็นวันที่ย่อภาษาไทยพร้อมตัวเลขไทยกระชับ
+ * เช่น "2026-10-30T00:00:00.000Z" -> "๓๐ ต.ค. ๖๙" (หาก twoDigitYear=true) หรือ "๓๐ ต.ค. ๒๕๖๙"
+ */
+export function toThaiShortDate(
+  dateStr: string | undefined | null,
+  twoDigitYear: boolean = true
+): string {
+  if (!dateStr) return "";
+  const trimmed = dateStr.trim();
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const fullYear = parseInt(isoMatch[1], 10) + 543;
+    const monthIndex = parseInt(isoMatch[2], 10) - 1;
+    const month = THAI_MONTHS_SHORT[monthIndex] || "";
+    const day = parseInt(isoMatch[3], 10);
+    const year = twoDigitYear ? String(fullYear).slice(-2) : String(fullYear);
+    return toThaiDigits(`${day} ${month} ${year}`);
+  }
+  try {
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) {
+      const day = d.getDate();
+      const month = THAI_MONTHS_SHORT[d.getMonth()];
+      const fullYear = d.getFullYear() + 543;
+      const year = twoDigitYear ? String(fullYear).slice(-2) : String(fullYear);
+      return toThaiDigits(`${day} ${month} ${year}`);
+    }
+  } catch {
+    // fallback
+  }
+  return toThaiDigits(trimmed);
 }

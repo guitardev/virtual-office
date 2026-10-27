@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { Member, CircularDocument } from "@/lib/types";
 import { DigitalSignaturePad } from "./DigitalSignaturePad";
 import { CirculationPrintSlip } from "./CirculationPrintSlip";
+import { toThaiShortDate, toThaiDate } from "@/lib/thai-numerals";
 
 export function getCircularFileDisplayUrl(fileUrl?: string): string {
   if (!fileUrl) return "/virtual-office/circular_docs/sample.pdf";
@@ -542,6 +543,14 @@ export function CircularViewerModal({
                   {doc.docNumber}
                 </span>
                 {urgencyBadge}
+                {doc.deadline && (
+                  <span
+                    className="text-[11px] font-medium text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded"
+                    title={`ครบกำหนดถือปฏิบัติ: ${toThaiDate(doc.deadline)}`}
+                  >
+                    ⏰ ภายใน {toThaiShortDate(doc.deadline, false)}
+                  </span>
+                )}
               </div>
               <h3 className="text-base sm:text-lg font-bold font-heading text-slate-800 mt-1 line-clamp-1">
                 {doc.title}
@@ -628,6 +637,14 @@ export function CircularViewerModal({
               <div className="flex items-center gap-2">
                 <span className="font-mono text-xs font-bold text-indigo-300">{doc.docNumber}</span>
                 {urgencyBadge}
+                {doc.deadline && (
+                  <span
+                    className="text-[10px] font-medium text-rose-200 bg-rose-900/60 border border-rose-500/40 px-2 py-0.5 rounded"
+                    title={`ครบกำหนดถือปฏิบัติ: ${toThaiDate(doc.deadline)}`}
+                  >
+                    ⏰ ภายใน {toThaiShortDate(doc.deadline, false)}
+                  </span>
+                )}
               </div>
               <h3 className="text-base font-bold font-heading text-white truncate max-w-xl">
                 {doc.title}

@@ -24,6 +24,7 @@ import { NewCircularModal } from "./NewCircularModal";
 import { CircularViewerModal } from "./CircularViewerModal";
 import { CirculationPrintSlip } from "./CirculationPrintSlip";
 import { DocumentScannerModal } from "./DocumentScannerModal";
+import { toThaiDate, toThaiShortDate } from "@/lib/thai-numerals";
 
 interface CircularPageProps {
   currentUser: Member | null;
@@ -781,8 +782,11 @@ export const CircularPage: React.FC<CircularPageProps> = ({
                           ลงวันที่ {doc.issuedDate}
                         </span>
                         {doc.deadline && (
-                          <span className="text-xs text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded">
-                            ⏰ ให้ถือปฏิบัติภายใน {doc.deadline}
+                          <span
+                            className="text-xs text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded font-medium"
+                            title={`ครบกำหนดถือปฏิบัติ: ${toThaiDate(doc.deadline)}`}
+                          >
+                            ⏰ ภายใน {toThaiShortDate(doc.deadline, false)}
                           </span>
                         )}
                       </div>
