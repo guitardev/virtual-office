@@ -145,11 +145,11 @@
     }
   }
 
-  /* ─── Thai Government Standard Document Typography & Paper Model ─── */
+  /* ─── Thai Government Standard Document Typography & Paper Model (A4 ONLY) ─── */
   .gov-a4-sheet {
     box-sizing: border-box;
-    width: 100%;
-    max-width: 210mm;
+    width: 210mm;
+    max-width: 100%;
     min-height: 297mm;
     /* จำลองขอบกระดาษราชการจริง: บน 2.5 ซม. ขวา 2.0 ซม. ล่าง 2.0 ซม. ซ้าย 3.0 ซม. */
     padding: 25mm 20mm 20mm 30mm;
@@ -157,9 +157,28 @@
     margin-right: auto;
     background-color: #ffffff;
     color: #000000;
-    font-family: 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif;
+    font-family: 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif !important;
     font-size: 16pt;
     line-height: 1.5;
+  }
+
+  /* บังคับใช้แบบอักษร Sarabun ทั้งเอกสารราชการเท่านั้น (ไม่ใช้ Kanit หรือ font-heading ของ Web UI) */
+  .gov-a4-sheet,
+  .gov-a4-sheet *,
+  .gov-a4-sheet h1,
+  .gov-a4-sheet h2,
+  .gov-a4-sheet h3,
+  .gov-a4-sheet h4,
+  .gov-a4-sheet h5,
+  .gov-a4-sheet h6,
+  .gov-a4-sheet p,
+  .gov-a4-sheet span,
+  .gov-a4-sheet strong,
+  .gov-a4-sheet div,
+  .gov-a4-sheet table,
+  .gov-a4-sheet td,
+  .gov-a4-sheet th {
+    font-family: 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif !important;
   }
 
   /* คำว่า 'บันทึกข้อความ' ขนาด ๒๙ พอยต์ ตัวหนา */
@@ -168,19 +187,38 @@
     line-height: 1.15 !important;
     font-weight: 800 !important;
     letter-spacing: 0.02em;
+    font-family: 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif !important;
   }
 
-  /* ส่วนราชการ, ที่, วันที่, เรื่อง ขนาด ๒๐ พอยต์ ตัวหนา */
+  /* ส่วนราชการ, ที่, วันที่ ขนาด ๒๐ พอยต์ ตัวหนา */
   .gov-font-field-label {
     font-size: 20pt !important;
     line-height: 1.25 !important;
     font-weight: 700 !important;
+    font-family: 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif !important;
   }
 
-  /* เนื้อหาหัวเรื่อง ขนาด ๑๖ พอยต์ */
+  /* คำว่า 'เรื่อง' ของบันทึกข้อความ: ขนาด ๑๖ พอยต์ เป็นมาตรฐานตามระเบียบ */
+  .gov-font-subject-label {
+    font-size: 16pt !important;
+    line-height: 1.35 !important;
+    font-weight: 700 !important;
+    font-family: 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif !important;
+  }
+
+  /* เนื้อหาหัวเรื่อง ขนาด ๑๖ พอยต์ ตัวหนา */
+  .gov-font-subject-value {
+    font-size: 16pt !important;
+    line-height: 1.4 !important;
+    font-weight: 700 !important;
+    font-family: 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif !important;
+  }
+
+  /* เนื้อหาหัวเรื่องทั่วไป ขนาด ๑๖ พอยต์ */
   .gov-font-field-value {
     font-size: 16pt !important;
     line-height: 1.4 !important;
+    font-family: 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif !important;
   }
 
   /* ตัวเนื้อหาเอกสารราชการ ขนาด ๑๖ พอยต์ และการจัดแนวชิดขอบซ้าย-ขวา (Justified) */

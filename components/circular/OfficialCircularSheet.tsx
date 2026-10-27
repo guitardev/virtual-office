@@ -183,10 +183,14 @@ export function OfficialCircularSheet({
         </div>
       </div>
 
-      {/* ─── OFFICIAL DOCUMENT PAPER (EXACT A4 PROPORTIONS) ─── */}
+      {/* ─── OFFICIAL DOCUMENT PAPER (EXACT A4 ONLY: 210mm x 297mm) ─── */}
       <div
-        style={{ fontFamily: "'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif" }}
-        className={`gov-a4-sheet relative rounded-lg border border-slate-300 shadow-md transition-all ${
+        style={{
+          fontFamily: "'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif",
+          width: "210mm",
+          minHeight: "297mm",
+        }}
+        className={`gov-a4-sheet relative bg-white text-black rounded-lg border border-slate-300 shadow-xl transition-all ${
           showMarginGuides ? "ring-2 ring-indigo-500/50" : ""
         } ${className}`}
       >
@@ -293,10 +297,10 @@ export function OfficialCircularSheet({
                 </div>
 
                 <div className="flex items-baseline gap-2 pt-1">
-                  <strong className="gov-font-field-label text-slate-900 print:text-black whitespace-nowrap">
+                  <strong className="gov-font-subject-label text-slate-900 print:text-black whitespace-nowrap text-[16pt]">
                     เรื่อง
                   </strong>
-                  <span className="gov-font-field-value font-bold text-slate-900 print:text-black flex-1">
+                  <span className="gov-font-subject-value font-bold text-slate-900 print:text-black flex-1 text-[16pt]">
                     {thaiTitle}
                   </span>
                 </div>
@@ -423,8 +427,8 @@ export function OfficialCircularSheet({
             {/* เรื่อง, เรียน */}
             <div className="space-y-2 pt-2 border-t border-slate-200 print:border-transparent">
               <div className="flex items-baseline gap-2">
-                <strong className="gov-font-field-label whitespace-nowrap">เรื่อง</strong>
-                <span className="font-bold text-[16pt]">{thaiTitle}</span>
+                <strong className="gov-font-subject-label whitespace-nowrap text-[16pt]">เรื่อง</strong>
+                <span className="gov-font-subject-value font-bold text-[16pt]">{thaiTitle}</span>
               </div>
               <div className="flex items-baseline gap-2">
                 <strong className="font-bold text-[16pt] whitespace-nowrap">เรียน</strong>
@@ -517,7 +521,7 @@ export function OfficialCircularSheet({
               <div className="gov-font-field-label text-slate-800 print:text-black mt-1">
                 ที่ {thaiDocNumber}
               </div>
-              <div className="gov-font-field-label text-slate-900 print:text-black mt-1">
+              <div className="gov-font-subject-label text-slate-900 print:text-black mt-1 text-[16pt]">
                 เรื่อง {thaiTitle}
               </div>
             </div>
@@ -583,7 +587,7 @@ export function OfficialCircularSheet({
               <h1 className="gov-font-memo-title text-slate-900 print:text-black mt-2">
                 ประกาศ{thaiSenderOrg.split(" โทร.")[0]}
               </h1>
-              <div className="gov-font-field-label text-slate-900 print:text-black mt-1">
+              <div className="gov-font-subject-label text-slate-900 print:text-black mt-1 text-[16pt]">
                 เรื่อง {thaiTitle}
               </div>
             </div>
