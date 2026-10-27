@@ -176,7 +176,7 @@ export function OfficialCircularSheet({
             </span>
           </div>
           <div className="flex items-center gap-2 text-slate-500">
-            <span>ตัวอักษรเนื้อความ ๑๖pt</span>
+            <span>ขนาดมาตรฐาน 16px (พิมพ์ ๑๖pt)</span>
             <span>•</span>
             <span>ย่อหน้า ๒.๕ ซม.</span>
           </div>
@@ -309,7 +309,7 @@ export function OfficialCircularSheet({
 
             {/* คำขึ้นต้น: เรียน */}
             <div className="mb-4 flex items-baseline gap-2">
-              <strong className="font-bold text-slate-900 print:text-black whitespace-nowrap text-[16pt]">
+              <strong className="font-bold text-slate-900 print:text-black whitespace-nowrap text-[16px] print:text-[16pt]">
                 เรียน
               </strong>
               <span className="gov-body-text text-slate-900 print:text-black">
@@ -365,10 +365,10 @@ export function OfficialCircularSheet({
                     (ลงชื่อผ่านระบบสารบรรณอิเล็กทรอนิกส์)
                   </span>
                 </div>
-                <div className="font-bold text-slate-900 print:text-black pt-1 text-[16pt]">
+                <div className="font-bold text-slate-900 print:text-black pt-1 text-[16px] print:text-[16pt]">
                   ({doc.createdByName})
                 </div>
-                <div className="text-[14pt] text-slate-700 print:text-black">
+                <div className="text-[14px] print:text-[14pt] text-slate-700 print:text-black">
                   {doc.senderOrg || "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"}
                 </div>
                 <div className="text-xs text-slate-400 print:text-black">
@@ -409,8 +409,8 @@ export function OfficialCircularSheet({
                 )}
               </div>
               <div className="space-y-0.5">
-                <div className="font-bold text-[16pt]">{thaiSenderOrg.split(" โทร.")[0]}</div>
-                <div className="text-[14pt] text-slate-700 print:text-black">
+                <div className="font-bold text-[16px] print:text-[16pt]">{thaiSenderOrg.split(" โทร.")[0]}</div>
+                <div className="text-[14px] print:text-[14pt] text-slate-700 print:text-black">
                   ศูนย์ราชการจังหวัดกำแพงเพชร ถนนกำแพงเพชร-สุโขทัย ๖๒๐๐๐
                 </div>
               </div>
@@ -420,7 +420,7 @@ export function OfficialCircularSheet({
             <div className="gov-midpoint-grid gap-4 items-baseline pt-2">
               <div />
               <div>
-                <span className="font-bold text-[16pt]">{thaiIssuedDate}</span>
+                <span className="font-bold text-[16px] print:text-[16pt]">{thaiIssuedDate}</span>
               </div>
             </div>
 
@@ -431,21 +431,21 @@ export function OfficialCircularSheet({
                 <span className="gov-font-subject-value font-bold text-[16px]">{thaiTitle}</span>
               </div>
               <div className="flex items-baseline gap-2">
-                <strong className="font-bold text-[16pt] whitespace-nowrap">เรียน</strong>
-                <span className="text-[16pt]">
+                <strong className="font-bold text-[16px] print:text-[16pt] whitespace-nowrap">เรียน</strong>
+                <span className="text-[16px] print:text-[16pt]">
                   {doc.targetCriteria.scope === "all"
                     ? "หัวหน้าส่วนราชการ ข้าราชการ และเจ้าหน้าที่ผู้เกี่ยวข้อง"
                     : `ข้าราชการและเจ้าหน้าที่ในสังกัด (${thaiTotalCount} ท่าน)`}
                 </span>
               </div>
               {doc.referenceDoc && (
-                <div className="flex items-baseline gap-2 text-[14pt] text-slate-700 print:text-black">
+                <div className="flex items-baseline gap-2 text-[14px] print:text-[14pt] text-slate-700 print:text-black">
                   <strong className="font-bold whitespace-nowrap">อ้างถึง</strong>
                   <span>{toThaiDigits(doc.referenceDoc)}</span>
                 </div>
               )}
               {doc.attachmentList && (
-                <div className="flex items-baseline gap-2 text-[14pt] text-slate-700 print:text-black">
+                <div className="flex items-baseline gap-2 text-[14px] print:text-[14pt] text-slate-700 print:text-black">
                   <strong className="font-bold whitespace-nowrap">สิ่งที่ส่งมาด้วย</strong>
                   <span>{toThaiDigits(doc.attachmentList)}</span>
                 </div>
@@ -483,13 +483,13 @@ export function OfficialCircularSheet({
             <div className="gov-midpoint-grid pt-6 print-keep-together">
               <div />
               <div className="space-y-6">
-                <div className="text-[16pt]">ขอแสดงความนับถือ</div>
+                <div className="text-[16px] print:text-[16pt]">ขอแสดงความนับถือ</div>
                 <div className="text-center space-y-1">
                   <div className="h-10 flex items-center justify-center italic text-slate-400 select-none print:text-black text-xs">
                     (ลงลายมือชื่อดิจิทัลรับรอง)
                   </div>
-                  <div className="font-bold text-[16pt]">({doc.createdByName})</div>
-                  <div className="text-[14pt] text-slate-600 print:text-black">
+                  <div className="font-bold text-[16px] print:text-[16pt]">({doc.createdByName})</div>
+                  <div className="text-[14px] print:text-[14pt] text-slate-600 print:text-black">
                     พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร
                   </div>
                 </div>
@@ -497,7 +497,7 @@ export function OfficialCircularSheet({
             </div>
 
             {/* ส่วนราชการเจ้าของเรื่องและเบอร์โทรศัพท์ ด้านล่างซ้าย */}
-            <div className="pt-8 border-t border-slate-100 print:border-transparent text-[13pt] text-slate-600 print:text-black space-y-0.5 print-keep-together">
+            <div className="pt-8 border-t border-slate-100 print:border-transparent text-[13px] print:text-[13pt] text-slate-600 print:text-black space-y-0.5 print-keep-together">
               <div className="font-bold">{thaiSenderOrg}</div>
               <div>โทรศัพท์ ๐ ๕๕๗๐ ๕๐๒๙ โทรสาร ๐ ๕๕๗๐ ๕๐๓๐</div>
               <div>ไปรษณีย์อิเล็กทรอนิกส์: saraban_kamphaengphet@m-society.go.th</div>
@@ -559,13 +559,13 @@ export function OfficialCircularSheet({
             <div className="gov-midpoint-grid gap-4 pt-8 print-keep-together">
               <div />
               <div className="space-y-6">
-                <div className="text-[16pt]">สั่ง ณ วันที่ {thaiIssuedDate}</div>
+                <div className="text-[16px] print:text-[16pt]">สั่ง ณ วันที่ {thaiIssuedDate}</div>
                 <div className="text-center space-y-1">
                   <div className="h-10 flex items-center justify-center italic text-slate-400 select-none print:text-black text-xs">
                     (ลงลายมือชื่อดิจิทัลรับรอง)
                   </div>
-                  <div className="font-bold text-[16pt]">({doc.createdByName})</div>
-                  <div className="text-[14pt] text-slate-600 print:text-black">
+                  <div className="font-bold text-[16px] print:text-[16pt]">({doc.createdByName})</div>
+                  <div className="text-[14px] print:text-[14pt] text-slate-600 print:text-black">
                     พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร
                   </div>
                 </div>
@@ -622,13 +622,13 @@ export function OfficialCircularSheet({
             <div className="gov-midpoint-grid gap-4 pt-8 print-keep-together">
               <div />
               <div className="space-y-6">
-                <div className="text-[16pt]">ประกาศ ณ วันที่ {thaiIssuedDate}</div>
+                <div className="text-[16px] print:text-[16pt]">ประกาศ ณ วันที่ {thaiIssuedDate}</div>
                 <div className="text-center space-y-1">
                   <div className="h-10 flex items-center justify-center italic text-slate-400 select-none print:text-black text-xs">
                     (ลงลายมือชื่อดิจิทัลรับรอง)
                   </div>
-                  <div className="font-bold text-[16pt]">({doc.createdByName})</div>
-                  <div className="text-[14pt] text-slate-600 print:text-black">
+                  <div className="font-bold text-[16px] print:text-[16pt]">({doc.createdByName})</div>
+                  <div className="text-[14px] print:text-[14pt] text-slate-600 print:text-black">
                     พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร
                   </div>
                 </div>

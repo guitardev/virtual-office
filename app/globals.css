@@ -131,7 +131,7 @@
       page-break-inside: avoid !important;
     }
 
-    /* Print-specific overrides to avoid double margins */
+    /* Print-specific overrides to avoid double margins and enforce official pt sizes */
     .gov-a4-sheet {
       padding: 0 !important;
       margin: 0 !important;
@@ -142,6 +142,38 @@
       min-height: auto !important;
       background: transparent !important;
       color: #000000 !important;
+      font-size: 16pt !important;
+    }
+
+    /* สั่งพิมพ์ตามขนาดทางการของระเบียบสำนักนายกรัฐมนตรีฯ: ๒๙pt / ๒๐pt / ๑๖pt */
+    .gov-font-memo-title {
+      font-size: 29pt !important;
+      line-height: 1.15 !important;
+      font-weight: 800 !important;
+    }
+
+    .gov-font-field-label {
+      font-size: 20pt !important;
+      line-height: 1.25 !important;
+      font-weight: 700 !important;
+    }
+
+    .gov-font-field-value,
+    .gov-font-subject-label,
+    .gov-font-subject-value,
+    .gov-body-text {
+      font-size: 16pt !important;
+      line-height: 1.6 !important;
+    }
+
+    .gov-urgency-badge {
+      font-size: 24pt !important;
+      font-weight: 800 !important;
+    }
+
+    .gov-secret-badge {
+      font-size: 20pt !important;
+      font-weight: 800 !important;
     }
   }
 
@@ -158,7 +190,7 @@
     background-color: #ffffff;
     color: #000000;
     font-family: 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif !important;
-    font-size: 16pt;
+    font-size: 16px;
     line-height: 1.5;
   }
 
@@ -181,19 +213,19 @@
     font-family: 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif !important;
   }
 
-  /* คำว่า 'บันทึกข้อความ' ขนาด ๒๙ พอยต์ ตัวหนา */
+  /* คำว่า 'บันทึกข้อความ' (Web UI: 24px ตัวหนาพิเศษ | พิมพ์: 29pt) */
   .gov-font-memo-title {
-    font-size: 29pt !important;
-    line-height: 1.15 !important;
+    font-size: 24px !important;
+    line-height: 1.2 !important;
     font-weight: 800 !important;
     letter-spacing: 0.02em;
     font-family: 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif !important;
   }
 
-  /* ส่วนราชการ, ที่, วันที่ ขนาด ๒๐ พอยต์ ตัวหนา */
+  /* ส่วนราชการ, ที่, วันที่ (Web UI: 16px ตัวหนา | พิมพ์: 20pt) */
   .gov-font-field-label {
-    font-size: 20pt !important;
-    line-height: 1.25 !important;
+    font-size: 16px !important;
+    line-height: 1.35 !important;
     font-weight: 700 !important;
     font-family: 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif !important;
   }
@@ -214,16 +246,16 @@
     font-family: 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif !important;
   }
 
-  /* เนื้อหาหัวเรื่องทั่วไป ขนาด ๑๖ พอยต์ */
+  /* เนื้อหาหัวเรื่องทั่วไป ขนาด 16px (พิมพ์ 16pt) */
   .gov-font-field-value {
-    font-size: 16pt !important;
+    font-size: 16px !important;
     line-height: 1.4 !important;
     font-family: 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif !important;
   }
 
-  /* ตัวเนื้อหาเอกสารราชการ ขนาด ๑๖ พอยต์ และการจัดแนวชิดขอบซ้าย-ขวา (Justified) */
+  /* ตัวเนื้อหาเอกสารราชการ ขนาด 16px (พิมพ์ 16pt) และการจัดแนวชิดขอบซ้าย-ขวา (Justified) */
   .gov-body-text {
-    font-size: 16pt !important;
+    font-size: 16px !important;
     line-height: 1.6 !important;
     text-align: justify !important;
     text-justify: inter-cluster !important;
@@ -234,19 +266,19 @@
     text-indent: 2.5cm !important;
   }
 
-  /* ชั้นความเร็ว (ด่วนที่สุด, ด่วนมาก, ด่วน) สีแดงตัวหนา ขนาด ๒๔-๓๒ พอยต์ */
+  /* ชั้นความเร็ว (ด่วนที่สุด, ด่วนมาก, ด่วน) สีแดงตัวหนา ขนาด 16px (พิมพ์ 24pt) */
   .gov-urgency-badge {
     color: #dc2626 !important;
-    font-size: 24pt !important;
+    font-size: 16px !important;
     font-weight: 800 !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
-  /* ชั้นความลับ (ลับที่สุด, ลับมาก, ลับ) สีแดงตัวหนา */
+  /* ชั้นความลับ (ลับที่สุด, ลับมาก, ลับ) สีแดงตัวหนา ขนาด 16px (พิมพ์ 20pt) */
   .gov-secret-badge {
     color: #dc2626 !important;
-    font-size: 20pt !important;
+    font-size: 16px !important;
     font-weight: 800 !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
