@@ -174,8 +174,9 @@ export function NewCircularModal({
       setScannedPages(initialScannedPages);
       const firstPage = initialScannedPages[0];
       const isPdf =
-        firstPage.startsWith("data:application/pdf") ||
-        firstPage.toLowerCase().includes(".pdf");
+        !firstPage.startsWith("data:image/") &&
+        (firstPage.startsWith("data:application/pdf") ||
+          firstPage.toLowerCase().includes(".pdf"));
       setFileUrl(firstPage);
       setFileName(
         initialFileName ||
@@ -216,28 +217,31 @@ export function NewCircularModal({
   }, [fileUrl]);
 
   const activePdfUrl = blobPdfUrl || fileUrl;
-  const isPdfDocument =
-    fileType.includes("pdf") ||
-    fileName.toLowerCase().endsWith(".pdf") ||
-    Boolean(
-      fileUrl &&
-        (fileUrl.startsWith("data:application/pdf") ||
-          fileUrl.toLowerCase().includes(".pdf"))
-    );
+  const isPdfDocument = Boolean(
+    !fileUrl?.startsWith("data:image/") &&
+      (fileUrl?.startsWith("data:application/pdf") ||
+        (fileUrl && fileUrl.toLowerCase().includes(".pdf")) ||
+        (fileType.includes("pdf") && !fileType.includes("image")) ||
+        (fileName.toLowerCase().endsWith(".pdf") && !fileType.startsWith("image/")))
+  );
 
   const handleScannerFinished = (pages: string[], name: string) => {
     setScannedPages(pages);
-    setFileName(name);
     setFileUrl(pages[0] || "");
     setFileSize(pages.length * 450000);
-    const isPdf =
-      name.toLowerCase().endsWith(".pdf") ||
-      Boolean(
-        pages[0] &&
-          (pages[0].startsWith("data:application/pdf") ||
-            pages[0].toLowerCase().includes(".pdf"))
-      );
-    setFileType(isPdf ? "application/pdf" : "image/jpeg");
+
+    const firstPage = pages[0] || "";
+    const isActuallyPdf =
+      firstPage.startsWith("data:application/pdf") ||
+      (firstPage.toLowerCase().includes(".pdf") && !firstPage.startsWith("data:image/"));
+
+    let cleanName = name;
+    if (!isActuallyPdf && cleanName.toLowerCase().endsWith(".pdf")) {
+      cleanName = cleanName.replace(/\.pdf$/i, pages.length > 1 ? ".pdf" : ".jpg");
+    }
+
+    setFileName(cleanName);
+    setFileType(isActuallyPdf ? "application/pdf" : "image/jpeg");
     setShowAttachmentPreview(true);
     setActivePreviewPageIndex(0);
     setShowScannerModal(false);

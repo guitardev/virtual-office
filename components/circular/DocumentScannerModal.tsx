@@ -37,7 +37,7 @@ export function DocumentScannerModal({
   const [scannedPages, setScannedPages] = useState<string[]>([]);
   const [activeFilter, setActiveFilter] = useState<"doc" | "grayscale" | "color">("doc");
   const [isCapturing, setIsCapturing] = useState<boolean>(false);
-  const [docTitle, setDocTitle] = useState<string>(`หนังสือราชการสแกน_${new Date().toISOString().slice(0, 10)}.pdf`);
+  const [docTitle, setDocTitle] = useState<string>("");
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [showHelpGuide, setShowHelpGuide] = useState<boolean>(false);
 
@@ -52,19 +52,20 @@ export function DocumentScannerModal({
   const [nasFiles, setNasFiles] = useState<NasFileItem[]>([]);
 
   // Helper to detect if a file URL or data URL is a PDF
-  const isPdfUrl = (url?: string, title?: string) => {
+  const isPdfUrl = (url?: string) => {
     if (!url) return false;
-    return (
-      url.startsWith("data:application/pdf") ||
-      url.toLowerCase().includes(".pdf") ||
-      (title && title.toLowerCase().endsWith(".pdf"))
-    );
+    // Image data URLs are NEVER PDFs
+    if (url.startsWith("data:image/")) return false;
+    if (url.startsWith("data:application/pdf")) return true;
+    const cleanUrl = url.split("?")[0].toLowerCase();
+    if (cleanUrl.endsWith(".pdf") || url.toLowerCase().includes(".pdf")) return true;
+    return false;
   };
 
   // Convert Base64 PDF to native Blob URL for reliable browser preview
   useEffect(() => {
     const currentPage = scannedPages[selectedPageIndex] || scannedPages[0];
-    if (!currentPage) {
+    if (!currentPage || !isPdfUrl(currentPage)) {
       setActivePdfBlobUrl(null);
       return;
     }
@@ -88,12 +89,10 @@ export function DocumentScannerModal({
       } catch {
         setActivePdfBlobUrl(currentPage);
       }
-    } else if (isPdfUrl(currentPage, docTitle)) {
-      setActivePdfBlobUrl(currentPage);
     } else {
-      setActivePdfBlobUrl(null);
+      setActivePdfBlobUrl(currentPage);
     }
-  }, [scannedPages, selectedPageIndex, docTitle]);
+  }, [scannedPages, selectedPageIndex]);
 
   // Function to stop current stream
   const stopCurrentStream = useCallback(() => {
@@ -528,11 +527,22 @@ export function DocumentScannerModal({
 
   const handleFinish = () => {
     if (scannedPages.length === 0) return;
-    onPagesCaptured(scannedPages, docTitle);
+    let finalName = docTitle.trim();
+    const hasPdf = scannedPages.some((p) => isPdfUrl(p));
+    const defaultExt = hasPdf ? ".pdf" : (scannedPages.length > 1 ? ".pdf" : ".jpg");
+
+    if (!finalName) {
+      const today = new Date().toISOString().slice(0, 10);
+      finalName = `เอกสารสแกน_${today}${defaultExt}`;
+    } else if (!finalName.includes(".")) {
+      finalName = `${finalName}${defaultExt}`;
+    }
+
+    onPagesCaptured(scannedPages, finalName);
   };
 
   const activePage = scannedPages[selectedPageIndex] || scannedPages[0];
-  const isCurrentPagePdf = isPdfUrl(activePage, docTitle);
+  const isCurrentPagePdf = isPdfUrl(activePage);
 
   const scannerBodyAndFooter = (
     <>
@@ -935,7 +945,7 @@ export function DocumentScannerModal({
             ) : (
               <div className="grid grid-cols-2 gap-3">
                 {scannedPages.map((pageUrl, idx) => {
-                  const isPdf = isPdfUrl(pageUrl, docTitle);
+                  const isPdf = isPdfUrl(pageUrl);
                   const isSelected = viewfinderMode === "preview" && selectedPageIndex === idx;
 
                   return (
@@ -1005,15 +1015,25 @@ export function DocumentScannerModal({
           </div>
 
           {/* Document Name input */}
-          <div>
-            <label className="block text-[11px] font-bold text-slate-700 mb-1">
-              ตั้งชื่อไฟล์หนังสือที่สแกน
-            </label>
+          <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="block text-[11px] font-bold text-slate-700">
+                ตั้งชื่อไฟล์หนังสือที่สแกน (ไม่บังคับ)
+              </label>
+              <span className="text-[10px] text-slate-400">
+                เว้นว่างได้ ระบบจะกำหนดชื่อและนามสกุลตามเอกสารจริง
+              </span>
+            </div>
             <input
               type="text"
               value={docTitle}
               onChange={(e) => setDocTitle(e.target.value)}
-              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 font-mono"
+              placeholder={
+                scannedPages.length > 0
+                  ? `เช่น เอกสารสแกน_${new Date().toISOString().slice(0, 10)}`
+                  : "ระบุชื่อไฟล์ หรือเว้นว่างเพื่อตั้งชื่ออัตโนมัติตามประเภทไฟล์ที่นำเข้า"
+              }
+              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 font-mono focus:border-indigo-600 focus:outline-none"
             />
           </div>
         </div>
