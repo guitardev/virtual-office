@@ -14,7 +14,7 @@ import { resolveTargetRecipients } from "@/lib/circular-data";
 import { getUserNasSid, getClientSynologyConfig, uploadNasFileDirect } from "@/lib/synology";
 import { DocumentScannerModal } from "./DocumentScannerModal";
 import { ThaiCalendarDatePicker } from "./ThaiCalendarDatePicker";
-import { getTodayThaiDate, formatIsoToThaiDate } from "@/lib/thai-numerals";
+import { getTodayThaiDate, formatIsoToThaiDate, toThaiDigits } from "@/lib/thai-numerals";
 
 interface NewCircularModalProps {
   currentUser: Member;
@@ -261,7 +261,7 @@ export function NewCircularModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || resolvedRecipients.length === 0) return;
+    if (!title.trim() || !docNumber.trim() || resolvedRecipients.length === 0) return;
 
     const newDoc: CircularDocument = {
       id: `circ_${Date.now()}`,
@@ -361,14 +361,19 @@ export function NewCircularModal({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  เลขที่หนังสือ <span className="text-rose-500">*</span>
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[11px] font-bold text-slate-700">
+                    เลขที่หนังสือ <span className="text-rose-500">*</span>
+                  </label>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    ระบุเลขที่หนังสือส่ง
+                  </span>
+                </div>
                 <input
                   type="text"
                   required
                   value={docNumber}
-                  onChange={(e) => setDocNumber(e.target.value)}
+                  onChange={(e) => setDocNumber(toThaiDigits(e.target.value))}
                   placeholder="เช่น พม ๐๐๐๕/ว ๑๒๓๔"
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 font-mono font-bold focus:border-indigo-600"
                 />
@@ -978,7 +983,7 @@ export function NewCircularModal({
             <button
               type="submit"
               aria-label="ส่งหนังสือเวียนทันที ออกหนังสือเวียนทันที"
-              disabled={!title.trim() || resolvedRecipients.length === 0}
+              disabled={!title.trim() || !docNumber.trim() || resolvedRecipients.length === 0}
               className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-indigo-600/25 transition-all cursor-pointer flex items-center gap-2"
             >
               <span>📤 ส่งหนังสือเวียนทันที</span>
