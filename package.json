@@ -14,10 +14,6 @@
     "test:headed": "playwright test --headed",
     "test:report": "playwright show-report"
   },
-  "engines": {
-    "node": ">=24.20.0",
-    "npm": ">=11.19.0"
-  },
   "keywords": [],
   "author": "",
   "license": "ISC",
