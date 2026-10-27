@@ -19,6 +19,7 @@ import {
   CircularDocument,
   CircularUrgency,
   CircularSecretLevel,
+  OfficialDocumentType,
 } from "./types";
 import { INITIAL_MEMBERS, INITIAL_SYSTEM_MODULES, INITIAL_ACCESS_REQUESTS, INITIAL_AUDIT_LOGS } from "./rbac";
 import { INITIAL_VEHICLES, INITIAL_BOOKING_REQUESTS } from "./carbooking-data";
@@ -2033,6 +2034,9 @@ export function mapRowToCircularDoc(row: any): CircularDocument {
     totalCount: Number(row.total_count) || 0,
     acknowledgedCount: Number(row.acknowledged_count) || 0,
     status: (row.status as "active" | "closed" | "archived") || "active",
+    docType: (row.doc_type as OfficialDocumentType) || "memo",
+    referenceDoc: row.reference_doc || undefined,
+    attachmentList: row.attachment_list || undefined,
   };
 }
 
@@ -2046,6 +2050,9 @@ export function mapCircularDocToRow(doc: CircularDocument): any {
     title: doc.title,
     issued_date: doc.issuedDate,
     sender_org: doc.senderOrg,
+    doc_type: doc.docType || "memo",
+    reference_doc: doc.referenceDoc || null,
+    attachment_list: doc.attachmentList || null,
     urgency: doc.urgency,
     secret_level: doc.secretLevel,
     summary: doc.summary || null,

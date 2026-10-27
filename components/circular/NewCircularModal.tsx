@@ -8,6 +8,7 @@ import {
   CircularSecretLevel,
   CircularTargetCriteria,
   PersonnelType,
+  OfficialDocumentType,
 } from "@/lib/types";
 import { GOVERNMENT_DIVISIONS, GOVERNMENT_PERSONNEL_TYPES } from "@/lib/rbac";
 import {
@@ -18,6 +19,8 @@ import {
 import { getUserNasSid, getClientSynologyConfig, uploadNasFileDirect } from "@/lib/synology";
 import { DocumentScannerModal } from "./DocumentScannerModal";
 import { OfficialCircularSheet } from "./OfficialCircularSheet";
+import { ThaiCalendarDatePicker } from "./ThaiCalendarDatePicker";
+import { getTodayThaiDate, formatIsoToThaiDate } from "@/lib/thai-numerals";
 
 interface NewCircularModalProps {
   currentUser: Member;
@@ -51,18 +54,16 @@ export function NewCircularModal({
   const [activePreviewPageIndex, setActivePreviewPageIndex] = useState<number>(0);
   const [showAttachmentPreview, setShowAttachmentPreview] = useState<boolean>(true);
 
+  // Official Document Attributes
+  const [docType, setDocType] = useState<OfficialDocumentType>("memo");
   const [docNumber, setDocNumber] = useState<string>("พม ๐๐๐๕/ว ");
   const [title, setTitle] = useState<string>("");
-  const [issuedDate, setIssuedDate] = useState<string>(
-    new Date().toLocaleDateString("th-TH", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    })
-  );
+  const [issuedDate, setIssuedDate] = useState<string>(() => getTodayThaiDate());
   const [senderOrg, setSenderOrg] = useState<string>("สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร");
   const [urgency, setUrgency] = useState<CircularUrgency>("normal");
   const [secretLevel, setSecretLevel] = useState<CircularSecretLevel>("normal");
+  const [referenceDoc, setReferenceDoc] = useState<string>("");
+  const [attachmentList, setAttachmentList] = useState<string>("");
   const [summary, setSummary] = useState<string>("");
   const [deadline, setDeadline] = useState<string>("");
 
@@ -275,6 +276,9 @@ export function NewCircularModal({
 
     const newDoc: CircularDocument = {
       id: `circ_${Date.now()}`,
+      docType,
+      referenceDoc: referenceDoc.trim() || undefined,
+      attachmentList: attachmentList.trim() || undefined,
       docNumber: docNumber.trim() || "ว-ภายใน",
       title: title.trim(),
       issuedDate: issuedDate.trim(),
@@ -324,6 +328,9 @@ export function NewCircularModal({
   };
 
   const handleSelectPreset = (preset: CircularPreset) => {
+    if (preset.docType) setDocType(preset.docType);
+    setReferenceDoc(preset.referenceDoc || "");
+    setAttachmentList(preset.attachmentList || "");
     setDocNumber(preset.docNumber);
     setTitle(preset.title);
     setIssuedDate(preset.issuedDate);
@@ -373,6 +380,9 @@ export function NewCircularModal({
   const previewDoc: CircularDocument = useMemo(
     () => ({
       id: `circ_preview_${Date.now()}`,
+      docType,
+      referenceDoc: referenceDoc.trim() || undefined,
+      attachmentList: attachmentList.trim() || undefined,
       docNumber: docNumber.trim() || "ว-ภายใน",
       title: title.trim() || "ชื่อเรื่องหนังสือเวียนราชการ",
       issuedDate: issuedDate.trim(),
@@ -396,6 +406,9 @@ export function NewCircularModal({
       status: "active",
     }),
     [
+      docType,
+      referenceDoc,
+      attachmentList,
       docNumber,
       title,
       issuedDate,
@@ -482,6 +495,15 @@ export function NewCircularModal({
                   <div className="flex items-center justify-between gap-1 mb-1">
                     <span className="font-mono text-[10px] text-indigo-600 font-bold bg-indigo-50 px-1.5 py-0.2 rounded">
                       {p.docNumber}
+                    </span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-slate-100 text-slate-700">
+                      {p.docType === "external"
+                        ? "🏛️ ภายนอก"
+                        : p.docType === "command"
+                        ? "⚖️ คำสั่ง"
+                        : p.docType === "announcement"
+                        ? "📢 ประกาศ"
+                        : "📜 ภายใน"}
                     </span>
                     <span className="text-[10px] text-slate-400">{p.issuedDate}</span>
                   </div>
@@ -625,12 +647,117 @@ export function NewCircularModal({
         <div className="space-y-6">
           {/* Section 1: Official Header & Urgency */}
           <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-3">
-            <div className="text-xs font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-2">
-              <span>๑. ข้อมูลหนังสือราชการ</span>
-              <span className="text-[10px] text-indigo-600 font-mono">ระเบียบงานสารบรรณ</span>
+            <div className="text-xs font-bold text-slate-900 flex items-center justify-between border-b border-slate-100 pb-2">
+              <div className="flex items-center gap-2">
+                <span>๑. ข้อมูลหนังสือราชการ</span>
+                <span className="text-[10px] text-indigo-600 font-mono">ระเบียบงานสารบรรณ</span>
+              </div>
+              <span className="text-[10px] text-slate-500 font-medium">
+                รองรับมาตรฐาน ๔ รูปแบบราชการ
+              </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* แม่แบบหนังสือราชการ ๔ รูปแบบ */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 mb-1.5">
+                เลือกรูปแบบแม่แบบหนังสือราชการ <span className="text-rose-500">*</span>
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDocType("memo");
+                    if (docNumber === "" || docNumber.startsWith("พม ๐๐๐๕/๑") || docNumber.includes("๑๒/๒๕๖๙")) {
+                      setDocNumber("พม ๐๐๐๕/ว ");
+                    }
+                  }}
+                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                    docType === "memo"
+                      ? "border-indigo-600 bg-indigo-50/70 shadow-2xs"
+                      : "border-slate-200 bg-slate-50 hover:bg-white text-slate-700"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-950">
+                    <span>📜</span>
+                    <span>บันทึกข้อความ</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-1 leading-tight">
+                    หนังสือภายใน ครุฑ ๑.๕ ซม. มุมซ้ายบน
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDocType("external");
+                    if (docNumber === "" || docNumber.endsWith("/ว ") || docNumber.includes("๑๒/๒๕๖๙")) {
+                      setDocNumber("พม ๐๐๐๕/");
+                    }
+                  }}
+                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                    docType === "external"
+                      ? "border-indigo-600 bg-indigo-50/70 shadow-2xs"
+                      : "border-slate-200 bg-slate-50 hover:bg-white text-slate-700"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-950">
+                    <span>🏛️</span>
+                    <span>หนังสือภายนอก</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-1 leading-tight">
+                    ติดต่อภายนอก ครุฑ ๓.๐ ซม. กึ่งกลางบน
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDocType("command");
+                    if (docNumber === "" || docNumber.includes("พม ๐๐๐๕")) {
+                      setDocNumber("๑๒/๒๕๖๙");
+                    }
+                  }}
+                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                    docType === "command"
+                      ? "border-indigo-600 bg-indigo-50/70 shadow-2xs"
+                      : "border-slate-200 bg-slate-50 hover:bg-white text-slate-700"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-950">
+                    <span>⚖️</span>
+                    <span>คำสั่งราชการ</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-1 leading-tight">
+                    หนังสือสั่งการ ครุฑ ๓.๐ ซม. กึ่งกลางบน
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDocType("announcement");
+                    if (docNumber === "" || docNumber.includes("พม ๐๐๐๕")) {
+                      setDocNumber("๕/๒๕๖๙");
+                    }
+                  }}
+                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                    docType === "announcement"
+                      ? "border-indigo-600 bg-indigo-50/70 shadow-2xs"
+                      : "border-slate-200 bg-slate-50 hover:bg-white text-slate-700"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-950">
+                    <span>📢</span>
+                    <span>ประกาศราชการ</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-1 leading-tight">
+                    หนังสือประชาสัมพันธ์ ครุฑ ๓.๐ ซม.
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 mb-1">
                   เลขที่หนังสือ <span className="text-rose-500">*</span>
@@ -645,19 +772,13 @@ export function NewCircularModal({
                 />
               </div>
 
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  ลงวันที่ <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={issuedDate}
-                  onChange={(e) => setIssuedDate(e.target.value)}
-                  placeholder="เช่น ๑๖ ตุลาคม ๒๕๖๙"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:border-indigo-600"
-                />
-              </div>
+              <ThaiCalendarDatePicker
+                label="ลงวันที่"
+                required
+                value={issuedDate}
+                onChange={(thaiDate) => setIssuedDate(thaiDate)}
+                id="circular-doc-issued-date"
+              />
             </div>
 
             <div>
@@ -721,9 +842,16 @@ export function NewCircularModal({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  กำหนดส่งการรับทราบ/ถือปฏิบัติภายใน (ถ้ามี)
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[11px] font-bold text-slate-700">
+                    กำหนดส่งการรับทราบ/ถือปฏิบัติภายใน (ถ้ามี)
+                  </label>
+                  {deadline && (
+                    <span className="text-[10px] text-indigo-700 font-bold bg-indigo-50 px-1.5 py-0.2 rounded">
+                      {formatIsoToThaiDate(deadline)}
+                    </span>
+                  )}
+                </div>
                 <input
                   type="date"
                   value={deadline}
@@ -739,6 +867,35 @@ export function NewCircularModal({
                 <div className="px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-600 font-medium">
                   {currentUser.name} ({currentUser.position})
                 </div>
+              </div>
+            </div>
+
+            {/* ข้อมูลอ้างถึง & สิ่งที่ส่งมาด้วย (สำหรับหนังสือภายนอก หรือ บันทึกข้อความที่มีเอกสารอ้างอิง) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-0.5">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  อ้างถึง (หนังสืออ้างถึง ถ้ามี)
+                </label>
+                <input
+                  type="text"
+                  value={referenceDoc}
+                  onChange={(e) => setReferenceDoc(e.target.value)}
+                  placeholder="เช่น หนังสือจังหวัดกำแพงเพชร ที่ กพ ๐๐๓๒/ว ๑๔๒ ลงวันที่..."
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:border-indigo-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  สิ่งที่ส่งมาด้วย (ถ้ามี)
+                </label>
+                <input
+                  type="text"
+                  value={attachmentList}
+                  onChange={(e) => setAttachmentList(e.target.value)}
+                  placeholder="เช่น ๑. สำเนาประกาศ ๑ ฉบับ ๒. แบบฟอร์ม ๑ ชุด"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:border-indigo-600"
+                />
               </div>
             </div>
 

@@ -493,12 +493,17 @@ export interface CircularRecipientStatus {
   ipAddress?: string;
 }
 
+export type OfficialDocumentType = "memo" | "external" | "command" | "announcement";
+
 export interface CircularDocument {
   id: string;
   docNumber: string;
   title: string;
   issuedDate: string;
   senderOrg: string;
+  docType?: OfficialDocumentType;
+  referenceDoc?: string;
+  attachmentList?: string;
   urgency: CircularUrgency;
   secretLevel: CircularSecretLevel;
   summary?: string;
