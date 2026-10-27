@@ -133,6 +133,7 @@
 
     /* Print-specific overrides to avoid double margins and enforce official pt sizes */
     .gov-a4-sheet {
+      transform: none !important;
       padding: 0 !important;
       margin: 0 !important;
       box-shadow: none !important;

@@ -187,4 +187,45 @@ test.describe("ระบบพิมพ์หนังสือราชกา�
     await expect(officialSheet).toBeVisible();
     await expect(page.locator("strong:has-text('วันที่')").first()).toBeVisible();
   });
+
+  test("ระบบซูมมุมมองเอกสาร Responsive Viewport Scaling & Auto-Fit (พอดีจอ, ๗๕%, ๑๐๐%)", async ({
+    page,
+  }) => {
+    // 1. นำทางไปยังหน้าระบบเวียนหนังสือราชการ
+    const circularNav = page.locator("aside").getByRole("button", { name: /เวียนหนังสือราชการ/ });
+    await expect(circularNav).toBeVisible({ timeout: 10000 });
+    await circularNav.click();
+
+    // 2. คลิกดูเอกสารเพื่อเปิด OfficialCircularSheet
+    const card = page.locator('[data-testid="circular-doc-card-circ_print_test_001"]');
+    await expect(card).toBeVisible({ timeout: 10000 });
+    await card.locator("h3").click();
+
+    // 3. ตรวจสอบแถบเครื่องมือปรับมุมมอง (Zoom Controls)
+    const fitBtn = page.locator("button:has-text('พอดีจอ')").first();
+    const zoom75Btn = page.locator("button:has-text('๗๕%')").first();
+    const zoom100Btn = page.locator("button:has-text('๑๐๐%')").first();
+
+    await expect(fitBtn).toBeVisible({ timeout: 10000 });
+    await expect(zoom75Btn).toBeVisible();
+    await expect(zoom100Btn).toBeVisible();
+
+    // 4. สลับโหมดซูมเป็น ๗๕%
+    await zoom75Btn.click();
+    const sheetWrapper = page.locator(".gov-a4-sheet").first();
+    await expect(sheetWrapper).toBeVisible();
+    await expect(sheetWrapper).toHaveCSS("transform", /matrix\(0\.75/);
+
+    // 5. สลับโหมดซูมเป็น ๑๐๐%
+    await zoom100Btn.click();
+    await expect(sheetWrapper).toHaveCSS("transform", "none");
+
+    // 6. ทดสอบย่อขนาดหน้าจอเป็นมือถือ (Mobile Viewport 390x844)
+    await page.setViewportSize({ width: 390, height: 844 });
+    await fitBtn.click();
+
+    // แผ่นกระดาษต้องปรับสเกลพอดีหน้าจออัตโนมัติ โดยไม่เกิดการแตกหักของเลย์เอาต์ A4
+    await expect(sheetWrapper).toBeVisible();
+    await expect(page.locator("h1:has-text('บันทึกข้อความ')").first()).toBeVisible();
+  });
 });

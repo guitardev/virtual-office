@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { CircularDocument, OfficialDocumentType } from "@/lib/types";
 import { GarudaEmblem } from "./GarudaEmblem";
 import { DocumentVerificationQR } from "./DocumentVerificationQR";
@@ -38,6 +38,28 @@ export function OfficialCircularSheet({
     forcedType || doc.docType || "memo"
   );
   const [showMarginGuides, setShowMarginGuides] = useState<boolean>(false);
+  const [zoomMode, setZoomMode] = useState<"fit" | "100" | "75">("fit");
+  const [fitScale, setFitScale] = useState<number>(1);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const updateFitScale = () => {
+      if (!containerRef.current) return;
+      const availableWidth = containerRef.current.clientWidth - 24;
+      const a4WidthPx = 794; // approx 210mm in px at 96dpi
+      if (availableWidth > 0 && availableWidth < a4WidthPx) {
+        setFitScale(Math.max(0.35, Math.min(1, availableWidth / a4WidthPx)));
+      } else {
+        setFitScale(1);
+      }
+    };
+
+    updateFitScale();
+    window.addEventListener("resize", updateFitScale);
+    return () => window.removeEventListener("resize", updateFitScale);
+  }, []);
+
+  const activeScale = zoomMode === "fit" ? fitScale : zoomMode === "75" ? 0.75 : 1;
 
   const isUrgent = doc.urgency !== "normal";
 
@@ -139,8 +161,52 @@ export function OfficialCircularSheet({
             </div>
           )}
 
-          {/* Quick Actions: Toggle Margins & Direct Print */}
-          <div className="flex items-center gap-2">
+          {/* Quick Actions: Zoom / Fit & Margins & Direct Print */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Viewport Zoom & Auto-Fit Controller */}
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+              <span className="text-[11px] font-bold text-slate-500 px-1.5 flex items-center gap-1">
+                <span>🔍</span>
+                <span className="hidden sm:inline">มุมมอง:</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setZoomMode("fit")}
+                className={`px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  zoomMode === "fit"
+                    ? "bg-white text-indigo-700 shadow-2xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+                title="ปรับขนาดกระดาษให้พอดีกับหน้าจอมือถือ/แท็บเล็ตอัตโนมัติ"
+              >
+                พอดีจอ {fitScale < 0.98 ? `(${Math.round(fitScale * 100)}%)` : ""}
+              </button>
+              <button
+                type="button"
+                onClick={() => setZoomMode("75")}
+                className={`px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  zoomMode === "75"
+                    ? "bg-white text-indigo-700 shadow-2xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+                title="ขนาด 75%"
+              >
+                ๗๕%
+              </button>
+              <button
+                type="button"
+                onClick={() => setZoomMode("100")}
+                className={`px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  zoomMode === "100"
+                    ? "bg-white text-indigo-700 shadow-2xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+                title="ขนาดจริง 100% (A4 210mm)"
+              >
+                ๑๐๐%
+              </button>
+            </div>
+
             <button
               type="button"
               onClick={() => setShowMarginGuides(!showMarginGuides)}
@@ -149,10 +215,11 @@ export function OfficialCircularSheet({
                   ? "bg-indigo-600 border-indigo-600 text-white shadow-xs"
                   : "bg-slate-50 border-slate-300 text-slate-700 hover:bg-slate-100"
               }`}
-              title="แสดง/ซ่อนเส้นประจำลองระยะขอบกระดาษจริงตามระเบียบสารบรรณ"
+              title="แสดง/ซ่อนเส้นจำลองระยะขอบกระดาษจริงตามระเบียบสารบรรณ"
             >
               <span>📐</span>
-              <span>{showMarginGuides ? "ซ่อนเส้นขอบ A4" : "ตรวจระยะขอบ A4"}</span>
+              <span className="hidden sm:inline">{showMarginGuides ? "ซ่อนเส้นขอบ A4" : "ตรวจระยะขอบ A4"}</span>
+              <span className="sm:hidden">{showMarginGuides ? "ซ่อนขอบ" : "ขอบ A4"}</span>
             </button>
 
             <button
@@ -183,17 +250,34 @@ export function OfficialCircularSheet({
         </div>
       </div>
 
-      {/* ─── OFFICIAL DOCUMENT PAPER (EXACT A4 ONLY: 210mm x 297mm) ─── */}
+      {/* ─── RESPONSIVE SCROLL & VIEWPORT CONTAINER ─── */}
       <div
-        style={{
-          fontFamily: "'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif",
-          width: "210mm",
-          minHeight: "297mm",
-        }}
-        className={`gov-a4-sheet relative bg-white text-black rounded-lg border border-slate-300 shadow-xl transition-all ${
-          showMarginGuides ? "ring-2 ring-indigo-500/50" : ""
-        } ${className}`}
+        ref={containerRef}
+        className="w-full overflow-x-auto flex flex-col items-center py-2 px-1 min-w-0"
       >
+        <div
+          style={{
+            width: activeScale < 1 ? `calc(210mm * ${activeScale})` : "210mm",
+            height: activeScale < 1 ? `calc(297mm * ${activeScale} + 24px)` : "auto",
+            overflow: "visible",
+            transition: "width 0.2s ease-in-out, height 0.2s ease-in-out",
+          }}
+          className="flex justify-center print:!w-full print:!h-auto print:!overflow-visible"
+        >
+          {/* ─── OFFICIAL DOCUMENT PAPER (EXACT A4 ONLY: 210mm x 297mm) ─── */}
+          <div
+            style={{
+              fontFamily: "'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif",
+              width: "210mm",
+              minHeight: "297mm",
+              transform: activeScale < 1 ? `scale(${activeScale})` : "none",
+              transformOrigin: "top center",
+              transition: "transform 0.2s ease-in-out",
+            }}
+            className={`gov-a4-sheet relative bg-white text-black rounded-lg border border-slate-300 shadow-xl print:!transform-none ${
+              showMarginGuides ? "ring-2 ring-indigo-500/50" : ""
+            } ${className}`}
+          >
         {/* Visual Margins Overlay Guide (แสดงเฉพาะเมื่อเปิดโหมดตรวจระยะ) */}
         {showMarginGuides && (
           <div className="absolute inset-0 pointer-events-none print:hidden z-10">
@@ -660,6 +744,8 @@ export function OfficialCircularSheet({
             </div>
           </div>
         )}
+          </div>
+        </div>
       </div>
     </div>
   );
