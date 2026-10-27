@@ -49,9 +49,7 @@ export function CircularViewerModal({
   inPage = true,
 }: CircularViewerModalProps) {
   const [activeTab, setActiveTab] = useState<"doc" | "tracking">("doc");
-  const [docViewMode, setDocViewMode] = useState<"letter" | "attachment">(
-    doc.scannedPages && doc.scannedPages.length > 0 ? "attachment" : "letter"
-  );
+  const [docViewMode, setDocViewMode] = useState<"letter" | "attachment">("letter");
   const [currentPageIndex, setCurrentPageIndex] = useState<number>(0);
   const [showSignaturePad, setShowSignaturePad] = useState<boolean>(false);
   const [showPrintSlip, setShowPrintSlip] = useState<boolean>(false);
