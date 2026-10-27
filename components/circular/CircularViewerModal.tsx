@@ -4,7 +4,6 @@ import React, { useState, useEffect } from "react";
 import { Member, CircularDocument } from "@/lib/types";
 import { DigitalSignaturePad } from "./DigitalSignaturePad";
 import { CirculationPrintSlip } from "./CirculationPrintSlip";
-import { OfficialCircularSheet } from "./OfficialCircularSheet";
 
 export function getCircularFileDisplayUrl(fileUrl?: string): string {
   if (!fileUrl) return "/virtual-office/circular_docs/sample.pdf";
@@ -49,7 +48,6 @@ export function CircularViewerModal({
   inPage = true,
 }: CircularViewerModalProps) {
   const [activeTab, setActiveTab] = useState<"doc" | "tracking">("doc");
-  const [docViewMode, setDocViewMode] = useState<"letter" | "attachment">("letter");
   const [currentPageIndex, setCurrentPageIndex] = useState<number>(0);
   const [showSignaturePad, setShowSignaturePad] = useState<boolean>(false);
   const [showPrintSlip, setShowPrintSlip] = useState<boolean>(false);
@@ -164,39 +162,24 @@ export function CircularViewerModal({
         <div className="flex-1 overflow-y-auto p-6 bg-[#F8FAFC] print:p-0 print:bg-transparent print:overflow-visible">
           {activeTab === "doc" ? (
             <div className="space-y-4">
-              {/* Dual-Mode Selector: Official Letter vs Attachment */}
-              <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs print:hidden">
-                <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setDocViewMode("letter")}
-                    className={`px-3.5 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                      docViewMode === "letter"
-                        ? "bg-white text-indigo-700 shadow-2xs"
-                        : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    <span>📜</span>
-                    <span>หนังสือราชการตราครุฑ</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setDocViewMode("attachment")}
-                    className={`px-3.5 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                      docViewMode === "attachment"
-                        ? "bg-white text-indigo-700 shadow-2xs"
-                        : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    <span>📎</span>
-                    <span>ไฟล์แนบต้นฉบับ</span>
-                    {doc.fileName && (
-                      <span className="max-w-[140px] truncate text-[10px] text-slate-500 font-normal">
-                        ({doc.fileName})
-                      </span>
-                    )}
-                  </button>
+              {/* Document Header & Quick Actions */}
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs print:hidden">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-xl text-indigo-600 shrink-0">
+                    📎
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-800">
+                      {doc.fileName || "เอกสารหนังสือเวียนต้นฉบับ"}
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      {doc.scannedPages && doc.scannedPages.length > 0
+                        ? `เอกสารสแกน ${doc.scannedPages.length} หน้า`
+                        : doc.fileSize
+                        ? `${(doc.fileSize / (1024 * 1024)).toFixed(2)} MB`
+                        : "เอกสารทางราชการ"}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Quick actions for attachment */}
@@ -217,22 +200,17 @@ export function CircularViewerModal({
                       type="button"
                       onClick={onPrintSlip}
                       className="px-3.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold flex items-center gap-1.5 cursor-pointer transition-all border border-indigo-200"
-                      title="พิมพ์หนังสือราชการและผลการเวียน (เลือกพิมพ์เฉพาะหนังสือเวียน, ใบสรุปผล หรือรวมชุดสมบูรณ์)"
+                      title="พิมพ์รายงานผลการเวียนหนังสือราชการและบัญชีรายชื่อผู้รับทราบ"
                     >
                       <span>🖨️</span>
-                      <span>พิมพ์หนังสือราชการ</span>
+                      <span>พิมพ์รายงานผลการเวียน</span>
                     </button>
                   )}
                 </div>
               </div>
 
-              {/* View Content depending on docViewMode */}
-              {docViewMode === "letter" ? (
-                <div className="animate-fade-in flex flex-col items-center">
-                  <OfficialCircularSheet document={doc} />
-                </div>
-              ) : (
-                <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs flex flex-col items-center animate-fade-in">
+              {/* View Content: The Attached Document */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs flex flex-col items-center animate-fade-in">
                   {doc.scannedPages && doc.scannedPages.length > 0 ? (
                     <div className="w-full space-y-3">
                       {/* Multi-page controls */}
@@ -366,7 +344,6 @@ export function CircularViewerModal({
                     </div>
                   )}
                 </div>
-              )}
 
               {/* User Acknowledged Verified Stamp Card (If already signed) */}
               {isRecipient && hasAcknowledged && recipientRecord && (

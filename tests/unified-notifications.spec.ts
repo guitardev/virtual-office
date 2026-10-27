@@ -104,20 +104,13 @@ test.describe("ระบบแจ้งเตือนแบบรวมศู�
     await createBtn.click();
     await page.waitForTimeout(500);
 
-    // Open preset picker to quickly populate valid data
-    const presetBtn = page.getByRole("button", { name: /นำเข้าจากแม่แบบราชการมาตรฐาน/i });
-    await expect(presetBtn).toBeVisible();
-    await presetBtn.click();
-    await page.waitForTimeout(300);
-
-    // Click first preset template
-    const firstPreset = page.locator("button:has-text('แนวทางจัดสรรงบประมาณ'), button:has-text('พม ๐๐๐๕'), button:has-text('กพ ๐๐๓๒')").first();
-    await expect(firstPreset).toBeVisible();
-    await firstPreset.click();
+    // Fill circular title directly
+    const titleInput = page.locator("input[placeholder*='ระบุชื่อเรื่องหนังสือเวียน']");
+    await titleInput.fill("แนวทางการจัดสรรงบประมาณโครงการพัฒนาคุณภาพชีวิต");
     await page.waitForTimeout(300);
 
     // Submit circular document
-    const submitBtn = page.getByRole("button", { name: /ออกหนังสือเวียนทันที/i });
+    const submitBtn = page.getByRole("button", { name: /ส่งหนังสือเวียนทันที|ออกหนังสือเวียนทันที/i });
     await expect(submitBtn).toBeVisible();
     await submitBtn.click();
 

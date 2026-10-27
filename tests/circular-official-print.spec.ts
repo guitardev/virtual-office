@@ -1,6 +1,6 @@
 import { test, expect } from "./fixtures";
 
-test.describe("ระบบพิมพ์หนังสือราชการที่สมบูรณ์ (Complete Official Document Printing)", () => {
+test.describe("ระบบเวียนหนังสือราชการและรายงานผลการเวียน (Circular Documents & Slip Printing)", () => {
   test.beforeEach(async ({ page }) => {
     await page.route("**/rest/v1/circular_documents*", async (route) => {
       await route.fulfill({
@@ -55,11 +55,11 @@ test.describe("ระบบพิมพ์หนังสือราชกา�
       timeout: 10000,
     });
 
-    // 3. ตรวจสอบว่ามีปุ่ม 'พิมพ์หนังสือ' ในการ์ดรายการหนังสือเวียน
+    // 3. ตรวจสอบว่ามีปุ่มพิมพ์ในการ์ดรายการหนังสือเวียน
     const card = page.locator('[data-testid="circular-doc-card-circ_print_test_001"]');
     await expect(card).toBeVisible({ timeout: 10000 });
 
-    const printBtn = card.locator("button:has-text('พิมพ์หนังสือ')");
+    const printBtn = card.locator("button:has-text('พิมพ์')");
     await expect(printBtn).toBeVisible();
     await printBtn.click();
 
@@ -81,15 +81,14 @@ test.describe("ระบบพิมพ์หนังสือราชกา�
     await expect(letterTab).toBeVisible();
     await expect(slipTab).toBeVisible();
 
-    // 7. สลับไปยังโหมด 'เฉพาะหนังสือเวียน'
-    await letterTab.click();
-    await expect(printView.locator("h1:has-text('บันทึกข้อความ')")).toBeVisible();
-    await expect(printView.locator("text=กพ ๐๐๓๒/ว ๒๕๖๙").first()).toBeVisible();
-    await expect(printView.locator("text=ด่วนที่สุด").first()).toBeVisible();
-
-    // 8. ตรวจสอบ QR Code รับรองความถูกต้องตามระเบียบสารบรรณอิเล็กทรอนิกส์
+    // 7. ตรวจสอบ QR Code รับรองความถูกต้องตามระเบียบสารบรรณอิเล็กทรอนิกส์ในใบสรุปผล
     const qrSection = printView.locator("text=สแกนตรวจสอบความถูกต้อง").first();
     await expect(qrSection).toBeVisible();
+
+    // 8. สลับไปยังโหมด 'เฉพาะหนังสือเวียน'
+    await letterTab.click();
+    await expect(printView.locator("text=หนังสือเวียนทางราชการ").first()).toBeVisible();
+    await expect(printView.locator("text=กพ ๐๐๓๒/ว ๒๕๖๙").first()).toBeVisible();
 
     // 9. สลับไปยังโหมด 'เฉพาะใบสรุปผล'
     await slipTab.click();
@@ -99,7 +98,7 @@ test.describe("ระบบพิมพ์หนังสือราชกา�
     await expect(printView.locator("text=นางอรัญญา เกิดสุข")).toBeVisible();
   });
 
-  test("รองรับแม่แบบราชการมาตรฐานครบถ้วน ๔ รูปแบบ (บันทึกข้อความ, หนังสือภายนอก, คำสั่ง, ประกาศ)", async ({
+  test("ระบบรับ-ส่งและดูเอกสารแนบหนังสือเวียนต้นฉบับ พร้อมข้อมูลสรุปสาระสำคัญ (ตัดส่วนการร่างหนังสือออกทั้งหมด)", async ({
     page,
   }) => {
     // 1. นำทางไปยังหน้าระบบเวียนหนังสือราชการ
@@ -107,43 +106,24 @@ test.describe("ระบบพิมพ์หนังสือราชกา�
     await expect(circularNav).toBeVisible({ timeout: 10000 });
     await circularNav.click();
 
-    // 2. คลิกดูเอกสารเพื่อเปิด OfficialCircularSheet
+    // 2. คลิกดูเอกสารเพื่อเปิด CircularViewerModal
     const card = page.locator('[data-testid="circular-doc-card-circ_print_test_001"]');
     await expect(card).toBeVisible({ timeout: 10000 });
     await card.locator("h3").click();
 
-    // 3. ตรวจสอบแท็บสลับรูปแบบ ๔ รูปแบบ
-    const modal = page.locator("div[role='dialog']").first();
-    await expect(page.locator("text=รูปแบบหนังสือราชการ:")).toBeVisible({ timeout: 10000 });
+    // 3. ตรวจสอบข้อมูลหนังสือเวียนที่ได้รับ
+    await expect(page.locator("text=มาตรการและแนวปฏิบัติการรับ-ส่งหนังสือราชการอิเล็กทรอนิกส์").first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator("text=กพ ๐๐๓๒/ว ๒๕๖๙").first()).toBeVisible();
 
-    const memoTab = page.locator("button:has-text('บันทึกข้อความ (ภายใน)')");
-    const externalTab = page.locator("button:has-text('หนังสือภายนอก')");
-    const commandTab = page.locator("button:has-text('คำสั่งราชการ')");
-    const announcementTab = page.locator("button:has-text('ประกาศราชการ')");
+    // 4. ต้องไม่มีส่วนการร่างหนังสือราชการ หรือการสลับแม่แบบหนังสือราชการ ๔ รูปแบบ
+    await expect(page.locator("text=รูปแบบหนังสือราชการ:")).toHaveCount(0);
+    await expect(page.locator("button:has-text('บันทึกข้อความ (ภายใน)')")).toHaveCount(0);
+    await expect(page.locator("button:has-text('หนังสือภายนอก')")).toHaveCount(0);
+    await expect(page.locator("button:has-text('คำสั่งราชการ')")).toHaveCount(0);
+    await expect(page.locator("button:has-text('ประกาศราชการ')")).toHaveCount(0);
 
-    await expect(memoTab).toBeVisible();
-    await expect(externalTab).toBeVisible();
-    await expect(commandTab).toBeVisible();
-    await expect(announcementTab).toBeVisible();
-
-    // 4. ตรวจสอบแบบที่ ๑: บันทึกข้อความ (Memo) - หัวเรื่องบันทึกข้อความ และตราครุฑ 1.5 ซม.
-    await memoTab.click();
-    await expect(page.locator("h1:has-text('บันทึกข้อความ')")).toBeVisible();
-
-    // 5. ตรวจสอบแบบที่ ๒: หนังสือภายนอก (External Letter) - มี 'เรื่อง', 'เรียน', 'ขอแสดงความนับถือ'
-    await externalTab.click();
-    await expect(page.locator("text=ขอแสดงความนับถือ")).toBeVisible();
-    await expect(page.locator("text=ศูนย์ราชการจังหวัดกำแพงเพชร")).toBeVisible();
-
-    // 6. ตรวจสอบแบบที่ ๓: คำสั่งราชการ (Command) - มี 'คำสั่ง', 'ข้อ ๑', 'สั่ง ณ วันที่'
-    await commandTab.click();
-    await expect(page.locator("h1:has-text('คำสั่ง')")).toBeVisible();
-    await expect(page.locator("text=สั่ง ณ วันที่")).toBeVisible();
-
-    // 7. ตรวจสอบแบบที่ ๔: ประกาศราชการ (Announcement) - มี 'ประกาศ', 'ประกาศ ณ วันที่'
-    await announcementTab.click();
-    await expect(page.locator("h1:has-text('ประกาศ')")).toBeVisible();
-    await expect(page.locator("text=ประกาศ ณ วันที่")).toBeVisible();
+    // 5. ตรวจสอบปุ่มพิมพ์รายงานผลการเวียนในหน้าดูเอกสาร
+    await expect(page.locator("button:has-text('พิมพ์รายงานผลการเวียน')")).toBeVisible();
   });
 
   test("เลือก 'ลงวันที่ *' จาก Calendar Date Picker และแปลงเป็นเลขไทยอัตโนมัติ โดยเริ่มต้นเป็นวันที่ปัจจุบัน", async ({
@@ -179,16 +159,12 @@ test.describe("ระบบพิมพ์หนังสือราชกา�
     await expect(todayBtn).toBeVisible();
     await todayBtn.click();
 
-    // 8. สลับไปแท็บ Live Preview ตรวจสอบว่าหัวหนังสือราชการแสดงวันที่เป็นเลขไทย
-    const livePreviewTab = page.locator("button:has-text('ดูตัวอย่างหนังสือราชการตราครุฑ')");
-    await livePreviewTab.click();
-
-    const officialSheet = page.locator("h1:has-text('บันทึกข้อความ')");
-    await expect(officialSheet).toBeVisible();
-    await expect(page.locator("strong:has-text('วันที่')").first()).toBeVisible();
+    // 8. ต้องไม่มีแถบร่างหนังสือ หรือ Live Preview ตราครุฑ
+    await expect(page.locator("button:has-text('ดูตัวอย่างหนังสือราชการตราครุฑ')")).toHaveCount(0);
+    await expect(page.locator("button:has-text('นำเข้าจากแม่แบบราชการมาตรฐาน')")).toHaveCount(0);
   });
 
-  test("ระบบซูมมุมมองเอกสาร Responsive Viewport Scaling & Auto-Fit (พอดีจอ, ๗๕%, ๑๐๐%)", async ({
+  test("ระบบแสดงใบสรุปผลการเวียน (Circulation Slip) รองรับการเปิดบนหน้าจอมือถือได้อย่างสมบูรณ์", async ({
     page,
   }) => {
     // 1. นำทางไปยังหน้าระบบเวียนหนังสือราชการ
@@ -196,40 +172,26 @@ test.describe("ระบบพิมพ์หนังสือราชกา�
     await expect(circularNav).toBeVisible({ timeout: 10000 });
     await circularNav.click();
 
-    // 2. คลิกดูเอกสารเพื่อเปิด OfficialCircularSheet
+    // 2. คลิกดูเอกสาร
     const card = page.locator('[data-testid="circular-doc-card-circ_print_test_001"]');
     await expect(card).toBeVisible({ timeout: 10000 });
-    await card.locator("h3").click();
 
-    // 3. ตรวจสอบแถบเครื่องมือปรับมุมมอง (Zoom Controls)
-    const fitBtn = page.locator("button:has-text('พอดีจอ')").first();
-    const zoom75Btn = page.locator("button:has-text('๗๕%')").first();
-    const zoom100Btn = page.locator("button:has-text('๑๐๐%')").first();
+    const printBtn = card.locator("button:has-text('พิมพ์')");
+    await expect(printBtn).toBeVisible();
+    await printBtn.click();
 
-    await expect(fitBtn).toBeVisible({ timeout: 10000 });
-    await expect(zoom75Btn).toBeVisible();
-    await expect(zoom100Btn).toBeVisible();
+    // 3. ตรวจสอบหน้ารายงานผลการเวียน
+    const printView = page.locator("[data-testid='circulation-print-view']");
+    await expect(printView).toBeVisible();
 
-    // 4. สลับโหมดซูมเป็น ๗๕%
-    await zoom75Btn.click();
-    const sheetWrapper = page.locator(".gov-a4-sheet").first();
-    await expect(sheetWrapper).toBeVisible();
-    await expect(sheetWrapper).toHaveCSS("transform", /matrix\(0\.75/);
-
-    // 5. สลับโหมดซูมเป็น ๑๐๐%
-    await zoom100Btn.click();
-    await expect(sheetWrapper).toHaveCSS("transform", "none");
-
-    // 6. ทดสอบย่อขนาดหน้าจอเป็นมือถือ (Mobile Viewport 390x844)
+    // 4. ทดสอบย่อขนาดหน้าจอเป็นมือถือ (Mobile Viewport 390x844)
     await page.setViewportSize({ width: 390, height: 844 });
-    await fitBtn.click();
 
-    // แผ่นกระดาษต้องปรับสเกลพอดีหน้าจออัตโนมัติ โดยไม่เกิดการแตกหักของเลย์เอาต์ A4
-    await expect(sheetWrapper).toBeVisible();
-    await expect(page.locator("h1:has-text('บันทึกข้อความ')").first()).toBeVisible();
+    // แผ่นรายงานต้องแสดงผลได้โดยไม่ล้นจอหรือแตกหัก
+    await expect(printView.locator("h1:has-text('บันทึกผลการเวียนหนังสือราชการและหลักฐานการรับทราบ')")).toBeVisible();
   });
 
-  test("การพิมพ์หนังสือราชการ: ซ่อน Web UI ทั้งหมด (Sidebar, Header, ปุ่ม) และแสดงเฉพาะแผ่นเอกสาร A4 พร้อมตราประทับด่วนตำแหน่งที่ถูกต้อง", async ({
+  test("การพิมพ์ใบสรุปผลการเวียน: ซ่อน Web UI ทั้งหมด (Sidebar, Header, ปุ่ม) และแสดงเฉพาะแผ่นเอกสารพร้อมผลการลงนาม", async ({
     page,
   }) => {
     // 1. นำทางไปยังหน้าระบบเวียนหนังสือราชการ
@@ -237,28 +199,26 @@ test.describe("ระบบพิมพ์หนังสือราชกา�
     await expect(circularNav).toBeVisible({ timeout: 10000 });
     await circularNav.click();
 
-    // 2. คลิกดูเอกสารเพื่อเปิด OfficialCircularSheet
+    // 2. คลิกพิมพ์
     const card = page.locator('[data-testid="circular-doc-card-circ_print_test_001"]');
     await expect(card).toBeVisible({ timeout: 10000 });
-    await card.locator("h3").click();
+    const printBtn = card.locator("button:has-text('พิมพ์')");
+    await printBtn.click();
 
-    // 3. ตรวจสอบตราประทับด่วนในบันทึกข้อความ (ต้องอยู่คู่กับตราครุฑ ก่อนคำว่าบันทึกข้อความ)
-    const urgentBadge = page.locator(".gov-urgency-badge:has-text('ด่วนที่สุด')").first();
-    await expect(urgentBadge).toBeVisible();
+    const printView = page.locator("[data-testid='circulation-print-view']");
+    await expect(printView).toBeVisible();
 
-    // 4. จำลองโหมดพิมพ์กระดาษ (@media print)
+    // 3. จำลองโหมดพิมพ์กระดาษ (@media print)
     await page.emulateMedia({ media: "print" });
 
-    // 5. โครงสร้างเว็บ UI อื่นๆ ทั้งหมดต้องถูกซ่อนอย่างสมบูรณ์
+    // 4. โครงสร้างเว็บ UI อื่นๆ ทั้งหมดต้องถูกซ่อนอย่างสมบูรณ์
     const sidebar = page.locator("aside").first();
     await expect(sidebar).toBeHidden();
 
     const topHeader = page.locator("header").first();
     await expect(topHeader).toBeHidden();
 
-    // 6. แผ่นกระดาษ A4 (.gov-a4-sheet) ต้องยังคงแสดงผลอย่างถูกต้อง
-    const sheet = page.locator(".gov-a4-sheet").first();
-    await expect(sheet).toBeVisible();
-    await expect(sheet.locator("h1:has-text('บันทึกข้อความ')")).toBeVisible();
+    // 5. แผ่นใบสรุปผลการเวียนและหลักฐานการรับทราบ ต้องยังคงแสดงผลอย่างถูกต้อง
+    await expect(page.locator("h1:has-text('บันทึกผลการเวียนหนังสือราชการและหลักฐานการรับทราบ')")).toBeVisible();
   });
 });

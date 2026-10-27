@@ -8,17 +8,11 @@ import {
   CircularSecretLevel,
   CircularTargetCriteria,
   PersonnelType,
-  OfficialDocumentType,
 } from "@/lib/types";
 import { GOVERNMENT_DIVISIONS, GOVERNMENT_PERSONNEL_TYPES } from "@/lib/rbac";
-import {
-  resolveTargetRecipients,
-  CIRCULAR_OFFICIAL_PRESETS,
-  CircularPreset,
-} from "@/lib/circular-data";
+import { resolveTargetRecipients } from "@/lib/circular-data";
 import { getUserNasSid, getClientSynologyConfig, uploadNasFileDirect } from "@/lib/synology";
 import { DocumentScannerModal } from "./DocumentScannerModal";
-import { OfficialCircularSheet } from "./OfficialCircularSheet";
 import { ThaiCalendarDatePicker } from "./ThaiCalendarDatePicker";
 import { getTodayThaiDate, formatIsoToThaiDate } from "@/lib/thai-numerals";
 
@@ -43,10 +37,6 @@ export function NewCircularModal({
 }: NewCircularModalProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Sub-tabs for form: "edit" or "preview"
-  const [formSubTab, setFormSubTab] = useState<"edit" | "preview">("edit");
-  const [previewDocViewMode, setPreviewDocViewMode] = useState<"letter" | "attachment">("letter");
-  const [showPresetPicker, setShowPresetPicker] = useState<boolean>(false);
   const [isNasLoading, setIsNasLoading] = useState<boolean>(false);
   const [nasFiles, setNasFiles] = useState<{ name: string; path: string; size: number }[]>([]);
   const [showNasPicker, setShowNasPicker] = useState<boolean>(false);
@@ -55,7 +45,6 @@ export function NewCircularModal({
   const [showAttachmentPreview, setShowAttachmentPreview] = useState<boolean>(true);
 
   // Official Document Attributes
-  const [docType, setDocType] = useState<OfficialDocumentType>("memo");
   const [docNumber, setDocNumber] = useState<string>("พม ๐๐๐๕/ว ");
   const [title, setTitle] = useState<string>("");
   const [issuedDate, setIssuedDate] = useState<string>(() => getTodayThaiDate());
@@ -276,7 +265,7 @@ export function NewCircularModal({
 
     const newDoc: CircularDocument = {
       id: `circ_${Date.now()}`,
-      docType,
+      docType: "memo",
       referenceDoc: referenceDoc.trim() || undefined,
       attachmentList: attachmentList.trim() || undefined,
       docNumber: docNumber.trim() || "ว-ภายใน",
@@ -327,27 +316,6 @@ export function NewCircularModal({
     }
   };
 
-  const handleSelectPreset = (preset: CircularPreset) => {
-    if (preset.docType) setDocType(preset.docType);
-    setReferenceDoc(preset.referenceDoc || "");
-    setAttachmentList(preset.attachmentList || "");
-    setDocNumber(preset.docNumber);
-    setTitle(preset.title);
-    setIssuedDate(preset.issuedDate);
-    setSenderOrg(preset.senderOrg);
-    setUrgency(preset.urgency);
-    setSecretLevel(preset.secretLevel);
-    setSummary(preset.summary);
-    setFileName(preset.fileName);
-    setFileUrl(preset.fileUrl);
-    setFileSize(preset.fileSize);
-    setFileType("application/pdf");
-    setScannedPages([]);
-    setShowAttachmentPreview(true);
-    setActivePreviewPageIndex(0);
-    setShowPresetPicker(false);
-  };
-
   const handleFetchNasFiles = async () => {
     setShowNasPicker(true);
     setIsNasLoading(true);
@@ -377,274 +345,8 @@ export function NewCircularModal({
     setShowNasPicker(false);
   };
 
-  const previewDoc: CircularDocument = useMemo(
-    () => ({
-      id: `circ_preview_${Date.now()}`,
-      docType,
-      referenceDoc: referenceDoc.trim() || undefined,
-      attachmentList: attachmentList.trim() || undefined,
-      docNumber: docNumber.trim() || "ว-ภายใน",
-      title: title.trim() || "ชื่อเรื่องหนังสือเวียนราชการ",
-      issuedDate: issuedDate.trim(),
-      senderOrg: senderOrg.trim(),
-      urgency,
-      secretLevel,
-      summary: summary.trim(),
-      fileUrl: fileUrl || "/virtual-office/circular_docs/sample.pdf",
-      fileName: fileName || "เอกสารแนบหนังสือเวียน.pdf",
-      fileSize: fileSize || 1500000,
-      totalPages: scannedPages.length > 0 ? scannedPages.length : 1,
-      scannedPages: scannedPages.length > 0 ? scannedPages : undefined,
-      createdBy: currentUser.id,
-      createdByName: currentUser.name,
-      createdAt: new Date().toISOString(),
-      deadline: deadline ? new Date(deadline).toISOString() : undefined,
-      targetCriteria,
-      recipients: resolvedRecipients,
-      totalCount: resolvedRecipients.length,
-      acknowledgedCount: 0,
-      status: "active",
-    }),
-    [
-      docType,
-      referenceDoc,
-      attachmentList,
-      docNumber,
-      title,
-      issuedDate,
-      senderOrg,
-      urgency,
-      secretLevel,
-      summary,
-      fileUrl,
-      fileName,
-      fileSize,
-      scannedPages,
-      currentUser,
-      deadline,
-      targetCriteria,
-      resolvedRecipients,
-    ]
-  );
-
   const formInner = (
-    <>
-      {/* Top Controls: Mode Switcher & Quick Import Presets */}
-      <div className="space-y-3 pb-2 border-b border-slate-200">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl text-xs">
-            <button
-              type="button"
-              onClick={() => setFormSubTab("edit")}
-              className={`px-3.5 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                formSubTab === "edit"
-                  ? "bg-white text-indigo-700 shadow-2xs"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <span>📝</span>
-              <span>กรอกข้อมูลหนังสือเวียน</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setFormSubTab("preview")}
-              className={`px-3.5 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                formSubTab === "preview"
-                  ? "bg-white text-indigo-700 shadow-2xs"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <span>👁️</span>
-              <span>ดูตัวอย่างหนังสือราชการตราครุฑ (Live Preview)</span>
-            </button>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setShowPresetPicker(!showPresetPicker)}
-            className="px-3.5 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-          >
-            <span>✨</span>
-            <span>นำเข้าจากแม่แบบราชการมาตรฐาน</span>
-            <span>{showPresetPicker ? "▲" : "▼"}</span>
-          </button>
-        </div>
-
-        {/* Preset Drawer */}
-        {showPresetPicker && (
-          <div className="p-3.5 rounded-2xl bg-indigo-50/50 border border-indigo-200 space-y-2.5 animate-fade-in text-xs">
-            <div className="font-bold text-slate-800 flex items-center justify-between">
-              <span>เลือกแม่แบบหนังสือเวียนเพื่อกรอกข้อมูลและแนบไฟล์ตัวอย่างอัตโนมัติ:</span>
-              <button
-                type="button"
-                onClick={() => setShowPresetPicker(false)}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                ✕ ปิด
-              </button>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {CIRCULAR_OFFICIAL_PRESETS.map((p) => (
-                <button
-                  type="button"
-                  key={p.id}
-                  onClick={() => handleSelectPreset(p)}
-                  className="p-3 rounded-xl bg-white border border-indigo-100 hover:border-indigo-400 hover:shadow-xs transition-all cursor-pointer group text-left w-full"
-                >
-                  <div className="flex items-center justify-between gap-1 mb-1">
-                    <span className="font-mono text-[10px] text-indigo-600 font-bold bg-indigo-50 px-1.5 py-0.2 rounded">
-                      {p.docNumber}
-                    </span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-slate-100 text-slate-700">
-                      {p.docType === "external"
-                        ? "🏛️ ภายนอก"
-                        : p.docType === "command"
-                        ? "⚖️ คำสั่ง"
-                        : p.docType === "announcement"
-                        ? "📢 ประกาศ"
-                        : "📜 ภายใน"}
-                    </span>
-                    <span className="text-[10px] text-slate-400">{p.issuedDate}</span>
-                  </div>
-                  <div className="font-bold text-slate-800 group-hover:text-indigo-600 line-clamp-1">
-                    {p.name}
-                  </div>
-                  <div className="text-[11px] text-slate-500 line-clamp-2 mt-0.5">
-                    {p.summary}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {formSubTab === "preview" ? (
-        <div className="py-4 space-y-4 animate-fade-in">
-          {/* Dual-Mode Selector in Live Preview */}
-          <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
-            <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl text-xs">
-              <button
-                type="button"
-                onClick={() => setPreviewDocViewMode("letter")}
-                className={`px-3.5 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  previewDocViewMode === "letter"
-                    ? "bg-white text-indigo-700 shadow-2xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                <span>📜</span>
-                <span>หนังสือราชการตราครุฑ</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setPreviewDocViewMode("attachment")}
-                className={`px-3.5 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  previewDocViewMode === "attachment"
-                    ? "bg-white text-indigo-700 shadow-2xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                <span>📎</span>
-                <span>เอกสารแนบต้นฉบับ / หน้าสแกน</span>
-                {(fileName || scannedPages.length > 0) && (
-                  <span className="max-w-[140px] truncate text-[10px] text-slate-500 font-normal">
-                    ({fileName || `${scannedPages.length} หน้า`})
-                  </span>
-                )}
-              </button>
-            </div>
-
-            <div className="text-xs text-slate-500 font-medium">
-              บุคลากรเป้าหมาย {resolvedRecipients.length} คน
-            </div>
-          </div>
-
-          {previewDocViewMode === "letter" ? (
-            <OfficialCircularSheet document={previewDoc} showVerificationSeal={false} />
-          ) : (
-            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs flex flex-col items-center animate-fade-in space-y-3">
-              {scannedPages.length > 0 ? (
-                <div className="w-full space-y-3">
-                  <div className="flex items-center justify-between text-xs px-2">
-                    <span className="font-bold text-slate-700">
-                      หน้า {activePreviewPageIndex + 1} จาก {scannedPages.length}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        disabled={activePreviewPageIndex === 0}
-                        onClick={() => setActivePreviewPageIndex((p) => Math.max(0, p - 1))}
-                        className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer font-bold"
-                      >
-                        ◀ หน้าก่อน
-                      </button>
-                      <button
-                        type="button"
-                        disabled={activePreviewPageIndex === scannedPages.length - 1}
-                        onClick={() =>
-                          setActivePreviewPageIndex((p) =>
-                            Math.min(scannedPages.length - 1, p + 1)
-                          )
-                        }
-                        className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer font-bold"
-                      >
-                        หน้าถัดไป ▶
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="w-full max-h-[550px] overflow-auto bg-slate-900/5 rounded-xl border border-slate-200 flex items-center justify-center p-2">
-                    {scannedPages[activePreviewPageIndex]?.startsWith("data:application/pdf") ||
-                    scannedPages[activePreviewPageIndex]?.toLowerCase().includes(".pdf") ? (
-                      <object
-                        data={activePdfUrl}
-                        type="application/pdf"
-                        className="w-full h-[500px] rounded-lg"
-                      >
-                        <iframe
-                          src={activePdfUrl}
-                          title={`Document page ${activePreviewPageIndex + 1}`}
-                          className="w-full h-[500px] rounded-lg border-none bg-white"
-                        />
-                      </object>
-                    ) : (
-                      <img
-                        src={scannedPages[activePreviewPageIndex]}
-                        alt={`Document page ${activePreviewPageIndex + 1}`}
-                        className="max-h-[480px] w-auto object-contain shadow-md rounded"
-                      />
-                    )}
-                  </div>
-                </div>
-              ) : activePdfUrl ? (
-                <div className="w-full space-y-3">
-                  <div className="w-full h-[540px] rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
-                    <object
-                      data={activePdfUrl}
-                      type="application/pdf"
-                      className="w-full h-full"
-                    >
-                      <iframe
-                        src={activePdfUrl}
-                        title="ตัวอย่างเอกสารแนบ"
-                        className="w-full h-full border-none"
-                      />
-                    </object>
-                  </div>
-                </div>
-              ) : (
-                <div className="py-12 text-center text-slate-400 text-xs">
-                  ยังไม่ได้แนบเอกสาร หรือสแกนเอกสารเข้าระบบ
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="space-y-6">
+    <div className="space-y-6">
           {/* Section 1: Official Header & Urgency */}
           <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-3">
             <div className="text-xs font-bold text-slate-900 flex items-center justify-between border-b border-slate-100 pb-2">
@@ -1262,11 +964,9 @@ export function NewCircularModal({
               className="hidden"
             />
           </div>
-        </div>
-      )}
 
-      {/* Footer Submit */}
-          <div className="pt-2 flex items-center justify-between gap-3">
+          {/* Footer Submit */}
+          <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
             <button
               type="button"
               onClick={onClose}
@@ -1285,8 +985,8 @@ export function NewCircularModal({
               <span>({resolvedRecipients.length} ท่าน)</span>
             </button>
           </div>
-    </>
-  );
+        </div>
+      );
 
   if (inPage) {
     return (

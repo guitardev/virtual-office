@@ -4,7 +4,6 @@ import React, { useMemo, useState } from "react";
 import { CircularDocument, Member } from "@/lib/types";
 import { GarudaEmblem } from "./GarudaEmblem";
 import { DocumentVerificationQR } from "./DocumentVerificationQR";
-import { OfficialCircularSheet } from "./OfficialCircularSheet";
 import { toThaiDigits, toThaiDate, toThaiDateTime } from "@/lib/thai-numerals";
 
 export type CircularPrintMode = "all" | "letter" | "slip";
@@ -231,15 +230,15 @@ export function CirculationPrintSlip({
   // ส่วนของการแสดงผลตามโหมดการพิมพ์
   const printableArea = (
     <div className="space-y-8">
-      {/* 1. โหมด letter หรือ all: พิมพ์ตัวบันทึกข้อความตราครุฑ */}
-      {(printMode === "letter" || printMode === "all") && (
+      {/* 1. โหมด slip หรือ all: พิมพ์ใบสรุปผลการเวียนและบัญชีรายชื่อผู้รับทราบ */}
+      {(printMode === "slip" || printMode === "all") && (
         <div className={printMode === "all" ? "print-page-break" : ""}>
-          <OfficialCircularSheet document={doc} showVerificationSeal={true} />
+          {slipContent}
         </div>
       )}
 
-      {/* 2. โหมด all: พิมพ์เอกสารแนบ (Scanned Pages หรือ Attachment Info) */}
-      {printMode === "all" && doc.scannedPages && doc.scannedPages.length > 0 && (
+      {/* 2. โหมด all หรือ letter: พิมพ์เอกสารแนบประกอบหนังสือเวียน (Scanned Pages หรือหน้าเอกสารแนบ) */}
+      {(printMode === "all" || printMode === "letter") && doc.scannedPages && doc.scannedPages.length > 0 && (
         <div className="space-y-6">
           {doc.scannedPages.map((pageImg, idx) => (
             <div key={idx} className="print-page-break bg-white p-4 sm:p-8 rounded-2xl border border-slate-200 print:border-none print:p-0 flex flex-col items-center">
@@ -256,10 +255,31 @@ export function CirculationPrintSlip({
         </div>
       )}
 
-      {/* 3. โหมด slip หรือ all: พิมพ์ใบสรุปผลการเวียนและบัญชีรายชื่อผู้รับทราบ */}
-      {(printMode === "slip" || printMode === "all") && (
-        <div className={printMode === "all" ? "print-page-break pt-4" : ""}>
-          {slipContent}
+      {/* กรณีเลือกพิมพ์เฉพาะหนังสือเวียนแต่ไม่มี scannedPages ให้แสดงข้อมูลสรุปหนังสือเวียน */}
+      {printMode === "letter" && (!doc.scannedPages || doc.scannedPages.length === 0) && (
+        <div className="gov-a4-sheet bg-white border border-slate-200 rounded-xl p-8 space-y-4 print:border-none print:shadow-none">
+          <div className="text-center space-y-2 border-b-2 border-slate-900 pb-5">
+            <div className="flex justify-center mb-1">
+              <GarudaEmblem size="2cm" />
+            </div>
+            <h2 className="text-lg font-bold text-slate-900 print:text-black">
+              หนังสือเวียนทางราชการ
+            </h2>
+            <p className="text-xs text-slate-600 print:text-black">
+              {toThaiDigits(doc.title)}
+            </p>
+          </div>
+          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-2 print:bg-transparent">
+            <div><strong>เลขที่หนังสือ:</strong> {toThaiDigits(doc.docNumber)}</div>
+            <div><strong>ลงวันที่:</strong> {toThaiDate(doc.issuedDate)}</div>
+            <div><strong>หน่วยงานต้นทาง:</strong> {toThaiDigits(doc.senderOrg || "-")}</div>
+            <div><strong>ไฟล์เอกสารแนบ:</strong> {doc.fileName || "เอกสารแนบประกอบหนังสือเวียน"}</div>
+            {doc.summary && (
+              <div className="pt-2 border-t border-slate-200">
+                <strong>สรุปสาระสำคัญ:</strong> {toThaiDigits(doc.summary)}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
