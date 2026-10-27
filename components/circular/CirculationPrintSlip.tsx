@@ -54,7 +54,7 @@ export function CirculationPrintSlip({
 
   // ส่วนของใบสรุปผลการเวียนและบัญชีลงนาม (Routing & Acknowledgment Slip)
   const slipContent = (
-    <div className="official-slip-sheet space-y-6">
+    <div className="gov-a4-sheet official-slip-sheet space-y-6 bg-white border border-slate-200 rounded-xl shadow-xs print:shadow-none print:border-none">
       {/* Government Emblem / Garuda Header */}
       <div className="text-center space-y-2 mb-6 border-b-2 border-slate-900 pb-5 print:border-black">
         <div className="flex justify-center mb-1">

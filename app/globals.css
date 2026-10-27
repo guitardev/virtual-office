@@ -102,7 +102,7 @@
   @media print {
     @page {
       size: A4 portrait;
-      margin: 20mm 15mm 20mm 25mm;
+      margin: 25mm 20mm 20mm 30mm; /* ระเบียบงานสารบรรณ: ขอบบน ๒.๕ ซม., ขวา ๒.๐ ซม., ล่าง ๒.๐ ซม., ซ้าย ๓.๐ ซม. */
     }
 
     html, body {
@@ -130,6 +130,95 @@
       break-inside: avoid !important;
       page-break-inside: avoid !important;
     }
+
+    /* Print-specific overrides to avoid double margins */
+    .gov-a4-sheet {
+      padding: 0 !important;
+      margin: 0 !important;
+      box-shadow: none !important;
+      border: none !important;
+      width: 100% !important;
+      max-width: none !important;
+      min-height: auto !important;
+      background: transparent !important;
+      color: #000000 !important;
+    }
+  }
+
+  /* ─── Thai Government Standard Document Typography & Paper Model ─── */
+  .gov-a4-sheet {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 210mm;
+    min-height: 297mm;
+    /* จำลองขอบกระดาษราชการจริง: บน 2.5 ซม. ขวา 2.0 ซม. ล่าง 2.0 ซม. ซ้าย 3.0 ซม. */
+    padding: 25mm 20mm 20mm 30mm;
+    margin-left: auto;
+    margin-right: auto;
+    background-color: #ffffff;
+    color: #000000;
+    font-family: 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif;
+    font-size: 16pt;
+    line-height: 1.5;
+  }
+
+  /* คำว่า 'บันทึกข้อความ' ขนาด ๒๙ พอยต์ ตัวหนา */
+  .gov-font-memo-title {
+    font-size: 29pt !important;
+    line-height: 1.15 !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.02em;
+  }
+
+  /* ส่วนราชการ, ที่, วันที่, เรื่อง ขนาด ๒๐ พอยต์ ตัวหนา */
+  .gov-font-field-label {
+    font-size: 20pt !important;
+    line-height: 1.25 !important;
+    font-weight: 700 !important;
+  }
+
+  /* เนื้อหาหัวเรื่อง ขนาด ๑๖ พอยต์ */
+  .gov-font-field-value {
+    font-size: 16pt !important;
+    line-height: 1.4 !important;
+  }
+
+  /* ตัวเนื้อหาเอกสารราชการ ขนาด ๑๖ พอยต์ และการจัดแนวชิดขอบซ้าย-ขวา (Justified) */
+  .gov-body-text {
+    font-size: 16pt !important;
+    line-height: 1.6 !important;
+    text-align: justify !important;
+    text-justify: inter-cluster !important;
+  }
+
+  /* ย่อหน้าตัวอักษร ๒.๕ เซนติเมตร ตามระเบียบงานสารบรรณ */
+  .gov-indent-para {
+    text-indent: 2.5cm !important;
+  }
+
+  /* ชั้นความเร็ว (ด่วนที่สุด, ด่วนมาก, ด่วน) สีแดงตัวหนา ขนาด ๒๔-๓๒ พอยต์ */
+  .gov-urgency-badge {
+    color: #dc2626 !important;
+    font-size: 24pt !important;
+    font-weight: 800 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* ชั้นความลับ (ลับที่สุด, ลับมาก, ลับ) สีแดงตัวหนา */
+  .gov-secret-badge {
+    color: #dc2626 !important;
+    font-size: 20pt !important;
+    font-weight: 800 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* จุดกึ่งกลางหน้ากระดาษ ๕๐% (Midpoint Alignment) */
+  .gov-midpoint-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    align-items: baseline !important;
   }
 }
 
