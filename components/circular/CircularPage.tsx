@@ -183,10 +183,19 @@ export const CircularPage: React.FC<CircularPageProps> = ({
           return true;
         }
         const myStatus = doc.recipients.find((r) => r.memberId === currentUser.id);
-        if (!myStatus) return false; // not targeted
+        const isCreatedByMe = doc.createdBy === currentUser.id;
 
-        if (statusFilter === "pending") return !myStatus.isAcknowledged;
-        if (statusFilter === "completed") return myStatus.isAcknowledged;
+        // In inbox: show documents targeted to me, OR dispatched by me
+        if (!myStatus && !isCreatedByMe) return false;
+
+        if (statusFilter === "pending") {
+          if (myStatus) return !myStatus.isAcknowledged;
+          return !isDocFullyAcked;
+        }
+        if (statusFilter === "completed") {
+          if (myStatus) return myStatus.isAcknowledged;
+          return isDocFullyAcked;
+        }
         return true;
       }
 
@@ -521,10 +530,10 @@ export const CircularPage: React.FC<CircularPageProps> = ({
       <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
           {/* Main Tabs */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar flex-nowrap pb-1 w-full md:w-auto">
             <button
               onClick={() => setActiveTab("inbox")}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 cursor-pointer ${
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 cursor-pointer shrink-0 ${
                 activeTab === "inbox"
                   ? "bg-indigo-50 text-indigo-700 font-semibold"
                   : "text-slate-600 hover:bg-slate-50"
@@ -541,7 +550,7 @@ export const CircularPage: React.FC<CircularPageProps> = ({
 
             <button
               onClick={() => setActiveTab("all")}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 cursor-pointer ${
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 cursor-pointer shrink-0 ${
                 activeTab === "all"
                   ? "bg-indigo-50 text-indigo-700 font-semibold"
                   : "text-slate-600 hover:bg-slate-50"
@@ -553,7 +562,7 @@ export const CircularPage: React.FC<CircularPageProps> = ({
 
             <button
               onClick={() => setActiveTab("tracking")}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 cursor-pointer ${
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 cursor-pointer shrink-0 ${
                 activeTab === "tracking"
                   ? "bg-indigo-50 text-indigo-700 font-semibold"
                   : "text-slate-600 hover:bg-slate-50"
@@ -722,14 +731,25 @@ export const CircularPage: React.FC<CircularPageProps> = ({
               </div>
             </div>
           ) : filteredDocuments.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center">
+            <div className="bg-white rounded-2xl border border-slate-100 p-8 sm:p-12 text-center">
               <span className="text-5xl block mb-3">📭</span>
               <h3 className="text-base font-semibold text-slate-700">ไม่พบหนังสือเวียนตามเงื่อนไขที่เลือก</h3>
-              <p className="text-sm text-slate-400 mt-1">
+              <p className="text-sm text-slate-400 mt-1 max-w-md mx-auto">
                 {activeTab === "inbox"
                   ? "ไม่มีหนังสือเวียนที่ส่งถึงคุณ หรือคุณได้รับทราบครบถ้วนแล้ว"
                   : "ลองปรับเปลี่ยนคำค้นหาหรือตัวกรองความเร่งด่วน"}
               </p>
+              {activeTab === "inbox" && documents.length > 0 && (
+                <div className="mt-4">
+                  <button
+                    onClick={() => setActiveTab("all")}
+                    className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-sm font-semibold rounded-xl border border-indigo-200 transition-colors inline-flex items-center gap-2 cursor-pointer"
+                  >
+                    <span>📤</span>
+                    <span>ดูในทะเบียนส่งเวียนทั้งหมด ({documents.length} ฉบับ)</span>
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4">
@@ -741,6 +761,7 @@ export const CircularPage: React.FC<CircularPageProps> = ({
                 const percent = totalCount > 0 ? Math.round((ackCount / totalCount) * 100) : 100;
                 const isTargeted = currentUser?.role !== "admin" && !!userStatus;
                 const isSigned = userStatus?.isAcknowledged;
+                const isCreatedByMe = currentUser && doc.createdBy === currentUser.id;
 
                 return (
                   <div
@@ -824,6 +845,10 @@ export const CircularPage: React.FC<CircularPageProps> = ({
                             <span>✍️</span> รอคุณลงนาม
                           </span>
                         )
+                      ) : isCreatedByMe ? (
+                        <span className="px-2.5 py-0.5 bg-blue-50 text-blue-700 text-xs font-semibold rounded-full border border-blue-200">
+                          📤 คุณเป็นผู้ส่งเวียน
+                        </span>
                       ) : (
                         <span className="px-2.5 py-0.5 bg-slate-100 text-slate-500 text-xs rounded-full">
                           ไม่ได้อยู่ในกลุ่มเป้าหมาย

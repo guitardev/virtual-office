@@ -225,16 +225,14 @@ export function loadStoredCircularDocs(): CircularDocument[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      // Purge obsolete mock documents permanently
+      // Purge obsolete mock IDs if any
       const cleaned = parsed.filter(
         (d) =>
           d &&
           d.id !== "circ_2569_001" &&
           d.id !== "circ_2569_002" &&
           d.id !== "circ_1792470539133" &&
-          d.id !== "circ_1792470817460" &&
-          d.title !== "ทดสอบเวียน" &&
-          d.title !== "test"
+          d.id !== "circ_1792470817460"
       );
       if (cleaned.length !== parsed.length) {
         saveStoredCircularDocs(cleaned);
