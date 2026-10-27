@@ -649,112 +649,12 @@ export function NewCircularModal({
           <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-3">
             <div className="text-xs font-bold text-slate-900 flex items-center justify-between border-b border-slate-100 pb-2">
               <div className="flex items-center gap-2">
-                <span>๑. ข้อมูลหนังสือราชการ</span>
-                <span className="text-[10px] text-indigo-600 font-mono">ระเบียบงานสารบรรณ</span>
+                <span>๑. ข้อมูลหนังสือเวียนที่นำมาเวียน</span>
+                <span className="text-[10px] text-indigo-600 font-mono">รับ - ส่ง หนังสือเวียน</span>
               </div>
               <span className="text-[10px] text-slate-500 font-medium">
-                รองรับมาตรฐาน ๔ รูปแบบราชการ
+                ระบุเลขที่ เรื่อง และวันที่ของหนังสือเวียนต้นฉบับ
               </span>
-            </div>
-
-            {/* แม่แบบหนังสือราชการ ๔ รูปแบบ */}
-            <div>
-              <label className="block text-[11px] font-bold text-slate-700 mb-1.5">
-                เลือกรูปแบบแม่แบบหนังสือราชการ <span className="text-rose-500">*</span>
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDocType("memo");
-                    if (docNumber === "" || docNumber.startsWith("พม ๐๐๐๕/๑") || docNumber.includes("๑๒/๒๕๖๙")) {
-                      setDocNumber("พม ๐๐๐๕/ว ");
-                    }
-                  }}
-                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                    docType === "memo"
-                      ? "border-indigo-600 bg-indigo-50/70 shadow-2xs"
-                      : "border-slate-200 bg-slate-50 hover:bg-white text-slate-700"
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-950">
-                    <span>📜</span>
-                    <span>บันทึกข้อความ</span>
-                  </div>
-                  <div className="text-[10px] text-slate-500 mt-1 leading-tight">
-                    หนังสือภายใน ครุฑ ๑.๕ ซม. มุมซ้ายบน
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDocType("external");
-                    if (docNumber === "" || docNumber.endsWith("/ว ") || docNumber.includes("๑๒/๒๕๖๙")) {
-                      setDocNumber("พม ๐๐๐๕/");
-                    }
-                  }}
-                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                    docType === "external"
-                      ? "border-indigo-600 bg-indigo-50/70 shadow-2xs"
-                      : "border-slate-200 bg-slate-50 hover:bg-white text-slate-700"
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-950">
-                    <span>🏛️</span>
-                    <span>หนังสือภายนอก</span>
-                  </div>
-                  <div className="text-[10px] text-slate-500 mt-1 leading-tight">
-                    ติดต่อภายนอก ครุฑ ๓.๐ ซม. กึ่งกลางบน
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDocType("command");
-                    if (docNumber === "" || docNumber.includes("พม ๐๐๐๕")) {
-                      setDocNumber("๑๒/๒๕๖๙");
-                    }
-                  }}
-                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                    docType === "command"
-                      ? "border-indigo-600 bg-indigo-50/70 shadow-2xs"
-                      : "border-slate-200 bg-slate-50 hover:bg-white text-slate-700"
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-950">
-                    <span>⚖️</span>
-                    <span>คำสั่งราชการ</span>
-                  </div>
-                  <div className="text-[10px] text-slate-500 mt-1 leading-tight">
-                    หนังสือสั่งการ ครุฑ ๓.๐ ซม. กึ่งกลางบน
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDocType("announcement");
-                    if (docNumber === "" || docNumber.includes("พม ๐๐๐๕")) {
-                      setDocNumber("๕/๒๕๖๙");
-                    }
-                  }}
-                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                    docType === "announcement"
-                      ? "border-indigo-600 bg-indigo-50/70 shadow-2xs"
-                      : "border-slate-200 bg-slate-50 hover:bg-white text-slate-700"
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-950">
-                    <span>📢</span>
-                    <span>ประกาศราชการ</span>
-                  </div>
-                  <div className="text-[10px] text-slate-500 mt-1 leading-tight">
-                    หนังสือประชาสัมพันธ์ ครุฑ ๓.๐ ซม.
-                  </div>
-                </button>
-              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
@@ -1377,10 +1277,11 @@ export function NewCircularModal({
 
             <button
               type="submit"
+              aria-label="ส่งหนังสือเวียนทันที ออกหนังสือเวียนทันที"
               disabled={!title.trim() || resolvedRecipients.length === 0}
               className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-indigo-600/25 transition-all cursor-pointer flex items-center gap-2"
             >
-              <span>🚀 ออกหนังสือเวียนทันที</span>
+              <span>📤 ส่งหนังสือเวียนทันที</span>
               <span>({resolvedRecipients.length} ท่าน)</span>
             </button>
           </div>
@@ -1402,14 +1303,14 @@ export function NewCircularModal({
               <span>ย้อนกลับไปรายการหนังสือเวียน</span>
             </button>
             <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center text-xl">
-              📜
+              📤
             </div>
             <div>
               <h3 className="text-base sm:text-lg font-bold font-heading text-slate-800">
-                สร้างหนังสือเวียนราชการใหม่ (New Circular Document)
+                ส่งหนังสือเวียนราชการ (Dispatch Circular Document)
               </h3>
               <p className="text-xs text-slate-500">
-                ออกหนังสือเวียน กำหนดกลุ่มเป้าหมาย และระบบลงนามรับทราบตามระเบียบสารบรรณ
+                ส่งต่อหนังสือเวียนที่ได้รับมา กำหนดกลุ่มเป้าหมายผู้รับ และติดตามรายงานผลการลงนามรับทราบ
               </p>
             </div>
           </div>
@@ -1448,14 +1349,14 @@ export function NewCircularModal({
         <div className="px-6 py-4 bg-gradient-to-r from-slate-900 to-indigo-950 text-white flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-xl">
-              📜
+              📤
             </div>
             <div>
               <h3 className="text-base font-bold font-heading text-white">
-                สร้างหนังสือเวียนราชการใหม่ (New Circular Document)
+                ส่งหนังสือเวียนราชการ (Dispatch Circular Document)
               </h3>
               <p className="text-xs text-indigo-200">
-                ออกหนังสือเวียน กำหนดกลุ่มเป้าหมาย และระบบลงนามรับทราบตามระเบียบสารบรรณ
+                ส่งต่อหนังสือเวียนที่ได้รับมา กำหนดกลุ่มเป้าหมายผู้รับ และติดตามรายงานผลการลงนามรับทราบ
               </p>
             </div>
           </div>

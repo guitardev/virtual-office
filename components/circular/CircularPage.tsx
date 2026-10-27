@@ -242,11 +242,11 @@ export const CircularPage: React.FC<CircularPageProps> = ({
     await saveCircularDoc(newDoc);
     recordAuditLog(
       currentUser?.name || newDoc.createdByName || "เจ้าหน้าที่",
-      `ออกหนังสือเวียนใหม่: ${newDoc.docNumber}`,
+      `ส่งหนังสือเวียน: ${newDoc.docNumber}`,
       `เรื่อง: ${newDoc.title} (กลุ่มเป้าหมาย ${newDoc.totalCount} คน)`,
       "success"
     ).catch(console.warn);
-    showToast(`ออกหนังสือเวียนเลขที่ ${newDoc.docNumber} สำเร็จ (บันทึกลงฐานข้อมูลแล้ว)`);
+    showToast(`ส่งหนังสือเวียน (ออกหนังสือเวียน) เลขที่ ${newDoc.docNumber} สำเร็จ (บันทึกลงฐานข้อมูลแล้ว)`);
     onDocumentCreated?.(newDoc);
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("smartmso:circular_created", { detail: newDoc }));
@@ -385,9 +385,12 @@ export const CircularPage: React.FC<CircularPageProps> = ({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-3xl">📜</span>
+            <span className="text-3xl">📬</span>
             <div className="flex flex-wrap items-center gap-2.5">
               <h1 className="text-2xl font-bold text-slate-800">ระบบเวียนหนังสือราชการอิเล็กทรอนิกส์</h1>
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                รับ - ส่ง หนังสือเวียน & รายงานผล
+              </span>
               {isLoading ? (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
                   <svg className="w-3 h-3 animate-spin text-indigo-600" viewBox="0 0 24 24" fill="none">
@@ -410,7 +413,7 @@ export const CircularPage: React.FC<CircularPageProps> = ({
             </div>
           </div>
           <p className="text-slate-500 text-sm mt-1">
-            เวียนหนังสือตามฝ่ายงาน/ประเภทบุคลากร พร้อมระบบสแกนเอกสาร ลงนามดิจิทัล และติดตามผลแบบเรียลไทม์
+            ศูนย์รับ-ส่งหนังสือเวียนราชการ: ตรวจสอบหนังสือเข้า ลงนามรับทราบ ส่งต่อหนังสือเวียนตามกลุ่มงาน และติดตามรายงานผลการเวียนเรียลไทม์
           </p>
         </div>
 
@@ -435,11 +438,14 @@ export const CircularPage: React.FC<CircularPageProps> = ({
           </button>
 
           <button
+            type="button"
+            aria-label="ส่งหนังสือเวียน ออกหนังสือเวียนใหม่"
             onClick={() => setViewMode("create")}
             className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium text-sm transition-shadow shadow-sm hover:shadow cursor-pointer"
+            title="นำหนังสือเวียนที่ได้รับมาลงทะเบียนและส่งเวียนต่อให้บุคลากรในสังกัด"
           >
-            <span>➕</span>
-            <span>ออกหนังสือเวียนใหม่</span>
+            <span>📤</span>
+            <span>ส่งหนังสือเวียน</span>
           </button>
         </div>
       </div>
@@ -525,7 +531,7 @@ export const CircularPage: React.FC<CircularPageProps> = ({
               }`}
             >
               <span>📥</span>
-              <span>หนังสือเวียนถึงฉัน</span>
+              <span>หนังสือเวียนรับเข้า (ถึงฉัน)</span>
               {stats.pendingMyAck > 0 && (
                 <span className="px-2 py-0.5 rounded-full text-xs bg-red-500 text-white font-bold">
                   {stats.pendingMyAck}
@@ -541,8 +547,8 @@ export const CircularPage: React.FC<CircularPageProps> = ({
                   : "text-slate-600 hover:bg-slate-50"
               }`}
             >
-              <span>📚</span>
-              <span>หนังสือเวียนทั้งหมด {isLoading ? "(กำลังโหลด...)" : `(${documents.length})`}</span>
+              <span>📤</span>
+              <span>ทะเบียนส่งเวียนทั้งหมด {isLoading ? "(กำลังโหลด...)" : `(${documents.length})`}</span>
             </button>
 
             <button
@@ -554,7 +560,7 @@ export const CircularPage: React.FC<CircularPageProps> = ({
               }`}
             >
               <span>📊</span>
-              <span>รายงานและสถิติการรับทราบ</span>
+              <span>รายงานผลการเวียนและสถิติ</span>
             </button>
           </div>
 
