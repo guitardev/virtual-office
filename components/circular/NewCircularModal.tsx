@@ -45,7 +45,7 @@ export function NewCircularModal({
   const [showAttachmentPreview, setShowAttachmentPreview] = useState<boolean>(true);
 
   // Official Document Attributes
-  const [docNumber, setDocNumber] = useState<string>("พม ๐๐๐๕/ว ");
+  const [docNumber, setDocNumber] = useState<string>("");
   const [title, setTitle] = useState<string>("");
   const [issuedDate, setIssuedDate] = useState<string>(() => getTodayThaiDate());
   const [senderOrg, setSenderOrg] = useState<string>("สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร");
@@ -87,6 +87,11 @@ export function NewCircularModal({
   const resolvedRecipients = useMemo(() => {
     return resolveTargetRecipients(targetCriteria, availableMembers);
   }, [targetCriteria, availableMembers]);
+
+  // Document Number strict validation (must not be empty AND must contain digits)
+  const isDocNumberEmpty = docNumber.trim().length === 0;
+  const hasDocDigits = /[0-9๐-๙]/.test(docNumber);
+  const isDocNumberValid = !isDocNumberEmpty && hasDocDigits;
 
   const toggleDivision = (div: string) => {
     setSelectedDivisions((prev) =>
@@ -265,14 +270,25 @@ export function NewCircularModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !docNumber.trim() || resolvedRecipients.length === 0) return;
+    if (!isDocNumberValid) {
+      alert("กรุณาระบุเลขที่หนังสือให้ครบถ้วน โดยจำเป็นต้องมีตัวเลขกำกับ เช่น พม ๐๐๐๕/ว ๑๒๓๔");
+      return;
+    }
+    if (!title.trim()) {
+      alert("กรุณาระบุชื่อเรื่องหนังสือเวียน");
+      return;
+    }
+    if (resolvedRecipients.length === 0) {
+      alert("กรุณาระบุกลุ่มเป้าหมายผู้รับหนังสือเวียนอย่างน้อย ๑ ท่าน");
+      return;
+    }
 
     const newDoc: CircularDocument = {
       id: `circ_${Date.now()}`,
       docType: "memo",
       referenceDoc: referenceDoc.trim() || undefined,
       attachmentList: attachmentList.trim() || undefined,
-      docNumber: docNumber.trim() || "ว-ภายใน",
+      docNumber: docNumber.trim(),
       title: title.trim(),
       issuedDate: issuedDate.trim(),
       senderOrg: senderOrg.trim(),
@@ -369,9 +385,19 @@ export function NewCircularModal({
                   <label className="block text-[11px] font-bold text-slate-700">
                     เลขที่หนังสือ <span className="text-rose-500">*</span>
                   </label>
-                  <span className="text-[10px] text-slate-500 font-medium">
-                    ระบุเลขที่หนังสือส่ง
-                  </span>
+                  {isDocNumberEmpty ? (
+                    <span className="text-[10px] text-rose-500 font-bold">
+                      * จำเป็นต้องระบุเลขที่หนังสือ
+                    </span>
+                  ) : !hasDocDigits ? (
+                    <span className="text-[10px] text-amber-600 font-bold">
+                      ⚠️ ต้องมีตัวเลขกำกับ (เช่น ๑๒๓๔)
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-emerald-600 font-bold">
+                      ✓ เลขที่หนังสือถูกต้อง
+                    </span>
+                  )}
                 </div>
                 <input
                   type="text"
@@ -379,8 +405,19 @@ export function NewCircularModal({
                   value={docNumber}
                   onChange={(e) => setDocNumber(toThaiDigits(e.target.value))}
                   placeholder="เช่น พม ๐๐๐๕/ว ๑๒๓๔"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 font-mono font-bold focus:border-indigo-600"
+                  className={`w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs text-slate-800 font-mono font-bold focus:outline-none transition-colors ${
+                    !isDocNumberValid && docNumber.length > 0
+                      ? "border-amber-400 focus:border-amber-500 bg-amber-50/20"
+                      : isDocNumberValid
+                      ? "border-emerald-300 focus:border-emerald-500"
+                      : "border-slate-200 focus:border-indigo-600"
+                  }`}
                 />
+                {!isDocNumberValid && docNumber.length > 0 && (
+                  <p className="text-[10px] text-amber-600 mt-1 font-medium">
+                    ⚠️ กรุณาระบุตัวเลขหนังสือ เช่น <strong>พม ๐๐๐๕/ว ๑๒๓๔</strong>
+                  </p>
+                )}
               </div>
 
               <ThaiCalendarDatePicker
@@ -987,7 +1024,8 @@ export function NewCircularModal({
             <button
               type="submit"
               aria-label="ส่งหนังสือเวียนทันที ออกหนังสือเวียนทันที"
-              disabled={!title.trim() || !docNumber.trim() || resolvedRecipients.length === 0}
+              disabled={!title.trim() || !isDocNumberValid || resolvedRecipients.length === 0}
+              title={!isDocNumberValid ? "กรุณาระบุเลขที่หนังสือพร้อมตัวเลขกำกับ" : undefined}
               className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-indigo-600/25 transition-all cursor-pointer flex items-center gap-2"
             >
               <span>📤 ส่งหนังสือเวียนทันที</span>

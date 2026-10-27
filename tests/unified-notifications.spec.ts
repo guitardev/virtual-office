@@ -104,14 +104,21 @@ test.describe("ระบบแจ้งเตือนแบบรวมศู�
     await createBtn.click();
     await page.waitForTimeout(500);
 
-    // Fill circular title directly
+    // Verify submit button is disabled when document number is empty
+    const submitBtn = page.getByRole("button", { name: /ส่งหนังสือเวียนทันที|ออกหนังสือเวียนทันที/i });
+    await expect(submitBtn).toBeDisabled();
+
+    // Fill circular doc number and title
+    const docNumberInput = page.locator("input[placeholder*='พม ๐๐๐๕/ว']");
+    await expect(docNumberInput).toBeVisible();
+    await docNumberInput.fill("พม ๐๐๐๕/ว ๑๒๓๔");
+
     const titleInput = page.locator("input[placeholder*='ระบุชื่อเรื่องหนังสือเวียน']");
     await titleInput.fill("แนวทางการจัดสรรงบประมาณโครงการพัฒนาคุณภาพชีวิต");
     await page.waitForTimeout(300);
 
-    // Submit circular document
-    const submitBtn = page.getByRole("button", { name: /ส่งหนังสือเวียนทันที|ออกหนังสือเวียนทันที/i });
-    await expect(submitBtn).toBeVisible();
+    // Submit circular document (now enabled)
+    await expect(submitBtn).toBeEnabled();
     await submitBtn.click();
 
     // Verify Toast notification appears

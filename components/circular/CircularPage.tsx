@@ -247,6 +247,10 @@ export const CircularPage: React.FC<CircularPageProps> = ({
 
   // Handle create new document
   const handleCreateDocument = async (newDoc: CircularDocument) => {
+    if (!newDoc.docNumber?.trim() || !/[0-9๐-๙]/.test(newDoc.docNumber)) {
+      showToast("❌ ไม่สามารถส่งหนังสือเวียนได้: จำเป็นต้องระบุเลขที่หนังสือพร้อมตัวเลขกำกับ");
+      return;
+    }
     const updated = [newDoc, ...documents];
     setDocuments(updated);
     await saveCircularDoc(newDoc);
