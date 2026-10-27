@@ -218,10 +218,11 @@ export function CircularViewerModal({
                     <button
                       type="button"
                       onClick={onPrintSlip}
-                      className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center gap-1 cursor-pointer transition-all"
+                      className="px-3.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold flex items-center gap-1.5 cursor-pointer transition-all border border-indigo-200"
+                      title="พิมพ์หนังสือราชการและผลการเวียน (เลือกพิมพ์เฉพาะหนังสือเวียน, ใบสรุปผล หรือรวมชุดสมบูรณ์)"
                     >
                       <span>🖨️</span>
-                      <span>พิมพ์ใบเวียน</span>
+                      <span>พิมพ์หนังสือราชการ</span>
                     </button>
                   )}
                 </div>
@@ -595,11 +596,11 @@ export function CircularViewerModal({
                 if (onPrintSlip) onPrintSlip();
                 else setShowPrintSlip(true);
               }}
-              className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5 border border-slate-200 cursor-pointer transition-all"
-              title="พิมพ์ใบสรุปผลการเวียนหนังสือราชการ"
+              className="px-3.5 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center gap-1.5 border border-indigo-200 cursor-pointer transition-all"
+              title="พิมพ์หนังสือราชการและผลการเวียน (เลือกพิมพ์เฉพาะหนังสือเวียน, ใบสรุปผล หรือรวมชุดสมบูรณ์)"
             >
               <span>🖨️</span>
-              <span>พิมพ์รายงานผล</span>
+              <span>พิมพ์หนังสือราชการ</span>
             </button>
             <button
               type="button"
@@ -678,11 +679,11 @@ export function CircularViewerModal({
             <button
               type="button"
               onClick={() => setShowPrintSlip(true)}
-              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all"
-              title="พิมพ์ใบสรุปผลการเวียนหนังสือราชการ"
+              className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all"
+              title="พิมพ์หนังสือราชการและผลการเวียน (เลือกพิมพ์เฉพาะหนังสือเวียน, ใบสรุปผล หรือรวมชุดสมบูรณ์)"
             >
               <span>🖨️</span>
-              <span className="hidden sm:inline">พิมพ์รายงาน</span>
+              <span className="hidden sm:inline">พิมพ์หนังสือราชการ</span>
             </button>
             <button
               type="button"

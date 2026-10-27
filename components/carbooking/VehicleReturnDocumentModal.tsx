@@ -2,6 +2,7 @@
 
 import React from "react";
 import { CarBookingRequest } from "@/lib/types";
+import { GarudaEmblem } from "@/components/circular/GarudaEmblem";
 
 interface VehicleReturnDocumentModalProps {
   booking: CarBookingRequest;
@@ -57,7 +58,9 @@ export function VehicleReturnDocumentModal({
         <div className="p-6 sm:p-10 text-slate-900 font-body print:p-6 print:text-black leading-relaxed overflow-y-auto flex-1 min-h-0 print:overflow-visible print:h-auto">
           {/* Garuda / Header */}
           <div className="text-center space-y-1 mb-6">
-            <div className="text-4xl select-none mb-1">🦅</div>
+            <div className="flex justify-center mb-1">
+              <GarudaEmblem size="2cm" />
+            </div>
             <h1 className="text-xl font-bold font-heading text-slate-900 print:text-black">
               ใบรายงานผลการใช้และการตรวจรับส่งคืนรถยนต์ราชการ
             </h1>

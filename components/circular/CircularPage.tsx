@@ -828,10 +828,10 @@ export const CircularPage: React.FC<CircularPageProps> = ({
                         <button
                           onClick={(e) => handleOpenPrint(doc, e)}
                           className="px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
-                          title="พิมพ์ใบปะหน้าเวียน / รายงานผล"
+                          title="พิมพ์หนังสือราชการและผลการเวียน (เลือกได้ทั้งตัวหนังสือ, ใบผลการเวียน, หรือรวมชุดสมบูรณ์)"
                         >
                           <span>🖨️</span>
-                          <span className="hidden sm:inline">พิมพ์ใบเวียน</span>
+                          <span className="hidden sm:inline">พิมพ์หนังสือ</span>
                         </button>
 
                         <button
