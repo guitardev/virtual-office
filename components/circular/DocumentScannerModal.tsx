@@ -214,7 +214,7 @@ export function DocumentScannerModal({
         } else if (errName === "NotFoundError" || errName === "DevicesNotFoundError") {
           setCameraErrorType("notfound");
           setCameraError(
-            "ไม่พบอุปกรณ์กล้องหรือเว็บแคมที่เชื่อมต่อกับคอมพิวเตอร์เครื่องนี้ (สามารถเลือกไฟล์ภาพ/PDF หรือใช้ปุ่มจำลองการสแกนได้)"
+            "ไม่พบอุปกรณ์กล้องหรือเว็บแคมที่เชื่อมต่อกับคอมพิวเตอร์เครื่องนี้ (สามารถเลือกไฟล์ภาพ/PDF หรือดึงจาก Synology NAS ได้)"
           );
         } else if (errName === "NotReadableError" || errName === "TrackStartError") {
           setCameraErrorType("busy");
@@ -247,143 +247,6 @@ export function DocumentScannerModal({
   const handleDeviceChange = (deviceId: string) => {
     setSelectedDeviceId(deviceId);
     startCamera(deviceId);
-  };
-
-  // Generate authentic simulated government scanned document
-  const handleSimulateScan = () => {
-    const pageNum = scannedPages.length + 1;
-    const canvas = document.createElement("canvas");
-    canvas.width = 1200;
-    canvas.height = 1700;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    // 1. Realistic paper background with subtle scan tint
-    ctx.fillStyle = "#FAF8F5";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Subtle paper scan border shadow
-    ctx.strokeStyle = "#E2E8F0";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(30, 30, canvas.width - 60, canvas.height - 60);
-
-    // 2. Thai Garuda Crest (ตราครุฑ)
-    const cx = canvas.width / 2;
-    ctx.fillStyle = "#1E293B";
-    ctx.textAlign = "center";
-
-    // Draw stylized Garuda silhouette
-    ctx.beginPath();
-    ctx.arc(cx, 110, 28, 0, Math.PI * 2);
-    ctx.fillStyle = "#1E293B";
-    ctx.fill();
-    ctx.font = "bold 22px 'TH Sarabun New', Sarabun, sans-serif";
-    ctx.fillStyle = "#FFFFFF";
-    ctx.fillText("ตราครุฑ", cx, 118);
-
-    // 3. Official Government Header
-    ctx.fillStyle = "#0F172A";
-    ctx.font = "bold 44px 'TH Sarabun New', Sarabun, sans-serif";
-    ctx.fillText("บันทึกข้อความ", cx, 185);
-
-    // Header Details
-    ctx.textAlign = "left";
-    ctx.font = "bold 28px 'TH Sarabun New', Sarabun, sans-serif";
-    ctx.fillText("ส่วนราชการ", 90, 255);
-    ctx.font = "26px 'TH Sarabun New', Sarabun, sans-serif";
-    ctx.fillText("สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร โทร. ๐ ๕๕๗๐ ๕๐๒๒", 230, 255);
-
-    ctx.font = "bold 28px 'TH Sarabun New', Sarabun, sans-serif";
-    ctx.fillText("ที่", 90, 305);
-    ctx.font = "26px 'TH Sarabun New', Sarabun, sans-serif";
-    ctx.fillText(`พม ๐๐๐๕/ว ๔๙${pageNum}  (หน้า ${pageNum})`, 130, 305);
-
-    ctx.font = "bold 28px 'TH Sarabun New', Sarabun, sans-serif";
-    ctx.fillText("วันที่", 720, 305);
-    ctx.font = "26px 'TH Sarabun New', Sarabun, sans-serif";
-    ctx.fillText("๑๕ ตุลาคม ๒๕๖๙", 780, 305);
-
-    ctx.font = "bold 28px 'TH Sarabun New', Sarabun, sans-serif";
-    ctx.fillText("เรื่อง", 90, 355);
-    ctx.font = "26px 'TH Sarabun New', Sarabun, sans-serif";
-    ctx.fillText("แนวทางการปฏิบัติงานราชการอิเล็กทรอนิกส์และระบบเวียนเอกสารเสมือนจริง", 160, 355);
-
-    // Divider line
-    ctx.strokeStyle = "#64748B";
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(90, 385);
-    ctx.lineTo(1110, 385);
-    ctx.stroke();
-
-    // "เรียน"
-    ctx.font = "bold 28px 'TH Sarabun New', Sarabun, sans-serif";
-    ctx.fillText("เรียน  หัวหน้ากลุ่ม/ฝ่าย และบุคลากรสำนักงาน พมจ.กำแพงเพชรทุกท่าน", 90, 435);
-
-    // Body text
-    ctx.font = "25px 'TH Sarabun New', Sarabun, sans-serif";
-    const bodyText = [
-      "      ด้วย สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร ได้พัฒนาระบบสำนักงานเสมือน (Virtual Office)",
-      "และระบบเวียนหนังสือราชการอิเล็กทรอนิกส์ เพื่อยกระดับการให้บริการตามพระราชบัญญัติการปฏิบัติราชการทางอิเล็กทรอนิกส์ พ.ศ. ๒๕๖๕",
-      "โดยให้บุคลากรทุกท่านสามารถรับทราบ ลงนามกำกับ และติดตามผลการปฏิบัติงานได้อย่างถูกต้อง รวดเร็ว และโปร่งใส",
-      "",
-      "      ในการนี้ เพื่อให้การขับเคลื่อนระบบเวียนเอกสารราชการเป็นไปด้วยความเรียบร้อย จึงขอให้ทุกกลุ่มงานปฏิบัติตามแนวทางดังนี้:",
-      "      ๑. ตรวจสอบและลงนามรับทราบหนังสือเวียนตามกำหนดเวลาอย่างสม่ำเสมอผ่านระบบออนไลน์",
-      "      ๒. นำข้อสั่งการและระเบียบที่เกี่ยวข้องไปถ่ายทอดและถือปฏิบัติในหน่วยงานโดยเคร่งครัด",
-      "      ๓. บันทึกหลักฐานการรับทราบผ่านลายมือชื่ออิเล็กทรอนิกส์ที่ระบบออกให้เพื่อเป็นหลักฐานอ้างอิง",
-      "",
-      "      จึงเรียนมาเพื่อโปรดทราบและถือปฏิบัติต่อไป",
-    ];
-
-    let currentY = 485;
-    for (const line of bodyText) {
-      if (line) {
-        ctx.fillText(line, 90, currentY);
-      }
-      currentY += 40;
-    }
-
-    // Signatory
-    ctx.textAlign = "center";
-    ctx.font = "26px 'TH Sarabun New', Sarabun, sans-serif";
-    ctx.fillText("(นายสมชาย มั่นคงพัฒนา)", 820, 1060);
-    ctx.font = "24px 'TH Sarabun New', Sarabun, sans-serif";
-    ctx.fillText("พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร", 820, 1100);
-
-    // Red Official Receipt Stamp (ตราประทับสารบรรณสีแดง)
-    ctx.save();
-    ctx.translate(960, 190);
-    ctx.rotate(-0.05); // slight natural tilt
-    ctx.strokeStyle = "rgba(220, 38, 38, 0.85)";
-    ctx.lineWidth = 3;
-    ctx.strokeRect(-120, -60, 240, 120);
-
-    ctx.fillStyle = "rgba(220, 38, 38, 0.85)";
-    ctx.font = "bold 19px 'TH Sarabun New', Sarabun, sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("สำนักงาน พมจ.กำแพงเพชร", 0, -30);
-    ctx.fillText("เลขรับที่: " + (1420 + pageNum), 0, -5);
-    ctx.fillText("วันที่: ๑๕ ต.ค. ๒๕๖๙", 0, 18);
-    ctx.fillText("เวลา: ๐๙:๓๐ น. (สแกนผ่านระบบ)", 0, 42);
-    ctx.restore();
-
-    // Footer Watermark / Audit verification line
-    ctx.font = "16px monospace";
-    ctx.fillStyle = "#64748B";
-    ctx.textAlign = "left";
-    ctx.fillText(
-      `SMART MSO ELECTRONIC SCAN • SHA256 VALIDATED • SCAN-REF: KPT-DOC-2569-PAGE-${pageNum}`,
-      90,
-      1630
-    );
-
-    const simulatedDataUrl = canvas.toDataURL("image/jpeg", 0.92);
-    setScannedPages((prev) => {
-      const next = [...prev, simulatedDataUrl];
-      setSelectedPageIndex(next.length - 1);
-      return next;
-    });
-    setViewfinderMode("preview");
   };
 
   // Capture current frame from camera
@@ -726,7 +589,7 @@ export function DocumentScannerModal({
                         {!cameraErrorType && <span>ไม่สามารถเปิดกล้องได้</span>}
                       </div>
                       <p className="text-[11px] text-slate-400 leading-relaxed">
-                        {cameraError || "อุปกรณ์ไม่พร้อมใช้งาน สามารถเลือกรูปภาพ/PDF จากเครื่อง หรือใช้เอกสารจำลองเพื่อทดสอบระบบได้"}
+                        {cameraError || "อุปกรณ์ไม่พร้อมใช้งาน สามารถเลือกรูปภาพ/PDF จากเครื่อง หรือดึงไฟล์จาก Synology NAS ได้"}
                       </p>
                     </div>
 
@@ -742,16 +605,6 @@ export function DocumentScannerModal({
                       >
                         <span>🔄</span>
                         <span>ลองเชื่อมต่อกล้องใหม่</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleSimulateScan}
-                        className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm flex items-center gap-1.5"
-                        title="สร้างตัวอย่างหน้าเอกสารราชการสแกนความละเอียดสูงพร้อมตราครุฑและตรายางรับเรื่อง"
-                      >
-                        <span>✨</span>
-                        <span>จำลองการสแกนเอกสารจริง</span>
                       </button>
 
                       <label className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-all shadow-sm flex items-center gap-1.5">
@@ -809,7 +662,7 @@ export function DocumentScannerModal({
                   <strong>บน Google Chrome / Microsoft Edge:</strong> คลิกไอคอน 🔒 หรือ ⚙️ ที่ด้านซ้ายสุดของช่องกรอก URL &gt; ไปที่เมนู <em>&ldquo;สิทธิ์การเข้าถึงเว็บไซต์ (Site permissions)&rdquo;</em> &gt; เปลี่ยนการตั้งค่า <em>&ldquo;กล้อง (Camera)&rdquo;</em> เป็น <strong>&ldquo;อนุญาต (Allow)&rdquo;</strong> แล้วรีเฟรชหน้าจอ
                 </li>
                 <li>
-                  <strong>บนคอมพิวเตอร์ตั้งโต๊ะ (PC):</strong> หากไม่ได้เสียบเว็บแคม USB สามารถคลิกปุ่ม <strong>&ldquo;✨ จำลองการสแกนเอกสารจริง&rdquo;</strong> หรือเลือกไฟล์จากเครื่อง/NAS ได้ทันที
+                  <strong>บนคอมพิวเตอร์ตั้งโต๊ะ (PC):</strong> หากไม่ได้เชื่อมต่อกล้องหรือเว็บแคม สามารถเลือกไฟล์ภาพ/PDF จากเครื่อง หรือดึงไฟล์จาก Synology NAS เข้าสู่ระบบได้ทันที
                 </li>
                 <li>
                   <strong>บนมือถือ/แท็บเล็ต:</strong> ระบบจะเลือกกล้องหลัง (Environment Camera) ที่มีความละเอียดสูงเพื่อสแกนเอกสารโดยอัตโนมัติ
@@ -900,14 +753,6 @@ export function DocumentScannerModal({
               </span>
             </div>
             <div className="flex items-center gap-2 text-[11px]">
-              <button
-                type="button"
-                onClick={handleSimulateScan}
-                className="font-bold text-indigo-600 hover:text-indigo-800 cursor-pointer"
-              >
-                + สแกนจำลอง
-              </button>
-              <span className="text-slate-300">|</span>
               <label className="font-bold text-emerald-600 hover:text-emerald-800 cursor-pointer">
                 + เพิ่มไฟล์/PDF
                 <input
@@ -929,17 +774,8 @@ export function DocumentScannerModal({
                 <div className="space-y-1">
                   <span className="text-xs font-bold text-slate-600 block">ยังไม่มีหน้าที่สแกน</span>
                   <p className="text-[11px] text-slate-400 max-w-xs leading-relaxed">
-                    ถ่ายภาพผ่านกล้อง, กด &ldquo;จำลองการสแกน&rdquo; หรือลากไฟล์ภาพ/PDF มาวางในกรอบกล้อง
+                    ถ่ายภาพผ่านกล้อง หรือลากไฟล์ภาพ/PDF มาวางในกรอบกล้อง
                   </p>
-                </div>
-                <div className="flex items-center gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={handleSimulateScan}
-                    className="px-3.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold cursor-pointer transition-all"
-                  >
-                    ✨ สแกนตัวอย่าง ๑ หน้า
-                  </button>
                 </div>
               </div>
             ) : (
@@ -1050,16 +886,6 @@ export function DocumentScannerModal({
         </button>
 
         <div className="flex items-center gap-2">
-          {scannedPages.length === 0 && (
-            <button
-              type="button"
-              onClick={handleSimulateScan}
-              className="px-4 py-2.5 rounded-xl border border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition-all cursor-pointer"
-            >
-              ✨ สแกนจำลองอัตโนมัติ
-            </button>
-          )}
-
           <button
             type="button"
             disabled={scannedPages.length === 0}
