@@ -42,7 +42,7 @@ test.describe("ระบบเวียนหนังสือราชกา�
     await page.goto("http://localhost:3000");
   });
 
-  test("เปิดระบบพิมพ์หนังสือราชการ มีตราครุฑ SVG มาตรฐาน สลับโหมดการพิมพ์ได้ และมี QR Code ตรวจสอบ", async ({
+  test("เปิดระบบพิมพ์ใบสรุปผลการเวียน มีตราครุฑ SVG มาตรฐาน สรุปผลการเวียนและหลักฐานการรับทราบ และมี QR Code ตรวจสอบ (ตัดคงเหลือเฉพาะสรุปผลการเวียน)", async ({
     page,
   }) => {
     // 1. นำทางไปยังหน้าระบบเวียนหนังสือราชการ
@@ -55,7 +55,7 @@ test.describe("ระบบเวียนหนังสือราชกา�
       timeout: 10000,
     });
 
-    // 3. ตรวจสอบว่ามีปุ่มพิมพ์ในการ์ดรายการหนังสือเวียน
+    // 3. ตรวจสอบว่ามีปุ่มพิมพ์สรุปผลการเวียนในการ์ดรายการหนังสือเวียน
     const card = page.locator('[data-testid="circular-doc-card-circ_print_test_001"]');
     await expect(card).toBeVisible({ timeout: 10000 });
 
@@ -63,7 +63,7 @@ test.describe("ระบบเวียนหนังสือราชกา�
     await expect(printBtn).toBeVisible();
     await printBtn.click();
 
-    // 4. ต้องแสดงหน้าระบบพิมพ์หนังสือราชการ (Print View)
+    // 4. ต้องแสดงหน้าระบบพิมพ์ใบสรุปผลการเวียน (Print View)
     const printView = page.locator("[data-testid='circulation-print-view']");
     await expect(printView).toBeVisible();
 
@@ -72,30 +72,19 @@ test.describe("ระบบเวียนหนังสือราชกา�
     await expect(garudaEmblem).toBeVisible();
     await expect(garudaEmblem).toHaveAttribute("src", "/images/garuda.svg");
 
-    // 6. ตรวจสอบแท็บเลือกโหมดการพิมพ์ 3 รูปแบบ
-    const allTab = printView.locator("button:has-text('ชุดรวมสมบูรณ์ (All)')");
-    const letterTab = printView.locator("button:has-text('เฉพาะหนังสือเวียน')");
-    const slipTab = printView.locator("button:has-text('เฉพาะใบสรุปผล')");
-
-    await expect(allTab).toBeVisible();
-    await expect(letterTab).toBeVisible();
-    await expect(slipTab).toBeVisible();
-
-    // 7. ตรวจสอบ QR Code รับรองความถูกต้องตามระเบียบสารบรรณอิเล็กทรอนิกส์ในใบสรุปผล
-    const qrSection = printView.locator("text=สแกนตรวจสอบความถูกต้อง").first();
-    await expect(qrSection).toBeVisible();
-
-    // 8. สลับไปยังโหมด 'เฉพาะหนังสือเวียน'
-    await letterTab.click();
-    await expect(printView.locator("text=หนังสือเวียนทางราชการ").first()).toBeVisible();
-    await expect(printView.locator("text=กพ ๐๐๓๒/ว ๒๕๖๙").first()).toBeVisible();
-
-    // 9. สลับไปยังโหมด 'เฉพาะใบสรุปผล'
-    await slipTab.click();
+    // 6. ตรวจสอบว่าแสดงหัวเรื่องบันทึกผลการเวียนหนังสือราชการและหลักฐานการรับทราบทันที (ไม่แสดงแท็บสลับโหมดอื่น)
     await expect(
       printView.locator("h1:has-text('บันทึกผลการเวียนหนังสือราชการและหลักฐานการรับทราบ')")
     ).toBeVisible();
     await expect(printView.locator("text=นางอรัญญา เกิดสุข")).toBeVisible();
+
+    // 7. ต้องไม่มีแท็บเลือกโหมดการพิมพ์แบบเดิม (ตัดออกให้คงเหลือเฉพาะสรุปผลการเวียน)
+    await expect(printView.locator("button:has-text('ชุดรวมสมบูรณ์ (All)')")).toHaveCount(0);
+    await expect(printView.locator("button:has-text('เฉพาะหนังสือเวียน')")).toHaveCount(0);
+
+    // 8. ตรวจสอบ QR Code รับรองความถูกต้องตามระเบียบสารบรรณอิเล็กทรอนิกส์ในใบสรุปผล
+    const qrSection = printView.locator("text=สแกนตรวจสอบความถูกต้อง").first();
+    await expect(qrSection).toBeVisible();
   });
 
   test("ระบบรับ-ส่งและดูเอกสารแนบหนังสือเวียนต้นฉบับ พร้อมข้อมูลสรุปสาระสำคัญ (ตัดส่วนการร่างหนังสือออกทั้งหมด)", async ({
@@ -122,8 +111,8 @@ test.describe("ระบบเวียนหนังสือราชกา�
     await expect(page.locator("button:has-text('คำสั่งราชการ')")).toHaveCount(0);
     await expect(page.locator("button:has-text('ประกาศราชการ')")).toHaveCount(0);
 
-    // 5. ตรวจสอบปุ่มพิมพ์รายงานผลการเวียนในหน้าดูเอกสาร
-    await expect(page.locator("button:has-text('พิมพ์รายงานผลการเวียน')")).toBeVisible();
+    // 5. ตรวจสอบปุ่มพิมพ์สรุปผลการเวียนในหน้าดูเอกสาร
+    await expect(page.locator("button:has-text('พิมพ์สรุปผลการเวียน')").first()).toBeVisible();
   });
 
   test("เลือก 'ลงวันที่ *' จาก Calendar Date Picker และแปลงเป็นเลขไทยอัตโนมัติ โดยเริ่มต้นเป็นวันที่ปัจจุบัน", async ({

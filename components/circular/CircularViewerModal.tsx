@@ -200,10 +200,10 @@ export function CircularViewerModal({
                       type="button"
                       onClick={onPrintSlip}
                       className="px-3.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold flex items-center gap-1.5 cursor-pointer transition-all border border-indigo-200"
-                      title="พิมพ์รายงานผลการเวียนหนังสือราชการและบัญชีรายชื่อผู้รับทราบ"
+                      title="พิมพ์ใบสรุปผลการเวียนหนังสือราชการและหลักฐานการรับทราบ"
                     >
                       <span>🖨️</span>
-                      <span>พิมพ์รายงานผลการเวียน</span>
+                      <span>พิมพ์สรุปผลการเวียน</span>
                     </button>
                   )}
                 </div>
@@ -572,10 +572,10 @@ export function CircularViewerModal({
                 else setShowPrintSlip(true);
               }}
               className="px-3.5 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center gap-1.5 border border-indigo-200 cursor-pointer transition-all"
-              title="พิมพ์หนังสือราชการและผลการเวียน (เลือกพิมพ์เฉพาะหนังสือเวียน, ใบสรุปผล หรือรวมชุดสมบูรณ์)"
+              title="พิมพ์ใบสรุปผลการเวียนหนังสือราชการและหลักฐานการรับทราบ"
             >
               <span>🖨️</span>
-              <span>พิมพ์หนังสือราชการ</span>
+              <span>พิมพ์สรุปผลการเวียน</span>
             </button>
             <button
               type="button"
@@ -655,10 +655,10 @@ export function CircularViewerModal({
               type="button"
               onClick={() => setShowPrintSlip(true)}
               className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all"
-              title="พิมพ์หนังสือราชการและผลการเวียน (เลือกพิมพ์เฉพาะหนังสือเวียน, ใบสรุปผล หรือรวมชุดสมบูรณ์)"
+              title="พิมพ์ใบสรุปผลการเวียนหนังสือราชการและหลักฐานการรับทราบ"
             >
               <span>🖨️</span>
-              <span className="hidden sm:inline">พิมพ์หนังสือราชการ</span>
+              <span className="hidden sm:inline">พิมพ์สรุปผลการเวียน</span>
             </button>
             <button
               type="button"

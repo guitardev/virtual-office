@@ -1,36 +1,28 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { CircularDocument, Member } from "@/lib/types";
 import { GarudaEmblem } from "./GarudaEmblem";
 import { DocumentVerificationQR } from "./DocumentVerificationQR";
 import { toThaiDigits, toThaiDate, toThaiDateTime } from "@/lib/thai-numerals";
-
-export type CircularPrintMode = "all" | "letter" | "slip";
 
 interface CirculationPrintSlipProps {
   document: CircularDocument;
   availableMembers?: Member[];
   onClose: () => void;
   inPage?: boolean;
-  initialMode?: CircularPrintMode;
 }
 
 /**
- * ระบบพิมพ์หนังสือราชการและใบสรุปผลการเวียน (Complete Official Document Printing)
- * รองรับ 3 โหมดการพิมพ์:
- * 1. "letter": พิมพ์เฉพาะตัวหนังสือเวียนตราครุฑ (Official Circular Memo)
- * 2. "slip": พิมพ์เฉพาะใบสรุปผลการเวียนและบัญชีรายชื่อผู้รับทราบ (Routing & Acknowledgment Slip)
- * 3. "all": พิมพ์ชุดเอกสารสมบูรณ์รวมเล่ม (Complete Dossier: หนังสือเวียน + เอกสารแนบ + ใบลงนาม)
+ * ระบบพิมพ์ใบสรุปผลการเวียนหนังสือราชการและหลักฐานการรับทราบ
+ * (Circulation Summary & Acknowledgment Slip)
  */
 export function CirculationPrintSlip({
   document: doc,
   availableMembers,
   onClose,
   inPage = true,
-  initialMode = "all",
 }: CirculationPrintSlipProps) {
-  const [printMode, setPrintMode] = useState<CircularPrintMode>(initialMode);
 
   const handlePrint = () => {
     window.print();
@@ -227,61 +219,10 @@ export function CirculationPrintSlip({
     </div>
   );
 
-  // ส่วนของการแสดงผลตามโหมดการพิมพ์
+  // ส่วนของการแสดงผล: พิมพ์เฉพาะใบสรุปผลการเวียนและบัญชีรายชื่อผู้รับทราบ
   const printableArea = (
-    <div className="space-y-8">
-      {/* 1. โหมด slip หรือ all: พิมพ์ใบสรุปผลการเวียนและบัญชีรายชื่อผู้รับทราบ */}
-      {(printMode === "slip" || printMode === "all") && (
-        <div className={printMode === "all" ? "print-page-break" : ""}>
-          {slipContent}
-        </div>
-      )}
-
-      {/* 2. โหมด all หรือ letter: พิมพ์เอกสารแนบประกอบหนังสือเวียน (Scanned Pages หรือหน้าเอกสารแนบ) */}
-      {(printMode === "all" || printMode === "letter") && doc.scannedPages && doc.scannedPages.length > 0 && (
-        <div className="space-y-6">
-          {doc.scannedPages.map((pageImg, idx) => (
-            <div key={idx} className="print-page-break bg-white p-4 sm:p-8 rounded-2xl border border-slate-200 print:border-none print:p-0 flex flex-col items-center">
-              <div className="w-full text-center text-xs font-bold text-slate-500 print:text-black mb-3">
-                เอกสารแนบประกอบหนังสือเวียน เลขที่ {doc.docNumber} (แผ่นที่ {idx + 1} จาก {doc.scannedPages?.length})
-              </div>
-              <img
-                src={pageImg}
-                alt={`เอกสารแนบหน้า ${idx + 1}`}
-                className="max-w-full max-h-[85vh] object-contain border border-slate-200 print:border-none shadow-xs print:shadow-none"
-              />
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* กรณีเลือกพิมพ์เฉพาะหนังสือเวียนแต่ไม่มี scannedPages ให้แสดงข้อมูลสรุปหนังสือเวียน */}
-      {printMode === "letter" && (!doc.scannedPages || doc.scannedPages.length === 0) && (
-        <div className="gov-a4-sheet bg-white border border-slate-200 rounded-xl p-8 space-y-4 print:border-none print:shadow-none">
-          <div className="text-center space-y-2 border-b-2 border-slate-900 pb-5">
-            <div className="flex justify-center mb-1">
-              <GarudaEmblem size="2cm" />
-            </div>
-            <h2 className="text-lg font-bold text-slate-900 print:text-black">
-              หนังสือเวียนทางราชการ
-            </h2>
-            <p className="text-xs text-slate-600 print:text-black">
-              {toThaiDigits(doc.title)}
-            </p>
-          </div>
-          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-2 print:bg-transparent">
-            <div><strong>เลขที่หนังสือ:</strong> {toThaiDigits(doc.docNumber)}</div>
-            <div><strong>ลงวันที่:</strong> {toThaiDate(doc.issuedDate)}</div>
-            <div><strong>หน่วยงานต้นทาง:</strong> {toThaiDigits(doc.senderOrg || "-")}</div>
-            <div><strong>ไฟล์เอกสารแนบ:</strong> {doc.fileName || "เอกสารแนบประกอบหนังสือเวียน"}</div>
-            {doc.summary && (
-              <div className="pt-2 border-t border-slate-200">
-                <strong>สรุปสาระสำคัญ:</strong> {toThaiDigits(doc.summary)}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+    <div className="space-y-6">
+      {slipContent}
     </div>
   );
 
@@ -299,9 +240,9 @@ export function CirculationPrintSlip({
         </button>
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-sm font-bold">🖨️ ระบบพิมพ์หนังสือราชการและผลการเวียน</span>
+            <span className="text-sm font-bold">🖨️ พิมพ์ใบสรุปผลการเวียนหนังสือราชการ</span>
             <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono">
-              ความคืบหน้า: {percent}%
+              รับทราบแล้ว: {percent}%
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-0.5 font-mono">
@@ -310,58 +251,13 @@ export function CirculationPrintSlip({
         </div>
       </div>
 
-      {/* Print Mode Selector Tabs */}
-      <div className="flex items-center gap-1.5 bg-slate-800 p-1 rounded-xl text-xs">
-        <button
-          type="button"
-          onClick={() => setPrintMode("all")}
-          className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-            printMode === "all"
-              ? "bg-indigo-600 text-white shadow-xs"
-              : "text-slate-300 hover:text-white"
-          }`}
-          title="พิมพ์หนังสือเวียน + เอกสารแนบ + ใบลงนามรับทราบ"
-        >
-          <span>📑</span>
-          <span>ชุดรวมสมบูรณ์ (All)</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setPrintMode("letter")}
-          className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-            printMode === "letter"
-              ? "bg-indigo-600 text-white shadow-xs"
-              : "text-slate-300 hover:text-white"
-          }`}
-          title="พิมพ์เฉพาะตัวบันทึกข้อความตราครุฑ"
-        >
-          <span>📜</span>
-          <span>เฉพาะหนังสือเวียน</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setPrintMode("slip")}
-          className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-            printMode === "slip"
-              ? "bg-indigo-600 text-white shadow-xs"
-              : "text-slate-300 hover:text-white"
-          }`}
-          title="พิมพ์เฉพาะใบสรุปผลและบัญชีลงนาม"
-        >
-          <span>📋</span>
-          <span>เฉพาะใบสรุปผล</span>
-        </button>
-      </div>
-
       <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={handlePrint}
           className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow cursor-pointer transition-all flex items-center gap-2"
         >
-          <span>🖨️ สั่งพิมพ์เอกสาร (Print / PDF)</span>
+          <span>🖨️ สั่งพิมพ์ใบสรุปผล (Print / PDF)</span>
         </button>
         <button
           type="button"
@@ -393,36 +289,10 @@ export function CirculationPrintSlip({
         {/* Top Control Bar (Hidden when printing) */}
         <div className="px-6 py-3.5 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-3 print:hidden">
           <div className="flex items-center gap-2 text-xs font-bold">
-            <span>🖨️ พิมพ์หนังสือราชการ</span>
-            <div className="flex items-center gap-1 bg-slate-800 p-0.5 rounded-lg text-[11px] ml-2">
-              <button
-                type="button"
-                onClick={() => setPrintMode("all")}
-                className={`px-2 py-0.5 rounded cursor-pointer ${
-                  printMode === "all" ? "bg-indigo-600 text-white font-bold" : "text-slate-300"
-                }`}
-              >
-                ชุดสมบูรณ์
-              </button>
-              <button
-                type="button"
-                onClick={() => setPrintMode("letter")}
-                className={`px-2 py-0.5 rounded cursor-pointer ${
-                  printMode === "letter" ? "bg-indigo-600 text-white font-bold" : "text-slate-300"
-                }`}
-              >
-                หนังสือเวียน
-              </button>
-              <button
-                type="button"
-                onClick={() => setPrintMode("slip")}
-                className={`px-2 py-0.5 rounded cursor-pointer ${
-                  printMode === "slip" ? "bg-indigo-600 text-white font-bold" : "text-slate-300"
-                }`}
-              >
-                ใบสรุปผล
-              </button>
-            </div>
+            <span>🖨️ พิมพ์ใบสรุปผลการเวียนหนังสือราชการ</span>
+            <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono">
+              รับทราบแล้ว: {percent}%
+            </span>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -430,7 +300,7 @@ export function CirculationPrintSlip({
               onClick={handlePrint}
               className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer transition-all flex items-center gap-1.5"
             >
-              <span>🖨️ สั่งพิมพ์</span>
+              <span>🖨️ สั่งพิมพ์ใบสรุปผล</span>
             </button>
             <button
               type="button"
