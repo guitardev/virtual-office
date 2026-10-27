@@ -2297,7 +2297,7 @@ export default function SmartMSOApp() {
 
       {/* ─── DESKTOP SIDEBAR ─── */}
       <aside
-        className={`hidden md:flex shrink-0 flex-col h-screen select-none shadow-xl z-20 transition-all duration-300 ease-in-out border-r ${
+        className={`hidden md:flex shrink-0 flex-col h-screen select-none shadow-xl z-20 transition-all duration-300 ease-in-out border-r print:hidden ${
           isDarkMode
             ? "bg-[#090D16] border-slate-800/90 text-slate-300"
             : "bg-[#0F172A] border-slate-800/80 text-slate-300"
@@ -2360,7 +2360,7 @@ export default function SmartMSOApp() {
 
       {/* ─── MOBILE DRAWER ─── */}
       {sidebarOpen && (
-        <div className="fixed inset-0 z-50 md:hidden flex">
+        <div className="fixed inset-0 z-50 md:hidden flex print:hidden">
           <div
             className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
             onClick={() => setSidebarOpen(false)}
@@ -2392,9 +2392,9 @@ export default function SmartMSOApp() {
       )}
 
       {/* ─── MAIN CONTENT VIEWPORT ─── */}
-      <div className="flex-1 min-w-0 flex flex-col h-screen overflow-hidden">
+      <div className="flex-1 min-w-0 flex flex-col h-screen overflow-hidden print:h-auto print:overflow-visible">
         {/* Top Header */}
-        <header className={`h-16 px-6 md:px-8 border-b flex items-center justify-between shrink-0 shadow-xs z-30 transition-colors backdrop-blur-md ${
+        <header className={`h-16 px-6 md:px-8 border-b flex items-center justify-between shrink-0 shadow-xs z-30 transition-colors backdrop-blur-md print:hidden ${
           isDarkMode
             ? "bg-slate-900/90 border-slate-800 text-slate-100 shadow-slate-950/40"
             : "bg-white/90 border-slate-200/80 text-slate-800"

@@ -106,7 +106,7 @@ export function CircularViewerModal({
   const viewerBodyAndFooter = (
     <>
       {/* Tab Switcher & Status Bar */}
-      <div className="px-6 py-2.5 bg-slate-100 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+      <div className="px-6 py-2.5 bg-slate-100 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs print:hidden">
         <div className="flex items-center gap-1">
             <button
               type="button"
@@ -161,11 +161,11 @@ export function CircularViewerModal({
         </div>
 
         {/* Body Content */}
-        <div className="flex-1 overflow-y-auto p-6 bg-[#F8FAFC]">
+        <div className="flex-1 overflow-y-auto p-6 bg-[#F8FAFC] print:p-0 print:bg-transparent print:overflow-visible">
           {activeTab === "doc" ? (
             <div className="space-y-4">
               {/* Dual-Mode Selector: Official Letter vs Attachment */}
-              <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs print:hidden">
                 <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl text-xs">
                   <button
                     type="button"
@@ -495,7 +495,7 @@ export function CircularViewerModal({
         </div>
 
         {/* Footer Actions */}
-        <div className="px-6 py-4 bg-white border-t border-slate-200 flex items-center justify-between gap-3">
+        <div className="px-6 py-4 bg-white border-t border-slate-200 flex items-center justify-between gap-3 print:hidden">
           <button
             type="button"
             onClick={onClose}
@@ -546,7 +546,7 @@ export function CircularViewerModal({
     return (
       <div data-testid="circular-viewer-view" className="w-full max-w-5xl mx-auto space-y-6 animate-fade-in text-slate-800 pb-12">
         {/* In-page Header Navigation */}
-        <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
+        <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4 print:hidden">
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -611,7 +611,7 @@ export function CircularViewerModal({
         </div>
 
         {/* Viewer Content Container */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden print:border-none print:shadow-none print:bg-transparent print:overflow-visible">
           {viewerBodyAndFooter}
         </div>
 
@@ -639,10 +639,10 @@ export function CircularViewerModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-900/80 backdrop-blur-md animate-fade-in text-slate-800">
-      <div className="w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[94vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-900/80 backdrop-blur-md animate-fade-in text-slate-800 print:static print:p-0 print:bg-transparent print:backdrop-blur-none">
+      <div className="w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[94vh] print:max-w-none print:max-h-none print:border-none print:shadow-none print:bg-transparent print:overflow-visible">
         {/* Header */}
-        <div className="px-6 py-4 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white flex items-center justify-between">
+        <div className="px-6 py-4 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white flex items-center justify-between print:hidden">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-xl">
               📜

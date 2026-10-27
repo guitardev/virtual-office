@@ -322,31 +322,32 @@ export function OfficialCircularSheet({
            ========================================================================= */}
         {currentType === "memo" && (
           <div>
-            {/* ส่วนหัว: ตราครุฑ 1.5 ซม. ซ้ายบน, คำว่า 'บันทึกข้อความ' 29pt กึ่งกลาง */}
-            <div className="relative border-b-2 border-slate-900 pb-4 mb-5 print:border-black">
-              <div className="flex items-start justify-between relative mb-2">
-                <div className="w-20 shrink-0 flex items-start pt-0.5">
-                  <GarudaEmblem size="1.5cm" />
+            {/* ส่วนหัว: ตราครุฑ 1.5 ซม. ซ้ายบน, ตราประทับด่วนระหว่างครุฑกับบันทึกข้อความ, คำว่า 'บันทึกข้อความ' 29pt กึ่งกลาง */}
+            <div className="relative border-b-2 border-slate-900 pb-3 mb-4 print:border-black">
+              <div className="relative flex items-center min-h-[48px] mb-2">
+                {/* ฝั่งซ้าย: ตราครุฑ ๑.๕ ซม. พร้อมตราประทับชั้นความเร็วสีแดงอยู่ระหว่างครุฑกับบันทึกข้อความ */}
+                <div className="flex items-center gap-3 z-10">
+                  <div className="w-16 shrink-0 flex items-center">
+                    <GarudaEmblem size="1.5cm" />
+                  </div>
+                  {isUrgent && (
+                    <span className="gov-urgency-badge whitespace-nowrap">
+                      {doc.urgency === "most_urgent"
+                        ? "ด่วนที่สุด"
+                        : doc.urgency === "very_urgent"
+                        ? "ด่วนมาก"
+                        : "ด่วน"}
+                    </span>
+                  )}
                 </div>
-                <div className="flex-1 text-center pr-20">
-                  <h1 className="gov-font-memo-title text-slate-900 print:text-black">
+
+                {/* คำว่า 'บันทึกข้อความ' กึ่งกลางหน้ากระดาษเป๊ะ */}
+                <div className="absolute inset-x-0 text-center pointer-events-none">
+                  <h1 className="gov-font-memo-title text-slate-900 print:text-black inline-block pointer-events-auto">
                     บันทึกข้อความ
                   </h1>
                 </div>
               </div>
-
-              {/* ชั้นความเร็ว (ถ้ามี) */}
-              {isUrgent && (
-                <div className="mb-2">
-                  <span className="gov-urgency-badge">
-                    {doc.urgency === "most_urgent"
-                      ? "ด่วนที่สุด"
-                      : doc.urgency === "very_urgent"
-                      ? "ด่วนมาก"
-                      : "ด่วน"}
-                  </span>
-                </div>
-              )}
 
               {/* ตารางหัวเรื่อง: ส่วนราชการ, ที่, วันที่, เรื่อง */}
               <div className="space-y-1.5 pt-1">
@@ -475,14 +476,13 @@ export function OfficialCircularSheet({
               </div>
             </div>
 
-            {/* แถวที่ 1: 'ที่' ด้านซ้าย และ ส่วนราชการเจ้าของหนังสือ ด้านขวา (เริ่มกึ่งกลาง 50%) */}
+            {/* แถวที่ 1: 'ที่' ด้านซ้าย (พร้อมตราประทับด่วนอยู่เหนือ 'ที่') และ ส่วนราชการ ด้านขวา (เริ่มกึ่งกลาง 50%) */}
             <div className="gov-midpoint-grid gap-4 items-start">
               <div>
-                <span className="gov-font-field-label">ที่</span>{" "}
-                <span className="gov-font-field-value font-bold">{thaiDocNumber}</span>
+                {/* ตราประทับชั้นความเร็ว: อยู่มุมซ้ายบน เหนือคำว่า 'ที่' */}
                 {isUrgent && (
-                  <div className="mt-1">
-                    <span className="gov-urgency-badge text-lg">
+                  <div className="mb-1.5">
+                    <span className="gov-urgency-badge">
                       {doc.urgency === "most_urgent"
                         ? "ด่วนที่สุด"
                         : doc.urgency === "very_urgent"
@@ -491,6 +491,10 @@ export function OfficialCircularSheet({
                     </span>
                   </div>
                 )}
+                <div>
+                  <span className="gov-font-field-label">ที่</span>{" "}
+                  <span className="gov-font-field-value font-bold">{thaiDocNumber}</span>
+                </div>
               </div>
               <div className="space-y-0.5">
                 <div className="font-bold text-[16px] print:text-[16pt]">{thaiSenderOrg.split(" โทร.")[0]}</div>
@@ -594,8 +598,19 @@ export function OfficialCircularSheet({
            ========================================================================= */}
         {currentType === "command" && (
           <div className="space-y-4">
-            {/* ตราครุฑ 3.0 ซม. กึ่งกลางบนสุด */}
-            <div className="text-center mb-3">
+            {/* ตราครุฑ 3.0 ซม. กึ่งกลางบนสุด พร้อมตราประทับชั้นความเร็วมุมซ้ายบน */}
+            <div className="relative text-center mb-3">
+              {isUrgent && (
+                <div className="absolute left-0 top-0 text-left">
+                  <span className="gov-urgency-badge">
+                    {doc.urgency === "most_urgent"
+                      ? "ด่วนที่สุด"
+                      : doc.urgency === "very_urgent"
+                      ? "ด่วนมาก"
+                      : "ด่วน"}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-center mb-1">
                 <GarudaEmblem size="3cm" />
               </div>
@@ -663,8 +678,19 @@ export function OfficialCircularSheet({
            ========================================================================= */}
         {currentType === "announcement" && (
           <div className="space-y-4">
-            {/* ตราครุฑ 3.0 ซม. กึ่งกลางบนสุด */}
-            <div className="text-center mb-3">
+            {/* ตราครุฑ 3.0 ซม. กึ่งกลางบนสุด พร้อมตราประทับชั้นความเร็วมุมซ้ายบน */}
+            <div className="relative text-center mb-3">
+              {isUrgent && (
+                <div className="absolute left-0 top-0 text-left">
+                  <span className="gov-urgency-badge">
+                    {doc.urgency === "most_urgent"
+                      ? "ด่วนที่สุด"
+                      : doc.urgency === "very_urgent"
+                      ? "ด่วนมาก"
+                      : "ด่วน"}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-center mb-1">
                 <GarudaEmblem size="3cm" />
               </div>

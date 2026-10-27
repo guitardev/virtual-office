@@ -111,6 +111,12 @@
       font-family: 'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif !important;
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      width: 100% !important;
+      height: auto !important;
+      min-height: 100% !important;
+      overflow: visible !important;
     }
 
     *, body, html {
@@ -119,6 +125,65 @@
 
     h1, h2, h3, h4, h5, h6, .font-heading {
       font-family: 'Sarabun', 'TH Sarabun New', sans-serif !important;
+    }
+
+    /* ─── ซ่อนโครงสร้าง Web UI ทั้งหมดของระบบ (แสดงเฉพาะกระดาษเอกสารทางการ) ─── */
+    aside,
+    header,
+    nav,
+    footer,
+    button,
+    input,
+    select,
+    textarea,
+    .print\:hidden,
+    [role="dialog"] > div > div:first-child,
+    [role="dialog"] > div > div:last-child,
+    [data-testid*="sidebar"],
+    [data-testid*="header"],
+    .no-print {
+      display: none !important;
+    }
+
+    /* ปลดล็อค Container ซ้อนทับ (Modal, Dialog, Backdrop) ไม่ให้บังหรือแสดงขอบในงานพิมพ์ */
+    div[role="dialog"],
+    div[class*="fixed inset-0"],
+    div[class*="bg-slate-900"],
+    div[class*="backdrop-blur"],
+    div[class*="overflow-y-auto"],
+    div[class*="overflow-x-auto"] {
+      position: static !important;
+      inset: auto !important;
+      background: transparent !important;
+      background-color: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      width: 100% !important;
+      max-width: none !important;
+      height: auto !important;
+      max-height: none !important;
+      overflow: visible !important;
+    }
+
+    /* ปลดล็อคความสูงและกรอบของ Root App Containers */
+    #__next,
+    main,
+    div[class*="max-w-"],
+    div[class*="h-screen"],
+    div[class*="min-h-screen"] {
+      height: auto !important;
+      min-height: auto !important;
+      max-height: none !important;
+      width: 100% !important;
+      max-width: none !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      overflow: visible !important;
+      border: none !important;
+      box-shadow: none !important;
+      background: transparent !important;
     }
 
     .print-page-break {
@@ -144,6 +209,7 @@
       background: transparent !important;
       color: #000000 !important;
       font-size: 16pt !important;
+      visibility: visible !important;
     }
 
     /* สั่งพิมพ์ตามขนาดทางการของระเบียบสำนักนายกรัฐมนตรีฯ: ๒๙pt / ๒๐pt / ๑๖pt */

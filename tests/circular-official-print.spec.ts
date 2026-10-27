@@ -228,4 +228,37 @@ test.describe("ระบบพิมพ์หนังสือราชกา�
     await expect(sheetWrapper).toBeVisible();
     await expect(page.locator("h1:has-text('บันทึกข้อความ')").first()).toBeVisible();
   });
+
+  test("การพิมพ์หนังสือราชการ: ซ่อน Web UI ทั้งหมด (Sidebar, Header, ปุ่ม) และแสดงเฉพาะแผ่นเอกสาร A4 พร้อมตราประทับด่วนตำแหน่งที่ถูกต้อง", async ({
+    page,
+  }) => {
+    // 1. นำทางไปยังหน้าระบบเวียนหนังสือราชการ
+    const circularNav = page.locator("aside").getByRole("button", { name: /เวียนหนังสือราชการ/ });
+    await expect(circularNav).toBeVisible({ timeout: 10000 });
+    await circularNav.click();
+
+    // 2. คลิกดูเอกสารเพื่อเปิด OfficialCircularSheet
+    const card = page.locator('[data-testid="circular-doc-card-circ_print_test_001"]');
+    await expect(card).toBeVisible({ timeout: 10000 });
+    await card.locator("h3").click();
+
+    // 3. ตรวจสอบตราประทับด่วนในบันทึกข้อความ (ต้องอยู่คู่กับตราครุฑ ก่อนคำว่าบันทึกข้อความ)
+    const urgentBadge = page.locator(".gov-urgency-badge:has-text('ด่วนที่สุด')").first();
+    await expect(urgentBadge).toBeVisible();
+
+    // 4. จำลองโหมดพิมพ์กระดาษ (@media print)
+    await page.emulateMedia({ media: "print" });
+
+    // 5. โครงสร้างเว็บ UI อื่นๆ ทั้งหมดต้องถูกซ่อนอย่างสมบูรณ์
+    const sidebar = page.locator("aside").first();
+    await expect(sidebar).toBeHidden();
+
+    const topHeader = page.locator("header").first();
+    await expect(topHeader).toBeHidden();
+
+    // 6. แผ่นกระดาษ A4 (.gov-a4-sheet) ต้องยังคงแสดงผลอย่างถูกต้อง
+    const sheet = page.locator(".gov-a4-sheet").first();
+    await expect(sheet).toBeVisible();
+    await expect(sheet.locator("h1:has-text('บันทึกข้อความ')")).toBeVisible();
+  });
 });
