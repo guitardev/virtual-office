@@ -75,6 +75,7 @@ interface EditProfileModalProps {
   form: EditProfileFormData;
   setForm: React.Dispatch<React.SetStateAction<EditProfileFormData>>;
   onSubmit: (e: React.FormEvent) => void;
+  onOpenChangePassword?: () => void;
 }
 
 export function EditProfileModal({
@@ -83,6 +84,7 @@ export function EditProfileModal({
   form,
   setForm,
   onSubmit,
+  onOpenChangePassword,
 }: EditProfileModalProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showUrlInput, setShowUrlInput] = useState(false);
@@ -507,6 +509,37 @@ export function EditProfileModal({
                   </div>
                 </div>
 
+                {/* Synology NAS Cloud Password Quick Link */}
+                {onOpenChangePassword && (
+                  <div className="p-3.5 rounded-xl bg-gradient-to-r from-slate-50 to-indigo-50/40 border border-indigo-100 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-xl">🔐</span>
+                      <div>
+                        <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          <span>รหัสผ่าน Synology NAS</span>
+                          <span className="px-1.5 py-0.2 bg-indigo-100 text-indigo-700 rounded text-[10px] font-semibold">
+                            nas.smso.site
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">
+                          บัญชีจัดเก็บเอกสารราชการและคลาวด์ไดรฟ์สำนักงาน
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      data-testid="edit-profile-card-change-nas-password-btn"
+                      onClick={() => {
+                        onClose();
+                        onOpenChangePassword();
+                      }}
+                      className="px-3 py-1.5 bg-white border border-indigo-200 hover:bg-indigo-50 hover:border-indigo-300 text-indigo-700 text-xs font-bold rounded-lg transition-colors cursor-pointer shrink-0 shadow-2xs"
+                    >
+                      เปลี่ยนรหัสผ่าน
+                    </button>
+                  </div>
+                )}
+
                 {/* Info Note */}
                 <div className="p-3.5 rounded-xl bg-amber-50/80 border border-amber-200/80 text-amber-800 text-xs flex items-start gap-2.5">
                   <span className="text-base leading-none">💡</span>
@@ -521,11 +554,27 @@ export function EditProfileModal({
 
           {/* ─── Fixed Footer Buttons ─── */}
           <div className="p-4 md:px-7 bg-slate-50/90 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
-            <div className="text-xs text-slate-500 hidden sm:flex items-center gap-1.5">
-              <span>⌨️</span>
-              <span>
-                กด <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[10px] font-mono font-bold text-slate-700">Esc</kbd> หรือคลิกปุ่มปิดหน้าต่างด้านบนเพื่อยกเลิกได้ทันที
-              </span>
+            <div className="flex items-center gap-3">
+              {onOpenChangePassword && (
+                <button
+                  type="button"
+                  data-testid="edit-profile-change-nas-password-btn"
+                  onClick={() => {
+                    onClose();
+                    onOpenChangePassword();
+                  }}
+                  className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>🔐</span>
+                  <span>เปลี่ยนรหัสผ่าน NAS</span>
+                </button>
+              )}
+              <div className="text-xs text-slate-500 hidden sm:flex items-center gap-1.5">
+                <span>⌨️</span>
+                <span>
+                  กด <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[10px] font-mono font-bold text-slate-700">Esc</kbd> หรือคลิกปุ่มปิดหน้าต่างด้านบนเพื่อยกเลิกได้ทันที
+                </span>
+              </div>
             </div>
 
             <div className="flex items-center gap-3 w-full sm:w-auto">

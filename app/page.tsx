@@ -38,6 +38,7 @@ import { CarBookingPage } from "@/components/carbooking/CarBookingPage";
 import { ReportsPage } from "@/components/reports/ReportsPage";
 import { UserPage } from "@/components/user/UserPage";
 import { EditProfileModal } from "@/components/user/EditProfileModal";
+import { ChangeNasPasswordModal } from "@/components/user/ChangeNasPasswordModal";
 import { AdminPage, AdminTabId } from "@/components/admin/AdminPage";
 import { AdminModals } from "@/components/admin/AdminModals";
 import { NasFileManager } from "@/components/dms/NasFileManager";
@@ -223,6 +224,7 @@ export default function SmartMSOApp() {
   const [memberSearch, setMemberSearch] = useState("");
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+  const [showGlobalNasPasswordModal, setShowGlobalNasPasswordModal] = useState(false);
 
   // ─── ACCESS REQUESTS MANAGEMENT STATE ───
   const [accessRequests, setAccessRequests] = useState<AccessRequest[]>(INITIAL_ACCESS_REQUESTS);
@@ -3136,6 +3138,14 @@ export default function SmartMSOApp() {
         form={editProfileForm}
         setForm={setEditProfileForm}
         onSubmit={handleSaveProfile}
+        onOpenChangePassword={() => setShowGlobalNasPasswordModal(true)}
+      />
+
+      <ChangeNasPasswordModal
+        isOpen={showGlobalNasPasswordModal}
+        onClose={() => setShowGlobalNasPasswordModal(false)}
+        currentUser={currentUser}
+        onSuccess={(msg) => showToast(msg)}
       />
 
       <LogoutConfirmModal

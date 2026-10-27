@@ -12,6 +12,7 @@ import {
   addSimulatedSession,
   listenSessionRevocation,
 } from "@/lib/session";
+import { ChangeNasPasswordModal } from "./ChangeNasPasswordModal";
 
 interface UserPageProps {
   currentUser: Member;
@@ -38,6 +39,7 @@ export function UserPage({
   const [sessions, setSessions] = useState<ActiveSession[]>([]);
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
   const [showSimulateMenu, setShowSimulateMenu] = useState(false);
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
 
   const refreshSessions = useCallback(() => {
     if (!currentUser?.id) return;
@@ -451,13 +453,44 @@ export function UserPage({
           )}
         </div>
 
+        {/* ─── Synology NAS Password & Cloud Security Card ─── */}
+        <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-50 via-indigo-50/30 to-purple-50/20 border border-indigo-100/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-800 text-white flex items-center justify-center shrink-0 shadow-sm text-xl">
+              🔐
+            </div>
+            <div>
+              <div className="text-sm font-bold text-slate-800 flex flex-wrap items-center gap-2">
+                <span>รหัสผ่านบัญชี Synology NAS & Cloud Storage</span>
+                <span className="px-2 py-0.5 bg-indigo-100/80 text-indigo-700 rounded-md text-[11px] font-semibold tracking-wide">
+                  nas.smso.site
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                เปลี่ยนรหัสผ่านเพื่อเข้าใช้งานไดรฟ์จัดเก็บเอกสารราชการ, Synology Drive และ DSM WebAPI โดยตรง พร้อมอัปเดตสิทธิ์อัตโนมัติ
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            data-testid="open-change-nas-password-btn"
+            onClick={() => setShowChangePasswordModal(true)}
+            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm hover:shadow transition-all cursor-pointer flex items-center justify-center gap-2 shrink-0 active:scale-98"
+          >
+            <span>🔑</span>
+            <span>เปลี่ยนรหัสผ่าน NAS</span>
+          </button>
+        </div>
+
         <div className="pt-4 flex justify-between items-center border-t border-slate-100">
           <button
             type="button"
-            onClick={() => showToast("🔑 ส่งลิงก์เปลี่ยนรหัสผ่านไปยังอีเมลของคุณแล้ว")}
-            className="px-4 py-2 border border-slate-300 rounded-xl text-sm font-semibold hover:bg-slate-50 text-slate-700 transition-colors cursor-pointer"
+            data-testid="footer-change-password-btn"
+            onClick={() => setShowChangePasswordModal(true)}
+            className="px-4 py-2 border border-slate-300 rounded-xl text-sm font-semibold hover:bg-slate-50 text-slate-700 transition-colors cursor-pointer flex items-center gap-2"
           >
-            เปลี่ยนรหัสผ่าน
+            <span>🔑</span>
+            <span>เปลี่ยนรหัสผ่าน NAS</span>
           </button>
           <button
             type="button"
@@ -480,6 +513,14 @@ export function UserPage({
           </button>
         </div>
       </div>
+
+      {/* Synology NAS Password Change Modal */}
+      <ChangeNasPasswordModal
+        isOpen={showChangePasswordModal}
+        onClose={() => setShowChangePasswordModal(false)}
+        currentUser={currentUser}
+        onSuccess={(msg) => showToast(msg)}
+      />
     </div>
   );
 }

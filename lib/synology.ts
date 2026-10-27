@@ -493,6 +493,51 @@ export async function loginSynology(
   }
 }
 
+export interface SynologyChangePasswordResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+  code?: number;
+  newSid?: string;
+  account?: string;
+}
+
+/**
+ * Change Synology NAS user password via WebAPI (/api/nas/change-password)
+ */
+export async function changeNasPassword(
+  account: string,
+  oldPasswd: string,
+  newPasswd: string,
+  nasUrl?: string
+): Promise<SynologyChangePasswordResult> {
+  try {
+    const res = await fetch("/api/nas/change-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: account,
+        oldPassword: oldPasswd,
+        newPassword: newPasswd,
+        nasUrl,
+      }),
+    });
+
+    const data = await safeParseJsonResponse(res);
+
+    if (data.success && data.newSid) {
+      setUserNasSid(data.newSid, account);
+    }
+
+    return data;
+  } catch (err: any) {
+    return {
+      success: false,
+      error: `เกิดข้อผิดพลาดในการเปลี่ยนรหัสผ่าน: ${err?.message || "ไม่สามารถติดต่อเซิร์ฟเวอร์"}`,
+    };
+  }
+}
+
 /**
  * Map Synology FileStation error code to clear Thai message
  */
