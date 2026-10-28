@@ -41,6 +41,23 @@ export function ReviewBookingModal({
     booking.requesterId === currentUser.id ||
     (Boolean(currentUser.name) && booking.requesterName === currentUser.name);
 
+  // ผู้มีสิทธิ์จัดสรรรถ/คนขับ (Stage 2): มีเฉพาะ 2 คน คือ หัวหน้าฝ่ายบริหาร และ syno_ปภาวิน
+  const isFleetDispatcherAuthorized =
+    currentUser.id === "syno_ปภาวิน" ||
+    currentUser.name.includes("ปภาวิน") ||
+    currentUser.id === "syno_เสกพล" ||
+    currentUser.name.includes("เสกพล") ||
+    (currentUser.division?.includes("ฝ่ายบริหารทั่วไป") &&
+      (currentUser.position?.includes("หัวหน้า") || currentUser.role === "manager")) ||
+    currentUser.id === booking.fleetDispatcherId;
+
+  // ผู้มีสิทธิ์เห็นชอบ (Stage 3): เฉพาะหัวหน้าฝ่ายบริหารทั่วไปเท่านั้น
+  const isAdminHeadAuthorized =
+    currentUser.id === "syno_เสกพล" ||
+    currentUser.name.includes("เสกพล") ||
+    (currentUser.division?.includes("ฝ่ายบริหารทั่วไป") &&
+      (currentUser.position?.includes("หัวหน้า") || currentUser.role === "manager"));
+
   // Check vehicle status and time overlap with other active bookings
   const getVehicleAvailability = (veh: Vehicle) => {
     if (veh.status === "maintenance") {
@@ -152,6 +169,10 @@ export function ReviewBookingModal({
         onEndorse(booking.id, booking.assignedDriver || "รอจัดสรร", notes.trim());
       }
     } else if (isStage2) {
+      if (currentUser.role !== "admin" && !isFleetDispatcherAuthorized) {
+        alert("เฉพาะเจ้าหน้าที่ฝ่ายบริหารทั่วไป (หัวหน้าฝ่ายบริหารทั่วไป หรือ คุณปภาวิน) เท่านั้นที่มีสิทธิ์จัดสรรรถยนต์และคนขับ");
+        return;
+      }
       // Step 3: Fleet Dispatcher Resource Assignment
       if (!selectedVehicleId) {
         alert("กรุณาเลือกยานพาหนะส่วนกลาง");
@@ -193,6 +214,10 @@ export function ReviewBookingModal({
         onEndorse(booking.id, driverToAssign, notes.trim());
       }
     } else if (isStage3) {
+      if (currentUser.role !== "admin" && !isAdminHeadAuthorized) {
+        alert("เฉพาะหัวหน้าฝ่ายบริหารทั่วไปเท่านั้นที่มีสิทธิ์ให้ความเห็นชอบในขั้นตอนนี้");
+        return;
+      }
       // Step 4.1: Admin Head Endorsement
       if (onAdminHeadEndorse) {
         onAdminHeadEndorse(booking.id, notes.trim());
@@ -555,6 +580,32 @@ export function ReviewBookingModal({
               <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3">
                 <span className="text-xs text-amber-800 bg-amber-50 px-3.5 py-2 rounded-xl border border-amber-200 font-medium">
                   ⚠️ ท่านเป็นผู้ขอใช้รถในรายการนี้ คำขออยู่ในขั้นตอนรอความเห็นชอบจากหัวหน้ากลุ่มงาน/ผู้ได้รับมอบหมาย
+                </span>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer shrink-0"
+                >
+                  ปิดหน้าต่าง
+                </button>
+              </div>
+            ) : isStage2 && currentUser.role !== "admin" && !isFleetDispatcherAuthorized ? (
+              <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3">
+                <span className="text-xs text-blue-800 bg-blue-50 px-3.5 py-2 rounded-xl border border-blue-200 font-medium">
+                  ℹ️ คำขออยู่ในขั้นตอนการจัดสรรรถยนต์และคนขับโดยเจ้าหน้าที่ฝ่ายบริหารทั่วไป (หัวหน้าฝ่ายบริหารทั่วไป หรือ คุณปภาวิน)
+                </span>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer shrink-0"
+                >
+                  ปิดหน้าต่าง
+                </button>
+              </div>
+            ) : isStage3 && currentUser.role !== "admin" && !isAdminHeadAuthorized ? (
+              <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3">
+                <span className="text-xs text-teal-800 bg-teal-50 px-3.5 py-2 rounded-xl border border-teal-200 font-medium">
+                  ℹ️ คำขออยู่ในขั้นตอนรอหัวหน้าฝ่ายบริหารทั่วไปให้ความเห็นชอบ
                 </span>
                 <button
                   type="button"

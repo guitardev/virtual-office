@@ -9,6 +9,14 @@ import sys
 import json
 import os
 import docx
+from docx.shared import Pt
+
+def set_p_text(p, text, font_name="TH SarabunPSK", font_size=16, bold=False):
+    p.text = text
+    for r in p.runs:
+        r.font.name = font_name
+        r.font.size = Pt(font_size)
+        r.bold = bold
 
 def generate_booking_docx(input_json_str, output_path):
     template_path = os.path.join(os.path.dirname(__file__), "..", "FormTemplates", "Form_ขอใช้รถ.docx")
@@ -22,6 +30,7 @@ def generate_booking_docx(input_json_str, output_path):
     # Extract fields
     req_name = booking_data.get('requesterName', '')
     req_pos = booking_data.get('requesterPosition', '')
+    veh_name = booking_data.get('vehicleName', '')
     lic_plate = booking_data.get('licensePlate', '')
     driver = booking_data.get('assignedDriver', '')
     dest = booking_data.get('destination', '')
@@ -37,48 +46,102 @@ def generate_booking_docx(input_json_str, output_path):
     day = booking_data.get('day', '')
     month = booking_data.get('month', '')
     year = booking_data.get('year', '')
-    manager_name = booking_data.get('managerName', '')
-    manager_notes = booking_data.get('managerNotes', 'เพื่อโปรดพิจารณาอนุญาต')
+
+    # Division Reviewer (Block 2)
+    div_reviewer_name = booking_data.get('divisionReviewerName', '')
+    div_reviewer_pos = booking_data.get('divisionReviewerPosition', '')
+    div_reviewer_date = booking_data.get('divisionReviewerDate', '')
+
+    # Admin Head (Block 3)
+    admin_head_name = booking_data.get('adminHeadName') or booking_data.get('managerName', '')
+    admin_head_pos = booking_data.get('adminHeadPosition', 'นักพัฒนาสังคมชำนาญการ (หัวหน้าฝ่ายบริหารทั่วไป)')
+    admin_head_notes = booking_data.get('adminHeadNotes') or booking_data.get('managerNotes', 'เพื่อโปรดพิจารณาอนุญาต')
+    admin_head_date = booking_data.get('adminHeadDate', '')
+
+    # Approver (Block 4)
     is_approved = booking_data.get('status') == 'approved'
     is_rejected = booking_data.get('status') == 'rejected'
     approver_name = booking_data.get('approverName', '')
+    approver_pos = booking_data.get('approverPosition', 'พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร')
+    approver_date = booking_data.get('approverDate', '')
 
-    for p in doc.paragraphs:
+    # Vehicle Display
+    veh_clause = f" {veh_name} " if veh_name and veh_name != "รอฝ่ายบริหารจัดสรร" else ""
+
+    for i, p in enumerate(doc.paragraphs):
         full_text = p.text
         if 'วันที่..' in full_text and 'เดือน...' in full_text:
-            p.text = f"\t                                                           วันที่..{day or '....'}...เดือน...{month or '..........'}....พ.ศ...{year or '........'}...."
+            set_p_text(p, f"\t                                                           วันที่..{day or '....'}...เดือน...{month or '..........'}....พ.ศ...{year or '........'}....")
         elif 'ข้าพเจ้า.....' in full_text:
-            p.text = f"\t                    ข้าพเจ้า.....{req_name or '...................................................'}.....ตำแหน่ง.....{req_pos or '...................................................'}.............."
+            set_p_text(p, f"\t                    ข้าพเจ้า.....{req_name or '...................................................'}.....ตำแหน่ง.....{req_pos or '...................................................'}..............")
         elif 'ขออนุญาตใช้รถยนต์หมายเลขทะเบียน' in full_text:
-            p.text = f"ขออนุญาตใช้รถยนต์หมายเลขทะเบียน.....{lic_plate or '.....................................'}.....โดยมี.....{driver or '...................................................................'}"
+            set_p_text(p, f"ขออนุญาตใช้รถยนต์{veh_clause}หมายเลขทะเบียน.....{lic_plate or '.....................................'}.....โดยมี.....{driver or '...................................................................'}")
         elif 'เป็นพนักงานขับรถยนต์ไปราชการที่' in full_text:
-            p.text = f"เป็นพนักงานขับรถยนต์ไปราชการที่...{dest or '..................................................................................................................'}"
+            set_p_text(p, f"เป็นพนักงานขับรถยนต์ไปราชการที่...{dest or '..................................................................................................................'}")
         elif 'เพื่อ...' in full_text:
-            p.text = f"เพื่อ...{purpose or '..................................................................................................................'}  พร้อมด้วย"
+            set_p_text(p, f"เพื่อ...{purpose or '..................................................................................................................'}  พร้อมด้วย")
         elif 'นางสาวพิชชาภา' in full_text or ('ปฏิบัติการ......' in full_text and 'เพื่อ...' not in full_text):
-            p.text = f"{passengers or '.....................................................................................................................................................'}......"
+            set_p_text(p, f"{passengers or '.....................................................................................................................................................'}......")
         elif 'มีคนนั่ง........' in full_text:
-            p.text = f"มีคนนั่ง........{passenger_count}...........คน   ระยะทางโดยประมาณ.........{distance}.........กิโลเมตร"
+            set_p_text(p, f"มีคนนั่ง........{passenger_count}...........คน   ระยะทางโดยประมาณ.........{distance}.........กิโลเมตร")
         elif 'ในวันที่…....' in full_text:
-            p.text = f"ในวันที่…....{start_date or '.........................'}..........เวลา......{start_time or '............'}...........น."
+            set_p_text(p, f"ในวันที่…....{start_date or '.........................'}..........เวลา......{start_time or '............'}...........น.")
         elif 'ถึงวันที่…....' in full_text:
-            p.text = f"ถึงวันที่…....{end_date or '.........................'}...........เวลา…...{end_time or '............'}….…..น."
+            set_p_text(p, f"ถึงวันที่…....{end_date or '.........................'}...........เวลา…...{end_time or '............'}….…..น.")
         elif 'ขอเบิกน้ำมันเชื้อเพลิง' in full_text:
             fuel_str = f"{fuel_amount} บาท" if fuel_amount else ".........................................บาท"
-            p.text = f"ขอเบิกน้ำมันเชื้อเพลิงและหล่อลื่น  จำนวน…{fuel_str}"
+            set_p_text(p, f"ขอเบิกน้ำมันเชื้อเพลิงและหล่อลื่น  จำนวน…{fuel_str}")
         elif '(..................นางสาวเอมวิกา' in full_text:
-            p.text = f"\t                                                                  (..................{req_name or '.......................................................'}...................)"
+            set_p_text(p, f"\t                                                                  (..................{req_name or '.......................................................'}...................)")
         elif 'ตำแหน่ง.......พนักงานคุ้มครองสวัสดิภาพเด็ก' in full_text:
-            p.text = f"\t                                                           ตำแหน่ง.......{req_pos or '.....................................................'}................"
-        elif 'ความเห็น...........' in full_text:
-            p.text = f" ความเห็น...........{manager_notes or 'เพื่อโปรดพิจารณาอนุญาต'}........................................................................................................."
-        elif '(................) อนุญาต' in full_text:
+            set_p_text(p, f"\t                                                           ตำแหน่ง.......{req_pos or '.....................................................'}................")
+        elif i == 18 or 'หัวหน้ากลุ่ม/ฝ่าย' in full_text:
+            # Paragraph 18: ลงชื่อ......................................................หัวหน้ากลุ่ม/ฝ่าย
+            pass
+        elif i == 19:
+            # Paragraph 19: (หัวหน้ากลุ่ม/ฝ่าย)
+            if div_reviewer_name:
+                set_p_text(p, f"\t                                                                  (..................{div_reviewer_name}...................)")
+            else:
+                set_p_text(p, "\t                                                                  (.......................................................)")
+        elif i == 20:
+            # Paragraph 20: ตำแหน่ง หัวหน้ากลุ่ม/ฝ่าย
+            if div_reviewer_pos:
+                set_p_text(p, f"\t                                                           ตำแหน่ง.......{div_reviewer_pos}................")
+            else:
+                set_p_text(p, "\t                                                           ตำแหน่ง.....................................................")
+        elif 'ความเห็น...........' in full_text or i == 22:
+            # Paragraph 22: ความเห็น หน.ฝ่ายบริหาร
+            set_p_text(p, f" ความเห็น...........{admin_head_notes or 'เพื่อโปรดพิจารณาอนุญาต'}.........................................................................................................")
+        elif i == 24 and 'ลงชื่อ' in full_text:
+            # Paragraph 24: ลงชื่อ หน.ฝ่ายบริหารทั่วไป
+            set_p_text(p, "\t                                                           \tลงชื่อ..........................................................หัวหน้าฝ่ายบริหารทั่วไป")
+        elif i == 25:
+            # Paragraph 25: (หน.ฝ่ายบริหารทั่วไป)
+            if admin_head_name:
+                set_p_text(p, f"\t                                                                  (..................{admin_head_name}...................)")
+            else:
+                set_p_text(p, "\t                                                                  (.......................................................)")
+        elif i == 26:
+            # Paragraph 26: ตำแหน่ง หน.ฝ่ายบริหารทั่วไป
+            if admin_head_name:
+                set_p_text(p, f"\t                                                           ตำแหน่ง.......{admin_head_pos}................")
+            else:
+                set_p_text(p, "\t                                                           ตำแหน่ง.....................................................")
+        elif '(................) อนุญาต' in full_text or i == 28:
             app_mark = '✓' if is_approved else '................'
             rej_mark = '✓' if is_rejected else '................'
-            p.text = f"\t\t                                                            ({app_mark}) อนุญาต   ({rej_mark}) ไม่อนุญาต"
-        elif '(.......................................................) ' in full_text and p.text.endswith(' '):
-            if approver_name and is_approved:
-                p.text = f"\t                                                                  (..................{approver_name}...................) "
+            set_p_text(p, f"\t\t                                                            ({app_mark}) อนุญาต   ({rej_mark}) ไม่อนุญาต")
+        elif i == 31:
+            # Paragraph 31: (ผู้อนุญาต)
+            if approver_name:
+                set_p_text(p, f"\t                                                                  (..................{approver_name}...................)")
+            else:
+                set_p_text(p, "\t                                                                  (.......................................................) ")
+        elif i == 32:
+            # Paragraph 32: วันที่ผู้อนุญาต
+            if approver_date:
+                set_p_text(p, f"\t                                                           \t    {approver_date}")
 
     doc.save(output_path)
     return output_path

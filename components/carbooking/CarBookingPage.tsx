@@ -1626,27 +1626,32 @@ export function CarBookingPage({
                   !isMyBooking &&
                   (isDesignatedReviewer || isDivisionHeadOfRequester || currentUser.role === "admin");
 
-                // Step 2: เจ้าหน้าที่ฝ่ายบริหารจัดสรรรถและคนขับ (มี 2 คน: หัวหน้าฝ่ายบริหาร และ syno_ปภาวิน)
-                const isFleetDispatcherUser =
+                // Step 2: เจ้าหน้าที่ฝ่ายบริหารจัดสรรรถและคนขับ (มีเฉพาะ 2 คน: หัวหน้าฝ่ายบริหารทั่วไป และ syno_ปภาวิน เท่านั้น)
+                // หน.กลุ่มฝ่ายอื่นๆ ที่ไม่ใช่ฝ่ายบริหารทั่วไป จะไม่มีสิทธิ์ในขั้นตอนนี้
+                const isFleetDispatcherAuthorized =
                   currentUser.id === "syno_ปภาวิน" ||
                   currentUser.name.includes("ปภาวิน") ||
                   currentUser.id === "syno_เสกพล" ||
                   currentUser.name.includes("เสกพล") ||
-                  currentUser.id === b.fleetDispatcherId ||
-                  currentUser.division?.includes("ฝ่ายบริหารทั่วไป");
+                  (currentUser.division?.includes("ฝ่ายบริหารทั่วไป") &&
+                    (currentUser.position?.includes("หัวหน้า") || currentUser.role === "manager")) ||
+                  currentUser.id === b.fleetDispatcherId;
 
                 const canReviewStage2 =
                   b.status === "pending_fleet_assignment" &&
-                  (currentUser.role === "admin" ||
-                    currentUser.role === "manager" ||
-                    isFleetDispatcherUser);
+                  (currentUser.role === "admin" || isFleetDispatcherAuthorized);
 
-                // Step 3: หัวหน้าฝ่ายบริหารเห็นชอบ
+                // Step 3: หัวหน้าฝ่ายบริหารเห็นชอบ (เฉพาะหัวหน้าฝ่ายบริหารทั่วไปเท่านั้น)
+                // หน.กลุ่มฝ่ายอื่นๆ ที่ไม่ใช่ฝ่ายบริหารทั่วไป จะไม่มีสิทธิ์ในขั้นตอนนี้
+                const isAdminHeadAuthorized =
+                  currentUser.id === "syno_เสกพล" ||
+                  currentUser.name.includes("เสกพล") ||
+                  (currentUser.division?.includes("ฝ่ายบริหารทั่วไป") &&
+                    (currentUser.position?.includes("หัวหน้า") || currentUser.role === "manager"));
+
                 const canReviewStage3 =
                   b.status === "pending_admin_head" &&
-                  (currentUser.role === "admin" ||
-                    currentUser.role === "manager" ||
-                    currentUser.division?.includes("ฝ่ายบริหารทั่วไป"));
+                  (currentUser.role === "admin" || isAdminHeadAuthorized);
 
                 // Step 4: พมจ. พิจารณาอนุมัติ
                 const canReviewStage4 =
@@ -1744,6 +1749,66 @@ export function CarBookingPage({
                         </div>
                       </div>
                     </div>
+
+                    {/* Assigned Vehicle & Driver Highlight (When allocated by General Administration) */}
+                    {b.licensePlate && b.licensePlate !== "-" && (
+                      <div className="p-3.5 bg-linear-to-r from-emerald-50/90 via-teal-50/80 to-blue-50/70 rounded-2xl border border-emerald-200 text-xs text-slate-800 space-y-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2 font-bold text-emerald-950">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">🚗</span>
+                            <span className="text-sm">
+                              ข้อมูลการจัดสรรยานพาหนะและพนักงานขับรถ
+                            </span>
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-200 text-emerald-800 border border-emerald-300">
+                              ฝ่ายบริหารทั่วไปจัดสรรแล้ว
+                            </span>
+                          </div>
+                          {b.fleetDispatcherActionAt && (
+                            <span className="text-[11px] text-slate-500 font-normal">
+                              จัดสรรเมื่อ {b.fleetDispatcherActionAt}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1.5 border-t border-emerald-200/60">
+                          <div>
+                            <span className="text-slate-500">ยานพาหนะ:</span>{" "}
+                            <strong className="text-slate-900 font-semibold">{b.vehicleName || "รถยนต์ส่วนกลาง"}</strong>
+                          </div>
+                          <div>
+                            <span className="text-slate-500">หมายเลขทะเบียน:</span>{" "}
+                            <strong className="text-emerald-900 font-mono font-bold">[{b.licensePlate}]</strong>
+                          </div>
+                          <div>
+                            <span className="text-slate-500">พนักงานขับรถ:</span>{" "}
+                            <strong className="text-teal-900 font-bold">{b.assignedDriver || "-"}</strong>
+                          </div>
+                        </div>
+
+                        {(b.fleetDispatcherName || b.adminHeadName || b.adminHeadNotes) && (
+                          <div className="pt-2 border-t border-emerald-200/40 text-[11px] text-slate-600 flex flex-wrap gap-x-4 gap-y-1">
+                            {b.fleetDispatcherName && (
+                              <div>
+                                <span className="text-slate-500">ผู้รับผิดชอบจัดสรร:</span>{" "}
+                                <span className="font-medium text-slate-800">{b.fleetDispatcherName}</span>
+                              </div>
+                            )}
+                            {b.adminHeadName && (
+                              <div>
+                                <span className="text-slate-500">หน.ฝ่ายบริหาร:</span>{" "}
+                                <span className="font-medium text-slate-800">{b.adminHeadName}</span>
+                              </div>
+                            )}
+                            {(b.adminHeadNotes || b.fleetDispatcherNotes) && (
+                              <div className="w-full text-slate-700">
+                                <span className="text-slate-500">ความเห็น:</span>{" "}
+                                <span className="italic">"{b.adminHeadNotes || b.fleetDispatcherNotes}"</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* Return Report Highlight (if completed) */}
                     {b.returnReport && (

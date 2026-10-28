@@ -57,10 +57,21 @@ export function CarBookingDocumentModal({
           y: (dt.getFullYear() + 543).toString(),
         };
       }
+      // If it's a Thai formatted string e.g. "28 ต.ค. 2569, 14:00 น."
+      const parts = dateStr.split(" ");
+      if (parts.length >= 3) {
+        return {
+          d: parts[0].replace(/[^0-9]/g, ""),
+          m: parts[1],
+          y: parts[2].replace(/[^0-9]/g, ""),
+        };
+      }
     } catch {}
     return { d: "", m: "", y: "" };
   };
 
+  const divReviewerDate = parseShortDate(booking.divisionReviewerActionAt);
+  const adminHeadDate = parseShortDate(booking.adminHeadActionAt || booking.fleetDispatcherActionAt);
   const approverDate = parseShortDate(booking.approverActionAt);
 
   const handleDownloadDocx = async () => {
@@ -70,8 +81,9 @@ export function CarBookingDocumentModal({
         requestNo: booking.requestNo,
         requesterName: booking.requesterName,
         requesterPosition: booking.requesterPosition,
-        licensePlate: booking.licensePlate,
-        assignedDriver: booking.assignedDriver,
+        vehicleName: booking.vehicleName && booking.vehicleName !== "รอฝ่ายบริหารจัดสรร" ? booking.vehicleName : "",
+        licensePlate: booking.licensePlate && booking.licensePlate !== "-" ? booking.licensePlate : "",
+        assignedDriver: booking.assignedDriver && booking.assignedDriver !== "รอฝ่ายบริหารจัดสรร" ? booking.assignedDriver : "",
         destination: booking.destination,
         purpose: booking.purpose,
         passengersList: booking.passengersList,
@@ -86,10 +98,17 @@ export function CarBookingDocumentModal({
         day: createdDate.day,
         month: createdDate.month,
         year: createdDate.year,
-        managerName: booking.managerName,
-        managerNotes: booking.managerNotes || "เพื่อโปรดพิจารณาอนุญาต",
+        divisionReviewerName: booking.divisionReviewerName || "",
+        divisionReviewerPosition: booking.divisionReviewerPosition || (booking.divisionReviewerName ? "หัวหน้ากลุ่ม/ฝ่าย" : ""),
+        divisionReviewerDate: divReviewerDate.d ? `${divReviewerDate.d} / ${divReviewerDate.m} / ${divReviewerDate.y}` : "",
+        adminHeadName: booking.adminHeadName || booking.fleetDispatcherName || booking.managerName || (booking.licensePlate && booking.licensePlate !== "-" ? "นายเสกพล ดิษฐโชติ" : ""),
+        adminHeadPosition: "นักพัฒนาสังคมชำนาญการ (หัวหน้าฝ่ายบริหารทั่วไป)",
+        adminHeadNotes: booking.adminHeadNotes || booking.fleetDispatcherNotes || booking.managerNotes || (booking.licensePlate && booking.licensePlate !== "-" ? `จัดสรรรถยนต์ ${booking.vehicleName || ""} ทะเบียน [${booking.licensePlate}] พนักงานขับรถ: ${booking.assignedDriver || ""} เรียบร้อยแล้ว เพื่อโปรดพิจารณาอนุญาต` : "เพื่อโปรดพิจารณาอนุญาต"),
+        adminHeadDate: adminHeadDate.d ? `${adminHeadDate.d} / ${adminHeadDate.m} / ${adminHeadDate.y}` : "",
         status: booking.status,
-        approverName: booking.approverName,
+        approverName: booking.approverName || (booking.status === "approved" ? "นางสาวมะลิวัน สิทธิโยธี" : ""),
+        approverPosition: "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
+        approverDate: approverDate.d ? `${approverDate.d} / ${approverDate.m} / ${approverDate.y}` : "",
       };
 
       const res = await fetch("/api/carbooking/download-docx", {
@@ -166,6 +185,50 @@ export function CarBookingDocumentModal({
         {/* Scrollable Document Preview / A4 Sheet */}
         <div className="overflow-y-auto flex-1 min-h-0 bg-slate-200/50 p-4 sm:p-8 print:p-0 print:bg-white print:overflow-visible">
           
+          {/* Status Alert Banner (On-screen only, hidden when printing) */}
+          {booking.licensePlate && booking.licensePlate !== "-" && (
+            <div className="max-w-[794px] mx-auto mb-4 p-4 bg-emerald-50/95 border border-emerald-300 rounded-2xl shadow-xs text-emerald-950 print:hidden">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-emerald-200/70">
+                <div className="flex items-center gap-2 font-bold text-sm text-emerald-900">
+                  <span className="text-base">✅</span>
+                  <span>จัดสรรยานพาหนะและพนักงานขับรถเรียบร้อยแล้ว</span>
+                </div>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-200 text-emerald-900 border border-emerald-300">
+                  ฝ่ายบริหารทั่วไปจัดสรรแล้ว
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs pt-2.5">
+                <div>
+                  <span className="text-emerald-700 font-medium">ยานพาหนะ: </span>
+                  <strong className="text-emerald-950 font-bold">{booking.vehicleName || "รถยนต์ส่วนกลาง"}</strong>
+                </div>
+                <div>
+                  <span className="text-emerald-700 font-medium">หมายเลขทะเบียน: </span>
+                  <strong className="text-emerald-950 font-mono font-bold">[{booking.licensePlate}]</strong>
+                </div>
+                <div>
+                  <span className="text-emerald-700 font-medium">พนักงานขับรถ: </span>
+                  <strong className="text-emerald-950 font-bold">{booking.assignedDriver || "-"}</strong>
+                </div>
+                {(booking.fleetDispatcherName || booking.adminHeadName) && (
+                  <div className="sm:col-span-3 text-[11px] text-emerald-800 pt-2 border-t border-emerald-200/60 flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <span>
+                      <strong>ผู้จัดสรร:</strong> {booking.fleetDispatcherName || "เจ้าหน้าที่ฝ่ายบริหารทั่วไป"} {booking.fleetDispatcherActionAt ? `(${booking.fleetDispatcherActionAt})` : ""}
+                    </span>
+                    <span>
+                      <strong>หน.ฝ่ายบริหาร:</strong> {booking.adminHeadName || "นายเสกพล ดิษฐโชติ"} {booking.adminHeadActionAt ? `(${booking.adminHeadActionAt})` : ""}
+                    </span>
+                    {(booking.adminHeadNotes || booking.fleetDispatcherNotes) && (
+                      <span className="w-full text-emerald-900">
+                        <strong>ความเห็น:</strong> "{booking.adminHeadNotes || booking.fleetDispatcherNotes}"
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* A4 Paper Canvas */}
           <div
             className="w-[794px] max-w-full min-h-[1123px] bg-white mx-auto p-10 sm:p-14 md:p-16 shadow-lg border border-slate-300 text-black text-[16px] sm:text-[16.5px] leading-[1.85] print:shadow-none print:border-none print:m-0 print:p-[20mm_18mm_15mm_25mm] print:w-full print:max-w-none print:min-h-0 select-text"
@@ -220,14 +283,18 @@ export function CarBookingDocumentModal({
               </div>
 
               {/* Line 2: ขออนุญาตใช้รถยนต์ */}
-              <div className="flex items-baseline">
-                <span className="shrink-0">ขออนุญาตใช้รถยนต์หมายเลขทะเบียน</span>
-                <span className="w-56 mx-1 border-b border-dotted border-black px-2 text-center font-normal font-mono">
-                  {booking.licensePlate || "....................................."}
+              <div className="flex items-baseline flex-wrap sm:flex-nowrap">
+                <span className="shrink-0">ขออนุญาตใช้รถยนต์</span>
+                <span className="min-w-[120px] mx-1 border-b border-dotted border-black px-1 text-center font-normal">
+                  {booking.vehicleName && booking.vehicleName !== "รอฝ่ายบริหารจัดสรร" ? booking.vehicleName : "..................................."}
+                </span>
+                <span className="shrink-0">หมายเลขทะเบียน</span>
+                <span className="min-w-[130px] mx-1 border-b border-dotted border-black px-2 text-center font-normal font-mono">
+                  {booking.licensePlate && booking.licensePlate !== "-" ? booking.licensePlate : "....................................."}
                 </span>
                 <span className="shrink-0">โดยมี</span>
                 <span className="flex-1 ml-1 border-b border-dotted border-black px-2 text-center font-normal">
-                  {booking.assignedDriver || "..................................................................."}
+                  {booking.assignedDriver && booking.assignedDriver !== "รอฝ่ายบริหารจัดสรร" ? booking.assignedDriver : "..................................................................."}
                 </span>
               </div>
 
@@ -351,10 +418,24 @@ export function CarBookingDocumentModal({
                   <span className="shrink-0">หัวหน้ากลุ่ม/ฝ่าย</span>
                 </div>
                 <div className="flex items-baseline justify-center">
-                  <span>(.......................................................)</span>
+                  <span>(</span>
+                  <span className="min-w-[180px] border-b border-dotted border-black px-1 text-center font-normal">
+                    {booking.divisionReviewerName || "......................................................."}
+                  </span>
+                  <span>)</span>
                 </div>
                 <div className="flex items-baseline justify-center">
-                  <span className="shrink-0">ตำแหน่ง.....................................................</span>
+                  <span className="shrink-0">ตำแหน่ง</span>
+                  <span className="min-w-[180px] border-b border-dotted border-black px-1 text-center font-normal">
+                    {booking.divisionReviewerPosition || "....................................................."}
+                  </span>
+                </div>
+                <div className="text-center tracking-widest text-black pt-0.5 text-sm">
+                  {booking.divisionReviewerActionAt && divReviewerDate.d ? (
+                    <span>{divReviewerDate.d} / {divReviewerDate.m} / {divReviewerDate.y}</span>
+                  ) : (
+                    <span>................/.............................../.................</span>
+                  )}
                 </div>
               </div>
             </div>
@@ -364,24 +445,49 @@ export function CarBookingDocumentModal({
               <div className="flex items-baseline">
                 <span className="shrink-0">ความเห็น...........</span>
                 <span className="flex-1 border-b border-dotted border-black px-2 font-normal">
-                  {booking.managerNotes || "เพื่อโปรดพิจารณาอนุญาต"}
+                  {booking.adminHeadNotes ||
+                    booking.fleetDispatcherNotes ||
+                    booking.managerNotes ||
+                    (booking.licensePlate && booking.licensePlate !== "-"
+                      ? `ตรวจสอบแล้ว จัดสรรรถยนต์ ${booking.vehicleName || ""} ทะเบียน [${booking.licensePlate}] พนักงานขับรถ: ${booking.assignedDriver || ""} เรียบร้อยแล้ว เห็นควรอนุญาต`
+                      : "เพื่อโปรดพิจารณาอนุญาต")}
                 </span>
-                <span className="shrink-0">.........................................................................................................</span>
               </div>
             </div>
 
-            {/* Signature Block 3: ผู้เสนอความเห็น (Right Aligned) */}
+            {/* Signature Block 3: ผู้เสนอความเห็น / หัวหน้าฝ่ายบริหารทั่วไป (Right Aligned) */}
             <div className="flex justify-end mb-4">
               <div className="w-[360px] text-center space-y-1">
                 <div className="flex items-baseline justify-center">
                   <span className="shrink-0">ลงชื่อ</span>
-                  <span className="w-52 border-b border-dotted border-black mx-1"></span>
+                  <span className="w-44 border-b border-dotted border-black mx-1"></span>
+                  <span className="shrink-0">หัวหน้าฝ่ายบริหารทั่วไป</span>
                 </div>
                 <div className="flex items-baseline justify-center">
-                  <span>(.......................................................)</span>
+                  <span>(</span>
+                  <span className="min-w-[180px] border-b border-dotted border-black px-1 text-center font-normal">
+                    {booking.adminHeadName ||
+                      (booking.licensePlate && booking.licensePlate !== "-"
+                        ? "นายเสกพล ดิษฐโชติ"
+                        : ".......................................................")}
+                  </span>
+                  <span>)</span>
                 </div>
                 <div className="flex items-baseline justify-center">
-                  <span className="shrink-0">ตำแหน่ง.....................................................</span>
+                  <span className="shrink-0">ตำแหน่ง</span>
+                  <span className="min-w-[180px] border-b border-dotted border-black px-1 text-center font-normal">
+                    {booking.adminHeadName?.includes("เสกพล") ||
+                    (booking.licensePlate && booking.licensePlate !== "-")
+                      ? "นักพัฒนาสังคมชำนาญการ (หัวหน้าฝ่ายบริหารทั่วไป)"
+                      : "....................................................."}
+                  </span>
+                </div>
+                <div className="text-center tracking-widest text-black pt-0.5 text-sm">
+                  {(booking.adminHeadActionAt || booking.fleetDispatcherActionAt) && adminHeadDate.d ? (
+                    <span>{adminHeadDate.d} / {adminHeadDate.m} / {adminHeadDate.y}</span>
+                  ) : (
+                    <span>................/.............................../.................</span>
+                  )}
                 </div>
               </div>
             </div>
@@ -414,7 +520,21 @@ export function CarBookingDocumentModal({
                   <span className="shrink-0">ผู้อนุญาต</span>
                 </div>
                 <div className="flex items-baseline justify-center">
-                  <span>(.......................................................)</span>
+                  <span>(</span>
+                  <span className="min-w-[180px] border-b border-dotted border-black px-1 text-center font-normal">
+                    {booking.status === "approved" || booking.approverName
+                      ? (booking.approverName || "นางสาวมะลิวัน สิทธิโยธี")
+                      : "......................................................."}
+                  </span>
+                  <span>)</span>
+                </div>
+                <div className="flex items-baseline justify-center">
+                  <span className="shrink-0">ตำแหน่ง</span>
+                  <span className="min-w-[180px] border-b border-dotted border-black px-1 text-center font-normal">
+                    {booking.status === "approved" || booking.approverName
+                      ? "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"
+                      : "....................................................."}
+                  </span>
                 </div>
                 <div className="text-center tracking-widest text-black pt-0.5 text-sm">
                   {booking.approverActionAt && approverDate.d ? (
