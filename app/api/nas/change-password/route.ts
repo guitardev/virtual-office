@@ -53,23 +53,52 @@ export async function POST(req: NextRequest) {
       DEFAULT_SYNOLOGY_CONFIG.nasUrl ||
       "https://nas.smso.site";
 
-    // 2. ขั้นแรก: ตรวจสอบความถูกต้องของรหัสผ่านเดิมด้วยการล็อกอินจริงบน Synology NAS (ขอรับ Session Core/webui)
-    let authResult = await loginSynology(username.trim(), oldPassword, targetUrl, "Core");
+    // 2. ขั้นแรก: ตรวจสอบความถูกต้องของรหัสผ่านเดิมด้วยการล็อกอินจริงบน Synology NAS
+    const rawUsername = username.trim();
+    const cleanUsername = rawUsername
+      .replace(/^syno_/, "")
+      .replace(/^(นาย|นางสาว|นาง|ดร\.|ว่าที่\s*ร\.ต\.)/, "")
+      .trim();
 
-    // ถ้า session Core ไม่สำเร็จ ให้ลอง session FileStation
-    if (!authResult.success && authResult.code !== 401 && authResult.code !== 400) {
-      authResult = await loginSynology(username.trim(), oldPassword, targetUrl, "FileStation");
+    // รวบรวมรูปแบบชื่อบัญชีที่อาจเป็นไปได้ (ตัด syno_, ตัดคำนำหน้าภาษาไทย)
+    const usernameCandidates = [
+      ...new Set([cleanUsername, rawUsername.replace(/^syno_/, ""), rawUsername]),
+    ].filter(Boolean);
+
+    let authResult: any = null;
+    let validUsername = cleanUsername;
+
+    for (const candidate of usernameCandidates) {
+      // ลอง session Core ก่อน
+      let res = await loginSynology(candidate, oldPassword, targetUrl, "Core");
+      if (!res.success && res.code !== 401 && res.code !== 400 && res.code !== 407) {
+        // หากไม่สำเร็จ ให้ลอง session FileStation
+        res = await loginSynology(candidate, oldPassword, targetUrl, "FileStation");
+      }
+
+      if (res.success) {
+        authResult = res;
+        validUsername = candidate;
+        break;
+      } else {
+        authResult = res;
+      }
     }
 
-    if (!authResult.success) {
+    if (!authResult || !authResult.success) {
+      let friendlyError = authResult?.error || "การยืนยันรหัสผ่านเดิมล้มเหลว";
+      if (authResult?.code === 400) {
+        friendlyError = `ชื่อผู้ใช้ "${rawUsername}" หรือรหัสผ่านปัจจุบันไม่ถูกต้อง กรุณาตรวจสอบชื่อบัญชีและรหัสผ่านเดิมอีกครั้ง`;
+      } else if (authResult?.code === 407) {
+        friendlyError =
+          "ที่อยู่ IP ถูกระงับการเชื่อมต่อชั่วคราวจากระบบความปลอดภัย NAS (Auto-Block) กรุณารอสักครู่แล้วลองใหม่อีกครั้ง";
+      }
+
       return NextResponse.json(
         {
           success: false,
-          error:
-            authResult.code === 401
-              ? "รหัสผ่านเดิมไม่ถูกต้อง กรุณาตรวจสอบและลองใหม่อีกครั้ง"
-              : authResult.error || "การยืนยันรหัสผ่านเดิมล้มเหลว",
-          code: authResult.code || 401,
+          error: friendlyError,
+          code: authResult?.code || 401,
         },
         { status: 401 }
       );
@@ -146,7 +175,7 @@ export async function POST(req: NextRequest) {
             api: "SYNO.Core.User",
             version: "1",
             method: "set",
-            name: username.trim(),
+            name: validUsername,
             password: newPassword,
             _sid: currentSid,
           });
@@ -204,13 +233,13 @@ export async function POST(req: NextRequest) {
     // 4. ตรวจสอบผลลัพธ์จาก DSM
     if (result.success) {
       // ทำการยืนยันตัวตนด้วยรหัสผ่านใหม่ทันที เพื่อให้ได้ Session ID ใหม่กลับไปใช้งานต่อเนื่อง
-      const verifyNewAuth = await loginSynology(username.trim(), newPassword, targetUrl);
+      const verifyNewAuth = await loginSynology(validUsername, newPassword, targetUrl);
 
       return NextResponse.json({
         success: true,
         message: "เปลี่ยนรหัสผ่านบน Synology NAS สำเร็จเรียบร้อยแล้ว",
         newSid: verifyNewAuth.success ? verifyNewAuth.sid : currentSid,
-        account: username.trim(),
+        account: validUsername,
       });
     }
 

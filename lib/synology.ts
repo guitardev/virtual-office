@@ -477,10 +477,11 @@ export async function loginSynology(
       typeof data.error === "string"
         ? data.error
         : data.error?.message || "ชื่อผู้ใช้หรือรหัสผ่านบน Synology NAS ไม่ถูกต้อง";
-    if (errorCode === 400) errorMessage = "ไม่มีบัญชีผู้ใช้งานนี้ในระบบ Synology NAS";
-    if (errorCode === 401) errorMessage = "รหัสผ่านไม่ถูกต้อง หรือบัญชีถูกปิดการใช้งาน";
+    if (errorCode === 400) errorMessage = "ชื่อผู้ใช้หรือรหัสผ่านบน Synology NAS ไม่ถูกต้อง";
+    if (errorCode === 401) errorMessage = "บัญชีนี้ถูกปิดการใช้งาน กรุณาติดต่อผู้ดูแลระบบ";
     if (errorCode === 402) errorMessage = "บัญชีนี้ถูกล็อค กรุณาติดต่อผู้ดูแลระบบ";
     if (errorCode === 403) errorMessage = "จำเป็นต้องยืนยันตัวตนแบบ 2 ขั้นตอน (2FA / OTP)";
+    if (errorCode === 407) errorMessage = "ที่อยู่ IP ถูกระงับการเชื่อมต่อชั่วคราวจากระบบความปลอดภัย NAS (Auto-Block) กรุณารอสักครู่แล้วลองใหม่";
 
     return {
       success: false,

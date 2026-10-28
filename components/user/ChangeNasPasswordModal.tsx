@@ -34,12 +34,21 @@ export function ChangeNasPasswordModal({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const config = getClientSynologyConfig();
-  const nasAccount =
+  const suggestedNasAccount =
     getUserNasAccount() ||
     (currentUser?.id?.startsWith("syno_") ? currentUser.id.replace(/^syno_/, "") : null) ||
+    currentUser?.firstName?.replace(/^(นาย|นางสาว|นาง|ดร\.|ว่าที่\s*ร\.ต\.)/, "") ||
     (currentUser?.email && !currentUser.email.startsWith("user_") ? currentUser.email.split("@")[0] : null) ||
-    currentUser?.name?.split(" ")[0] ||
+    currentUser?.name?.replace(/^(นาย|นางสาว|นาง|ดร\.|ว่าที่\s*ร\.ต\.)/, "").split(" ")[0] ||
     "admin";
+
+  const [accountUsername, setAccountUsername] = useState(suggestedNasAccount);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setAccountUsername(suggestedNasAccount);
+    }
+  }, [isOpen, suggestedNasAccount]);
 
   if (!isOpen) return null;
 
@@ -53,6 +62,11 @@ export function ChangeNasPasswordModal({
     e.preventDefault();
     setErrorMessage(null);
     setSuccessMessage(null);
+
+    if (!accountUsername.trim()) {
+      setErrorMessage("กรุณาระบุชื่อบัญชีผู้ใช้ Synology NAS");
+      return;
+    }
 
     if (!oldPassword.trim()) {
       setErrorMessage("กรุณาระบุรหัสผ่านปัจจุบัน");
@@ -83,7 +97,7 @@ export function ChangeNasPasswordModal({
 
     try {
       const res = await changeNasPassword(
-        nasAccount,
+        accountUsername.trim(),
         oldPassword,
         newPassword,
         config.nasUrl
@@ -168,7 +182,7 @@ export function ChangeNasPasswordModal({
             <span>👤</span>
             <span>บัญชี NAS:</span>
             <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
-              {nasAccount}
+              {accountUsername || suggestedNasAccount}
             </span>
           </div>
         </div>
@@ -196,6 +210,27 @@ export function ChangeNasPasswordModal({
               </div>
             </div>
           )}
+
+          {/* Field 0: NAS Account Username */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-bold text-slate-700">
+                ชื่อบัญชี Synology NAS (Username) <span className="text-rose-500">*</span>
+              </label>
+              <span className="text-[10px] text-slate-400">ตรวจสอบหรือแก้ไขให้ตรงกับ NAS</span>
+            </div>
+            <div className="relative flex items-center">
+              <input
+                type="text"
+                required
+                data-testid="nas-username-input"
+                value={accountUsername}
+                onChange={(e) => setAccountUsername(e.target.value)}
+                placeholder="ระบุชื่อบัญชีผู้ใช้บน Synology NAS (เช่น พนมศักย์ หรือ admin)"
+                className="w-full pl-3.5 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-semibold text-slate-900 focus:bg-white focus:border-indigo-600 transition-colors"
+              />
+            </div>
+          </div>
 
           {/* Field 1: Old Password */}
           <div>
