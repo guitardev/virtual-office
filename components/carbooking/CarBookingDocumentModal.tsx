@@ -118,18 +118,24 @@ export function CarBookingDocumentModal({
       });
 
       if (!res.ok) {
-        throw new Error("ดาวน์โหลดไฟล์ Word ไม่สำเร็จ");
+        const errorJson = await res.json().catch(() => null);
+        throw new Error(
+          errorJson?.details || errorJson?.error || `ดาวน์โหลดไฟล์ Word ไม่สำเร็จ (HTTP ${res.status})`
+        );
       }
 
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `Form_ขอใช้รถ_${booking.requestNo.replace(/[^a-zA-Z0-9ก-๙_-]/g, "_")}.docx`;
+      const safeRequestNo = (booking.requestNo || "form").replace(/[^a-zA-Z0-9ก-๙_-]/g, "_");
+      a.download = `Form_ขอใช้รถ_${safeRequestNo}.docx`;
       document.body.appendChild(a);
       a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
+      setTimeout(() => {
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      }, 1000);
     } catch (err: any) {
       alert("เกิดข้อผิดพลาดในการดาวน์โหลดเอกสาร: " + err?.message);
     } finally {

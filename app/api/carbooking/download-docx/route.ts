@@ -19,7 +19,23 @@ export async function POST(req: NextRequest) {
     await fs.writeFile(inputJsonPath, JSON.stringify(bookingData), "utf-8");
 
     const scriptPath = path.join(process.cwd(), "scripts", "generate_car_booking_docx.py");
-    await execFileAsync("python", [scriptPath, inputJsonPath, outputDocxPath]);
+    
+    // Try python, py, python3 with shell: true for maximum cross-platform compatibility
+    let pythonErr: any = null;
+    let generated = false;
+    for (const pyCmd of ["python", "py", "python3"]) {
+      try {
+        await execFileAsync(pyCmd, [scriptPath, inputJsonPath, outputDocxPath], { shell: true });
+        generated = true;
+        break;
+      } catch (err: any) {
+        pythonErr = err;
+      }
+    }
+
+    if (!generated) {
+      throw new Error(`ไม่สามารถประมวลผล Python ได้ (${pythonErr?.message || "Python command not found"})`);
+    }
 
     const docxBuffer = await fs.readFile(outputDocxPath);
 

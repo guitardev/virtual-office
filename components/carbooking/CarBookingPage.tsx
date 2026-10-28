@@ -35,8 +35,6 @@ import { CarBookingDocumentModal } from "./CarBookingDocumentModal";
 import { ReviewBookingModal } from "./ReviewBookingModal";
 import { ReturnVehicleModal } from "./ReturnVehicleModal";
 import { VehicleReturnDocumentModal } from "./VehicleReturnDocumentModal";
-import { VehicleFormModal } from "./VehicleFormModal";
-import { VehicleDetailModal } from "./VehicleDetailModal";
 import { NotificationLogsModal } from "./NotificationLogsModal";
 import { RealisticFuelGauge } from "./RealisticFuelGauge";
 import { FleetGanttView } from "./FleetGanttView";
@@ -53,7 +51,7 @@ export function CarBookingPage({
   showToast,
   members = [],
 }: CarBookingPageProps) {
-  const [activeTab, setActiveTab] = useState<"fleet" | "requests" | "timeline" | "new_request">("requests");
+  const [activeTab, setActiveTab] = useState<"requests" | "timeline" | "new_request">("requests");
   const [vehicles, setVehicles] = useState<Vehicle[]>(() => loadStoredVehicles());
   const [bookings, setBookings] = useState<CarBookingRequest[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -64,10 +62,9 @@ export function CarBookingPage({
   const [selectedReviewBooking, setSelectedReviewBooking] = useState<CarBookingRequest | null>(null);
   const [selectedReturnBooking, setSelectedReturnBooking] = useState<CarBookingRequest | null>(null);
   const [selectedReturnDocBooking, setSelectedReturnDocBooking] = useState<CarBookingRequest | null>(null);
-  const [selectedManageVehicle, setSelectedManageVehicle] = useState<Vehicle | null>(null);
-  const [isCreatingVehicle, setIsCreatingVehicle] = useState<boolean>(false);
-  const [selectedDetailVehicle, setSelectedDetailVehicle] = useState<Vehicle | null>(null);
   const [selectedNotifBooking, setSelectedNotifBooking] = useState<CarBookingRequest | null>(null);
+  const [isNotificationHubOpen, setIsNotificationHubOpen] = useState<boolean>(false);
+  const [expandedNotifBookingId, setExpandedNotifBookingId] = useState<string | null>(null);
 
   // Form State for new booking
   const [formVehicleId, setFormVehicleId] = useState<string>(vehicles[0]?.id || "veh_1");
@@ -301,24 +298,229 @@ export function CarBookingPage({
   const stats = useMemo(() => {
     const totalVehicles = vehicles.length;
     const availableVehicles = vehicles.filter((v) => v.status === "available").length;
-    const pendingReviewCount = bookings.filter((b) => b.status === "pending_review").length;
-    const endorsedCount = bookings.filter((b) => b.status === "endorsed").length;
+
+    // Stage 1: หน.กลุ่ม/ผู้แทนกลุ่มเห็นชอบ
+    const stage1Count = bookings.filter(
+      (b) => b.status === "pending_division_head" || b.status === "pending_review"
+    ).length;
+
+    // Stage 2: เจ้าหน้าที่ฝ่ายบริหารจัดสรรรถและคนขับ
+    const stage2Count = bookings.filter(
+      (b) => b.status === "pending_fleet_assignment"
+    ).length;
+
+    // Stage 3: หัวหน้าฝ่ายบริหารทั่วไปเสนอความเห็น
+    const stage3Count = bookings.filter(
+      (b) => b.status === "pending_admin_head"
+    ).length;
+
+    // Stage 4: พมจ. พิจารณาอนุมัติ
+    const stage4Count = bookings.filter(
+      (b) => b.status === "pending_provincial" || b.status === "endorsed"
+    ).length;
+
+    // Total Pending across all 4 stages
+    const totalPendingCount = stage1Count + stage2Count + stage3Count + stage4Count;
+
     const approvedCount = bookings.filter((b) => b.status === "approved").length;
     const completedCount = bookings.filter((b) => b.status === "completed").length;
+    const rejectedCount = bookings.filter((b) => b.status === "rejected").length;
 
     return {
       totalVehicles,
       availableVehicles,
-      pendingReviewCount,
-      endorsedCount,
+      stage1Count,
+      stage2Count,
+      stage3Count,
+      stage4Count,
+      totalPendingCount,
       approvedCount,
       completedCount,
+      rejectedCount,
+      // legacy aliases
+      pendingReviewCount: stage1Count,
+      endorsedCount: stage4Count,
     };
   }, [vehicles, bookings]);
 
   // Active / Approved bookings that are on mission or due for return
   const activeReturnDueBookings = useMemo(() => {
     return bookings.filter((b) => b.status === "approved");
+  }, [bookings]);
+
+  // ─── PENDING ACTION ITEMS & NOTIFICATIONS FOR CURRENT USER ───
+  const myPendingActionItems = useMemo(() => {
+    const items: Array<{
+      id: string;
+      requestNo: string;
+      stageLabel: string;
+      badgeColor: string;
+      title: string;
+      requesterName: string;
+      destination: string;
+      notificationNotice: string;
+      actionText: string;
+      actionIcon: string;
+      onAction: () => void;
+    }> = [];
+
+    const myName = currentUser.name || "";
+    const myDivision = currentUser.division || "";
+    const myPosition = currentUser.position || "";
+    const myRole = currentUser.role || "";
+
+    const isFleetStaff =
+      currentUser.id === "syno_ปภาวิน" ||
+      currentUser.id === "syno_เสกพล" ||
+      myName.includes("ปภาวิน") ||
+      myName.includes("เสกพล") ||
+      myRole === "admin";
+
+    const isAdminHead =
+      currentUser.id === "syno_เสกพล" ||
+      myName.includes("เสกพล") ||
+      myRole === "admin";
+
+    const isProvincialHead =
+      myPosition.includes("พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัด") ||
+      myName.includes("มะลิวัน") ||
+      myRole === "admin";
+
+    for (const b of bookings) {
+      const isMyBooking =
+        b.requesterId === currentUser.id || (Boolean(myName) && b.requesterName === myName);
+
+      // Stage 1: Pending Division Head Review
+      if (
+        (b.status === "pending_division_head" || b.status === "pending_review") &&
+        !isMyBooking
+      ) {
+        const isDesignatedReviewer =
+          (Boolean(b.divisionReviewerId) && currentUser.id === b.divisionReviewerId) ||
+          (Boolean(b.divisionReviewerName && myName) &&
+            ((b.divisionReviewerName || "").includes(myName) || myName.includes(b.divisionReviewerName || "")));
+
+        const isDivisionHead =
+          Boolean(b.requesterDivision) &&
+          myDivision === b.requesterDivision &&
+          (myPosition.includes("หัวหน้า") || myRole === "manager");
+
+        if (isDesignatedReviewer || isDivisionHead || myRole === "admin") {
+          items.push({
+            id: `stg1_${b.id}`,
+            requestNo: b.requestNo,
+            stageLabel: "ขั้นที่ 1: รอ หน.กลุ่มเห็นชอบ",
+            badgeColor: "bg-amber-100 text-amber-900 border border-amber-300",
+            title: `คำขอใช้รถไปราชการ: ${b.destination}`,
+            requesterName: b.requesterName,
+            destination: b.destination,
+            notificationNotice: `แจ้งเตือนถึงท่านในฐานะ${isDesignatedReviewer ? "ผู้ได้รับมอบหมาย" : "หัวหน้ากลุ่ม"}`,
+            actionText: "พิจารณาเห็นชอบ",
+            actionIcon: "✍️",
+            onAction: () => setSelectedReviewBooking(b),
+          });
+        }
+      }
+
+      // Stage 2: Pending Fleet Assignment
+      if (b.status === "pending_fleet_assignment" && isFleetStaff) {
+        items.push({
+          id: `stg2_${b.id}`,
+          requestNo: b.requestNo,
+          stageLabel: "ขั้นที่ 2: รอจัดสรรรถและคนขับ",
+          badgeColor: "bg-blue-100 text-blue-900 border border-blue-300",
+          title: `จัดสรรรถและคนขับสำหรับคำขอ ${b.requestNo} (${b.destination})`,
+          requesterName: b.requesterName,
+          destination: b.destination,
+          notificationNotice: "แจ้งเตือนถึงเจ้าหน้าที่ฝ่ายบริหารทั่วไป (ผู้รับผิดชอบจัดสรร)",
+          actionText: "จัดสรรรถและคนขับ",
+          actionIcon: "🚗",
+          onAction: () => setSelectedReviewBooking(b),
+        });
+      }
+
+      // Stage 3: Pending Admin Head Endorsement
+      if (b.status === "pending_admin_head" && isAdminHead) {
+        items.push({
+          id: `stg3_${b.id}`,
+          requestNo: b.requestNo,
+          stageLabel: "ขั้นที่ 3: รอ หน.ฝ่ายบริหาร เสนอความเห็น",
+          badgeColor: "bg-indigo-100 text-indigo-900 border border-indigo-300",
+          title: `เสนอความเห็น: รถ ${b.vehicleName || "ส่วนกลาง"} [${b.licensePlate || "-"}] คนขับ: ${b.assignedDriver || "-"}`,
+          requesterName: b.requesterName,
+          destination: b.destination,
+          notificationNotice: "แจ้งเตือนถึงนายเสกพล ดิษฐโชติ (หน.ฝ่ายบริหารทั่วไป)",
+          actionText: "พิจารณาเสนอความเห็น",
+          actionIcon: "📋",
+          onAction: () => setSelectedReviewBooking(b),
+        });
+      }
+
+      // Stage 4: Pending Provincial Head Approval
+      if (
+        (b.status === "pending_provincial" || b.status === "endorsed") &&
+        isProvincialHead
+      ) {
+        items.push({
+          id: `stg4_${b.id}`,
+          requestNo: b.requestNo,
+          stageLabel: "ขั้นที่ 4: รอ พมจ. พิจารณาอนุมัติ",
+          badgeColor: "bg-purple-100 text-purple-900 border border-purple-300",
+          title: `พิจารณาอนุมัติคำขอใช้รถราชการ ${b.requestNo} (${b.destination})`,
+          requesterName: b.requesterName,
+          destination: b.destination,
+          notificationNotice: "แจ้งเตือนถึงนางสาวมะลิวัน สิทธิโยธี (พมจ.กำแพงเพชร)",
+          actionText: "พิจารณาอนุมัติ",
+          actionIcon: "⚖️",
+          onAction: () => setSelectedReviewBooking(b),
+        });
+      }
+
+      // Driver Assignment Notice
+      if (
+        b.assignedDriver &&
+        myName &&
+        b.assignedDriver.includes(myName) &&
+        b.status === "approved"
+      ) {
+        items.push({
+          id: `drv_${b.id}`,
+          requestNo: b.requestNo,
+          stageLabel: "ภารกิจพนักงานขับรถ",
+          badgeColor: "bg-teal-100 text-teal-900 border border-teal-300",
+          title: `ท่านได้รับมอบหมายขับรถ ${b.vehicleName || ""} [${b.licensePlate || "-"}] ไป ${b.destination}`,
+          requesterName: b.requesterName,
+          destination: b.destination,
+          notificationNotice: `เวลาเดินทาง: ${b.departureTime.replace("T", " ")} น.`,
+          actionText: "ดูข้อมูลภารกิจ",
+          actionIcon: "🚗",
+          onAction: () => setSelectedDocBooking(b),
+        });
+      }
+
+      // Requester Notice when Approved
+      if (isMyBooking && b.status === "approved") {
+        items.push({
+          id: `req_app_${b.id}`,
+          requestNo: b.requestNo,
+          stageLabel: "อนุมัติเรียบร้อยแล้ว",
+          badgeColor: "bg-emerald-100 text-emerald-900 border border-emerald-300",
+          title: `คำขอ ${b.requestNo} ได้รับการอนุมัติแล้ว! รถ [${b.licensePlate || "-"}] คนขับ: ${b.assignedDriver || "-"}`,
+          requesterName: b.requesterName,
+          destination: b.destination,
+          notificationNotice: "ได้รับอนุญาตจาก พมจ.กำแพงเพชร เรียบร้อยแล้ว",
+          actionText: "พิมพ์เอกสาร",
+          actionIcon: "📄",
+          onAction: () => setSelectedDocBooking(b),
+        });
+      }
+    }
+
+    return items;
+  }, [bookings, currentUser]);
+
+  const totalOfficeNotifsCount = useMemo(() => {
+    return bookings.reduce((acc, b) => acc + (b.notifications?.length || 0), 0);
   }, [bookings]);
 
   // Filtered bookings
@@ -334,6 +536,14 @@ export function CarBookingPage({
             b.status === "pending_review" ||
             b.status === "endorsed";
           if (!isPending) return false;
+        } else if (statusFilter === "stage1") {
+          if (b.status !== "pending_division_head" && b.status !== "pending_review") return false;
+        } else if (statusFilter === "stage2") {
+          if (b.status !== "pending_fleet_assignment") return false;
+        } else if (statusFilter === "stage3") {
+          if (b.status !== "pending_admin_head") return false;
+        } else if (statusFilter === "stage4") {
+          if (b.status !== "pending_provincial" && b.status !== "endorsed") return false;
         } else if (b.status !== statusFilter) {
           return false;
         }
@@ -938,56 +1148,6 @@ export function CarBookingPage({
     }
   };
 
-  // Vehicle Management (CRUD)
-  const handleSaveVehicle = (savedVehicle: Vehicle) => {
-    const exists = vehicles.some((v) => v.id === savedVehicle.id);
-    let updatedVehicles: Vehicle[];
-    if (exists) {
-      updatedVehicles = vehicles.map((v) => (v.id === savedVehicle.id ? savedVehicle : v));
-      showToast(`💾 บันทึกการแก้ไขข้อมูลรถ ${savedVehicle.licensePlate} เรียบร้อย`);
-    } else {
-      updatedVehicles = [savedVehicle, ...vehicles];
-      showToast(`➕ เพิ่มรถยนต์ราชการ ${savedVehicle.licensePlate} เข้าสู่ระบบสำเร็จ`);
-    }
-    updateAndSaveVehicles(updatedVehicles);
-    setSelectedManageVehicle(null);
-    setIsCreatingVehicle(false);
-  };
-
-  const handleDeleteVehicle = (vehicleId: string) => {
-    const veh = vehicles.find((v) => v.id === vehicleId);
-    if (!veh) return;
-    if (
-      !confirm(
-        `คุณต้องการลบรถยนต์ราชการ "${veh.name} (${veh.licensePlate})" ออกจากระบบหรือไม่?`
-      )
-    ) {
-      return;
-    }
-    const updatedVehicles = vehicles.filter((v) => v.id !== vehicleId);
-    updateAndSaveVehicles(updatedVehicles);
-    deleteVehicle(vehicleId).catch(() => {});
-    showToast(`ลบข้อมูลรถยนต์ ${veh.licensePlate} เรียบร้อยแล้ว`);
-    if (selectedDetailVehicle?.id === vehicleId) {
-      setSelectedDetailVehicle(null);
-    }
-  };
-
-  const handleToggleVehicleStatus = (vehicleId: string, newStatus: VehicleStatus) => {
-    const updatedVehicles = vehicles.map((v) => {
-      if (v.id !== vehicleId) return v;
-      return { ...v, status: newStatus };
-    });
-    updateAndSaveVehicles(updatedVehicles);
-    const statusText =
-      newStatus === "available"
-        ? "พร้อมใช้งาน"
-        : newStatus === "in_use"
-        ? "ปฏิบัติภารกิจ"
-        : "ส่งซ่อมบำรุง";
-    showToast(`อัปเดตสถานะรถยนต์เป็น "${statusText}" เรียบร้อย`);
-  };
-
   const getStatusBadge = (status: BookingStatus) => {
     switch (status) {
       case "pending_division_head":
@@ -1055,8 +1215,6 @@ export function CarBookingPage({
     return 10;
   };
 
-  const canManageFleet = currentUser.role === "admin" || currentUser.role === "manager";
-
   return (
     <div className="space-y-6">
       {/* Header Banner */}
@@ -1079,19 +1237,25 @@ export function CarBookingPage({
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
-            {canManageFleet && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedManageVehicle(null);
-                  setIsCreatingVehicle(true);
-                }}
-                className="px-4 py-2.5 bg-white/10 hover:bg-white/20 border border-white/20 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 backdrop-blur-xs"
-              >
-                <span>⚙️</span>
-                <span>จัดการข้อมูลรถ</span>
-              </button>
-            )}
+            {/* Notification Hub Button */}
+            <button
+              type="button"
+              onClick={() => setIsNotificationHubOpen(true)}
+              className="relative px-4 py-2.5 bg-white/10 hover:bg-white/20 border border-white/20 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 backdrop-blur-xs"
+              title="เปิดศูนย์รวมการแจ้งเตือน Line Notify และสถานะงานทั้งหมด"
+            >
+              <span className="text-sm">🔔</span>
+              <span>ศูนย์การแจ้งเตือน</span>
+              {myPendingActionItems.length > 0 ? (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500 text-white animate-pulse">
+                  {myPendingActionItems.length} งานรอคุณ
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-500/40 text-teal-200">
+                  {totalOfficeNotifsCount}
+                </span>
+              )}
+            </button>
 
             <button
               type="button"
@@ -1104,6 +1268,79 @@ export function CarBookingPage({
           </div>
         </div>
       </div>
+
+      {/* ─── ACTION-REQUIRED NOTIFICATION BANNER (ศูนย์แจ้งเตือนภารกิจที่รอคุณดำเนินการ) ─── */}
+      {myPendingActionItems.length > 0 && (
+        <div className="p-4 bg-linear-to-r from-amber-500/15 via-orange-500/10 to-teal-500/10 border-2 border-amber-400 rounded-3xl shadow-md space-y-3 animate-fade-in">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <span className="w-9 h-9 rounded-2xl bg-amber-500 text-white flex items-center justify-center text-lg font-bold shadow-xs animate-bounce">
+                🔔
+              </span>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <span>แจ้งเตือนภารกิจที่รอคุณดำเนินการ ({myPendingActionItems.length} รายการ)</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 text-amber-900">
+                    เรียน {currentUser.name} ({currentUser.position})
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  ระบบได้ส่งการแจ้งเตือนมายังท่าน เพื่อโปรดดำเนินการในขั้นตอนที่เกี่ยวข้อง
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsNotificationHubOpen(true)}
+              className="text-xs font-bold text-amber-900 hover:text-amber-950 underline cursor-pointer"
+            >
+              ดูประวัติการแจ้งเตือนทั้งหมด ➔
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+            {myPendingActionItems.map((item) => (
+              <div
+                key={item.id}
+                className="p-3.5 bg-white border border-amber-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs hover:border-amber-400 transition-all"
+              >
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-amber-100 text-amber-900">
+                      {item.requestNo}
+                    </span>
+                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${item.badgeColor}`}>
+                      {item.stageLabel}
+                    </span>
+                  </div>
+                  <div className="text-xs font-bold text-slate-900">
+                    {item.title}
+                  </div>
+                  <div className="text-[11px] text-slate-500 flex items-center gap-2">
+                    <span>ผู้ขอ: <strong>{item.requesterName}</strong></span>
+                    <span>•</span>
+                    <span>ปลายทาง: {item.destination}</span>
+                  </div>
+                  <div className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded inline-block">
+                    📲 {item.notificationNotice}
+                  </div>
+                </div>
+
+                <div className="shrink-0">
+                  <button
+                    type="button"
+                    onClick={item.onAction}
+                    className="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <span>{item.actionIcon}</span>
+                    <span>{item.actionText}</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ─── URGENT RETURN ALERT BANNER (Item 2: ระบบแจ้งเตือนการคืนรถ) ─── */}
       {activeReturnDueBookings.length > 0 && (
@@ -1177,62 +1414,120 @@ export function CarBookingPage({
         </div>
       )}
 
-      {/* KPI Metric Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3.5">
-          <div className="w-11 h-11 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center text-xl shrink-0 font-bold">
-            🚗
+      {/* KPI Metric Cards: จำนวนคำขอของแต่ละขั้นตอน 1-4 และสถานะภารกิจ */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {/* Step 1 */}
+        <div
+          onClick={() => setStatusFilter(statusFilter === "stage1" ? "all" : "stage1")}
+          className={`p-3.5 bg-white rounded-2xl border transition-all cursor-pointer shadow-xs hover:shadow-md ${
+            statusFilter === "stage1" ? "border-amber-500 ring-2 ring-amber-400/30" : "border-slate-200/80 hover:border-amber-300"
+          }`}
+        >
+          <div className="flex items-center justify-between pb-1">
+            <span className="text-xs text-slate-500 font-medium">1. รอ หน.กลุ่ม</span>
+            <span className="w-7 h-7 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center text-xs font-bold">
+              ⏳
+            </span>
           </div>
-          <div>
-            <div className="text-xs text-slate-500 font-medium">ยานพาหนะราชการ</div>
-            <div className="text-xl font-bold font-heading text-slate-900 mt-0.5">
-              {stats.totalVehicles}{" "}
-              <span className="text-xs text-slate-400 font-normal">
-                คัน (พร้อมใช้ {stats.availableVehicles})
-              </span>
-            </div>
+          <div className="text-xl font-bold font-heading text-amber-700">
+            {stats.stage1Count} <span className="text-xs text-slate-400 font-normal">คำขอ</span>
           </div>
+          <div className="text-[10px] text-slate-400 mt-0.5">เห็นชอบชั้นต้น</div>
         </div>
 
-        <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3.5">
-          <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center text-xl shrink-0 font-bold">
-            ⏳
+        {/* Step 2 */}
+        <div
+          onClick={() => setStatusFilter(statusFilter === "stage2" ? "all" : "stage2")}
+          className={`p-3.5 bg-white rounded-2xl border transition-all cursor-pointer shadow-xs hover:shadow-md ${
+            statusFilter === "stage2" ? "border-blue-500 ring-2 ring-blue-400/30" : "border-slate-200/80 hover:border-blue-300"
+          }`}
+        >
+          <div className="flex items-center justify-between pb-1">
+            <span className="text-xs text-slate-500 font-medium">2. รอจัดสรรรถ</span>
+            <span className="w-7 h-7 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center text-xs font-bold">
+              🚗
+            </span>
           </div>
-          <div>
-            <div className="text-xs text-slate-500 font-medium">รอหัวหน้าฝ่ายตรวจสอบ</div>
-            <div className="text-xl font-bold font-heading text-amber-700 mt-0.5">
-              {stats.pendingReviewCount}{" "}
-              <span className="text-xs text-slate-400 font-normal">คำขอ</span>
-            </div>
+          <div className="text-xl font-bold font-heading text-blue-700">
+            {stats.stage2Count} <span className="text-xs text-slate-400 font-normal">คำขอ</span>
           </div>
+          <div className="text-[10px] text-slate-400 mt-0.5">ฝ่ายบริหารจัดสรร</div>
         </div>
 
-        <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3.5">
-          <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center text-xl shrink-0 font-bold">
-            📋
+        {/* Step 3 */}
+        <div
+          onClick={() => setStatusFilter(statusFilter === "stage3" ? "all" : "stage3")}
+          className={`p-3.5 bg-white rounded-2xl border transition-all cursor-pointer shadow-xs hover:shadow-md ${
+            statusFilter === "stage3" ? "border-indigo-500 ring-2 ring-indigo-400/30" : "border-slate-200/80 hover:border-indigo-300"
+          }`}
+        >
+          <div className="flex items-center justify-between pb-1">
+            <span className="text-xs text-slate-500 font-medium">3. รอ หน.ฝ่ายบริหาร</span>
+            <span className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center text-xs font-bold">
+              📋
+            </span>
           </div>
-          <div>
-            <div className="text-xs text-slate-500 font-medium">รอ พมจ. อนุมัติ</div>
-            <div className="text-xl font-bold font-heading text-blue-700 mt-0.5">
-              {stats.endorsedCount}{" "}
-              <span className="text-xs text-slate-400 font-normal">คำขอ</span>
-            </div>
+          <div className="text-xl font-bold font-heading text-indigo-700">
+            {stats.stage3Count} <span className="text-xs text-slate-400 font-normal">คำขอ</span>
           </div>
+          <div className="text-[10px] text-slate-400 mt-0.5">เสนอความเห็น</div>
         </div>
 
-        <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3.5">
-          <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center text-xl shrink-0 font-bold">
-            ✅
+        {/* Step 4 */}
+        <div
+          onClick={() => setStatusFilter(statusFilter === "stage4" ? "all" : "stage4")}
+          className={`p-3.5 bg-white rounded-2xl border transition-all cursor-pointer shadow-xs hover:shadow-md ${
+            statusFilter === "stage4" ? "border-purple-500 ring-2 ring-purple-400/30" : "border-slate-200/80 hover:border-purple-300"
+          }`}
+        >
+          <div className="flex items-center justify-between pb-1">
+            <span className="text-xs text-slate-500 font-medium">4. รอ พมจ. อนุมัติ</span>
+            <span className="w-7 h-7 rounded-lg bg-purple-50 text-purple-700 flex items-center justify-center text-xs font-bold">
+              ⚖️
+            </span>
           </div>
-          <div>
-            <div className="text-xs text-slate-500 font-medium">อนุมัติ & ส่งคืนแล้ว</div>
-            <div className="text-xl font-bold font-heading text-emerald-700 mt-0.5">
-              {stats.approvedCount + stats.completedCount}{" "}
-              <span className="text-xs text-slate-400 font-normal">
-                ภารกิจ (ส่งคืน {stats.completedCount})
-              </span>
-            </div>
+          <div className="text-xl font-bold font-heading text-purple-700">
+            {stats.stage4Count} <span className="text-xs text-slate-400 font-normal">คำขอ</span>
           </div>
+          <div className="text-[10px] text-slate-400 mt-0.5">พิจารณาอนุญาต</div>
+        </div>
+
+        {/* Approved */}
+        <div
+          onClick={() => setStatusFilter(statusFilter === "approved" ? "all" : "approved")}
+          className={`p-3.5 bg-white rounded-2xl border transition-all cursor-pointer shadow-xs hover:shadow-md ${
+            statusFilter === "approved" ? "border-emerald-500 ring-2 ring-emerald-400/30" : "border-slate-200/80 hover:border-emerald-300"
+          }`}
+        >
+          <div className="flex items-center justify-between pb-1">
+            <span className="text-xs text-slate-500 font-medium">อนุมัติแล้ว</span>
+            <span className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center text-xs font-bold">
+              ✅
+            </span>
+          </div>
+          <div className="text-xl font-bold font-heading text-emerald-700">
+            {stats.approvedCount} <span className="text-xs text-slate-400 font-normal">ภารกิจ</span>
+          </div>
+          <div className="text-[10px] text-slate-400 mt-0.5">พร้อมเดินทาง</div>
+        </div>
+
+        {/* Completed */}
+        <div
+          onClick={() => setStatusFilter(statusFilter === "completed" ? "all" : "completed")}
+          className={`p-3.5 bg-white rounded-2xl border transition-all cursor-pointer shadow-xs hover:shadow-md ${
+            statusFilter === "completed" ? "border-teal-500 ring-2 ring-teal-400/30" : "border-slate-200/80 hover:border-teal-300"
+          }`}
+        >
+          <div className="flex items-center justify-between pb-1">
+            <span className="text-xs text-slate-500 font-medium">ส่งคืนแล้ว</span>
+            <span className="w-7 h-7 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center text-xs font-bold">
+              🏁
+            </span>
+          </div>
+          <div className="text-xl font-bold font-heading text-teal-700">
+            {stats.completedCount} <span className="text-xs text-slate-400 font-normal">ภารกิจ</span>
+          </div>
+          <div className="text-[10px] text-slate-400 mt-0.5">เสร็จสิ้นภารกิจ</div>
         </div>
       </div>
 
@@ -1249,9 +1544,9 @@ export function CarBookingPage({
         >
           <span>📋</span>
           <span>ทะเบียนคำขอจองรถ & รายงานคืน ({bookings.length})</span>
-          {stats.pendingReviewCount + stats.endorsedCount > 0 && (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
-              {stats.pendingReviewCount + stats.endorsedCount}
+          {stats.totalPendingCount > 0 && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+              รอพิจารณา {stats.totalPendingCount}
             </span>
           )}
         </button>
@@ -1267,19 +1562,6 @@ export function CarBookingPage({
         >
           <span>📅</span>
           <span>ตารางไทม์ไลน์ภารกิจ (Gantt View)</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("fleet")}
-          className={`pb-3.5 px-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors cursor-pointer ${
-            activeTab === "fleet"
-              ? "border-teal-600 text-teal-700"
-              : "border-transparent text-slate-500 hover:text-slate-800"
-          }`}
-        >
-          <span>🚗</span>
-          <span>ยานพาหนะราชการ & จัดการข้อมูล ({vehicles.length})</span>
         </button>
 
         <button
@@ -1321,252 +1603,45 @@ export function CarBookingPage({
         />
       )}
 
-      {/* ─── TAB 1: FLEET OVERVIEW & MANAGEMENT ─── */}
-      {activeTab === "fleet" && (
-        <div className="space-y-5">
-          {/* Action Bar */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs">
-            <div>
-              <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                <span>🚘</span>
-                <span>บัญชียานพาหนะและรถยนต์ราชการส่วนกลาง ({vehicles.length} คัน)</span>
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                ตรวจสอบสถานะความพร้อม เลขไมล์สะสม เกจระดับน้ำมัน และเข้าดูแฟ้มประวัติรถแต่ละคัน
-              </p>
-            </div>
-
-            {canManageFleet && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedManageVehicle(null);
-                  setIsCreatingVehicle(true);
-                }}
-                className="px-4 py-2 bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
-              >
-                <span>➕</span>
-                <span>เพิ่มรถยนต์ราชการใหม่</span>
-              </button>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {vehicles.map((car) => {
-              return (
-                <div
-                  key={car.id}
-                  className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col justify-between hover:border-teal-200 hover:shadow-md transition-all group"
-                >
-                  <div>
-                    {/* Vehicle Photo Banner */}
-                    <div className="relative h-44 w-full bg-gradient-to-br from-slate-900 via-slate-800 to-teal-950 overflow-hidden">
-                      {car.image ? (
-                        <img
-                          src={car.image}
-                          alt={car.name}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center text-slate-400">
-                          <span className="text-5xl mb-2">
-                            {car.category.includes("ตู้")
-                              ? "🚐"
-                              : car.category.includes("กระบะ")
-                              ? "🛻"
-                              : car.category.includes("จักรยานยนต์")
-                              ? "🏍️"
-                              : "🚗"}
-                          </span>
-                          <span className="text-xs text-slate-400 font-medium">ไม่มีรูปภาพประกอบ</span>
-                        </div>
-                      )}
-                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-black/30 pointer-events-none" />
-
-                      {/* Top Badges */}
-                      <div className="absolute top-3 left-3 right-3 flex items-center justify-between">
-                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md text-white border border-white/20">
-                          {car.category}
-                        </span>
-                        <span
-                          className={`text-xs px-2.5 py-1 rounded-full font-bold shadow-xs backdrop-blur-md ${
-                            car.status === "available"
-                              ? "bg-emerald-500/90 text-white"
-                              : car.status === "in_use"
-                              ? "bg-blue-500/90 text-white"
-                              : "bg-rose-500/90 text-white"
-                          }`}
-                        >
-                          {car.status === "available"
-                            ? "🟢 พร้อมใช้งาน"
-                            : car.status === "in_use"
-                            ? "🔵 ติดภารกิจ"
-                            : "🔴 ซ่อมบำรุง"}
-                        </span>
-                      </div>
-
-                      {/* License Plate on image bottom */}
-                      <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between">
-                        <span className="px-3 py-1 bg-white/95 backdrop-blur-md border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-900 shadow-sm">
-                          {car.licensePlate}
-                        </span>
-                        <span className="text-[11px] font-medium text-slate-200 bg-black/60 backdrop-blur-sm px-2.5 py-0.5 rounded-lg border border-white/10">
-                          👥 {car.capacity} ที่นั่ง
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="p-5 space-y-4">
-                      <div>
-                        <h3 className="font-bold font-heading text-lg text-slate-900 group-hover:text-teal-700 transition-colors">
-                          {car.name}
-                        </h3>
-                        <p className="text-xs text-slate-500 mt-0.5">
-                          เชื้อเพลิง: {car.fuelType} • ฝ่ายดูแล: {car.assignedDivision || "ฝ่ายบริหารทั่วไป"}
-                        </p>
-                      </div>
-
-                      {/* Realistic Fuel Gauge & Odometer Cluster */}
-                      <div className="p-3 bg-slate-950 rounded-2xl border border-slate-800 shadow-inner flex items-center justify-between gap-3">
-                        <div className="flex-1 pl-1">
-                          <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-0.5 flex items-center gap-1">
-                            <span>🛣️ ODOMETER</span>
-                          </div>
-                          <div className="font-mono font-black text-amber-400 text-lg tracking-wider">
-                            {(car.mileage || 0).toLocaleString("th-TH")}{" "}
-                            <span className="text-[10px] text-slate-400 font-normal">KM</span>
-                          </div>
-                          <div className="text-[10px] text-slate-400 mt-1 truncate">
-                            👤 {car.driverName || "พนักงานขับรถเวร"}
-                          </div>
-                        </div>
-                        <div className="shrink-0 flex flex-col items-center">
-                          <RealisticFuelGauge level={car.fuelLevel} size="sm" showLabel={true} />
-                        </div>
-                      </div>
-
-                      {/* Specs info */}
-                      <div className="text-xs text-slate-600 space-y-1.5 pt-1">
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-400">คนขับประจำ:</span>
-                          <span className="font-medium text-teal-700 truncate max-w-[170px]">
-                            {car.driverName || "พนักงานขับรถเวร"}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-400">ฝ่ายผู้ดูแล:</span>
-                          <span className="font-medium text-slate-700 truncate max-w-[170px]">
-                            {car.assignedDivision || "ฝ่ายบริหารทั่วไป"}
-                          </span>
-                        </div>
-                      </div>
-
-                    {/* Features list */}
-                    <div className="pt-1 flex flex-wrap gap-1">
-                      {car.features.slice(0, 3).map((feat, idx) => (
-                        <span
-                          key={idx}
-                          className="text-[10px] px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600 font-medium"
-                        >
-                          {feat}
-                        </span>
-                      ))}
-                      {car.features.length > 3 && (
-                        <span className="text-[10px] px-1.5 py-0.5 text-slate-400">
-                          +{car.features.length - 3}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                  {/* Card Actions */}
-                  <div className="p-4 bg-slate-50 border-t border-slate-100 space-y-2">
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedDetailVehicle(car)}
-                        className="py-2 px-2.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1"
-                      >
-                        <span>🔍</span>
-                        <span>ดูแฟ้มประวัติ</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFormVehicleId(car.id);
-                          setActiveTab("new_request");
-                        }}
-                        disabled={car.status === "maintenance"}
-                        className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1 ${
-                          car.status === "maintenance"
-                            ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-                            : "bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-800 cursor-pointer"
-                        }`}
-                      >
-                        <span>➕</span>
-                        <span>จองคันนี้</span>
-                      </button>
-                    </div>
-
-                    {/* Admin/Manager Edit Actions */}
-                    {canManageFleet && (
-                      <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 text-[11px]">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedManageVehicle(car);
-                            setIsCreatingVehicle(false);
-                          }}
-                          className="text-teal-700 hover:text-teal-900 font-bold transition-colors cursor-pointer flex items-center gap-1"
-                        >
-                          <span>✏️</span>
-                          <span>แก้ไขข้อมูล</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteVehicle(car.id)}
-                          className="text-rose-600 hover:text-rose-800 font-medium transition-colors cursor-pointer flex items-center gap-1"
-                        >
-                          <span>🗑️</span>
-                          <span>ลบ</span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* ─── TAB 2: BOOKING REGISTRY & RETURN WORKFLOW ─── */}
       {activeTab === "requests" && (
         <div className="space-y-4">
           {/* Filters Bar */}
-          <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+          <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-1.5">
               {[
-                { id: "all", label: "ทั้งหมด" },
-                { id: "pending", label: "รอพิจารณา (ขั้นตอน 1-4)" },
-                { id: "approved", label: "อนุมัติแล้ว" },
-                { id: "completed", label: "ส่งคืนแล้ว" },
-                { id: "rejected", label: "ไม่อนุมัติ" },
+                { id: "all", label: "ทั้งหมด", count: bookings.length },
+                { id: "pending", label: "รอพิจารณารวม", count: stats.totalPendingCount },
+                { id: "stage1", label: "1. รอ หน.กลุ่ม", count: stats.stage1Count, badgeColor: "bg-amber-100 text-amber-800" },
+                { id: "stage2", label: "2. รอจัดสรรรถ", count: stats.stage2Count, badgeColor: "bg-blue-100 text-blue-800" },
+                { id: "stage3", label: "3. รอ หน.ฝ่ายบริหาร", count: stats.stage3Count, badgeColor: "bg-indigo-100 text-indigo-800" },
+                { id: "stage4", label: "4. รอ พมจ.", count: stats.stage4Count, badgeColor: "bg-purple-100 text-purple-800" },
+                { id: "approved", label: "อนุมัติแล้ว", count: stats.approvedCount, badgeColor: "bg-emerald-100 text-emerald-800" },
+                { id: "completed", label: "ส่งคืนแล้ว", count: stats.completedCount, badgeColor: "bg-teal-100 text-teal-800" },
+                { id: "rejected", label: "ไม่อนุมัติ", count: stats.rejectedCount, badgeColor: "bg-rose-100 text-rose-800" },
               ].map((f) => (
                 <button
                   key={f.id}
                   type="button"
                   onClick={() => setStatusFilter(f.id)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     statusFilter === f.id
                       ? "bg-teal-700 text-white shadow-xs"
-                      : "bg-slate-100 hover:bg-slate-200 text-slate-600"
+                      : "bg-slate-100 hover:bg-slate-200 text-slate-700"
                   }`}
                 >
-                  {f.label}
+                  <span>{f.label}</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold leading-none ${
+                      statusFilter === f.id
+                        ? "bg-white/20 text-white"
+                        : f.count > 0
+                        ? (f.badgeColor || "bg-slate-200 text-slate-800")
+                        : "bg-slate-200/60 text-slate-400"
+                    }`}
+                  >
+                    {f.count}
+                  </span>
                 </button>
               ))}
             </div>
@@ -1699,6 +1774,91 @@ export function CarBookingPage({
                         <span className="text-xs text-slate-400 font-mono">ยื่นเมื่อ {b.createdAt}</span>
                       </div>
                     </div>
+
+                    {/* Active Stakeholder Notification Notice Banner */}
+                    <div className="p-3 bg-linear-to-r from-teal-50/80 via-slate-50 to-amber-50/50 rounded-2xl border border-teal-200/70 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-lg bg-teal-100 text-teal-800 flex items-center justify-center text-xs font-bold shrink-0">
+                          🔔
+                        </span>
+                        <div>
+                          <span className="text-slate-500 font-medium">การแจ้งเตือนงาน: </span>
+                          <strong className="text-slate-900">
+                            {b.status === "pending_division_head" || b.status === "pending_review" ? (
+                              <span>ส่ง Line Notify แจ้งเตือนไปยัง <span className="text-amber-800 font-bold">{b.divisionReviewerName || "หัวหน้ากลุ่ม/ฝ่าย"}</span> เพื่อพิจารณาเห็นชอบชั้นต้นแล้ว</span>
+                            ) : b.status === "pending_fleet_assignment" ? (
+                              <span>ผ่านความเห็นชอบแล้ว ➔ ส่ง Line Notify แจ้งเตือนไปยัง <span className="text-blue-800 font-bold">ฝ่ายบริหารทั่วไป (คุณเสกพล / คุณปภาวิน)</span> เพื่อจัดสรรรถและคนขับ</span>
+                            ) : b.status === "pending_admin_head" ? (
+                              <span>จัดสรรรถแล้ว ➔ ส่ง Line Notify เสนอ <span className="text-indigo-800 font-bold">นายเสกพล ดิษฐโชติ (หน.ฝ่ายบริหารทั่วไป)</span> เพื่อพิจารณาเสนอความเห็น</span>
+                            ) : b.status === "pending_provincial" || b.status === "endorsed" ? (
+                              <span>เสนอความเห็นแล้ว ➔ ส่ง Line Notify นำกราบเรียน <span className="text-purple-800 font-bold">นางสาวมะลิวัน สิทธิโยธี (พมจ.กำแพงเพชร)</span> เพื่อโปรดพิจารณาอนุมัติ</span>
+                            ) : b.status === "approved" ? (
+                              <span>อนุมัติคำขอแล้ว ➔ ส่ง Line Notify แจ้งเตือน <span className="text-emerald-800 font-bold">ผู้ขอใช้รถ ({b.requesterName})</span> และ <span className="text-teal-800 font-bold">คนขับ ({b.assignedDriver})</span> เรียบร้อยแล้ว</span>
+                            ) : b.status === "completed" ? (
+                              <span className="text-teal-900 font-semibold">ส่งคืนรถและกุญแจเรียบร้อย (ภารกิจเสร็จสิ้น)</span>
+                            ) : (
+                              <span className="text-rose-700 font-semibold">คำขอถูกปฏิเสธ</span>
+                            )}
+                          </strong>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedNotifBookingId(expandedNotifBookingId === b.id ? null : b.id)}
+                          className="px-2.5 py-1 bg-white hover:bg-teal-50 text-teal-800 border border-teal-200 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+                        >
+                          <span>{expandedNotifBookingId === b.id ? "▲ ซ่อนบันทึกแจ้งเตือน" : `▼ ดูข้อความที่ส่ง (${b.notifications?.length || 0})`}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Inline Expanded Notification History */}
+                    {expandedNotifBookingId === b.id && (
+                      <div className="p-3.5 bg-slate-50/90 rounded-2xl border border-teal-200/80 space-y-2 text-xs animate-fade-in">
+                        <div className="flex items-center justify-between font-bold text-slate-700 pb-1.5 border-b border-slate-200">
+                          <span className="flex items-center gap-1.5 text-teal-900">
+                            <span>📲</span>
+                            <span>ประวัติข้อความ Line Notify และการแจ้งเตือนงานทั้งหมด ({b.notifications?.length || 0} รายการ):</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedNotifBooking(b)}
+                            className="text-teal-700 hover:text-teal-900 text-[11px] font-bold underline cursor-pointer"
+                          >
+                            เปิดดูแบบเต็มหน้าต่าง ➔
+                          </button>
+                        </div>
+
+                        <div className="space-y-2 pt-1">
+                          {(!b.notifications || b.notifications.length === 0) ? (
+                            <div className="text-slate-400 italic text-[11px] p-2 text-center">ยังไม่มีประวัติการส่งข้อความแจ้งเตือนสำหรับคำขอนี้</div>
+                          ) : (
+                            b.notifications.map((notif, idx) => (
+                              <div key={notif.id || idx} className="p-3 bg-white rounded-xl border border-slate-200 space-y-1.5 shadow-2xs">
+                                <div className="flex flex-wrap items-center justify-between gap-1 text-[11px]">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                      🟢 Line Notify
+                                    </span>
+                                    <strong className="text-slate-800">{notif.title}</strong>
+                                  </div>
+                                  <span className="text-[10px] text-slate-400 font-mono">{notif.timestamp}</span>
+                                </div>
+                                <div className="p-2.5 bg-[#E8F8F5] text-slate-900 rounded-lg text-[11px] border border-[#A3E4D7] leading-relaxed">
+                                  {notif.message}
+                                </div>
+                                <div className="text-[10px] text-slate-500 flex flex-wrap items-center justify-between gap-2 pt-0.5">
+                                  <span>ส่งถึง: <strong>{notif.recipientRole}</strong> ({notif.recipientName})</span>
+                                  <span className="text-emerald-700 font-medium">✓ จัดส่งสำเร็จ (Delivered)</span>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Middle: Mission & Destination */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
@@ -2637,38 +2797,19 @@ export function CarBookingPage({
         />
       )}
 
-      {/* ─── MODAL: Add / Edit Vehicle (Fleet CRUD) ─── */}
-      {(selectedManageVehicle || isCreatingVehicle) && (
-        <VehicleFormModal
-          vehicle={selectedManageVehicle}
-          onClose={() => {
-            setSelectedManageVehicle(null);
-            setIsCreatingVehicle(false);
-          }}
-          onSave={handleSaveVehicle}
-        />
-      )}
-
-      {/* ─── MODAL: Vehicle Detail & Profile ─── */}
-      {selectedDetailVehicle && (
-        <VehicleDetailModal
-          vehicle={selectedDetailVehicle}
-          bookings={bookings}
-          currentUser={currentUser}
-          onClose={() => setSelectedDetailVehicle(null)}
-          onEditVehicle={(veh) => {
-            setSelectedDetailVehicle(null);
-            setSelectedManageVehicle(veh);
-          }}
-          onToggleStatus={handleToggleVehicleStatus}
-        />
-      )}
-
       {/* ─── MODAL: Notification Logs & Line Alerts ─── */}
-      {selectedNotifBooking && (
+      {(selectedNotifBooking || isNotificationHubOpen) && (
         <NotificationLogsModal
           booking={selectedNotifBooking}
-          onClose={() => setSelectedNotifBooking(null)}
+          allBookings={bookings}
+          currentUser={currentUser}
+          onClose={() => {
+            setSelectedNotifBooking(null);
+            setIsNotificationHubOpen(false);
+          }}
+          onSelectBooking={(b) => {
+            setSelectedDocBooking(b);
+          }}
         />
       )}
     </div>
