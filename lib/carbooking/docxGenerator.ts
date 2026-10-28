@@ -16,7 +16,7 @@ function escapeXml(unsafe?: string): string {
     .replace(/'/g, "&apos;");
 }
 
-function createRunXml(text: string, isBold: boolean = false): string {
+function rText(text: string, isBold: boolean = false): string {
   const parts = text.split("\t");
   let inner = "";
   parts.forEach((part, index) => {
@@ -31,6 +31,27 @@ function createRunXml(text: string, isBold: boolean = false): string {
   return `<w:r><w:rPr><w:rFonts w:ascii="TH SarabunPSK" w:cs="TH SarabunPSK" w:eastAsia="TH SarabunPSK" w:hAnsi="TH SarabunPSK"/><w:sz w:val="32"/><w:szCs w:val="32"/>${
     isBold ? "<w:b/><w:bCs/>" : ""
   }</w:rPr>${inner}</w:r>`;
+}
+
+// Generates text with Underline style = Dotted (<w:u w:val="dotted"/>)
+// and handles continuous layout seamlessly
+function rDotted(text?: string, minWidthChars: number = 0): string {
+  let val = (text || "").trim();
+  if (!val) {
+    val = "\u00A0".repeat(minWidthChars || 15);
+  } else if (minWidthChars > 0 && val.length < minWidthChars) {
+    const pad = Math.floor((minWidthChars - val.length) / 2);
+    val =
+      "\u00A0".repeat(Math.max(1, pad)) +
+      val +
+      "\u00A0".repeat(Math.max(1, minWidthChars - val.length - pad));
+  } else {
+    val = `\u00A0${val}\u00A0`;
+  }
+
+  return `<w:r><w:rPr><w:rFonts w:ascii="TH SarabunPSK" w:cs="TH SarabunPSK" w:eastAsia="TH SarabunPSK" w:hAnsi="TH SarabunPSK"/><w:sz w:val="32"/><w:szCs w:val="32"/><w:u w:val="dotted"/></w:rPr><w:t xml:space="preserve">${escapeXml(
+    val
+  )}</w:t></w:r>`;
 }
 
 async function loadTemplateBuffer(): Promise<Buffer> {
@@ -50,6 +71,73 @@ async function loadTemplateBuffer(): Promise<Buffer> {
   return Buffer.from(TEMPLATE_DOCX_BASE64, "base64");
 }
 
+const THAI_MONTHS_MAP: Record<string, string> = {
+  "ม.ค.": "มกราคม",
+  "ก.พ.": "กุมภาพันธ์",
+  "มี.ค.": "มีนาคม",
+  "เม.ย.": "เมษายน",
+  "พ.ค.": "พฤษภาคม",
+  "มิ.ย.": "มิถุนายน",
+  "ก.ค.": "กรกฎาคม",
+  "ส.ค.": "สิงหาคม",
+  "ก.ย.": "กันยายน",
+  "ต.ค.": "ตุลาคม",
+  "พ.ย.": "พฤศจิกายน",
+  "ธ.ค.": "ธันวาคม",
+};
+
+function cleanPersonName(name?: string): string {
+  if (!name) return "";
+  // Strip trailing parentheses like "(นักพัฒนาสังคม)", "(พมจ.กำแพงเพชร)", "(หัวหน้ากลุ่ม...)"
+  return name.replace(/\s*\([^)]*\)\s*$/g, "").trim();
+}
+
+function cleanVehicleName(vehName?: string, plate?: string): string {
+  if (!vehName) return "";
+  let cleaned = vehName;
+  if (plate && plate !== "-") {
+    const escapedPlate = plate.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    cleaned = cleaned
+      .replace(new RegExp(`\\s*\\(${escapedPlate}\\)`, "gi"), "")
+      .replace(new RegExp(`\\s*${escapedPlate}`, "gi"), "")
+      .trim();
+  }
+  return cleaned;
+}
+
+function parseThaiDateFallback(dateStr?: string): { day: string; month: string; year: string } {
+  if (dateStr) {
+    const match = dateStr.match(/(\d{1,2})\s+([^\s\d,]+)\s+(\d{4})/);
+    if (match) {
+      const day = match[1];
+      let month = match[2];
+      const year = match[3];
+      if (THAI_MONTHS_MAP[month]) {
+        month = THAI_MONTHS_MAP[month];
+      }
+      return { day, month, year };
+    }
+
+    try {
+      const d = new Date(dateStr);
+      if (!isNaN(d.getTime())) {
+        return {
+          day: d.getDate().toString(),
+          month: d.toLocaleDateString("th-TH", { month: "long" }),
+          year: (d.getFullYear() + 543).toString(),
+        };
+      }
+    } catch {}
+  }
+
+  const now = new Date();
+  return {
+    day: now.getDate().toString(),
+    month: now.toLocaleDateString("th-TH", { month: "long" }),
+    year: (now.getFullYear() + 543).toString(),
+  };
+}
+
 export async function generateCarBookingDocx(bookingData: any): Promise<Buffer> {
   const templateBuffer = await loadTemplateBuffer();
   const zip = await JSZip.loadAsync(templateBuffer);
@@ -61,12 +149,13 @@ export async function generateCarBookingDocx(bookingData: any): Promise<Buffer> 
 
   const docXml = await docXmlFile.async("text");
 
-  // Extract fields with fallbacks
-  const reqName = bookingData.requesterName || "";
+  // Extract fields with fallbacks & name sanitization
+  const reqName = cleanPersonName(bookingData.requesterName);
   const reqPos = bookingData.requesterPosition || "";
-  const vehName = bookingData.vehicleName || "";
-  const licPlate = bookingData.licensePlate || "";
-  const driver = bookingData.assignedDriver || "";
+  const licPlate = bookingData.licensePlate && bookingData.licensePlate !== "-" ? bookingData.licensePlate : "";
+  const rawVehName = bookingData.vehicleName && bookingData.vehicleName !== "รอฝ่ายบริหารจัดสรร" ? bookingData.vehicleName : "";
+  const vehName = cleanVehicleName(rawVehName, licPlate);
+  const driver = bookingData.assignedDriver && bookingData.assignedDriver !== "รอฝ่ายบริหารจัดสรร" ? bookingData.assignedDriver : "";
   const dest = bookingData.destination || "";
   const purpose = bookingData.purpose || "";
   const passengers = bookingData.passengersList || "";
@@ -79,36 +168,49 @@ export async function generateCarBookingDocx(bookingData: any): Promise<Buffer> 
   const fuelAmount = bookingData.fuelBudgetRequested
     ? String(bookingData.fuelBudgetAmount || "")
     : "";
-  const day = bookingData.day || "";
-  const month = bookingData.month || "";
-  const year = bookingData.year || "";
+
+  // Date parsing: never leave blank
+  let day = bookingData.day || "";
+  let month = bookingData.month || "";
+  let year = bookingData.year || "";
+  if (!day || !month || !year) {
+    const fallbackDate = parseThaiDateFallback(bookingData.createdAt || bookingData.startDateThai);
+    day = day || fallbackDate.day;
+    month = month || fallbackDate.month;
+    year = year || fallbackDate.year;
+  }
 
   // Step 1: Division Reviewer (Block 2)
-  const divReviewerName = bookingData.divisionReviewerName || "";
-  const divReviewerPos = bookingData.divisionReviewerPosition || "";
+  const divReviewerName = cleanPersonName(bookingData.divisionReviewerName);
+  const divReviewerPos = bookingData.divisionReviewerPosition || (divReviewerName ? "หัวหน้ากลุ่ม/ฝ่าย" : "");
 
   // Step 2 & 3: Admin Head (Block 3)
-  const adminHeadName =
-    bookingData.adminHeadName || bookingData.managerName || "";
+  const adminHeadName = cleanPersonName(
+    bookingData.adminHeadName ||
+    bookingData.fleetDispatcherName ||
+    bookingData.managerName ||
+    (licPlate ? "นายเสกพล ดิษฐโชติ" : "")
+  );
   const adminHeadPos =
     bookingData.adminHeadPosition ||
     "นักพัฒนาสังคมชำนาญการ (หัวหน้าฝ่ายบริหารทั่วไป)";
   const adminHeadNotes =
     bookingData.adminHeadNotes ||
     bookingData.managerNotes ||
-    "เพื่อโปรดพิจารณาอนุญาต";
+    (licPlate ? `จัดสรรรถยนต์ ${vehName || ""} ทะเบียน [${licPlate}] เรียบร้อยแล้ว เพื่อโปรดพิจารณาอนุญาต` : "เพื่อโปรดพิจารณาอนุญาต");
 
   // Step 4: Provincial Head Approver (Block 4)
   const isApproved = bookingData.status === "approved";
   const isRejected = bookingData.status === "rejected";
-  const approverName = bookingData.approverName || "";
+  const approverName = cleanPersonName(
+    bookingData.approverName || (isApproved ? "นางสาวมะลิวัน สิทธิโยธี" : "")
+  );
   const approverPos =
     bookingData.approverPosition ||
     "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร";
   const approverDate = bookingData.approverDate || "";
 
-  const vehClause =
-    vehName && vehName !== "รอฝ่ายบริหารจัดสรร" ? ` ${vehName} ` : "";
+  const vehClause = vehName ? ` ${vehName} ` : "";
 
   // Split paragraphs by </w:p>
   const rawParagraphs = docXml.split("</w:p>");
@@ -119,133 +221,138 @@ export async function generateCarBookingDocx(bookingData: any): Promise<Buffer> 
     }
     const fullText = pXml.replace(/<[^>]+>/g, "");
 
-    let newContent: string | null = null;
+    let runs: string | null = null;
 
     if (fullText.includes("วันที่..") && fullText.includes("เดือน...")) {
-      newContent = `\t                                                           วันที่..${
-        day || "...."
-      }...เดือน...${month || ".........."}....พ.ศ...${year || "........"}....`;
+      runs =
+        rText("\t                                                           วันที่ ") +
+        rDotted(day, 6) +
+        rText(" เดือน ") +
+        rDotted(month, 14) +
+        rText(" พ.ศ. ") +
+        rDotted(year, 8);
     } else if (fullText.includes("ข้าพเจ้า.....")) {
-      newContent = `\t                    ข้าพเจ้า.....${
-        reqName || "..................................................."
-      }.....ตำแหน่ง.....${
-        reqPos || "..................................................."
-      }..............`;
+      runs =
+        rText("\t                    ข้าพเจ้า ") +
+        rDotted(reqName, 28) +
+        rText(" ตำแหน่ง ") +
+        rDotted(reqPos, 28);
     } else if (fullText.includes("ขออนุญาตใช้รถยนต์หมายเลขทะเบียน")) {
-      newContent = `ขออนุญาตใช้รถยนต์${vehClause}หมายเลขทะเบียน.....${
-        licPlate || "....................................."
-      }.....โดยมี.....${
-        driver ||
-        "..................................................................."
-      }`;
+      runs =
+        rText("ขออนุญาตใช้รถยนต์ ") +
+        rDotted(vehName, 18) +
+        rText(" หมายเลขทะเบียน ") +
+        rDotted(licPlate, 18) +
+        rText(" โดยมี ") +
+        rDotted(driver, 24);
     } else if (fullText.includes("เป็นพนักงานขับรถยนต์ไปราชการที่")) {
-      newContent = `เป็นพนักงานขับรถยนต์ไปราชการที่...${
-        dest ||
-        ".................................................................................................................."
-      }`;
+      runs =
+        rText("เป็นพนักงานขับรถยนต์ไปราชการที่ ") +
+        rDotted(dest, 55);
     } else if (fullText.includes("เพื่อ...")) {
-      newContent = `เพื่อ...${
-        purpose ||
-        ".................................................................................................................."
-      }  พร้อมด้วย`;
+      runs =
+        rText("เพื่อ ") +
+        rDotted(purpose, 45) +
+        rText("  พร้อมด้วย");
     } else if (
       fullText.includes("นางสาวพิชชาภา") ||
       (fullText.includes("ปฏิบัติการ......") && !fullText.includes("เพื่อ..."))
     ) {
-      newContent = `${
-        passengers ||
-        "....................................................................................................................................................."
-      }......`;
+      runs = rDotted(passengers, 65);
     } else if (fullText.includes("มีคนนั่ง........")) {
-      newContent = `มีคนนั่ง........${passengerCount}...........คน   ระยะทางโดยประมาณ.........${distance}.........กิโลเมตร`;
+      runs =
+        rText("มีคนนั่ง ") +
+        rDotted(passengerCount, 6) +
+        rText(" คน   ระยะทางโดยประมาณ ") +
+        rDotted(distance, 10) +
+        rText(" กิโลเมตร");
     } else if (fullText.includes("ในวันที่…....")) {
-      newContent = `ในวันที่…....${
-        startDate || "........................."
-      }..........เวลา......${startTime || "............"}...........น.`;
+      runs =
+        rText("ในวันที่ ") +
+        rDotted(startDate, 18) +
+        rText(" เวลา ") +
+        rDotted(startTime, 10) +
+        rText(" น.");
     } else if (fullText.includes("ถึงวันที่…....")) {
-      newContent = `ถึงวันที่…....${
-        endDate || "........................."
-      }...........เวลา…...${endTime || "............"}….…..น.`;
+      runs =
+        rText("ถึงวันที่ ") +
+        rDotted(endDate, 18) +
+        rText(" เวลา ") +
+        rDotted(endTime, 10) +
+        rText(" น.");
     } else if (fullText.includes("ขอเบิกน้ำมันเชื้อเพลิง")) {
-      const fuelStr = fuelAmount
-        ? `${fuelAmount} บาท`
-        : ".........................................บาท";
-      newContent = `ขอเบิกน้ำมันเชื้อเพลิงและหล่อลื่น  จำนวน…${fuelStr}`;
+      const fuelText = fuelAmount ? `${fuelAmount} บาท` : "- บาท";
+      runs =
+        rText("ขอเบิกน้ำมันเชื้อเพลิงและหล่อลื่น  จำนวน ") +
+        rDotted(fuelText, 20);
     } else if (fullText.includes("(..................นางสาวเอมวิกา")) {
-      newContent = `\t                                                                  (..................${
-        reqName ||
-        "......................................................."
-      }...................)`;
+      runs =
+        rText("\t                                                                  ( ") +
+        rDotted(reqName, 26) +
+        rText(" )");
     } else if (fullText.includes("ตำแหน่ง.......พนักงานคุ้มครองสวัสดิภาพเด็ก")) {
-      newContent = `\t                                                           ตำแหน่ง.......${
-        reqPos ||
-        "....................................................."
-      }................`;
+      runs =
+        rText("\t                                                           ตำแหน่ง ") +
+        rDotted(reqPos, 26);
     } else if (i === 19) {
-      if (divReviewerName) {
-        newContent = `\t                                                                  (..................${divReviewerName}...................)`;
-      } else {
-        newContent =
-          "\t                                                                  (.......................................................)";
-      }
+      runs =
+        rText("\t                                                                  ( ") +
+        rDotted(divReviewerName, 26) +
+        rText(" )");
     } else if (i === 20) {
-      if (divReviewerPos) {
-        newContent = `\t                                                           ตำแหน่ง.......${divReviewerPos}................`;
-      } else {
-        newContent =
-          "\t                                                           ตำแหน่ง.....................................................";
-      }
+      runs =
+        rText("\t                                                           ตำแหน่ง ") +
+        rDotted(divReviewerPos, 26);
     } else if (fullText.includes("ความเห็น...........")) {
-      newContent = ` ความเห็น...........${
-        adminHeadNotes || "เพื่อโปรดพิจารณาอนุญาต"
-      }.........................................................................................................`;
+      runs =
+        rText(" ความเห็น ") +
+        rDotted(adminHeadNotes, 65);
     } else if (i === 24 && fullText.includes("ลงชื่อ")) {
-      newContent =
-        "\t                                                           \tลงชื่อ..........................................................หัวหน้าฝ่ายบริหารทั่วไป";
+      runs =
+        rText("\t                                                           \tลงชื่อ..........................................................หัวหน้าฝ่ายบริหารทั่วไป");
     } else if (i === 25) {
-      if (adminHeadName) {
-        newContent = `\t                                                                  (..................${adminHeadName}...................)`;
-      } else {
-        newContent =
-          "\t                                                                  (.......................................................)";
-      }
+      runs =
+        rText("\t                                                                  ( ") +
+        rDotted(adminHeadName, 26) +
+        rText(" )");
     } else if (i === 26) {
-      if (adminHeadName) {
-        newContent = `\t                                                           ตำแหน่ง.......${adminHeadPos}................`;
-      } else {
-        newContent =
-          "\t                                                           ตำแหน่ง.....................................................";
-      }
+      runs =
+        rText("\t                                                           ตำแหน่ง ") +
+        rDotted(adminHeadPos, 26);
     } else if (fullText.includes("อนุญาต") && fullText.includes("ไม่อนุญาต")) {
-      const appMark = isApproved ? "✓" : "................";
-      const rejMark = isRejected ? "✓" : "................";
-      newContent = `\t\t                                                            (${appMark}) อนุญาต   (${rejMark}) ไม่อนุญาต`;
+      const appMark = isApproved ? "✓" : "  ";
+      const rejMark = isRejected ? "✓" : "  ";
+      runs =
+        rText("\t\t                                                            ( ") +
+        rDotted(appMark, 3) +
+        rText(" ) อนุญาต   ( ") +
+        rDotted(rejMark, 3) +
+        rText(" ) ไม่อนุญาต");
     } else if (i === 31) {
-      if (approverName) {
-        newContent = `\t                                                                  (..................${approverName}...................)`;
-      } else {
-        newContent =
-          "\t                                                                  (.......................................................) ";
-      }
+      runs =
+        rText("\t                                                                  ( ") +
+        rDotted(approverName, 26) +
+        rText(" )");
     } else if (i === 32) {
       if (approverDate) {
-        newContent = `\t                                                           \t    ${approverDate}`;
+        runs =
+          rText("\t                                                           \t    ") +
+          rDotted(approverDate, 18);
       }
     }
 
-    if (newContent !== null) {
+    if (runs !== null) {
       const pPrEndIndex = pXml.indexOf("</w:pPr>");
-      const runXml = createRunXml(newContent);
       if (pPrEndIndex !== -1) {
         const prefix = pXml.substring(0, pPrEndIndex + 8);
-        return prefix + runXml;
+        return prefix + runs;
       } else {
         const pOpenEnd = pXml.indexOf(">");
         if (pOpenEnd !== -1) {
           const pOpen = pXml.substring(0, pOpenEnd + 1);
-          return pOpen + runXml;
+          return pOpen + runs;
         }
-        return `<w:p>${runXml}`;
+        return `<w:p>${runs}`;
       }
     }
 
