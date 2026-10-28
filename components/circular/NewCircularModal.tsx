@@ -4,6 +4,7 @@ import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   Member,
   CircularDocument,
+  CircularAttachment,
   CircularUrgency,
   CircularSecretLevel,
   CircularTargetCriteria,
@@ -15,6 +16,31 @@ import { getUserNasSid, getClientSynologyConfig, uploadNasFileDirect } from "@/l
 import { DocumentScannerModal } from "./DocumentScannerModal";
 import { ThaiCalendarDatePicker } from "./ThaiCalendarDatePicker";
 import { getTodayThaiDate, formatIsoToThaiDate, toThaiDigits } from "@/lib/thai-numerals";
+
+export function getFileCategoryInfo(name: string, mime?: string) {
+  const ext = name.split(".").pop()?.toLowerCase() || "";
+  const m = (mime || "").toLowerCase();
+
+  if (ext === "pdf" || m.includes("pdf")) {
+    return { icon: "📕", label: "PDF", bg: "bg-rose-50 text-rose-700 border-rose-200", badge: "PDF", type: "pdf" };
+  }
+  if (["doc", "docx"].includes(ext) || m.includes("word") || m.includes("officedocument.wordprocessingml")) {
+    return { icon: "📘", label: "Word", bg: "bg-blue-50 text-blue-700 border-blue-200", badge: "DOCX", type: "word" };
+  }
+  if (["xls", "xlsx", "csv"].includes(ext) || m.includes("excel") || m.includes("spreadsheet") || m.includes("csv")) {
+    return { icon: "📗", label: "Excel", bg: "bg-emerald-50 text-emerald-700 border-emerald-200", badge: "XLSX", type: "excel" };
+  }
+  if (["ppt", "pptx"].includes(ext) || m.includes("powerpoint") || m.includes("presentation")) {
+    return { icon: "📙", label: "PowerPoint", bg: "bg-amber-50 text-amber-700 border-amber-200", badge: "PPTX", type: "ppt" };
+  }
+  if (["jpg", "jpeg", "png", "webp", "gif", "bmp"].includes(ext) || m.startsWith("image/")) {
+    return { icon: "🖼️", label: "รูปภาพ", bg: "bg-indigo-50 text-indigo-700 border-indigo-200", badge: "IMAGE", type: "image" };
+  }
+  if (["zip", "rar", "7z", "tar", "gz"].includes(ext) || m.includes("zip") || m.includes("compressed")) {
+    return { icon: "🗜️", label: "ไฟล์บีบอัด", bg: "bg-purple-50 text-purple-700 border-purple-200", badge: "ZIP", type: "zip" };
+  }
+  return { icon: "📄", label: ext ? ext.toUpperCase() : "เอกสาร", bg: "bg-slate-50 text-slate-700 border-slate-200", badge: ext.toUpperCase() || "FILE", type: "other" };
+}
 
 interface NewCircularModalProps {
   currentUser: Member;
@@ -63,16 +89,40 @@ export function NewCircularModal({
   const [selectedSpecificIds, setSelectedSpecificIds] = useState<string[]>([]);
   const [showRecipientsList, setShowRecipientsList] = useState<boolean>(false);
 
-  // File and Scan state
-  const [fileName, setFileName] = useState<string>("");
-  const [fileUrl, setFileUrl] = useState<string>("");
-  const [fileSize, setFileSize] = useState<number>(0);
-  const [fileType, setFileType] = useState<string>("");
-  const [scannedPages, setScannedPages] = useState<string[]>(initialScannedPages);
+  // Multi-attachment state (supports multiple files, multiple types, multiple channels)
+  const [attachments, setAttachments] = useState<CircularAttachment[]>(() => {
+    if (initialScannedPages && initialScannedPages.length > 0) {
+      const isPdf = initialScannedPages[0].startsWith("data:application/pdf");
+      return [
+        {
+          id: `att_${Date.now()}_0`,
+          name: initialFileName || (isPdf ? `เอกสารสแกนราชการ_${new Date().toISOString().slice(0, 10)}.pdf` : `เอกสารสแกนราชการ_${new Date().toISOString().slice(0, 10)}.jpg`),
+          size: initialScannedPages.length * 450000,
+          type: isPdf ? "application/pdf" : "image/jpeg",
+          url: initialScannedPages[0],
+          scannedPages: initialScannedPages,
+          source: "scanner",
+        },
+      ];
+    }
+    return [];
+  });
+  const [selectedAttachmentId, setSelectedAttachmentId] = useState<string>("");
   const [showScannerModal, setShowScannerModal] = useState<boolean>(false);
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [selectedFileObj, setSelectedFileObj] = useState<File | null>(null);
+  const [selectedFileObjs, setSelectedFileObjs] = useState<File[]>([]);
+
+  // Calculate active attachment
+  const currentAttachment = useMemo(() => {
+    return attachments.find((a) => a.id === selectedAttachmentId) || attachments[0] || null;
+  }, [attachments, selectedAttachmentId]);
+
+  const fileName = currentAttachment?.name || "";
+  const fileUrl = currentAttachment?.url || "";
+  const fileSize = currentAttachment?.size || 0;
+  const fileType = currentAttachment?.type || "";
+  const scannedPages = currentAttachment?.scannedPages || [];
 
   // Calculate recipients dynamically
   const targetCriteria: CircularTargetCriteria = useMemo(() => {
@@ -111,44 +161,64 @@ export function NewCircularModal({
     );
   };
 
-  // Robust file processor for file input or drag-and-drop
-  const processSelectedFile = (file: File) => {
-    if (!file) return;
+  // Multi-file processor supporting various types (PDF, Word, Excel, PPT, Images, ZIP, etc.)
+  const processSelectedFiles = (files: FileList | File[]) => {
+    if (!files || files.length === 0) return;
     setUploadError(null);
 
-    // Limit check (e.g. 25MB)
-    if (file.size > 25 * 1024 * 1024) {
-      setUploadError("ขนาดไฟล์ใหญ่เกินกว่า 25 MB กรุณาเลือกไฟล์ที่มีขนาดเล็กลง");
-      return;
-    }
+    const fileList = Array.from(files);
+    const newItems: CircularAttachment[] = [];
+    let processed = 0;
 
-    setFileName(file.name);
-    setFileSize(file.size);
-    setFileType(file.type);
-    setSelectedFileObj(file);
-
-    const isImage = file.type.startsWith("image/") || /\.(jpe?g|png|webp|gif|bmp)$/i.test(file.name);
-
-    const reader = new FileReader();
-    reader.onload = (loadEvt) => {
-      const result = loadEvt.target?.result as string;
-      if (result) {
-        setFileUrl(result);
-        if (isImage) {
-          setScannedPages([result]);
-        }
+    fileList.forEach((file) => {
+      if (file.size > 50 * 1024 * 1024) {
+        setUploadError(`ขนาดไฟล์ "${file.name}" ใหญ่เกิน 50 MB`);
+        processed++;
+        return;
       }
-    };
-    reader.onerror = () => {
-      setUploadError("ไม่สามารถอ่านข้อมูลไฟล์ได้ กรุณาลองใหม่อีกครั้ง");
-    };
-    reader.readAsDataURL(file);
+
+      const isImage = file.type.startsWith("image/") || /\.(jpe?g|png|webp|gif|bmp)$/i.test(file.name);
+      const isPdf = file.type.includes("pdf") || file.name.toLowerCase().endsWith(".pdf");
+
+      const reader = new FileReader();
+      reader.onload = (loadEvt) => {
+        const result = (loadEvt.target?.result as string) || "";
+        newItems.push({
+          id: `att_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          name: file.name,
+          size: file.size,
+          type: file.type || (isPdf ? "application/pdf" : isImage ? "image/jpeg" : "application/octet-stream"),
+          url: result,
+          scannedPages: isImage ? [result] : undefined,
+          source: "upload",
+        });
+
+        processed++;
+        if (processed === fileList.length) {
+          if (newItems.length > 0) {
+            setAttachments((prev) => [...prev, ...newItems]);
+            setSelectedAttachmentId(newItems[newItems.length - 1].id);
+            setShowAttachmentPreview(true);
+            setActivePreviewPageIndex(0);
+          }
+        }
+      };
+
+      reader.onerror = () => {
+        processed++;
+        setUploadError(`ไม่สามารถอ่านข้อมูลไฟล์ "${file.name}" ได้ กรุณาลองใหม่อีกครั้ง`);
+      };
+
+      reader.readAsDataURL(file);
+    });
+
+    setSelectedFileObjs((prev) => [...prev, ...fileList]);
   };
 
   const handleManualFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      processSelectedFile(file);
+    if (e.target.files && e.target.files.length > 0) {
+      processSelectedFiles(e.target.files);
+      e.target.value = "";
     }
   };
 
@@ -168,33 +238,40 @@ export function NewCircularModal({
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) {
-      processSelectedFile(file);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      processSelectedFiles(e.dataTransfer.files);
     }
   };
 
+  // Sync initial scanned pages if provided
   useEffect(() => {
-    if (initialScannedPages && initialScannedPages.length > 0) {
-      setScannedPages(initialScannedPages);
+    if (initialScannedPages && initialScannedPages.length > 0 && attachments.length === 0) {
       const firstPage = initialScannedPages[0];
       const isPdf =
         !firstPage.startsWith("data:image/") &&
         (firstPage.startsWith("data:application/pdf") ||
           firstPage.toLowerCase().includes(".pdf"));
-      setFileUrl(firstPage);
-      setFileName(
+      const initName =
         initialFileName ||
-          (isPdf
-            ? `เอกสารสแกนราชการ_${new Date().toISOString().slice(0, 10)}.pdf`
-            : `เอกสารสแกนราชการ_${new Date().toISOString().slice(0, 10)}.jpg`)
-      );
-      setFileType(isPdf ? "application/pdf" : "image/jpeg");
-      setFileSize(initialScannedPages.length * 450000);
+        (isPdf
+          ? `เอกสารสแกนราชการ_${new Date().toISOString().slice(0, 10)}.pdf`
+          : `เอกสารสแกนราชการ_${new Date().toISOString().slice(0, 10)}.jpg`);
+
+      const newAtt: CircularAttachment = {
+        id: `att_init_${Date.now()}`,
+        name: initName,
+        size: initialScannedPages.length * 450000,
+        type: isPdf ? "application/pdf" : "image/jpeg",
+        url: firstPage,
+        scannedPages: initialScannedPages,
+        source: "scanner",
+      };
+      setAttachments([newAtt]);
+      setSelectedAttachmentId(newAtt.id);
       setShowAttachmentPreview(true);
       setActivePreviewPageIndex(0);
     }
-  }, [initialScannedPages, initialFileName]);
+  }, [initialScannedPages, initialFileName, attachments.length]);
 
   // Safely convert Base64 PDF data URL into Blob URL for Chrome/Edge PDF rendering
   useEffect(() => {
@@ -229,36 +306,75 @@ export function NewCircularModal({
         (fileType.includes("pdf") && !fileType.includes("image")) ||
         (fileName.toLowerCase().endsWith(".pdf") && !fileType.startsWith("image/")))
   );
+  const isImageDocument = Boolean(
+    fileUrl?.startsWith("data:image/") ||
+      fileType.startsWith("image/") ||
+      /\.(jpe?g|png|webp|gif|bmp)$/i.test(fileName)
+  );
 
+  // Scanner channel handler
   const handleScannerFinished = (pages: string[], name: string) => {
-    setScannedPages(pages);
-    setFileUrl(pages[0] || "");
-    setFileSize(pages.length * 450000);
-
+    if (!pages || pages.length === 0) return;
     const firstPage = pages[0] || "";
     const isActuallyPdf =
       firstPage.startsWith("data:application/pdf") ||
       (firstPage.toLowerCase().includes(".pdf") && !firstPage.startsWith("data:image/"));
 
-    let cleanName = name;
-    if (!isActuallyPdf && cleanName.toLowerCase().endsWith(".pdf")) {
+    let cleanName = (name || "").trim();
+    if (!cleanName) {
+      cleanName = isActuallyPdf
+        ? `เอกสารสแกนชุดที่${attachments.length + 1}.pdf`
+        : `เอกสารสแกนชุดที่${attachments.length + 1}_${pages.length}หน้า.jpg`;
+    } else if (!isActuallyPdf && cleanName.toLowerCase().endsWith(".pdf")) {
       cleanName = cleanName.replace(/\.pdf$/i, pages.length > 1 ? ".pdf" : ".jpg");
     }
 
-    setFileName(cleanName);
-    setFileType(isActuallyPdf ? "application/pdf" : "image/jpeg");
+    const newAtt: CircularAttachment = {
+      id: `att_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      name: cleanName,
+      size: pages.length * 450000,
+      type: isActuallyPdf ? "application/pdf" : "image/jpeg",
+      url: firstPage,
+      scannedPages: pages,
+      source: "scanner",
+    };
+
+    setAttachments((prev) => [...prev, newAtt]);
+    setSelectedAttachmentId(newAtt.id);
     setShowAttachmentPreview(true);
     setActivePreviewPageIndex(0);
     setShowScannerModal(false);
   };
 
-  const handleRemoveAttachment = () => {
-    setFileName("");
-    setFileUrl("");
-    setFileSize(0);
-    setFileType("");
-    setScannedPages([]);
-    setSelectedFileObj(null);
+  // Remove individual attachment
+  const handleRemoveAttachmentItem = (attId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setAttachments((prev) => {
+      const filtered = prev.filter((a) => a.id !== attId);
+      if (selectedAttachmentId === attId) {
+        setSelectedAttachmentId(filtered[0]?.id || "");
+      }
+      return filtered;
+    });
+  };
+
+  // Set attachment as primary (ฉบับหลัก)
+  const handleSetPrimaryAttachment = (attId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setAttachments((prev) => {
+      const idx = prev.findIndex((a) => a.id === attId);
+      if (idx <= 0) return prev;
+      const target = prev[idx];
+      const rest = prev.filter((_, i) => i !== idx);
+      return [target, ...rest];
+    });
+    setSelectedAttachmentId(attId);
+  };
+
+  const handleRemoveAllAttachments = () => {
+    setAttachments([]);
+    setSelectedAttachmentId("");
+    setSelectedFileObjs([]);
     setUploadError(null);
     setShowAttachmentPreview(false);
     setActivePreviewPageIndex(0);
@@ -283,11 +399,12 @@ export function NewCircularModal({
       return;
     }
 
+    const primaryAttachment = attachments[0];
     const newDoc: CircularDocument = {
       id: `circ_${Date.now()}`,
       docType: "memo",
       referenceDoc: referenceDoc.trim() || undefined,
-      attachmentList: attachmentList.trim() || undefined,
+      attachmentList: attachmentList.trim() || (attachments.length > 1 ? attachments.map((a, i) => `${i + 1}. ${a.name}`).join(", ") : undefined),
       docNumber: docNumber.trim(),
       title: title.trim(),
       issuedDate: issuedDate.trim(),
@@ -295,11 +412,12 @@ export function NewCircularModal({
       urgency,
       secretLevel,
       summary: summary.trim(),
-      fileUrl: fileUrl || "/virtual-office/circular_docs/sample.pdf",
-      fileName: fileName || "เอกสารแนบหนังสือเวียน.pdf",
-      fileSize: fileSize || (scannedPages.length > 0 ? scannedPages.length * 450000 : 1250000),
-      totalPages: scannedPages.length > 0 ? scannedPages.length : 1,
-      scannedPages: scannedPages.length > 0 ? scannedPages : undefined,
+      fileUrl: primaryAttachment?.url || fileUrl || "/virtual-office/circular_docs/sample.pdf",
+      fileName: primaryAttachment?.name || fileName || "เอกสารแนบหนังสือเวียน.pdf",
+      fileSize: primaryAttachment?.size || fileSize || 1250000,
+      totalPages: primaryAttachment?.scannedPages?.length || (scannedPages.length > 0 ? scannedPages.length : 1),
+      scannedPages: primaryAttachment?.scannedPages || (scannedPages.length > 0 ? scannedPages : undefined),
+      attachments: attachments.length > 0 ? attachments : undefined,
       createdBy: currentUser.id,
       createdByName: currentUser.name,
       createdAt: new Date().toISOString(),
@@ -313,23 +431,19 @@ export function NewCircularModal({
 
     onSave(newDoc);
 
-    // Background sync attached file to Synology NAS /virtual-office/circular_docs
-    if (selectedFileObj) {
+    // Background sync attached files to Synology NAS /virtual-office/circular_docs
+    if (selectedFileObjs.length > 0) {
       try {
         const sid = getUserNasSid();
         const config = getClientSynologyConfig();
-        uploadNasFileDirect(
-          selectedFileObj,
-          "/virtual-office/circular_docs",
-          sid || "",
-          config.nasUrl
-        )
-          .then((res) => {
-            if (res.success && res.file) {
-              console.log("[Circular] Synced file directly to NAS:", res.file.path);
-            }
-          })
-          .catch((err) => console.warn("[Circular] NAS direct sync failed:", err));
+        selectedFileObjs.forEach((fileObj) => {
+          uploadNasFileDirect(
+            fileObj,
+            "/virtual-office/circular_docs",
+            sid || "",
+            config.nasUrl
+          ).catch((err) => console.warn("[Circular] NAS direct sync failed for", fileObj.name, err));
+        });
       } catch (err) {
         console.warn("[Circular] NAS sync error:", err);
       }
@@ -355,11 +469,21 @@ export function NewCircularModal({
   };
 
   const handleSelectNasFile = (file: { name: string; path: string; size: number }) => {
-    setFileName(file.name);
-    setFileSize(file.size);
-    setFileType(file.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "application/octet-stream");
-    setFileUrl(`/api/nas/download?path=${encodeURIComponent(file.path)}&mode=open`);
-    setScannedPages([]);
+    const isPdfExt = file.name.toLowerCase().endsWith(".pdf");
+    const isImgExt = /\.(jpe?g|png|webp|gif|bmp)$/i.test(file.name);
+
+    const newAtt: CircularAttachment = {
+      id: `att_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      name: file.name,
+      size: file.size,
+      type: isPdfExt ? "application/pdf" : isImgExt ? "image/jpeg" : "application/octet-stream",
+      url: `/api/nas/download?path=${encodeURIComponent(file.path)}&mode=open`,
+      nasPath: file.path,
+      source: "nas",
+    };
+
+    setAttachments((prev) => [...prev, newAtt]);
+    setSelectedAttachmentId(newAtt.id);
     setShowAttachmentPreview(true);
     setActivePreviewPageIndex(0);
     setShowNasPicker(false);
@@ -741,11 +865,53 @@ export function NewCircularModal({
             )}
           </div>
 
-          {/* Section 3: File Attachment & Scan Ingestion */}
-          <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-3">
-            <div className="text-xs font-bold text-slate-900 flex items-center justify-between border-b border-slate-100 pb-2">
-              <span>๓. ไฟล์หนังสือราชการต้นฉบับ</span>
-              <span className="text-[10px] text-indigo-600 font-mono">แนบไฟล์ PDF, รูปภาพ หรือสแกนสด</span>
+          {/* Section 3: File Attachment & Multi-Channel Ingestion */}
+          <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-4">
+            <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-3 gap-2">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-900">๓. ไฟล์หนังสือราชการต้นฉบับและเอกสารแนบท้าย</span>
+                  <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                    attachments.length > 0
+                      ? "bg-emerald-100 text-emerald-800"
+                      : "bg-slate-100 text-slate-500"
+                  }`}>
+                    {attachments.length} ไฟล์
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  รองรับหลายไฟล์ หลายประเภท (PDF, Word, Excel, PowerPoint, รูปภาพ, ZIP) ผ่าน ๓ ช่องทาง
+                </p>
+              </div>
+
+              {attachments.length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setShowScannerModal(true)}
+                    className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-bold border border-indigo-200 cursor-pointer transition-all flex items-center gap-1 shadow-2xs"
+                  >
+                    <span>📷</span>
+                    <span>สแกนสดเพิ่ม</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl text-xs font-bold border border-emerald-200 cursor-pointer transition-all flex items-center gap-1 shadow-2xs"
+                  >
+                    <span>📁</span>
+                    <span>อัปโหลดเพิ่ม</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleFetchNasFiles}
+                    className="px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 rounded-xl text-xs font-bold border border-sky-200 cursor-pointer transition-all flex items-center gap-1 shadow-2xs"
+                  >
+                    <span>☁️</span>
+                    <span>ดึงจาก NAS</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             {uploadError && (
@@ -761,84 +927,188 @@ export function NewCircularModal({
               </div>
             )}
 
-            {/* If a file is already selected or scanned, display active card & preview */}
-            {fileName ? (
-              <div className="space-y-3 animate-fade-in">
-                <div className="p-4 rounded-2xl bg-indigo-50/70 border-2 border-indigo-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-12 h-12 rounded-xl bg-indigo-600 text-white flex items-center justify-center text-2xl shrink-0 shadow-sm">
-                      {fileType.startsWith("image/") || scannedPages.length > 0 ? "🖼️" : "📄"}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-slate-900 truncate">{fileName}</span>
-                        <span className="px-2 py-0.2 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-full">
-                          แนบไฟล์เรียบร้อย
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        {fileSize > 0 ? `${(fileSize / (1024 * 1024)).toFixed(2)} MB` : "ไฟล์พร้อมเวียน"}
-                        {scannedPages.length > 0 && ` • สแกน ${scannedPages.length} หน้า`}
-                        {fileType && ` • ${fileType.includes("pdf") ? "เอกสาร PDF" : "รูปภาพเอกสาร"}`}
-                      </p>
-                    </div>
-                  </div>
+            {/* Ingestion Channel Cards (Initial Large View or Drag Area) */}
+            {attachments.length === 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Channel 1: Live Camera Scanner */}
+                <button
+                  type="button"
+                  onClick={() => setShowScannerModal(true)}
+                  className="p-5 rounded-2xl border-2 border-dashed border-indigo-300 hover:border-indigo-500 bg-indigo-50/40 hover:bg-indigo-50 text-indigo-700 text-xs font-bold flex flex-col items-center justify-center gap-2 cursor-pointer transition-all group shadow-2xs"
+                >
+                  <span className="text-3xl group-hover:scale-110 transition-transform">📷</span>
+                  <span className="text-xs font-bold">ช่องทางที่ ๑: สแกนสด</span>
+                  <span className="text-[10px] text-indigo-500 font-normal text-center">
+                    ถ่ายภาพเอกสาร A4 ผ่านกล้อง/เว็บแคม ปรับคมชัดอัตโนมัติ
+                  </span>
+                </button>
 
-                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                    <button
-                      type="button"
-                      onClick={() => setShowAttachmentPreview(!showAttachmentPreview)}
-                      className="px-3 py-1.5 text-xs font-semibold bg-white border border-indigo-200 hover:bg-indigo-50 text-indigo-700 rounded-xl cursor-pointer transition-all shadow-2xs flex items-center gap-1.5"
-                    >
-                      <span>{showAttachmentPreview ? "🙈 ซ่อนตัวอย่าง" : "👁️ ดูตัวอย่างเอกสาร"}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="px-3 py-1.5 text-xs font-semibold bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl cursor-pointer transition-all shadow-2xs"
-                    >
-                      เปลี่ยนไฟล์
-                    </button>
-                    {scannedPages.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setShowScannerModal(true)}
-                        className="px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl cursor-pointer transition-all shadow-2xs"
-                      >
-                        สแกนเพิ่ม
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={handleRemoveAttachment}
-                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl cursor-pointer transition-colors"
-                      title="ยกเลิกไฟล์แนบ"
-                    >
-                      ✕
-                    </button>
-                  </div>
+                {/* Channel 2: Multi-file Local Upload / Drag & Drop */}
+                <div
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`p-5 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-2 cursor-pointer transition-all group shadow-2xs ${
+                    isDragOver
+                      ? "border-emerald-500 bg-emerald-100/70"
+                      : "border-slate-300 hover:border-emerald-400 bg-slate-50 hover:bg-emerald-50/30"
+                  }`}
+                >
+                  <span className="text-3xl group-hover:scale-110 transition-transform">📁</span>
+                  <span className="text-xs font-bold text-slate-800">ช่องทางที่ ๒: อัปโหลดจากเครื่อง</span>
+                  <span className="text-[10px] text-slate-500 font-normal text-center">
+                    รองรับหลายไฟล์พร้อมกัน (PDF, Word, Excel, รูปภาพ, ZIP) ลากวางได้
+                  </span>
                 </div>
 
-                {/* Embedded Document Preview Box */}
-                {showAttachmentPreview && (fileUrl || scannedPages.length > 0) && (
+                {/* Channel 3: Synology NAS Storage */}
+                <button
+                  type="button"
+                  onClick={handleFetchNasFiles}
+                  className="p-5 rounded-2xl border-2 border-dashed border-sky-300 hover:border-sky-500 bg-sky-50/40 hover:bg-sky-50 text-sky-800 text-xs font-bold flex flex-col items-center justify-center gap-2 cursor-pointer transition-all group shadow-2xs"
+                >
+                  <span className="text-3xl group-hover:scale-110 transition-transform">☁️</span>
+                  <span className="text-xs font-bold">ช่องทางที่ ๓: คลังเอกสาร NAS</span>
+                  <span className="text-[10px] text-sky-600 font-normal text-center">
+                    ดึงไฟล์เอกสารราชการจาก Synology File Station
+                  </span>
+                </button>
+              </div>
+            ) : (
+              /* Drag & Drop banner for adding more files when files already exist */
+              <div
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className={`py-3 px-4 rounded-xl border-2 border-dashed flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                  isDragOver
+                    ? "border-emerald-500 bg-emerald-100/70 text-emerald-800"
+                    : "border-slate-200 hover:border-slate-300 bg-slate-50/80 text-slate-600"
+                }`}
+              >
+                <span className="text-base">📥</span>
+                <span className="text-xs font-medium">
+                  ลากไฟล์เอกสารมาวางที่นี่ หรือคลิกเพื่ออัปโหลดไฟล์เพิ่ม (รองรับ PDF, Word, Excel, PPT, รูปภาพ, ZIP)
+                </span>
+              </div>
+            )}
+
+            {/* Attached Files List */}
+            {attachments.length > 0 && (
+              <div className="space-y-3 pt-1">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+                  <div className="flex items-center gap-2">
+                    <span>📑 รายการไฟล์เอกสารที่แนบในหนังสือเวียนนี้ ({attachments.length} รายการ):</span>
+                  </div>
+                  {attachments.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveAllAttachments}
+                      className="text-[11px] font-bold text-rose-500 hover:text-rose-700 cursor-pointer"
+                    >
+                      ลบไฟล์ทั้งหมด
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                  {attachments.map((att, idx) => {
+                    const cat = getFileCategoryInfo(att.name, att.type);
+                    const isPrimary = idx === 0;
+                    const isSelected = att.id === currentAttachment?.id;
+
+                    return (
+                      <div
+                        key={att.id}
+                        onClick={() => {
+                          setSelectedAttachmentId(att.id);
+                          setShowAttachmentPreview(true);
+                          setActivePreviewPageIndex(0);
+                        }}
+                        className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                          isSelected
+                            ? "bg-indigo-50/60 border-indigo-400 ring-2 ring-indigo-500/20 shadow-xs"
+                            : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/60"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl shrink-0 border ${cat.bg}`}>
+                            {cat.icon}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-xs font-bold text-slate-900 truncate max-w-[190px]" title={att.name}>
+                                {att.name}
+                              </span>
+                              {isPrimary ? (
+                                <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-800 text-[9px] font-bold rounded-md shrink-0">
+                                  ★ เอกสารหลัก
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.2 bg-slate-100 text-slate-600 text-[9px] font-medium rounded-md shrink-0">
+                                  แนบท้าย #{idx + 1}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+                              <span>{Math.round(att.size / 1024)} KB</span>
+                              <span>•</span>
+                              <span className="uppercase font-mono">{cat.badge}</span>
+                              <span>•</span>
+                              <span className="text-slate-500 font-medium">
+                                {att.source === "scanner" ? "📷 สแกนสด" : att.source === "nas" ? "☁️ NAS" : "📁 อัปโหลด"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          {!isPrimary && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleSetPrimaryAttachment(att.id, e)}
+                              className="px-2 py-1 text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg border border-amber-200 cursor-pointer transition-all"
+                              title="ตั้งเป็นเอกสารฉบับหลักของหนังสือเวียน"
+                            >
+                              ตั้งฉบับหลัก
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => handleRemoveAttachmentItem(att.id, e)}
+                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
+                            title="ลบไฟล์นี้ออก"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Active Attachment Preview Box */}
+                {currentAttachment && showAttachmentPreview && (
                   <div
                     data-testid="circular-document-preview-box"
-                    className="p-4 bg-slate-900/5 rounded-2xl border border-slate-200 space-y-3"
+                    className="p-4 bg-slate-900/5 rounded-2xl border border-slate-200 space-y-3 mt-3 animate-fade-in"
                   >
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                    <div className="flex flex-wrap items-center justify-between text-xs gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-bold text-slate-800 flex items-center gap-1.5 truncate">
                           <span>👁️</span>
-                          <span>ตัวอย่างเอกสารที่นำเข้า / หน้าสแกน</span>
+                          <span>ตัวอย่างเอกสาร: {fileName}</span>
                         </span>
                         {scannedPages.length > 1 && (
-                          <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-mono text-[11px] font-bold">
+                          <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-mono text-[11px] font-bold shrink-0">
                             หน้า {activePreviewPageIndex + 1} จาก {scannedPages.length}
                           </span>
                         )}
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 shrink-0">
                         {scannedPages.length > 1 && (
                           <div className="flex items-center gap-1">
                             <button
@@ -864,17 +1134,25 @@ export function NewCircularModal({
                           </div>
                         )}
 
-                        {activePdfUrl && (
+                        {fileUrl && (
                           <button
                             type="button"
-                            onClick={() => window.open(activePdfUrl, "_blank")}
+                            onClick={() => window.open(fileUrl, "_blank")}
                             className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer shadow-2xs flex items-center gap-1"
-                            title="เปิดเอกสารในแท็บใหม่แบบเต็มจอ"
+                            title="เปิดไฟล์ในแท็บใหม่"
                           >
                             <span>🔍</span>
-                            <span>ขยายเต็มจอ</span>
+                            <span>เปิดเต็มจอ ↗</span>
                           </button>
                         )}
+
+                        <button
+                          type="button"
+                          onClick={() => setShowAttachmentPreview(false)}
+                          className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 cursor-pointer shadow-2xs"
+                        >
+                          ซ่อนตัวอย่าง ✕
+                        </button>
                       </div>
                     </div>
 
@@ -892,63 +1170,42 @@ export function NewCircularModal({
                             className="w-full h-[460px] rounded-lg border-none"
                           />
                         </object>
-                      ) : (
+                      ) : isImageDocument ? (
                         <img
                           src={scannedPages[activePreviewPageIndex] || fileUrl}
-                          alt="ตัวอย่างเอกสารสแกน"
+                          alt="ตัวอย่างเอกสาร"
                           className="max-h-[460px] w-auto object-contain rounded-lg shadow-sm"
                         />
+                      ) : (
+                        /* Rich Non-image/Non-PDF preview card (Word, Excel, PPT, ZIP, etc.) */
+                        <div className="w-full py-12 flex flex-col items-center justify-center text-center space-y-3">
+                          <div className="text-5xl">{getFileCategoryInfo(fileName, fileType).icon}</div>
+                          <div className="space-y-1 max-w-md">
+                            <span className="text-sm font-bold text-slate-800 block truncate">{fileName}</span>
+                            <span className="text-xs text-slate-400 block font-mono">
+                              ขนาด {Math.round(fileSize / 1024)} KB • ประเภท {getFileCategoryInfo(fileName, fileType).label}
+                            </span>
+                            <p className="text-[11px] text-slate-500 pt-1">
+                              ไฟล์ประเภทนี้พร้อมให้ผู้รับเปิดและดาวน์โหลดผ่านระบบเวียนหนังสือราชการ
+                            </p>
+                          </div>
+                          {fileUrl && (
+                            <a
+                              href={fileUrl}
+                              download={fileName}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-all cursor-pointer shadow-sm flex items-center gap-1.5"
+                            >
+                              <span>⬇️</span>
+                              <span>ดาวน์โหลด / เปิดไฟล์แนบนี้</span>
+                            </a>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
                 )}
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {/* Live Camera Scanner Button */}
-                <button
-                  type="button"
-                  onClick={() => setShowScannerModal(true)}
-                  className="p-4 rounded-2xl border-2 border-dashed border-indigo-300 hover:border-indigo-500 bg-indigo-50/40 hover:bg-indigo-50 text-indigo-700 text-xs font-bold flex flex-col items-center justify-center gap-2 cursor-pointer transition-all group"
-                >
-                  <span className="text-2xl group-hover:scale-110 transition-transform">📷</span>
-                  <span className="text-xs font-bold">สแกนเอกสารสด</span>
-                  <span className="text-[10px] text-indigo-500 font-normal text-center">
-                    ถ่ายภาพเอกสาร A4 ปรับขาวดำคมชัด
-                  </span>
-                </button>
-
-                {/* File Upload Dropzone */}
-                <div
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                  onClick={() => fileInputRef.current?.click()}
-                  className={`p-4 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-2 cursor-pointer transition-all group ${
-                    isDragOver
-                      ? "border-indigo-500 bg-indigo-100/70"
-                      : "border-slate-300 hover:border-slate-400 bg-slate-50 hover:bg-slate-100"
-                  }`}
-                >
-                  <span className="text-2xl group-hover:scale-110 transition-transform">📁</span>
-                  <span className="text-xs font-bold text-slate-700">อัปโหลดไฟล์จากเครื่อง</span>
-                  <span className="text-[10px] text-slate-500 font-normal text-center">
-                    ไฟล์ PDF หรือรูปภาพ (ลากวางได้)
-                  </span>
-                </div>
-
-                {/* Synology NAS Cloud Library Picker */}
-                <button
-                  type="button"
-                  onClick={handleFetchNasFiles}
-                  className="p-4 rounded-2xl border-2 border-dashed border-sky-300 hover:border-sky-500 bg-sky-50/40 hover:bg-sky-50 text-sky-800 text-xs font-bold flex flex-col items-center justify-center gap-2 cursor-pointer transition-all group"
-                >
-                  <span className="text-2xl group-hover:scale-110 transition-transform">☁️</span>
-                  <span className="text-xs font-bold">คลังเอกสาร NAS</span>
-                  <span className="text-[10px] text-sky-600 font-normal text-center">
-                    ดึงไฟล์จาก Synology File Station
-                  </span>
-                </button>
               </div>
             )}
 
@@ -986,14 +1243,19 @@ export function NewCircularModal({
                         className="p-2.5 flex items-center justify-between hover:bg-sky-50 cursor-pointer transition-colors group"
                       >
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-lg">📄</span>
+                          <span className="text-lg">{getFileCategoryInfo(file.name).icon}</span>
                           <span className="font-semibold text-slate-800 truncate group-hover:text-sky-700">
                             {file.name}
                           </span>
                         </div>
-                        <span className="text-[10px] text-slate-400 shrink-0 font-mono">
-                          {Math.round(file.size / 1024)} KB
-                        </span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            {Math.round(file.size / 1024)} KB
+                          </span>
+                          <span className="px-2 py-0.5 rounded-lg bg-sky-100 text-sky-800 text-[10px] font-bold group-hover:bg-sky-600 group-hover:text-white transition-colors">
+                            + แนบไฟล์นี้
+                          </span>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1001,11 +1263,12 @@ export function NewCircularModal({
               </div>
             )}
 
-            {/* Hidden native file input */}
+            {/* Hidden native file input supporting multiple files and multiple types */}
             <input
               ref={fileInputRef}
               type="file"
-              accept="application/pdf,image/*"
+              multiple
+              accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.zip,.rar,.7z,.txt"
               onChange={handleManualFileUpload}
               className="hidden"
             />

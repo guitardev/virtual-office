@@ -6,7 +6,7 @@ import { supabase, mapRowToMember } from "@/lib/supabase";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { username, password, nasUrl } = body;
+    const { username, password, nasUrl, session } = body;
 
     if (!username || !password) {
       return NextResponse.json(
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
       "https://nas.smso.site";
 
     // 1. Authenticate against Database Auth Web API
-    const authResult = await loginSynology(username, password, targetUrl);
+    const authResult = await loginSynology(username, password, targetUrl, session || "FileStation");
 
     if (!authResult.success) {
       return NextResponse.json(

@@ -495,6 +495,17 @@ export interface CircularRecipientStatus {
 
 export type OfficialDocumentType = "memo" | "external" | "command" | "announcement";
 
+export interface CircularAttachment {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  url: string;
+  scannedPages?: string[];
+  nasPath?: string;
+  source?: "upload" | "scanner" | "nas";
+}
+
 export interface CircularDocument {
   id: string;
   docNumber: string;
@@ -512,6 +523,7 @@ export interface CircularDocument {
   fileSize: number;
   totalPages?: number;
   scannedPages?: string[];
+  attachments?: CircularAttachment[];
   createdBy: string;
   createdByName: string;
   createdAt: string;

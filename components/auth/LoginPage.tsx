@@ -206,7 +206,13 @@ export function LoginPage({ onLogin, availableMembers, onRequestAccess }: LoginP
       );
     } catch (err: any) {
       setIsLoading(false);
-      const msg = err?.message || "การเชื่อมต่อขัดข้อง";
+      const isTimeout =
+        err?.name === "TimeoutError" ||
+        err?.message?.includes("timeout") ||
+        err?.message?.includes("aborted");
+      const msg = isTimeout
+        ? "การเชื่อมต่อไปยังระบบฐานข้อมูลหมดเวลา (Timeout) กรุณาลองใหม่อีกครั้ง"
+        : err?.message || "การเชื่อมต่อขัดข้อง";
       setErrorMessage(
         `เกิดข้อผิดพลาดในการเชื่อมต่อระบบฐานข้อมูล: ${msg
           .replace(/https?:\/\/[^\s]+/g, "เซิร์ฟเวอร์")

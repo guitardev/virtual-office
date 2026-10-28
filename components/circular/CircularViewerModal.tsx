@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Member, CircularDocument } from "@/lib/types";
+import { Member, CircularDocument, CircularAttachment } from "@/lib/types";
 import { DigitalSignaturePad } from "./DigitalSignaturePad";
 import { CirculationPrintSlip } from "./CirculationPrintSlip";
 import { toThaiShortDate, toThaiDate } from "@/lib/thai-numerals";
+import { getFileCategoryInfo } from "./NewCircularModal";
 
 export function getCircularFileDisplayUrl(fileUrl?: string): string {
   if (!fileUrl) return "/virtual-office/circular_docs/sample.pdf";
@@ -53,6 +54,28 @@ export function CircularViewerModal({
   const [showSignaturePad, setShowSignaturePad] = useState<boolean>(false);
   const [showPrintSlip, setShowPrintSlip] = useState<boolean>(false);
   const [blobPdfUrl, setBlobPdfUrl] = useState<string | null>(null);
+  const [selectedAttId, setSelectedAttId] = useState<string>(() => {
+    return doc.attachments?.[0]?.id || "";
+  });
+
+  useEffect(() => {
+    if (doc.attachments && doc.attachments.length > 0) {
+      if (!doc.attachments.some((a) => a.id === selectedAttId)) {
+        setSelectedAttId(doc.attachments[0].id);
+      }
+    }
+  }, [doc.id, doc.attachments, selectedAttId]);
+
+  const activeAttachment: CircularAttachment | null =
+    (doc.attachments && doc.attachments.find((a) => a.id === selectedAttId)) ||
+    doc.attachments?.[0] ||
+    null;
+
+  const activeFileName = activeAttachment?.name || doc.fileName;
+  const activeFileSize = activeAttachment?.size ?? doc.fileSize;
+  const activeFileUrl = activeAttachment?.url || doc.fileUrl;
+  const activeScannedPages = activeAttachment?.scannedPages || doc.scannedPages;
+  const activeCategory = getFileCategoryInfo(activeFileName, activeAttachment?.type);
 
   // Admin IDs set for statistics exclusion
   const adminIdSet = React.useMemo(
@@ -65,9 +88,9 @@ export function CircularViewerModal({
 
   // Safely convert Base64 PDF data URL into Blob URL for Chrome/Edge PDF rendering
   useEffect(() => {
-    if (doc.fileUrl && doc.fileUrl.startsWith("data:application/pdf")) {
+    if (activeFileUrl && activeFileUrl.startsWith("data:application/pdf")) {
       try {
-        const base64Data = doc.fileUrl.includes(",") ? doc.fileUrl.split(",")[1] : doc.fileUrl;
+        const base64Data = activeFileUrl.includes(",") ? activeFileUrl.split(",")[1] : activeFileUrl;
         const byteCharacters = atob(base64Data);
         const byteNumbers = new Array(byteCharacters.length);
         for (let i = 0; i < byteCharacters.length; i++) {
@@ -83,10 +106,12 @@ export function CircularViewerModal({
       } catch (err) {
         console.warn("Could not generate Blob URL for PDF:", err);
       }
+    } else {
+      setBlobPdfUrl(null);
     }
-  }, [doc.fileUrl]);
+  }, [activeFileUrl]);
 
-  const activePdfUrl = blobPdfUrl || getCircularFileDisplayUrl(doc.fileUrl);
+  const activePdfUrl = blobPdfUrl || getCircularFileDisplayUrl(activeFileUrl);
 
   // Check if current user is a recipient and their status
   const recipientRecord = doc.recipients.find((r) => r.memberId === currentUser.id);
@@ -163,21 +188,75 @@ export function CircularViewerModal({
         <div className="flex-1 overflow-y-auto p-6 bg-[#F8FAFC] print:p-0 print:bg-transparent print:overflow-visible">
           {activeTab === "doc" ? (
             <div className="space-y-4">
+              {/* Multi-Attachment Switcher Bar if more than 1 attachment */}
+              {doc.attachments && doc.attachments.length > 1 && (
+                <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs print:hidden space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <span>📎</span>
+                      <span>ไฟล์เอกสารและสิ่งที่ส่งมาด้วยทั้งหมด ({doc.attachments.length} รายการ)</span>
+                    </div>
+                    <span className="text-[11px] text-slate-400">คลิกเพื่อสลับดูแต่ละไฟล์</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {doc.attachments.map((att, idx) => {
+                      const isSelected = activeAttachment ? activeAttachment.id === att.id : idx === 0;
+                      const cat = getFileCategoryInfo(att.name, att.type);
+                      return (
+                        <button
+                          key={att.id || idx}
+                          type="button"
+                          onClick={() => {
+                            setSelectedAttId(att.id);
+                            setCurrentPageIndex(0);
+                          }}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 border ${
+                            isSelected
+                              ? "bg-indigo-600 text-white border-indigo-600 shadow-xs ring-2 ring-indigo-200"
+                              : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 hover:border-slate-300"
+                          }`}
+                        >
+                          <span>{cat.icon}</span>
+                          <span className="max-w-[180px] truncate" title={att.name}>
+                            {att.name}
+                          </span>
+                          {idx === 0 && (
+                            <span
+                              className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                                isSelected ? "bg-indigo-700 text-white" : "bg-amber-100 text-amber-800"
+                              }`}
+                            >
+                              เอกสารหลัก
+                            </span>
+                          )}
+                          <span className={`text-[10px] ${isSelected ? "text-indigo-200" : "text-slate-400"}`}>
+                            {att.size ? `${(att.size / 1024).toFixed(0)} KB` : ""}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Document Header & Quick Actions */}
               <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs print:hidden">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-xl text-indigo-600 shrink-0">
-                    📎
+                  <div className={`w-10 h-10 rounded-xl border flex items-center justify-center text-xl shrink-0 ${activeCategory.bg}`}>
+                    {activeCategory.icon}
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-slate-800">
-                      {doc.fileName || "เอกสารหนังสือเวียนต้นฉบับ"}
+                    <div className="text-xs font-bold text-slate-800 flex items-center gap-2">
+                      <span>{activeFileName || "เอกสารหนังสือเวียนต้นฉบับ"}</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold border ${activeCategory.bg}`}>
+                        {activeCategory.badge}
+                      </span>
                     </div>
                     <div className="text-[11px] text-slate-400">
-                      {doc.scannedPages && doc.scannedPages.length > 0
-                        ? `เอกสารสแกน ${doc.scannedPages.length} หน้า`
-                        : doc.fileSize
-                        ? `${(doc.fileSize / (1024 * 1024)).toFixed(2)} MB`
+                      {activeScannedPages && activeScannedPages.length > 0
+                        ? `เอกสารสแกน ${activeScannedPages.length} หน้า`
+                        : activeFileSize
+                        ? `${(activeFileSize / (1024 * 1024)).toFixed(2)} MB`
                         : "เอกสารทางราชการ"}
                     </div>
                   </div>
@@ -212,12 +291,12 @@ export function CircularViewerModal({
 
               {/* View Content: The Attached Document */}
               <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs flex flex-col items-center animate-fade-in">
-                  {doc.scannedPages && doc.scannedPages.length > 0 ? (
+                  {activeScannedPages && activeScannedPages.length > 0 ? (
                     <div className="w-full space-y-3">
                       {/* Multi-page controls */}
                       <div className="flex items-center justify-between text-xs px-2">
                         <span className="font-bold text-slate-700">
-                          หน้า {currentPageIndex + 1} จาก {doc.scannedPages.length}
+                          หน้า {currentPageIndex + 1} จาก {activeScannedPages.length}
                         </span>
                         <div className="flex items-center gap-2">
                           <button
@@ -230,10 +309,10 @@ export function CircularViewerModal({
                           </button>
                           <button
                             type="button"
-                            disabled={currentPageIndex === doc.scannedPages.length - 1}
+                            disabled={currentPageIndex === activeScannedPages.length - 1}
                             onClick={() =>
                               setCurrentPageIndex((prev) =>
-                                Math.min(doc.scannedPages!.length - 1, prev + 1)
+                                Math.min(activeScannedPages!.length - 1, prev + 1)
                               )
                             }
                             className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer font-bold"
@@ -244,16 +323,16 @@ export function CircularViewerModal({
                       </div>
 
                       <div className="w-full max-h-[550px] overflow-auto bg-slate-900/5 rounded-xl border border-slate-200 flex items-center justify-center p-2">
-                        {doc.scannedPages[currentPageIndex].startsWith("data:application/pdf") ||
-                        doc.scannedPages[currentPageIndex].toLowerCase().endsWith(".pdf") ? (
+                        {activeScannedPages[currentPageIndex].startsWith("data:application/pdf") ||
+                        activeScannedPages[currentPageIndex].toLowerCase().endsWith(".pdf") ? (
                           <iframe
-                            src={doc.scannedPages[currentPageIndex]}
+                            src={activeScannedPages[currentPageIndex]}
                             title={`Document page ${currentPageIndex + 1}`}
                             className="w-full h-[500px] rounded-lg border-none bg-white"
                           />
                         ) : (
                           <img
-                            src={doc.scannedPages[currentPageIndex]}
+                            src={activeScannedPages[currentPageIndex]}
                             alt={`Document page ${currentPageIndex + 1}`}
                             className="max-h-[480px] w-auto object-contain shadow-md rounded"
                           />
@@ -261,8 +340,8 @@ export function CircularViewerModal({
                       </div>
                     </div>
                   ) : activePdfUrl &&
-                    (activePdfUrl.includes(".pdf") ||
-                      doc.fileName.toLowerCase().endsWith(".pdf") ||
+                    (activeCategory.type === "pdf" ||
+                      activeFileName.toLowerCase().endsWith(".pdf") ||
                       activePdfUrl.startsWith("data:application/pdf") ||
                       activePdfUrl.startsWith("blob:")) ? (
                     <div className="w-full space-y-3">
@@ -280,7 +359,7 @@ export function CircularViewerModal({
                         </object>
                       </div>
                       <div className="flex flex-wrap justify-between items-center text-xs text-slate-500 px-2 gap-2">
-                        <span>📄 {doc.fileName} ({Math.round(doc.fileSize / 1024)} KB)</span>
+                        <span>📄 {activeFileName} ({Math.round(activeFileSize / 1024)} KB)</span>
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
@@ -291,7 +370,7 @@ export function CircularViewerModal({
                           </button>
                           <a
                             href={activePdfUrl}
-                            download={doc.fileName}
+                            download={activeFileName}
                             className="px-3.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold border border-indigo-200 flex items-center gap-1.5 transition-all cursor-pointer"
                           >
                             <span>⬇️</span>
@@ -301,21 +380,22 @@ export function CircularViewerModal({
                       </div>
                     </div>
                   ) : activePdfUrl &&
-                    (activePdfUrl.startsWith("data:image/") ||
-                      /\.(png|jpe?g|webp|gif)$/i.test(doc.fileName)) ? (
+                    (activeCategory.type === "image" ||
+                      activePdfUrl.startsWith("data:image/") ||
+                      /\.(png|jpe?g|webp|gif|bmp)$/i.test(activeFileName)) ? (
                     <div className="w-full space-y-3 flex flex-col items-center">
                       <div className="w-full max-h-[520px] overflow-auto bg-slate-900/5 rounded-xl border border-slate-200 flex items-center justify-center p-2">
                         <img
                           src={activePdfUrl}
-                          alt={doc.fileName}
+                          alt={activeFileName}
                           className="max-h-[480px] w-auto object-contain shadow-md rounded"
                         />
                       </div>
                       <div className="w-full flex justify-between items-center text-xs text-slate-500 px-2">
-                        <span>🖼️ {doc.fileName} ({Math.round(doc.fileSize / 1024)} KB)</span>
+                        <span>🖼️ {activeFileName} ({Math.round(activeFileSize / 1024)} KB)</span>
                         <a
                           href={activePdfUrl}
-                          download={doc.fileName}
+                          download={activeFileName}
                           className="px-3.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold border border-indigo-200 flex items-center gap-1.5 transition-all cursor-pointer"
                         >
                           <span>⬇️</span>
@@ -325,21 +405,28 @@ export function CircularViewerModal({
                     </div>
                   ) : (
                     <div className="w-full py-12 flex flex-col items-center justify-center text-center space-y-3">
-                      <div className="text-4xl">📄</div>
-                      <div className="text-sm font-bold text-slate-800">{doc.fileName}</div>
+                      <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-3xl border shadow-2xs ${activeCategory.bg}`}>
+                        {activeCategory.icon}
+                      </div>
+                      <div className="text-sm font-bold text-slate-800">{activeFileName}</div>
+                      <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${activeCategory.bg}`}>
+                        <span>{activeCategory.icon}</span>
+                        <span>{activeCategory.label}</span>
+                        {activeFileSize ? <span>• {(activeFileSize / 1024).toFixed(0)} KB</span> : null}
+                      </div>
                       <p className="text-xs text-slate-500 max-w-sm">
-                        เอกสารจัดเก็บบนระบบคลังเอกสารความปลอดภัยสูง Synology NAS
+                        ไฟล์เอกสารประเภท {activeCategory.label} รองรับการดาวน์โหลดไปเปิดหรือแก้ไขด้วยโปรแกรมบนอุปกรณ์ของท่าน
                       </p>
                       {activePdfUrl && (
                         <a
                           href={activePdfUrl}
-                          download={doc.fileName}
+                          download={activeFileName}
                           target="_blank"
                           rel="noreferrer"
-                          className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl text-xs border border-indigo-200 transition-all cursor-pointer flex items-center gap-1.5"
+                          className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-xs transition-all cursor-pointer flex items-center gap-2"
                         >
                           <span>⬇️</span>
-                          <span>เปิดหรือดาวน์โหลดเอกสาร</span>
+                          <span>ดาวน์โหลดไฟล์ {activeFileName}</span>
                         </a>
                       )}
                     </div>

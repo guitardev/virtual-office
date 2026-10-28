@@ -53,8 +53,13 @@ export async function POST(req: NextRequest) {
       DEFAULT_SYNOLOGY_CONFIG.nasUrl ||
       "https://nas.smso.site";
 
-    // 2. ขั้นแรก: ตรวจสอบความถูกต้องของรหัสผ่านเดิมด้วยการล็อกอินจริงบน Synology NAS
-    const authResult = await loginSynology(username.trim(), oldPassword, targetUrl);
+    // 2. ขั้นแรก: ตรวจสอบความถูกต้องของรหัสผ่านเดิมด้วยการล็อกอินจริงบน Synology NAS (ขอรับ Session Core/webui)
+    let authResult = await loginSynology(username.trim(), oldPassword, targetUrl, "Core");
+
+    // ถ้า session Core ไม่สำเร็จ ให้ลอง session FileStation
+    if (!authResult.success && authResult.code !== 401 && authResult.code !== 400) {
+      authResult = await loginSynology(username.trim(), oldPassword, targetUrl, "FileStation");
+    }
 
     if (!authResult.success) {
       return NextResponse.json(
@@ -85,10 +90,10 @@ export async function POST(req: NextRequest) {
     const executeDsmPasswordChange = async (url: string) => {
       const cleanUrl = url.replace(/\/+$/, "");
 
-      // แบบที่ 1: มาตรฐาน SYNO.Core.NormalUser (DSM 6 และ DSM 7 ส่วนใหญ่)
-      const formBody1 = new URLSearchParams({
+      // แบบที่ 1: SYNO.Core.NormalUser v2 (มาตรฐาน DSM 7+ ตามที่ DSM Personal Settings ใช้งาน)
+      const formBodyV2 = new URLSearchParams({
         api: "SYNO.Core.NormalUser",
-        version: "1",
+        version: "2",
         method: "set",
         old_password: oldPassword,
         password: newPassword,
@@ -96,11 +101,11 @@ export async function POST(req: NextRequest) {
       });
 
       try {
-        const res1 = await fetch(`${cleanUrl}/webapi/entry.cgi`, {
+        const res1 = await fetch(`${cleanUrl}/webapi/entry.cgi?_sid=${encodeURIComponent(currentSid)}`, {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: formBody1.toString(),
-          signal: AbortSignal.timeout(8000),
+          body: formBodyV2.toString(),
+          signal: AbortSignal.timeout(15000),
         });
 
         const data1 = await safeParseJsonResponse(res1);
@@ -109,30 +114,54 @@ export async function POST(req: NextRequest) {
           return { success: true, data: data1 };
         }
 
-        // หาก API แรกไม่รองรับ (Code 101/102) ให้ลองแบบที่ 2 สำหรับ DSM 7+ (SYNO.Core.User.Password)
-        const errCode = data1?.error?.code || data1?.code;
-        if (errCode === 101 || errCode === 102) {
-          const formBody2 = new URLSearchParams({
-            api: "SYNO.Core.User.Password",
+        const errCode1 = data1?.error?.code || data1?.code;
+
+        // แบบที่ 2: หาก API แจ้งว่าเวอร์ชันไม่รองรับ (Code 103/104) ให้ลอง SYNO.Core.NormalUser v1 (สำหรับ DSM 6)
+        if (errCode1 === 103 || errCode1 === 104 || errCode1 === 102) {
+          const formBodyV1 = new URLSearchParams({
+            api: "SYNO.Core.NormalUser",
             version: "1",
             method: "set",
             old_password: oldPassword,
-            new_password: newPassword,
+            password: newPassword,
             _sid: currentSid,
           });
 
-          const res2 = await fetch(`${cleanUrl}/webapi/entry.cgi`, {
+          const resV1 = await fetch(`${cleanUrl}/webapi/entry.cgi?_sid=${encodeURIComponent(currentSid)}`, {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: formBody2.toString(),
-            signal: AbortSignal.timeout(8000),
+            body: formBodyV1.toString(),
+            signal: AbortSignal.timeout(15000),
           });
 
-          const data2 = await safeParseJsonResponse(res2);
-          if (data2.success) {
-            return { success: true, data: data2 };
+          const dataV1 = await safeParseJsonResponse(resV1);
+          if (dataV1.success) {
+            return { success: true, data: dataV1 };
           }
-          return { success: false, data: data2 };
+        }
+
+        // แบบที่ 3: ลองผ่าน SYNO.Core.User (สำหรับ Administrator หรือสิทธิ์จัดการผู้ใช้)
+        if (errCode1 === 105 || errCode1 === 102 || errCode1 === 103) {
+          const formBodyAdmin = new URLSearchParams({
+            api: "SYNO.Core.User",
+            version: "1",
+            method: "set",
+            name: username.trim(),
+            password: newPassword,
+            _sid: currentSid,
+          });
+
+          const resAdmin = await fetch(`${cleanUrl}/webapi/entry.cgi?_sid=${encodeURIComponent(currentSid)}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: formBodyAdmin.toString(),
+            signal: AbortSignal.timeout(15000),
+          });
+
+          const dataAdmin = await safeParseJsonResponse(resAdmin);
+          if (dataAdmin.success) {
+            return { success: true, data: dataAdmin };
+          }
         }
 
         return { success: false, data: data1 };
@@ -158,7 +187,12 @@ export async function POST(req: NextRequest) {
       if (targetUrl !== lanUrl) {
         try {
           const lanResult = await executeDsmPasswordChange(lanUrl);
-          if (lanResult.success || (lanResult.data?.code && lanResult.data?.code !== 1033 && lanResult.data?.code !== 502)) {
+          if (
+            lanResult.success ||
+            (lanResult.data?.code &&
+              lanResult.data?.code !== 1033 &&
+              lanResult.data?.code !== 502)
+          ) {
             result = lanResult;
           }
         } catch {
@@ -180,26 +214,39 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // แปลงรหัส Error ของ Synology DSM เป็นข้อความภาษาไทย
+    // แปลงรหัส Error ของ Synology DSM เป็นข้อความภาษาไทยที่ชัดเจน
     const rawError = result.data?.error;
     const errorCode = (typeof rawError === "object" ? rawError?.code : result.data?.code) || 400;
 
     let errorMessage = "ไม่สามารถเปลี่ยนรหัสผ่านบน Synology NAS ได้";
-    if (errorCode === 400) {
+    if (errorCode === 101) {
+      errorMessage = "พารามิเตอร์ของคำขอไม่ถูกต้อง (Error 101)";
+    } else if (errorCode === 102 || errorCode === 103) {
+      errorMessage = "ระบบ Synology NAS ไม่รองรับคำขอเปลี่ยนรหัสผ่านนี้ (Error 102/103)";
+    } else if (errorCode === 105) {
+      errorMessage = "บัญชีผู้ใช้นี้ไม่มีสิทธิ์เปลี่ยนรหัสผ่านบน Synology NAS กรุณาติดต่อผู้ดูแลระบบ";
+    } else if (errorCode === 106 || errorCode === 119) {
+      errorMessage = "เซสชันการเชื่อมต่อ NAS หมดอายุ กรุณาเข้าสู่ระบบใหม่อีกครั้ง";
+    } else if (errorCode === 400) {
       errorMessage =
-        "รหัสผ่านใหม่ไม่ผ่านเกณฑ์ความปลอดภัยของ Synology NAS (แนะนำให้มีความยาวอย่างน้อย ๘ ตัวอักษร มีตัวพิมพ์ใหญ่ ตัวพิมพ์เล็ก และตัวเลข)";
+        "คำขอไม่ถูกต้อง หรือรหัสผ่านใหม่ไม่ผ่านเกณฑ์ความปลอดภัยของ Synology NAS (แนะนำให้มีความยาวอย่างน้อย 8 ตัวอักษร มีตัวพิมพ์ใหญ่ พิมพ์เล็ก ตัวเลข และอักขระพิเศษ)";
     } else if (errorCode === 401) {
       errorMessage = "รหัสผ่านเดิมไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง";
-    } else if (errorCode === 402) {
-      errorMessage = "รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสผ่านเดิม";
+    } else if (errorCode === 402 || errorCode === 3122) {
+      errorMessage = "รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสผ่านเดิมที่เคยใช้งานมาก่อน";
     } else if (errorCode === 403) {
       errorMessage = "รหัสผ่านใหม่ต้องไม่มีชื่อผู้ใช้หรือชื่อจริงเป็นส่วนประกอบ";
     } else if (errorCode === 404) {
       errorMessage = "บัญชีผู้ใช้นี้ถูกจำกัดสิทธิ์ ไม่อนุญาตให้เปลี่ยนรหัสผ่านด้วยตนเอง";
+    } else if (errorCode === 3121 || errorCode === 3123 || errorCode === 3124) {
+      errorMessage =
+        "รหัสผ่านใหม่ไม่ผ่านเกณฑ์ความปลอดภัยของ Synology NAS (แนะนำให้มีความยาวอย่างน้อย 8 ตัวอักษร มีตัวพิมพ์ใหญ่ ตัวพิมพ์เล็ก ตัวเลข และอักขระพิเศษ)";
     } else if (typeof rawError === "string") {
       errorMessage = rawError;
     } else if (rawError?.message) {
       errorMessage = rawError.message;
+    } else {
+      errorMessage = `ไม่สามารถเปลี่ยนรหัสผ่านบน Synology NAS ได้ (รหัสข้อผิดพลาด: ${errorCode})`;
     }
 
     return NextResponse.json(

@@ -352,7 +352,7 @@ export async function checkNasHealth(
     const queryUrl = `${nasUrl.replace(/\/+$/, "")}/webapi/query.cgi?api=SYNO.API.Info&version=1&method=query&query=SYNO.API.Auth,SYNO.FileStation.Info,SYNO.FileStation.List,SYNO.FileStation.Upload`;
     const res = await fetch(queryUrl, {
       method: "GET",
-      signal: AbortSignal.timeout(6000),
+      signal: AbortSignal.timeout(15000),
     });
 
     const latencyMs = Date.now() - startTime;
@@ -402,7 +402,8 @@ export async function checkNasHealth(
 export async function loginSynology(
   account: string,
   passwd: string,
-  nasUrl: string = DEFAULT_SYNOLOGY_CONFIG.nasUrl
+  nasUrl: string = DEFAULT_SYNOLOGY_CONFIG.nasUrl,
+  sessionName: string = "FileStation"
 ): Promise<SynologyAuthResult> {
   try {
     // If running in browser, proxy through server API route
@@ -414,6 +415,7 @@ export async function loginSynology(
           username: account,
           password: passwd,
           nasUrl,
+          session: sessionName,
         }),
       });
       const data = await safeParseJsonResponse(res);
@@ -436,11 +438,11 @@ export async function loginSynology(
       const cleanUrl = url.replace(/\/+$/, "");
       const loginUrl = `${cleanUrl}/webapi/entry.cgi?api=SYNO.API.Auth&version=7&method=login&account=${encodeURIComponent(
         account
-      )}&passwd=${encodeURIComponent(passwd)}&session=FileStation&format=sid`;
+      )}&passwd=${encodeURIComponent(passwd)}&session=${encodeURIComponent(sessionName)}&format=sid`;
 
       const res = await fetch(loginUrl, {
         method: "GET",
-        signal: AbortSignal.timeout(6000),
+        signal: AbortSignal.timeout(15000),
       });
 
       return await safeParseJsonResponse(res);
@@ -486,9 +488,16 @@ export async function loginSynology(
       error: errorMessage,
     };
   } catch (err: any) {
+    const isTimeout =
+      err?.name === "TimeoutError" ||
+      err?.message?.includes("timeout") ||
+      err?.message?.includes("aborted");
+    const errorMsg = isTimeout
+      ? "การเชื่อมต่อไปยังระบบฐานข้อมูล NAS หมดเวลา (Timeout) กรุณาลองใหม่อีกครั้ง หรือตรวจสอบสถานะเครือข่าย"
+      : `ไม่สามารถเชื่อมต่อ Synology NAS: ${err?.message || "การเชื่อมต่อขัดข้อง"}`;
     return {
       success: false,
-      error: `ไม่สามารถเชื่อมต่อ Synology NAS: ${err?.message || "การเชื่อมต่อขัดข้อง"}`,
+      error: errorMsg,
     };
   }
 }

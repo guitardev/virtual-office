@@ -36,7 +36,8 @@ export function ChangeNasPasswordModal({
   const config = getClientSynologyConfig();
   const nasAccount =
     getUserNasAccount() ||
-    currentUser?.email?.split("@")[0] ||
+    (currentUser?.id?.startsWith("syno_") ? currentUser.id.replace(/^syno_/, "") : null) ||
+    (currentUser?.email && !currentUser.email.startsWith("user_") ? currentUser.email.split("@")[0] : null) ||
     currentUser?.name?.split(" ")[0] ||
     "admin";
 
