@@ -37,6 +37,9 @@ export function ReviewBookingModal({
   const isStage2 = booking.status === "pending_fleet_assignment";
   const isStage3 = booking.status === "pending_admin_head";
   const isStage4 = booking.status === "pending_provincial" || booking.status === "endorsed";
+  const isMyBooking =
+    booking.requesterId === currentUser.id ||
+    (Boolean(currentUser.name) && booking.requesterName === currentUser.name);
 
   // Check vehicle status and time overlap with other active bookings
   const getVehicleAvailability = (veh: Vehicle) => {
@@ -138,6 +141,10 @@ export function ReviewBookingModal({
     }
 
     if (isStage1) {
+      if (isMyBooking) {
+        alert("ผู้ขอใช้รถไม่สามารถพิจารณาเห็นชอบคำขอของตนเองได้ ต้องให้หัวหน้ากลุ่มงานหรือผู้ได้รับมอบหมายเป็นผู้พิจารณา");
+        return;
+      }
       // Step 2: Division Head / Official Endorsement
       if (onDivisionEndorse) {
         onDivisionEndorse(booking.id, notes.trim());
@@ -544,48 +551,65 @@ export function ReviewBookingModal({
         {/* Footer Actions */}
         {!showRejectForm && (
           <div className="p-4 bg-slate-50 border-t border-slate-200/80 flex items-center justify-between gap-3 shrink-0">
-            <button
-              type="button"
-              onClick={() => setShowRejectForm(true)}
-              className="px-4 py-2 bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-            >
-              ✕ ไม่อนุมัติ / ส่งกลับ
-            </button>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
-              >
-                ยกเลิก
-              </button>
-
-              <button
-                type="button"
-                onClick={handleAction}
-                className={`px-5 py-2 rounded-xl text-xs font-bold text-white shadow-md transition-all cursor-pointer flex items-center gap-1.5 ${
-                  isStage1
-                    ? "bg-amber-600 hover:bg-amber-700 shadow-amber-600/20"
-                    : isStage2
-                    ? "bg-blue-600 hover:bg-blue-700 shadow-blue-600/20"
-                    : isStage3
-                    ? "bg-teal-600 hover:bg-teal-700 shadow-teal-600/20"
-                    : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20"
-                }`}
-              >
-                <span>✓</span>
-                <span>
-                  {isStage1
-                    ? "ให้ความเห็นชอบ (ส่งต่อฝ่ายบริหารจัดรถ)"
-                    : isStage2
-                    ? "บันทึกการจัดสรร & เสนอหัวหน้าฝ่ายบริหาร"
-                    : isStage3
-                    ? "เห็นชอบและเสนอ พมจ. ขออนุมัติ"
-                    : "👑 อนุมัติการใช้รถราชการ (พร้อมส่ง Line Notify)"}
+            {isStage1 && isMyBooking ? (
+              <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3">
+                <span className="text-xs text-amber-800 bg-amber-50 px-3.5 py-2 rounded-xl border border-amber-200 font-medium">
+                  ⚠️ ท่านเป็นผู้ขอใช้รถในรายการนี้ คำขออยู่ในขั้นตอนรอความเห็นชอบจากหัวหน้ากลุ่มงาน/ผู้ได้รับมอบหมาย
                 </span>
-              </button>
-            </div>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer shrink-0"
+                >
+                  ปิดหน้าต่าง
+                </button>
+              </div>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowRejectForm(true)}
+                  className="px-4 py-2 bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                >
+                  ✕ ไม่อนุมัติ / ส่งกลับ
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    ยกเลิก
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleAction}
+                    className={`px-5 py-2 rounded-xl text-xs font-bold text-white shadow-md transition-all cursor-pointer flex items-center gap-1.5 ${
+                      isStage1
+                        ? "bg-amber-600 hover:bg-amber-700 shadow-amber-600/20"
+                        : isStage2
+                        ? "bg-blue-600 hover:bg-blue-700 shadow-blue-600/20"
+                        : isStage3
+                        ? "bg-teal-600 hover:bg-teal-700 shadow-teal-600/20"
+                        : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20"
+                    }`}
+                  >
+                    <span>✓</span>
+                    <span>
+                      {isStage1
+                        ? "ให้ความเห็นชอบ (ส่งต่อฝ่ายบริหารจัดรถ)"
+                        : isStage2
+                        ? "บันทึกการจัดสรร & เสนอหัวหน้าฝ่ายบริหาร"
+                        : isStage3
+                        ? "เห็นชอบและเสนอ พมจ. ขออนุมัติ"
+                        : "👑 อนุมัติการใช้รถราชการ (พร้อมส่ง Line Notify)"}
+                    </span>
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>

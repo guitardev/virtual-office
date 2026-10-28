@@ -10,6 +10,7 @@ import {
   FuelLevel,
   VehicleStatus,
   BookingNotificationLog,
+  Role,
 } from "@/lib/types";
 import {
   loadStoredBookings,
@@ -154,24 +155,41 @@ export function CarBookingPage({
     return officials.length > 0 ? officials : (inDiv.length > 0 ? inDiv : [detectedDivisionHead as any]);
   }, [members, currentUser, detectedDivisionHead]);
 
-  // Step 2: Designated Fleet Dispatchers in ฝ่ายบริหารทั่วไป
+  // Step 2: Designated Fleet Dispatchers in ฝ่ายบริหารทั่วไป (มี 2 คน: หัวหน้าฝ่ายบริหาร และ syno_ปภาวิน)
   const fleetDispatchers = useMemo(() => {
-    const adminMembers = members.filter((m) => m.division?.includes("ฝ่ายบริหารทั่วไป"));
-    if (adminMembers.length > 0) return adminMembers;
-    return [
-      {
-        id: "disp_1",
-        name: "นายอนุชา พลแสน",
-        position: "พนักงานขับรถยนต์ / งานยานพาหนะ ฝ่ายบริหารทั่วไป",
-        division: "ฝ่ายบริหารทั่วไป",
-      },
-      {
-        id: "disp_2",
-        name: "นายเสกพล ดิษฐโชติ",
-        position: "นักพัฒนาสังคมชำนาญการ (หัวหน้าฝ่ายบริหารทั่วไป)",
-        division: "ฝ่ายบริหารทั่วไป",
-      },
-    ];
+    // 1. หัวหน้าฝ่ายบริหารทั่วไป (นายเสกพล ดิษฐโชติ)
+    const adminHeadMember = members.find(
+      (m) =>
+        m.id === "syno_เสกพล" ||
+        m.name.includes("เสกพล") ||
+        (m.division?.includes("ฝ่ายบริหารทั่วไป") && (m.position?.includes("หัวหน้า") || m.role === "manager"))
+    );
+    const adminHead = {
+      id: adminHeadMember?.id || "syno_เสกพล",
+      name: adminHeadMember?.name || "นายเสกพล ดิษฐโชติ",
+      position: adminHeadMember?.position?.includes("หัวหน้า")
+        ? adminHeadMember.position
+        : "นักพัฒนาสังคมชำนาญการ (หัวหน้าฝ่ายบริหารทั่วไป)",
+      division: "ฝ่ายบริหารทั่วไป",
+      role: (adminHeadMember?.role || "manager") as Role,
+    };
+
+    // 2. เจ้าหน้าที่ฝ่ายบริหารทั่วไป (syno_ปภาวิน)
+    const paphawinMember = members.find(
+      (m) => m.id === "syno_ปภาวิน" || m.name.includes("ปภาวิน")
+    );
+    const paphawin = {
+      id: paphawinMember?.id || "syno_ปภาวิน",
+      name: paphawinMember?.name || "ปภาวิน",
+      position:
+        paphawinMember?.position && paphawinMember.position !== "รอกำหนดตำแหน่ง"
+          ? paphawinMember.position
+          : "เจ้าหน้าที่ฝ่ายบริหารทั่วไป (ผู้รับผิดชอบจัดสรรรถ/คนขับ)",
+      division: "ฝ่ายบริหารทั่วไป",
+      role: (paphawinMember?.role || "member") as Role,
+    };
+
+    return [adminHead, paphawin];
   }, [members]);
 
   // Real-time Conflict Guard calculations
@@ -209,9 +227,15 @@ export function CarBookingPage({
 
     let isMounted = true;
     fetchCarBookings().then((remoteBookings) => {
-      if (isMounted && remoteBookings) {
+      if (!isMounted) return;
+      if (remoteBookings && remoteBookings.length > 0) {
         setBookings(remoteBookings);
         saveStoredBookings(remoteBookings);
+      } else if (loadedBookings && loadedBookings.length > 0) {
+        // Sync local bookings to Supabase if Supabase was empty
+        loadedBookings.forEach((b) => {
+          saveCarBooking(b).catch(console.warn);
+        });
       }
     });
 
@@ -230,7 +254,7 @@ export function CarBookingPage({
     });
 
     const unsubBookings = subscribeToCarBookings((updatedBookings) => {
-      if (isMounted && updatedBookings) {
+      if (isMounted && updatedBookings && updatedBookings.length > 0) {
         setBookings(updatedBookings);
         saveStoredBookings(updatedBookings);
       }
@@ -253,12 +277,16 @@ export function CarBookingPage({
     };
   }, []);
 
-  const updateAndSaveBookings = (newBookings: CarBookingRequest[]) => {
+  const updateAndSaveBookings = (newBookings: CarBookingRequest[], targetBooking?: CarBookingRequest) => {
     setBookings(newBookings);
     saveStoredBookings(newBookings);
-    newBookings.forEach((b) => {
-      saveCarBooking(b).catch(() => {});
-    });
+    if (targetBooking) {
+      saveCarBooking(targetBooking).catch(console.error);
+    } else {
+      newBookings.forEach((b) => {
+        saveCarBooking(b).catch(console.error);
+      });
+    }
   };
 
   const updateAndSaveVehicles = (newVehicles: Vehicle[]) => {
@@ -415,7 +443,7 @@ export function CarBookingPage({
     };
 
     const updated = [newBooking, ...bookings];
-    updateAndSaveBookings(updated);
+    updateAndSaveBookings(updated, newBooking);
 
     recordAuditLog(
       currentUser.name,
@@ -1567,26 +1595,51 @@ export function CarBookingPage({
           ) : (
             <div className="space-y-4">
               {filteredBookings.map((b) => {
-                const isMyBooking = b.requesterId === currentUser.id;
+                const isMyBooking =
+                  b.requesterId === currentUser.id ||
+                  (Boolean(currentUser.name) && b.requesterName === currentUser.name);
+
                 const canReportReturn =
                   b.status === "approved" &&
                   (isMyBooking || currentUser.role === "admin" || currentUser.role === "manager");
 
                 // Step 1: หัวหน้ากลุ่มหรือข้าราชการในกลุ่มเห็นชอบ
+                // กฎระเบียบราชการ: ผู้ขอใช้รถไม่สามารถพิจารณาเห็นชอบคำขอของตนเองได้ (!isMyBooking)
+                // ผู้มีสิทธิ์พิจารณาเห็นชอบ ต้องเป็น:
+                // 1) ผู้ได้รับมอบหมายที่ถูกเลือกโดยตรง (currentUser.id === b.divisionReviewerId หรือชื่อตรงกัน)
+                // 2) หรือ หัวหน้ากลุ่มงานที่ผู้ขอสังกัด (currentUser.division === b.requesterDivision และมีตำแหน่งหัวหน้าหรือบทบาท manager)
+                // 3) หรือ ผู้ดูแลระบบจังหวัด (admin) ที่ไม่ใช่ผู้ยื่นคำขอเอง
+                const isDesignatedReviewer =
+                  Boolean(b.divisionReviewerId && currentUser.id === b.divisionReviewerId) ||
+                  Boolean(b.divisionReviewerName && currentUser.name === b.divisionReviewerName);
+
+                const isDivisionHeadOfRequester =
+                  currentUser.division === b.requesterDivision &&
+                  (currentUser.role === "manager" ||
+                    currentUser.position?.includes("หัวหน้า") ||
+                    currentUser.id === "syno_พนมศักย์" ||
+                    currentUser.id === "syno_วรวุฒิ" ||
+                    currentUser.id === "syno_เสกพล");
+
                 const canReviewStage1 =
                   (b.status === "pending_division_head" || b.status === "pending_review") &&
-                  (currentUser.role === "admin" ||
-                    currentUser.role === "manager" ||
-                    currentUser.id === b.divisionReviewerId ||
-                    currentUser.division === b.requesterDivision);
+                  !isMyBooking &&
+                  (isDesignatedReviewer || isDivisionHeadOfRequester || currentUser.role === "admin");
 
-                // Step 2: เจ้าหน้าที่ฝ่ายบริหารจัดสรรรถและคนขับ
+                // Step 2: เจ้าหน้าที่ฝ่ายบริหารจัดสรรรถและคนขับ (มี 2 คน: หัวหน้าฝ่ายบริหาร และ syno_ปภาวิน)
+                const isFleetDispatcherUser =
+                  currentUser.id === "syno_ปภาวิน" ||
+                  currentUser.name.includes("ปภาวิน") ||
+                  currentUser.id === "syno_เสกพล" ||
+                  currentUser.name.includes("เสกพล") ||
+                  currentUser.id === b.fleetDispatcherId ||
+                  currentUser.division?.includes("ฝ่ายบริหารทั่วไป");
+
                 const canReviewStage2 =
                   b.status === "pending_fleet_assignment" &&
                   (currentUser.role === "admin" ||
                     currentUser.role === "manager" ||
-                    currentUser.id === b.fleetDispatcherId ||
-                    currentUser.division?.includes("ฝ่ายบริหารทั่วไป"));
+                    isFleetDispatcherUser);
 
                 // Step 3: หัวหน้าฝ่ายบริหารเห็นชอบ
                 const canReviewStage3 =
@@ -2146,7 +2199,7 @@ export function CarBookingPage({
                   </label>
                 </div>
                 <select
-                  value={formDispatcherId}
+                  value={formDispatcherId || fleetDispatchers[0]?.id || ""}
                   onChange={(e) => setFormDispatcherId(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-white border border-teal-300 rounded-xl text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
                 >
@@ -2175,7 +2228,7 @@ export function CarBookingPage({
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-600 leading-relaxed mt-1">
-                    ตามระเบียบการใช้รถยนต์ส่วนกลาง ผู้ขอใช้รถไม่ต้องเลือกรถยนต์เอง — <strong>เจ้าหน้าที่ฝ่ายบริหารทั่วไป (งานยานพาหนะ)</strong> จะเป็นผู้ตรวจสอบสถานะความพร้อมและจัดสรรรถยนต์และพนักงานขับรถที่เหมาะสมและว่างให้ในขั้นตอนที่ 2
+                    ตามระเบียบการใช้รถยนต์ส่วนกลาง ผู้ขอใช้รถไม่ต้องเลือกรถยนต์เอง — <strong>เจ้าหน้าที่ฝ่ายบริหารทั่วไป (หัวหน้าฝ่ายบริหารทั่วไป หรือ คุณปภาวิน)</strong> จะเป็นผู้ตรวจสอบสถานะความพร้อมและจัดสรรรถยนต์และพนักงานขับรถที่เหมาะสมและว่างให้ในขั้นตอนที่ 2
                   </p>
                 </div>
               </div>

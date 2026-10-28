@@ -714,11 +714,11 @@ export function mapRowToCarBooking(row: any): CarBookingRequest {
   return {
     id: row.id,
     requestNo: row.request_no,
-    vehicleId: row.vehicle_id,
-    vehicleName: row.vehicle_name,
-    licensePlate: row.license_plate,
-    requesterId: row.requester_id,
-    requesterName: row.requester_name,
+    vehicleId: row.vehicle_id || "",
+    vehicleName: row.vehicle_name || "รอฝ่ายบริหารจัดสรร",
+    licensePlate: row.license_plate || "-",
+    requesterId: row.requester_id || "",
+    requesterName: row.requester_name || "",
     requesterPosition: row.requester_position || "",
     requesterDivision: row.requester_division || "",
     requesterPhone: row.requester_phone || "",
@@ -771,33 +771,40 @@ export function mapRowToCarBooking(row: any): CarBookingRequest {
   };
 }
 
+function sanitizeCarBookingFk(val: string | null | undefined): string | null {
+  if (!val || typeof val !== "string") return null;
+  const trimmed = val.trim();
+  if (trimmed === "" || trimmed === "-" || trimmed === "null" || trimmed === "undefined") return null;
+  return trimmed;
+}
+
 export function mapCarBookingToRow(b: CarBookingRequest): any {
   return {
     id: b.id,
     request_no: b.requestNo,
-    vehicle_id: b.vehicleId,
-    vehicle_name: b.vehicleName,
-    license_plate: b.licensePlate,
-    requester_id: b.requesterId,
+    vehicle_id: sanitizeCarBookingFk(b.vehicleId),
+    vehicle_name: b.vehicleName || "รอฝ่ายบริหารจัดสรร",
+    license_plate: b.licensePlate || "-",
+    requester_id: sanitizeCarBookingFk(b.requesterId),
     requester_name: b.requesterName,
     requester_position: b.requesterPosition || null,
     requester_division: b.requesterDivision || null,
     requester_phone: b.requesterPhone || null,
     purpose: b.purpose,
     destination: b.destination,
-    origin: b.origin,
+    origin: b.origin || "สำนักงาน พมจ.กำแพงเพชร",
     departure_time: b.departureTime,
     return_time: b.returnTime,
-    passenger_count: b.passengerCount,
+    passenger_count: b.passengerCount || 1,
     passengers_list: b.passengersList || null,
     estimated_distance: b.estimatedDistance || null,
-    require_driver: b.requireDriver,
+    require_driver: b.requireDriver ?? true,
     assigned_driver: b.assignedDriver || null,
     fuel_budget_requested: b.fuelBudgetRequested || false,
     fuel_budget_amount: b.fuelBudgetAmount || null,
     fuel_budget_source: b.fuelBudgetSource || null,
-    status: b.status,
-    created_at: b.createdAt,
+    status: b.status || "pending_division_head",
+    created_at: b.createdAt || new Date().toISOString(),
     division_reviewer_id: b.divisionReviewerId || null,
     division_reviewer_name: b.divisionReviewerName || null,
     division_reviewer_position: b.divisionReviewerPosition || null,
@@ -876,8 +883,34 @@ export async function saveCarBooking(booking: CarBookingRequest): Promise<boolea
   try {
     const row = mapCarBookingToRow(booking);
     const { error } = await supabase.from("car_bookings").upsert(row);
-    return !error;
-  } catch {
+    if (error) {
+      console.warn("saveCarBooking initial upsert error:", error.code, error.message);
+      // Fallback: If foreign key error code 23503 occurs (e.g. requester_id not in users or vehicle_id not in vehicles)
+      if (error.code === "23503") {
+        console.warn("FK constraint violation (23503) on car_bookings, retrying with sanitized foreign keys...");
+        const retryRow = { ...row };
+        if (error.message.includes("vehicle_id")) {
+          retryRow.vehicle_id = null;
+        }
+        if (error.message.includes("requester_id")) {
+          retryRow.requester_id = null;
+        }
+        if (!error.message.includes("vehicle_id") && !error.message.includes("requester_id")) {
+          retryRow.vehicle_id = null;
+          retryRow.requester_id = null;
+        }
+        const retryRes = await supabase.from("car_bookings").upsert(retryRow);
+        if (retryRes.error) {
+          console.error("saveCarBooking retry failed:", retryRes.error.message);
+          return false;
+        }
+        return true;
+      }
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("Exception in saveCarBooking:", err);
     return false;
   }
 }
