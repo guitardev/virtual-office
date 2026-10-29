@@ -402,3 +402,12 @@ export function findAvailableVehiclesForPeriod(
   });
 }
 
+/**
+ * Strips parentheses, titles in brackets, and extra role notes,
+ * returning solely the clean Title, Name, and Surname (คำนำหน้า ชื่อ นามสกุล)
+ */
+export function cleanPersonName(name?: string | null): string {
+  if (!name) return "";
+  return name.replace(/\s*\([^)]*\)\s*/g, " ").trim();
+}
+

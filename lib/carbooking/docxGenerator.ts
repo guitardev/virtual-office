@@ -90,9 +90,9 @@ const THAI_MONTHS_MAP: Record<string, string> = {
   "ธ.ค.": "ธันวาคม",
 };
 
-function cleanPersonName(name?: string): string {
+export function cleanPersonName(name?: string | null): string {
   if (!name) return "";
-  return name.replace(/\s*\([^)]*\)\s*$/g, "").trim();
+  return name.replace(/\s*\([^)]*\)\s*/g, " ").trim();
 }
 
 function cleanVehicleName(vehName?: string, plate?: string): string {
@@ -158,9 +158,20 @@ export async function generateCarBookingDocx(bookingData: any): Promise<Buffer> 
   const licPlate = bookingData.licensePlate && bookingData.licensePlate !== "-" ? bookingData.licensePlate : "กฉ 5196 กำแพงเพชร";
   const rawVehName = bookingData.vehicleName && bookingData.vehicleName !== "รอฝ่ายบริหารจัดสรร" ? bookingData.vehicleName : "รถยนต์ส่วนกลาง";
   const vehName = cleanVehicleName(rawVehName, licPlate);
-  const driver = bookingData.assignedDriver && bookingData.assignedDriver !== "รอฝ่ายบริหารจัดสรร" 
-    ? bookingData.assignedDriver 
-    : (bookingData.requireDriver === false ? "(ผู้ขอขับขี่เอง)" : "นายสมชาย ใจดี");
+  let rawDriver =
+    bookingData.assignedDriver && bookingData.assignedDriver !== "รอฝ่ายบริหารจัดสรร"
+      ? bookingData.assignedDriver
+      : "";
+
+  let driver = cleanPersonName(rawDriver);
+
+  if (!driver || rawDriver === "ขับขี่เองโดยผู้ขอใช้รถ" || rawDriver === "ขับขี่เอง") {
+    if (bookingData.requireDriver === false || !rawDriver) {
+      driver = reqName || "นายสมชาย ใจดี";
+    } else {
+      driver = "นายสมชาย ใจดี";
+    }
+  }
   const dest = bookingData.destination || "";
   const purpose = bookingData.purpose || "";
   const passengers = bookingData.passengersList || "-";
@@ -206,9 +217,14 @@ export async function generateCarBookingDocx(bookingData: any): Promise<Buffer> 
     bookingData.managerName ||
     "นายเสกพล ดิษฐโชติ"
   );
-  const adminHeadPos =
+  let rawAdminHeadPos =
     bookingData.adminHeadPosition ||
-    "นักพัฒนาสังคมชำนาญการ (หัวหน้าฝ่ายบริหารทั่วไป)";
+    "นักพัฒนาสังคมชำนาญการ";
+  let adminHeadPos = rawAdminHeadPos
+    .replace(/\s*\(หัวหน้าฝ่ายบริหารทั่วไป\)/gi, "")
+    .replace(/\s*หัวหน้าฝ่ายบริหารทั่วไป/gi, "")
+    .trim();
+  adminHeadPos = cleanPersonName(adminHeadPos) || "นักพัฒนาสังคมชำนาญการ";
   const adminHeadNotes =
     bookingData.adminHeadNotes ||
     bookingData.managerNotes ||
@@ -394,22 +410,18 @@ export async function generateCarBookingDocx(bookingData: any): Promise<Buffer> 
         rText(" ) อนุญาต   ( ") +
         rDotted(rejMark, 3) +
         rText(" ) ไม่อนุญาต");
-    } else if (fullText.startsWith("(") && state === "after_provincial_sig") {
-      // Provincial signature name
-      runs =
-        rText("\t                                                                  ( ") +
-        rDotted(approverName, 26) +
-        rText(" )");
-      state = "provincial_date_next";
     } else if (fullText.includes("/") && (state === "after_provincial_sig" || state === "provincial_date_next" || i === 36)) {
-      // Provincial signature date
+      // Provincial signature date (Fix name & position are kept from template; date is filled when approved)
+      const dayVal = isApproved ? appDate.day : " ";
+      const monthVal = isApproved ? appDate.month : " ";
+      const yearVal = isApproved ? appDate.year : " ";
       runs =
         rText("\t                 ") +
-        rDotted(appDate.day, 4) +
+        rDotted(dayVal, 4) +
         rText(" / ") +
-        rDotted(appDate.month, 10) +
+        rDotted(monthVal, 10) +
         rText(" / ") +
-        rDotted(appDate.year, 6);
+        rDotted(yearVal, 6);
     }
 
     if (runs !== null) {

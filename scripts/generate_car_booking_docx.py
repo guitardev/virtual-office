@@ -33,6 +33,11 @@ def generate_booking_docx(input_json_str, output_path):
     veh_name = booking_data.get('vehicleName', '')
     lic_plate = booking_data.get('licensePlate', '')
     driver = booking_data.get('assignedDriver', '')
+    if not driver or driver == "ขับขี่เองโดยผู้ขอใช้รถ" or driver == "ขับขี่เอง":
+        if booking_data.get('requireDriver') is False or not driver:
+            driver = req_name if req_name else "ผู้ขอใช้รถ"
+    import re
+    driver = re.sub(r'\s*\(.*?\)\s*', '', driver).strip()
     dest = booking_data.get('destination', '')
     purpose = booking_data.get('purpose', '')
     passengers = booking_data.get('passengersList', '')
@@ -54,15 +59,17 @@ def generate_booking_docx(input_json_str, output_path):
 
     # Admin Head (Block 3)
     admin_head_name = booking_data.get('adminHeadName') or booking_data.get('managerName', '')
-    admin_head_pos = booking_data.get('adminHeadPosition', 'นักพัฒนาสังคมชำนาญการ (หัวหน้าฝ่ายบริหารทั่วไป)')
+    admin_head_pos = booking_data.get('adminHeadPosition', 'นักพัฒนาสังคมชำนาญการ')
+    if "(หัวหน้าฝ่ายบริหารทั่วไป)" in admin_head_pos:
+        admin_head_pos = admin_head_pos.replace("(หัวหน้าฝ่ายบริหารทั่วไป)", "").strip()
     admin_head_notes = booking_data.get('adminHeadNotes') or booking_data.get('managerNotes', 'เพื่อโปรดพิจารณาอนุญาต')
     admin_head_date = booking_data.get('adminHeadDate', '')
 
-    # Approver (Block 4)
+    # Approver (Block 4) - Fixed to Provincial Director
     is_approved = booking_data.get('status') == 'approved'
     is_rejected = booking_data.get('status') == 'rejected'
-    approver_name = booking_data.get('approverName', '')
-    approver_pos = booking_data.get('approverPosition', 'พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร')
+    approver_name = "นางสาวมะลิวัน สิทธิโยธี"
+    approver_pos = "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"
     approver_date = booking_data.get('approverDate', '')
 
     # Vehicle Display

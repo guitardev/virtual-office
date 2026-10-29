@@ -19,6 +19,7 @@ import {
   saveStoredVehicles,
   getConflictingBookings,
   findAvailableVehiclesForPeriod,
+  cleanPersonName,
 } from "@/lib/carbooking-data";
 import {
   fetchVehicles,
@@ -712,8 +713,8 @@ export function CarBookingPage({
       assignedDriver: formRequireDriver
         ? "รอฝ่ายบริหารจัดสรร"
         : selectedStaffDriver?.name
-        ? `${selectedStaffDriver.name}${selectedStaffDriver.id === currentUser.id ? " (ผู้ขอขับขี่เอง)" : " (เจ้าหน้าที่ขับขี่เอง)"}`
-        : "ขับขี่เองโดยผู้ขอใช้รถ",
+        ? cleanPersonName(selectedStaffDriver.name)
+        : cleanPersonName(currentUser.name),
       fuelBudgetRequested: formFuelBudgetRequested,
       fuelBudgetAmount: formFuelBudgetRequested ? Number(formFuelBudgetAmount) : undefined,
       fuelBudgetSource: formFuelBudgetRequested ? formFuelBudgetSource.trim() : undefined,

@@ -144,6 +144,15 @@ export function CarBookingDocumentModal({
   const adminHeadDate = parseShortDate(booking.adminHeadActionAt || booking.fleetDispatcherActionAt);
   const approverDate = parseShortDate(booking.approverActionAt);
 
+  const resolvedDriver =
+    cleanPersonName(booking.assignedDriver) &&
+    booking.assignedDriver !== "รอฝ่ายบริหารจัดสรร" &&
+    booking.assignedDriver !== "ขับขี่เองโดยผู้ขอใช้รถ"
+      ? cleanPersonName(booking.assignedDriver)
+      : booking.requireDriver === false
+      ? cleanPersonName(booking.requesterName) || "ผู้ขอใช้รถ"
+      : "";
+
   const handleDownloadDocx = async () => {
     try {
       setIsDownloading(true);
@@ -157,7 +166,7 @@ export function CarBookingDocumentModal({
         requesterPosition: booking.requesterPosition,
         vehicleName: cleanedVehName,
         licensePlate: booking.licensePlate && booking.licensePlate !== "-" ? booking.licensePlate : "",
-        assignedDriver: booking.assignedDriver && booking.assignedDriver !== "รอฝ่ายบริหารจัดสรร" ? booking.assignedDriver : "",
+        assignedDriver: resolvedDriver,
         destination: booking.destination,
         purpose: booking.purpose,
         passengersList: booking.passengersList,
@@ -182,11 +191,11 @@ export function CarBookingDocumentModal({
         divisionReviewerPosition: booking.divisionReviewerPosition || (booking.divisionReviewerName ? "หัวหน้ากลุ่ม/ฝ่าย" : ""),
         divisionReviewerDate: divReviewerDate.d ? `${divReviewerDate.d} / ${divReviewerDate.m} / ${divReviewerDate.y}` : "",
         adminHeadName: cleanPersonName(booking.adminHeadName || booking.fleetDispatcherName || booking.managerName || (booking.licensePlate && booking.licensePlate !== "-" ? "นายเสกพล ดิษฐโชติ" : "")),
-        adminHeadPosition: "นักพัฒนาสังคมชำนาญการ (หัวหน้าฝ่ายบริหารทั่วไป)",
-        adminHeadNotes: booking.adminHeadNotes || booking.fleetDispatcherNotes || booking.managerNotes || (booking.licensePlate && booking.licensePlate !== "-" ? `จัดสรรรถยนต์ ${cleanedVehName || ""} ทะเบียน [${booking.licensePlate}] พนักงานขับรถ: ${booking.assignedDriver || ""} เรียบร้อยแล้ว เพื่อโปรดพิจารณาอนุญาต` : "เพื่อโปรดพิจารณาอนุญาต"),
+        adminHeadPosition: "นักพัฒนาสังคมชำนาญการ",
+        adminHeadNotes: booking.adminHeadNotes || booking.fleetDispatcherNotes || booking.managerNotes || (booking.licensePlate && booking.licensePlate !== "-" ? `จัดสรรรถยนต์ ${cleanedVehName || ""} ทะเบียน [${booking.licensePlate}] พนักงานขับรถ: ${resolvedDriver || ""} เรียบร้อยแล้ว เพื่อโปรดพิจารณาอนุญาต` : "เพื่อโปรดพิจารณาอนุญาต"),
         adminHeadDate: adminHeadDate.d ? `${adminHeadDate.d} / ${adminHeadDate.m} / ${adminHeadDate.y}` : "",
         status: booking.status,
-        approverName: cleanPersonName(booking.approverName || (booking.status === "approved" ? "นางสาวมะลิวัน สิทธิโยธี" : "")),
+        approverName: "นางสาวมะลิวัน สิทธิโยธี",
         approverPosition: "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
         approverDate: approverDate.d ? `${approverDate.d} / ${approverDate.m} / ${approverDate.y}` : "",
       };
@@ -294,7 +303,7 @@ export function CarBookingDocumentModal({
                 </div>
                 <div>
                   <span className="text-emerald-700 font-medium">พนักงานขับรถ: </span>
-                  <strong className="text-emerald-950 font-bold">{booking.assignedDriver || "-"}</strong>
+                  <strong className="text-emerald-950 font-bold">{resolvedDriver || "-"}</strong>
                 </div>
                 {(booking.fleetDispatcherName || booking.adminHeadName) && (
                   <div className="sm:col-span-3 text-[11px] text-emerald-800 pt-2 border-t border-emerald-200/60 flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -378,7 +387,7 @@ export function CarBookingDocumentModal({
                 </span>
                 <span className="shrink-0">โดยมี </span>
                 <span className="flex-1 ml-1 border-b border-dotted border-black px-2 text-center font-normal">
-                  {booking.assignedDriver && booking.assignedDriver !== "รอฝ่ายบริหารจัดสรร" ? booking.assignedDriver : "\u00A0"}
+                  {resolvedDriver || "\u00A0"}
                 </span>
               </div>
 
@@ -536,7 +545,7 @@ export function CarBookingDocumentModal({
                     booking.fleetDispatcherNotes ||
                     booking.managerNotes ||
                     (booking.licensePlate && booking.licensePlate !== "-"
-                      ? `ตรวจสอบแล้ว จัดสรรรถยนต์ ${cleanVehicleName(booking.vehicleName, booking.licensePlate)} ทะเบียน [${booking.licensePlate}] พนักงานขับรถ: ${booking.assignedDriver || ""} เรียบร้อยแล้ว เห็นควรอนุญาต`
+                      ? `ตรวจสอบแล้ว จัดสรรรถยนต์ ${cleanVehicleName(booking.vehicleName, booking.licensePlate)} ทะเบียน [${booking.licensePlate}] พนักงานขับรถ: ${resolvedDriver || ""} เรียบร้อยแล้ว เห็นควรอนุญาต`
                       : "เพื่อโปรดพิจารณาอนุญาต")}
                 </span>
               </div>
@@ -565,11 +574,12 @@ export function CarBookingDocumentModal({
                 <div className="flex items-baseline justify-center">
                   <span className="shrink-0">ตำแหน่ง </span>
                   <span className="min-w-[180px] border-b border-dotted border-black px-1 text-center font-normal">
-                    {(booking as any).adminHeadPosition ||
-                      (booking.adminHeadName?.includes("เสกพล") ||
-                      (booking.licensePlate && booking.licensePlate !== "-")
-                        ? "นักพัฒนาสังคมชำนาญการ (หัวหน้าฝ่ายบริหารทั่วไป)"
-                        : "\u00A0")}
+                    {((booking as any).adminHeadPosition
+                      ? cleanPersonName((booking as any).adminHeadPosition).replace(/\s*\(หัวหน้าฝ่ายบริหารทั่วไป\)/gi, "").replace(/\s*หัวหน้าฝ่ายบริหารทั่วไป/gi, "").trim()
+                      : (booking.adminHeadName?.includes("เสกพล") ||
+                        (booking.licensePlate && booking.licensePlate !== "-")
+                          ? "นักพัฒนาสังคมชำนาญการ"
+                          : "\u00A0"))}
                   </span>
                 </div>
                 <div className="text-center tracking-widest text-black pt-0.5 text-sm">
@@ -611,25 +621,19 @@ export function CarBookingDocumentModal({
                 </div>
                 <div className="flex items-baseline justify-center">
                   <span>( </span>
-                  <span className="min-w-[180px] border-b border-dotted border-black px-1 text-center font-normal">
-                    {booking.status === "approved" || booking.approverName
-                      ? (cleanPersonName(booking.approverName) || "นางสาวมะลิวัน สิทธิโยธี")
-                      : "\u00A0"}
+                  <span className="min-w-[180px] px-1 text-center font-normal">
+                    นางสาวมะลิวัน สิทธิโยธี
                   </span>
                   <span> )</span>
                 </div>
                 <div className="flex items-baseline justify-center">
-                  <span className="shrink-0">ตำแหน่ง </span>
-                  <span className="min-w-[180px] border-b border-dotted border-black px-1 text-center font-normal">
-                    {(booking as any).approverPosition ||
-                      (booking.status === "approved" || booking.approverName
-                        ? "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"
-                        : "\u00A0")}
+                  <span className="min-w-[180px] px-1 text-center font-normal">
+                    พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร
                   </span>
                 </div>
                 <div className="text-center tracking-widest text-black pt-0.5 text-sm">
-                  {booking.approverActionAt && approverDate.d ? (
-                    <span>{approverDate.d} / {approverDate.m} / {approverDate.y}</span>
+                  {booking.status === "approved" && (booking.approverActionAt || approverDate.d) ? (
+                    <span>{approverDate.d || "....."} / {approverDate.m || "................"} / {approverDate.y || "........"}</span>
                   ) : (
                     <span>................/.............................../.................</span>
                   )}
