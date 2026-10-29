@@ -39,6 +39,41 @@ import { NotificationLogsModal } from "./NotificationLogsModal";
 import { RealisticFuelGauge } from "./RealisticFuelGauge";
 import { FleetGanttView } from "./FleetGanttView";
 import { PaperlessDispatchQRCode } from "./PaperlessDispatchQRCode";
+import { sendBrowserNotification } from "@/lib/notifications";
+
+export interface DistrictPreset {
+  name: string;
+  destination: string;
+  roundTripKm: number;
+  tag?: string;
+}
+
+export const KAMPHAENG_PHET_DISTRICTS: DistrictPreset[] = [
+  { name: "อ.เมืองกำแพงเพชร", destination: "อำเภอเมืองกำแพงเพชร จังหวัดกำแพงเพชร", roundTripKm: 35, tag: "ใกล้" },
+  { name: "อ.คลองลาน", destination: "อำเภอคลองลาน จังหวัดกำแพงเพชร", roundTripKm: 130, tag: "โซนใต้" },
+  { name: "อ.ขาณุวรลักษบุรี", destination: "อำเภอขาณุวรลักษบุรี จังหวัดกำแพงเพชร", roundTripKm: 175, tag: "โซนใต้" },
+  { name: "อ.คลองขลุง", destination: "อำเภอคลองขลุง จังหวัดกำแพงเพชร", roundTripKm: 95, tag: "โซนกลาง" },
+  { name: "อ.พรานกระต่าย", destination: "อำเภอพรานกระต่าย จังหวัดกำแพงเพชร", roundTripKm: 70, tag: "โซนเหนือ" },
+  { name: "อ.ลานกระบือ", destination: "อำเภอลานกระบือ จังหวัดกำแพงเพชร", roundTripKm: 120, tag: "โซนเหนือ" },
+  { name: "อ.ไทรงาม", destination: "อำเภอไทรงาม จังหวัดกำแพงเพชร", roundTripKm: 85, tag: "โซนตะวันออก" },
+  { name: "อ.ทรายทองวัฒนา", destination: "อำเภอทรายทองวัฒนา จังหวัดกำแพงเพชร", roundTripKm: 110, tag: "โซนตะวันออก" },
+  { name: "อ.บึงสามัคคี", destination: "อำเภอบึงสามัคคี จังหวัดกำแพงเพชร", roundTripKm: 165, tag: "โซนตะวันออก" },
+  { name: "อ.ปางศิลาทอง", destination: "อำเภอปางศิลาทอง จังหวัดกำแพงเพชร", roundTripKm: 150, tag: "โซนตะวันตก" },
+  { name: "อ.โกสัมพีนคร", destination: "อำเภอโกสัมพีนคร จังหวัดกำแพงเพชร", roundTripKm: 85, tag: "โซนตะวันตก" },
+  { name: "กระทรวง พม. (กทม.)", destination: "กระทรวงการพัฒนาสังคมและความมั่นคงของมนุษย์ กรุงเทพมหานคร", roundTripKm: 760, tag: "ส่วนกลาง" },
+  { name: "จ.พิษณุโลก", destination: "จังหวัดพิษณุโลก (หน่วยงานสังกัด พม.)", roundTripKm: 230, tag: "เขตตรวจราชการ" },
+  { name: "จ.นครสวรรค์", destination: "จังหวัดนครสวรรค์ (หน่วยงานสังกัด พม.)", roundTripKm: 240, tag: "เขตตรวจราชการ" },
+];
+
+export const FUEL_PROJECT_PRESETS = [
+  "งบดำเนินงานสำนักงาน พมจ.กำแพงเพชร",
+  "โครงการขับเคลื่อนศูนย์ช่วยเหลือสังคมตำบล",
+  "โครงการเงินสงเคราะห์ผู้มีรายได้น้อยและครอบครัวเปราะบาง",
+  "โครงการพัฒนาคุณภาพชีวิตกลุ่มเปราะบางรายครัวเรือน",
+  "โครงการเสริมสร้างความเข้มแข็งสภาเด็กและเยาวชน",
+  "โครงการส่งเสริมสิทธิและพัฒนาศักยภาพคนพิการ",
+  "โครงการขับเคลื่อนสมัชชาครอบครัวและสตรี",
+];
 
 interface CarBookingPageProps {
   currentUser: Member;
@@ -77,6 +112,7 @@ export function CarBookingPage({
   const [formEstimatedDistance, setFormEstimatedDistance] = useState<number>(150);
   const [formPassengersList, setFormPassengersList] = useState<string>("");
   const [formRequireDriver, setFormRequireDriver] = useState<boolean>(true);
+  const [formSelectedStaffDriverId, setFormSelectedStaffDriverId] = useState<string>(currentUser?.id || "");
 
   // Selected passengers from members DropDown list
   const [selectedPassengers, setSelectedPassengers] = useState<Member[]>([]);
@@ -105,10 +141,45 @@ export function CarBookingPage({
     setFormPassengerCount(Math.max(1, 1 + updated.length));
   };
 
-  // New Fuel Budget State (Item 1 requirement)
+  // New Fuel Budget State (Item 1 & Template requirement)
   const [formFuelBudgetRequested, setFormFuelBudgetRequested] = useState<boolean>(false);
-  const [formFuelBudgetAmount, setFormFuelBudgetAmount] = useState<number>(1000);
-  const [formFuelBudgetSource, setFormFuelBudgetSource] = useState<string>("งบดำเนินงานสำนักงาน");
+  const [formFuelBudgetAmount, setFormFuelBudgetAmount] = useState<number>(600);
+  const [formFuelBudgetSource, setFormFuelBudgetSource] = useState<string>("งบดำเนินงานสำนักงาน พมจ.กำแพงเพชร");
+  const [formFuelProjectName, setFormFuelProjectName] = useState<string>("งบดำเนินงานสำนักงาน พมจ.กำแพงเพชร");
+  const [formFuelConsumptionRate, setFormFuelConsumptionRate] = useState<number>(4.0);
+
+  // Live auto-calculation for distance & fuel budget
+  const calculatedFuelEstimate = useMemo(() => {
+    const dist = Number(formEstimatedDistance) || 0;
+    const rate = Number(formFuelConsumptionRate) || 4.0;
+    const exact = dist * rate;
+    const rounded = Math.round(exact / 50) * 50;
+    return {
+      exact,
+      rounded: Math.max(100, rounded),
+    };
+  }, [formEstimatedDistance, formFuelConsumptionRate]);
+
+  // Resolve staff driver object when self-driving
+  const selectedStaffDriver = useMemo(() => {
+    if (!formSelectedStaffDriverId || formSelectedStaffDriverId === currentUser?.id) {
+      return currentUser;
+    }
+    return members.find((m) => m.id === formSelectedStaffDriverId) || currentUser;
+  }, [formSelectedStaffDriverId, currentUser, members]);
+
+  // Total passengers with driver calculation for template {จำนวนผู้โดยสารรวมคนขับรถ}
+  const totalPassengerCountWithDriver = useMemo(() => {
+    const base = Number(formPassengerCount) || 1;
+    if (formRequireDriver) {
+      // 1 (requester) + N (passengers) + 1 (central fleet driver)
+      return base + 1;
+    }
+    // If self-driving: check if chosen staff driver is already requester or among selected passengers
+    const driverId = formSelectedStaffDriverId || currentUser?.id;
+    const isAlreadyIncluded = driverId === currentUser?.id || selectedPassengers.some((p) => p.id === driverId);
+    return isAlreadyIncluded ? base : base + 1;
+  }, [formPassengerCount, formRequireDriver, formSelectedStaffDriverId, currentUser, selectedPassengers]);
 
   // Step 1 & 2 Workflow States: Reviewer Selection & Designated Fleet Dispatcher
   const [formReviewerType, setFormReviewerType] = useState<"head" | "official">("head");
@@ -290,7 +361,7 @@ export function CarBookingPage({
     setVehicles(newVehicles);
     saveStoredVehicles(newVehicles);
     newVehicles.forEach((v) => {
-      saveVehicle(v).catch(() => {});
+      saveVehicle(v).catch(() => { });
     });
   };
 
@@ -599,22 +670,24 @@ export function CarBookingPage({
     const chosenDispatcher =
       fleetDispatchers.find((d) => d.id === formDispatcherId) || fleetDispatchers[0];
 
-    // Step 1 Notification: ส่ง Notifications ไปยัง หัวหน้ากลุ่มหรือข้าราชการในกลุ่มที่เลือก
+    // Step 1 Notification: ส่ง Notifications ไปยัง ศูนย์การแจ้งเตือน WebApp (หัวหน้ากลุ่มหรือข้าราชการที่เลือก)
     const initialNotification: BookingNotificationLog = {
       id: `notif_${Date.now()}_sub`,
       timestamp: nowFormatted,
       type: "request_submitted",
       title: "ยื่นคำขอใช้รถราชการใหม่ (รอพิจารณาชั้นต้น)",
-      message: `[Line Notify] 📩 มีคำขอใช้รถใหม่ ${newReqNo} จาก ${currentUser.name} (${currentUser.division}) ปลายทาง: ${formDestination.trim()} ${
-        formFuelBudgetRequested
+      message: `📩 มีคำขอใช้รถใหม่ ${newReqNo} จาก ${currentUser.name} (${currentUser.division}) ปลายทาง: ${formDestination.trim()} ${formFuelBudgetRequested
           ? `(ของบประมาณค่าน้ำมัน: ${formFuelBudgetAmount.toLocaleString()} บาท)`
           : "(ไม่ของบค่าน้ำมัน)"
-      } รอ ${chosenReviewer.name} (${formReviewerType === "head" ? "หัวหน้ากลุ่ม/ฝ่าย" : "ข้าราชการในกลุ่ม"}) ตรวจสอบและให้ความเห็นชอบชั้นต้น`,
+        } รอ ${chosenReviewer.name} (${formReviewerType === "head" ? "หัวหน้ากลุ่ม/ฝ่าย" : "ข้าราชการในกลุ่ม"}) ตรวจสอบและให้ความเห็นชอบชั้นต้น`,
       recipientRole: formReviewerType === "head" ? "หัวหน้ากลุ่ม/ฝ่าย" : "ข้าราชการในกลุ่มตนเอง",
       recipientName: chosenReviewer.name,
-      channel: "line_notify",
+      channel: "webapp_notification",
       status: "delivered",
     };
+    sendBrowserNotification("คำขอใช้รถราชการใหม่", {
+      body: `มีคำขอ ${newReqNo} จาก ${currentUser.name} ปลายทาง: ${formDestination.trim()} รอพิจารณาชั้นต้น`,
+    });
 
     const newBooking: CarBookingRequest = {
       id: `req_car_${Date.now()}`,
@@ -636,10 +709,17 @@ export function CarBookingPage({
       passengersList: formPassengersList.trim() || `${currentUser.name}`,
       estimatedDistance: Number(formEstimatedDistance) || 150,
       requireDriver: formRequireDriver,
-      assignedDriver: formRequireDriver ? "รอฝ่ายบริหารจัดสรร" : "ขับขี่เองโดยผู้ขอใช้รถ",
+      assignedDriver: formRequireDriver
+        ? "รอฝ่ายบริหารจัดสรร"
+        : selectedStaffDriver?.name
+        ? `${selectedStaffDriver.name}${selectedStaffDriver.id === currentUser.id ? " (ผู้ขอขับขี่เอง)" : " (เจ้าหน้าที่ขับขี่เอง)"}`
+        : "ขับขี่เองโดยผู้ขอใช้รถ",
       fuelBudgetRequested: formFuelBudgetRequested,
       fuelBudgetAmount: formFuelBudgetRequested ? Number(formFuelBudgetAmount) : undefined,
       fuelBudgetSource: formFuelBudgetRequested ? formFuelBudgetSource.trim() : undefined,
+      fuelProjectName: formFuelBudgetRequested ? (formFuelProjectName || formFuelBudgetSource).trim() : undefined,
+      fuelConsumptionRate: formFuelBudgetRequested ? Number(formFuelConsumptionRate) : undefined,
+      totalPassengerCountWithDriver: totalPassengerCountWithDriver,
       status: "pending_division_head",
       createdAt: nowFormatted,
       divisionReviewerId: chosenReviewer.id,
@@ -663,7 +743,7 @@ export function CarBookingPage({
     ).catch(console.warn);
 
     showToast(
-      `✅ ยื่นคำขอใช้รถ ${newReqNo} สำเร็จ! ส่ง Line Notify ไปยัง ${chosenReviewer.name} เรียบร้อยแล้ว`
+      `✅ ยื่นคำขอใช้รถ ${newReqNo} สำเร็จ! แจ้งเตือนไปยัง ${chosenReviewer.name} ผ่านศูนย์การแจ้งเตือนในระบบเรียบร้อยแล้ว`
     );
     setActiveTab("requests");
 
@@ -674,6 +754,10 @@ export function CarBookingPage({
     setSelectedPassengers([]);
     setFormPassengerCount(1);
     setFormFuelBudgetRequested(false);
+    setFormFuelProjectName("งบดำเนินงานสำนักงาน พมจ.กำแพงเพชร");
+    setFormFuelConsumptionRate(4.0);
+    setFormRequireDriver(true);
+    setFormSelectedStaffDriverId(currentUser?.id || "");
   };
 
   // ─── STEP 2: Division Head / Peer Official Endorsement ───
@@ -698,12 +782,15 @@ export function CarBookingPage({
       timestamp: nowFormatted,
       type: "division_endorsed",
       title: "หัวหน้ากลุ่ม/ผู้แทนกลุ่มเห็นชอบคำขอใช้รถ",
-      message: `[Line Notify] 📋 คำขอใช้รถ ${target.requestNo} ผ่านความเห็นชอบจาก ${currentUser.name} (${currentUser.position}) เรียบร้อยแล้ว แจ้งเตือนไปยัง ${dispatcherName} เพื่อดำเนินการจัดสรรรถยนต์และพนักงานขับรถต่อไป`,
+      message: `📋 คำขอใช้รถ ${target.requestNo} ผ่านความเห็นชอบจาก ${currentUser.name} (${currentUser.position}) เรียบร้อยแล้ว แจ้งเตือนไปยัง ${dispatcherName} เพื่อดำเนินการจัดสรรรถยนต์และพนักงานขับรถต่อไป`,
       recipientRole: "เจ้าหน้าที่จัดสรรรถ ฝ่ายบริหารทั่วไป",
       recipientName: dispatcherName,
-      channel: "line_notify",
+      channel: "webapp_notification",
       status: "delivered",
     };
+    sendBrowserNotification("คำขอใช้รถผ่านความเห็นชอบชั้นต้น", {
+      body: `คำขอ ${target.requestNo} ผ่านความเห็นชอบแล้ว รอจัดสรรรถและคนขับ`,
+    });
 
     const updated = bookings.map((b) => {
       if (b.id !== bookingId) return b;
@@ -733,7 +820,7 @@ export function CarBookingPage({
     ).catch(console.warn);
 
     setSelectedReviewBooking(null);
-    showToast(`✓ เห็นชอบคำขอ ${target.requestNo} เรียบร้อยแล้ว! ส่ง Line Notify ไปยัง ${dispatcherName}`);
+    showToast(`✓ เห็นชอบคำขอ ${target.requestNo} เรียบร้อยแล้ว! แจ้งเตือนไปยัง ${dispatcherName} ผ่านศูนย์การแจ้งเตือน`);
   };
 
   // ─── STEP 3: Fleet Dispatcher Resource Assignment ───
@@ -769,12 +856,15 @@ export function CarBookingPage({
       timestamp: nowFormatted,
       type: "fleet_assigned",
       title: "จัดสรรรถและพนักงานขับรถเรียบร้อย",
-      message: `[Line Notify] 🚗 คำขอ ${target.requestNo} ได้รับการจัดสรรพาหนะ: ${assignedVeh.name} [${assignedVeh.licensePlate}] พนักงานขับรถ: ${assignedDriver} เสนอ ${adminHeadName} เพื่อโปรดพิจารณาเห็นชอบ`,
+      message: `🚗 คำขอ ${target.requestNo} ได้รับการจัดสรรพาหนะ: ${assignedVeh.name} [${assignedVeh.licensePlate}] พนักงานขับรถ: ${assignedDriver} เสนอ ${adminHeadName} เพื่อโปรดพิจารณาเห็นชอบ`,
       recipientRole: "หัวหน้าฝ่ายบริหารทั่วไป",
       recipientName: "นายเสกพล ดิษฐโชติ",
-      channel: "line_notify",
+      channel: "webapp_notification",
       status: "delivered",
     };
+    sendBrowserNotification("จัดสรรรถและคนขับเรียบร้อย", {
+      body: `คำขอ ${target.requestNo} รถ ${assignedVeh.licensePlate} คนขับ: ${assignedDriver} เสนอ หน.ฝ่ายบริหาร`,
+    });
 
     const updated = bookings.map((b) => {
       if (b.id !== bookingId) return b;
@@ -803,7 +893,7 @@ export function CarBookingPage({
     ).catch(console.warn);
 
     setSelectedReviewBooking(null);
-    showToast(`✓ จัดสรรรถและคนขับสำหรับคำขอ ${target.requestNo} สำเร็จ! ส่ง Line Notify เสนอหัวหน้าฝ่ายบริหารทั่วไปแล้ว`);
+    showToast(`✓ จัดสรรรถและคนขับสำหรับคำขอ ${target.requestNo} สำเร็จ! แจ้งเตือนเสนอหัวหน้าฝ่ายบริหารทั่วไปผ่านศูนย์การแจ้งเตือนแล้ว`);
   };
 
   // ─── STEP 4.1: Admin Head Endorsement ───
@@ -826,12 +916,15 @@ export function CarBookingPage({
       timestamp: nowFormatted,
       type: "admin_head_endorsed",
       title: "หัวหน้าฝ่ายบริหารทั่วไปเห็นชอบคำขอใช้รถ",
-      message: `[Line Notify] 👔 คำขอใช้รถ ${target.requestNo} ผ่านความเห็นชอบจากหัวหน้าฝ่ายบริหารทั่วไป (${currentUser.name}) เสนอ พมจ.กำแพงเพชร (นางสาวมะลิวัน สิทธิโยธี) เพื่อโปรดพิจารณาอนุมัติ`,
+      message: `👔 คำขอใช้รถ ${target.requestNo} ผ่านความเห็นชอบจากหัวหน้าฝ่ายบริหารทั่วไป (${currentUser.name}) เสนอ พมจ.กำแพงเพชร (นางสาวมะลิวัน สิทธิโยธี) เพื่อโปรดพิจารณาอนุมัติ`,
       recipientRole: "พมจ.กำแพงเพชร",
       recipientName: "นางสาวมะลิวัน สิทธิโยธี",
-      channel: "line_notify",
+      channel: "webapp_notification",
       status: "delivered",
     };
+    sendBrowserNotification("หน.ฝ่ายบริหารเสนอความเห็นคำขอใช้รถ", {
+      body: `คำขอ ${target.requestNo} ผ่านความเห็นชอบแล้ว เสนอ พมจ.กำแพงเพชร พิจารณาอนุมัติ`,
+    });
 
     const updated = bookings.map((b) => {
       if (b.id !== bookingId) return b;
@@ -856,7 +949,7 @@ export function CarBookingPage({
     ).catch(console.warn);
 
     setSelectedReviewBooking(null);
-    showToast(`✓ หัวหน้าฝ่ายบริหารเห็นชอบคำขอ ${target.requestNo} แล้ว! ส่ง Line Notify เสนอ พมจ.กำแพงเพชร`);
+    showToast(`✓ หัวหน้าฝ่ายบริหารเห็นชอบคำขอ ${target.requestNo} แล้ว! แจ้งเตือนเสนอ พมจ.กำแพงเพชร ผ่านศูนย์การแจ้งเตือน`);
   };
 
   // ─── STEP 4.2: Provincial Final Approval ───
@@ -881,10 +974,10 @@ export function CarBookingPage({
       timestamp: nowFormatted,
       type: "approved",
       title: "พมจ.กำแพงเพชร อนุมัติคำขอใช้รถยนต์ราชการ",
-      message: `[Line Notify] 🎉 คำขอ ${target.requestNo} ได้รับการอนุมัติแล้วจาก พมจ.กำแพงเพชร พาหนะ: ${target.vehicleName} [${target.licensePlate}] พนักงานขับรถ: ${target.assignedDriver || "พนักงานขับรถเวร"} พร้อมออกเดินทางได้`,
+      message: `🎉 คำขอ ${target.requestNo} ได้รับการอนุมัติแล้วจาก พมจ.กำแพงเพชร พาหนะ: ${target.vehicleName} [${target.licensePlate}] พนักงานขับรถ: ${target.assignedDriver || "พนักงานขับรถเวร"} พร้อมออกเดินทางได้`,
       recipientRole: "ผู้ขอใช้รถ",
       recipientName: target.requesterName,
-      channel: "line_notify",
+      channel: "webapp_notification",
       status: "delivered",
     };
 
@@ -894,15 +987,14 @@ export function CarBookingPage({
       timestamp: nowFormatted,
       type: "approved",
       title: "มอบหมายภารกิจพนักงานขับรถราชการ",
-      message: `[Line Notify] 🚗 คุณได้รับมอบหมายขับรถ ${target.vehicleName} [${
-        target.licensePlate
-      }] ไปยัง ${target.destination} กำหนดออก: ${target.departureTime.replace(
-        "T",
-        " "
-      )} คณะผู้เดินทาง ${target.passengerCount} คน`,
+      message: `🚗 คุณได้รับมอบหมายขับรถ ${target.vehicleName} [${target.licensePlate
+        }] ไปยัง ${target.destination} กำหนดออก: ${target.departureTime.replace(
+          "T",
+          " "
+        )} คณะผู้เดินทาง ${target.passengerCount} คน`,
       recipientRole: "พนักงานขับรถราชการ",
       recipientName: target.assignedDriver || "พนักงานขับรถ",
-      channel: "line_notify",
+      channel: "webapp_notification",
       status: "delivered",
     };
 
@@ -912,18 +1004,20 @@ export function CarBookingPage({
       timestamp: nowFormatted,
       type: "approved",
       title: "เตรียมความพร้อมรถยนต์ราชการสำหรับภารกิจ",
-      message: `[System Alert] 📋 เตรียมความพร้อมรถ ${target.vehicleName} [${
-        target.licensePlate
-      }] สำหรับคำขอ ${target.requestNo} ${
-        target.fuelBudgetRequested
+      message: `📋 เตรียมความพร้อมรถ ${target.vehicleName} [${target.licensePlate
+        }] สำหรับคำขอ ${target.requestNo} ${target.fuelBudgetRequested
           ? `(งบประมาณค่าน้ำมัน: ${target.fuelBudgetAmount?.toLocaleString()} บาท)`
           : ""
-      }`,
+        }`,
       recipientRole: "เจ้าหน้าที่ยานพาหนะ",
       recipientName: "ฝ่ายบริหารทั่วไป (งานยานพาหนะ)",
-      channel: "system_alert",
+      channel: "webapp_notification",
       status: "delivered",
     };
+
+    sendBrowserNotification("พมจ. อนุมัติคำขอใช้รถยนต์ราชการ", {
+      body: `คำขอ ${target.requestNo} ได้รับการอนุมัติแล้ว รถ: ${target.vehicleName} [${target.licensePlate}]`,
+    });
 
     const newNotifs = [notifRequester, notifDriver, notifFleet];
 
@@ -958,7 +1052,7 @@ export function CarBookingPage({
     ).catch(console.warn);
 
     showToast(
-      `👑 พมจ.กำแพงเพชร อนุมัติเรียบร้อย! และระบบได้ส่ง Line Notify แจ้งเตือนไปยังคุณ ${target.requesterName} และพนักงานขับรถแล้ว`
+      `👑 พมจ.กำแพงเพชร อนุมัติเรียบร้อย! และระบบได้แจ้งเตือนไปยังคุณ ${target.requesterName} และพนักงานขับรถผ่านศูนย์การแจ้งเตือนแล้ว`
     );
   };
 
@@ -995,7 +1089,7 @@ export function CarBookingPage({
     showToast(`✕ บันทึกการส่งกลับ/ไม่อนุมัติคำขอ ${bookingId} เรียบร้อยแล้ว`);
   };
 
-  // Manual Trigger: Send Return Reminder (แจ้งเตือนการคืนรถ via Line Notify)
+  // Manual Trigger: Send Return Reminder (แจ้งเตือนการคืนรถผ่านศูนย์การแจ้งเตือน WebApp)
   const handleSendReturnReminder = (booking: CarBookingRequest) => {
     const nowFormatted =
       new Date().toLocaleDateString("th-TH", {
@@ -1011,12 +1105,16 @@ export function CarBookingPage({
       timestamp: nowFormatted,
       type: "return_reminder",
       title: "แจ้งเตือนถึงกำหนดส่งคืนรถยนต์ราชการ",
-      message: `[Line Notify] ⚠️ แจ้งเตือนถึงกำหนดส่งคืนรถยนต์ราชการ: คำขอ ${booking.requestNo} (${booking.licensePlate}) ถึงเวลาส่งคืนแล้ว กรุณานำรถส่งคืน ณ สำนักงาน พมจ. และรายงานผลการตรวจสภาพ เลขไมล์ และเกจน้ำมันในระบบเพื่อคืนสถานะความพร้อม`,
+      message: `⚠️ แจ้งเตือนถึงกำหนดส่งคืนรถยนต์ราชการ: คำขอ ${booking.requestNo} (${booking.licensePlate}) ถึงเวลาส่งคืนแล้ว กรุณานำรถส่งคืน ณ สำนักงาน พมจ. และรายงานผลการตรวจสภาพ เลขไมล์ และเกจน้ำมันในระบบเพื่อคืนสถานะความพร้อม`,
       recipientRole: "ผู้ขอใช้รถ / คณะเดินทาง",
       recipientName: booking.requesterName,
-      channel: "line_notify",
+      channel: "webapp_notification",
       status: "delivered",
     };
+
+    sendBrowserNotification("แจ้งเตือนถึงกำหนดส่งคืนรถราชการ", {
+      body: `คำขอ ${booking.requestNo} (${booking.licensePlate}) ถึงเวลาส่งคืนรถแล้ว`,
+    });
 
     const updated = bookings.map((b) => {
       if (b.id !== booking.id) return b;
@@ -1028,7 +1126,7 @@ export function CarBookingPage({
 
     updateAndSaveBookings(updated);
     showToast(
-      `📲 ส่งข้อความ Line Notify แจ้งเตือนคืนรถยนต์ [${booking.licensePlate}] ไปยังคุณ ${booking.requesterName} เรียบร้อยแล้ว!`
+      `🔔 แจ้งเตือนคืนรถยนต์ [${booking.licensePlate}] ไปยังคุณ ${booking.requesterName} ผ่านศูนย์การแจ้งเตือนในระบบเรียบร้อยแล้ว!`
     );
   };
 
@@ -1037,7 +1135,7 @@ export function CarBookingPage({
     if (!confirm(`คุณต้องการยกเลิกคำขอ ${booking.requestNo} หรือไม่?`)) return;
     const updated = bookings.filter((b) => b.id !== booking.id);
     updateAndSaveBookings(updated);
-    deleteCarBooking(booking.id).catch(() => {});
+    deleteCarBooking(booking.id).catch(() => { });
     showToast(`ยกเลิกคำขอ ${booking.requestNo} สำเร็จ`);
   };
 
@@ -1071,12 +1169,11 @@ export function CarBookingPage({
       timestamp: nowFormatted,
       type: "return_completed",
       title: "ส่งคืนรถยนต์และกุญแจเรียบร้อย",
-      message: `[Line Notify] 🏁 ส่งคืนรถยนต์ ${licensePlate} เรียบร้อยแล้ว (กุญแจรถ: ${report.keyReturned ? "ส่งคืนแล้ว" : "ยังไม่ส่งคืน"}) เลขไมล์: ${report.endMileage.toLocaleString()} กม. (ระยะวิ่งจริง ${report.totalDistance.toLocaleString()} กม.) เกจน้ำมัน: ${
-        report.endFuelLevel
-      } ผู้ตรวจรับ: ${report.inspectorName}`,
+      message: `🏁 ส่งคืนรถยนต์ ${licensePlate} เรียบร้อยแล้ว (กุญแจรถ: ${report.keyReturned ? "ส่งคืนแล้ว" : "ยังไม่ส่งคืน"}) เลขไมล์: ${report.endMileage.toLocaleString()} กม. (ระยะวิ่งจริง ${report.totalDistance.toLocaleString()} กม.) เกจน้ำมัน: ${report.endFuelLevel
+        } ผู้ตรวจรับ: ${report.inspectorName}`,
       recipientRole: "เจ้าหน้าที่ยานพาหนะ",
       recipientName: "ฝ่ายบริหารทั่วไป (งานยานพาหนะ)",
-      channel: "line_notify",
+      channel: "webapp_notification",
       status: "delivered",
     };
     notifs.push(returnCompletedNotif);
@@ -1088,13 +1185,16 @@ export function CarBookingPage({
         timestamp: nowFormatted,
         type: "maintenance_alert",
         title: "⚠️ แจ้งซ่อมบำรุงเร่งด่วน: ตรวจพบปัญหาจากการใช้งานรถยนต์ราชการ",
-        message: `[Line Notify ด่วน] 🚨 รถยนต์ ${licensePlate} ถูกรายงานปัญหาหลังการใช้งาน: "${report.issuesFound}". ระบบได้ปรับสถานะรถยนต์เป็น "ซ่อมบำรุง (Maintenance)" โดยอัตโนมัติ แจ้งเตือนไปยัง นายเสกพล ดิษฐโชติ (หัวหน้าฝ่ายบริหารทั่วไป) เพื่อโปรดพิจารณาอนุมัติส่งซ่อมบำรุง`,
+        message: `🚨 รถยนต์ ${licensePlate} ถูกรายงานปัญหาหลังการใช้งาน: "${report.issuesFound}". ระบบได้ปรับสถานะรถยนต์เป็น "ซ่อมบำรุง (Maintenance)" โดยอัตโนมัติ แจ้งเตือนไปยัง นายเสกพล ดิษฐโชติ (หัวหน้าฝ่ายบริหารทั่วไป) เพื่อโปรดพิจารณาอนุมัติส่งซ่อมบำรุง`,
         recipientRole: "หัวหน้าฝ่ายบริหารทั่วไป",
         recipientName: "นายเสกพล ดิษฐโชติ",
-        channel: "line_notify",
+        channel: "webapp_notification",
         status: "delivered",
       };
       notifs.push(maintenanceAlertNotif);
+      sendBrowserNotification("แจ้งซ่อมบำรุงเร่งด่วน", {
+        body: `รถยนต์ ${licensePlate} ถูกรายงานปัญหา: "${report.issuesFound}"`,
+      });
     }
 
     // 1. Update Booking status to completed and attach report & notifs
@@ -1139,7 +1239,7 @@ export function CarBookingPage({
 
     if (hasDefect) {
       showToast(
-        `⚠️ บันทึกการส่งคืนรถ [${licensePlate}] และรายงานแจ้งซ่อมสำเร็จ! ระบบได้ปรับสถานะเป็น "ซ่อมบำรุง" และส่ง Line Notify ด่วนไปยังหัวหน้าฝ่ายบริหารทั่วไปแล้ว`
+        `⚠️ บันทึกการส่งคืนรถ [${licensePlate}] และรายงานแจ้งซ่อมสำเร็จ! ระบบได้ปรับสถานะเป็น "ซ่อมบำรุง" และแจ้งเตือนด่วนไปยังหัวหน้าฝ่ายบริหารทั่วไปผ่านศูนย์การแจ้งเตือนแล้ว`
       );
     } else {
       showToast(
@@ -1242,7 +1342,7 @@ export function CarBookingPage({
               type="button"
               onClick={() => setIsNotificationHubOpen(true)}
               className="relative px-4 py-2.5 bg-white/10 hover:bg-white/20 border border-white/20 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 backdrop-blur-xs"
-              title="เปิดศูนย์รวมการแจ้งเตือน Line Notify และสถานะงานทั้งหมด"
+              title="เปิดศูนย์รวมการแจ้งเตือนในระบบ WebApp และสถานะงานทั้งหมด"
             >
               <span className="text-sm">🔔</span>
               <span>ศูนย์การแจ้งเตือน</span>
@@ -1393,10 +1493,10 @@ export function CarBookingPage({
                     type="button"
                     onClick={() => handleSendReturnReminder(dueBooking)}
                     className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
-                    title="ส่ง Line Notify แจ้งเตือนผู้ขอใช้รถ"
+                    title="แจ้งเตือนผู้ขอใช้รถผ่านศูนย์การแจ้งเตือน WebApp"
                   >
-                    <span>📲</span>
-                    <span>ส่งเตือน Line</span>
+                    <span>🔔</span>
+                    <span>แจ้งเตือนคืนรถ</span>
                   </button>
 
                   <button
@@ -1418,10 +1518,12 @@ export function CarBookingPage({
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {/* Step 1 */}
         <div
-          onClick={() => setStatusFilter(statusFilter === "stage1" ? "all" : "stage1")}
-          className={`p-3.5 bg-white rounded-2xl border transition-all cursor-pointer shadow-xs hover:shadow-md ${
-            statusFilter === "stage1" ? "border-amber-500 ring-2 ring-amber-400/30" : "border-slate-200/80 hover:border-amber-300"
-          }`}
+          onClick={() => {
+            setStatusFilter(statusFilter === "stage1" ? "all" : "stage1");
+            setActiveTab("requests");
+          }}
+          className={`p-3.5 bg-white rounded-2xl border transition-all cursor-pointer shadow-xs hover:shadow-md ${statusFilter === "stage1" ? "border-amber-500 ring-2 ring-amber-400/30" : "border-slate-200/80 hover:border-amber-300"
+            }`}
         >
           <div className="flex items-center justify-between pb-1">
             <span className="text-xs text-slate-500 font-medium">1. รอ หน.กลุ่ม</span>
@@ -1437,10 +1539,12 @@ export function CarBookingPage({
 
         {/* Step 2 */}
         <div
-          onClick={() => setStatusFilter(statusFilter === "stage2" ? "all" : "stage2")}
-          className={`p-3.5 bg-white rounded-2xl border transition-all cursor-pointer shadow-xs hover:shadow-md ${
-            statusFilter === "stage2" ? "border-blue-500 ring-2 ring-blue-400/30" : "border-slate-200/80 hover:border-blue-300"
-          }`}
+          onClick={() => {
+            setStatusFilter(statusFilter === "stage2" ? "all" : "stage2");
+            setActiveTab("requests");
+          }}
+          className={`p-3.5 bg-white rounded-2xl border transition-all cursor-pointer shadow-xs hover:shadow-md ${statusFilter === "stage2" ? "border-blue-500 ring-2 ring-blue-400/30" : "border-slate-200/80 hover:border-blue-300"
+            }`}
         >
           <div className="flex items-center justify-between pb-1">
             <span className="text-xs text-slate-500 font-medium">2. รอจัดสรรรถ</span>
@@ -1456,10 +1560,12 @@ export function CarBookingPage({
 
         {/* Step 3 */}
         <div
-          onClick={() => setStatusFilter(statusFilter === "stage3" ? "all" : "stage3")}
-          className={`p-3.5 bg-white rounded-2xl border transition-all cursor-pointer shadow-xs hover:shadow-md ${
-            statusFilter === "stage3" ? "border-indigo-500 ring-2 ring-indigo-400/30" : "border-slate-200/80 hover:border-indigo-300"
-          }`}
+          onClick={() => {
+            setStatusFilter(statusFilter === "stage3" ? "all" : "stage3");
+            setActiveTab("requests");
+          }}
+          className={`p-3.5 bg-white rounded-2xl border transition-all cursor-pointer shadow-xs hover:shadow-md ${statusFilter === "stage3" ? "border-indigo-500 ring-2 ring-indigo-400/30" : "border-slate-200/80 hover:border-indigo-300"
+            }`}
         >
           <div className="flex items-center justify-between pb-1">
             <span className="text-xs text-slate-500 font-medium">3. รอ หน.ฝ่ายบริหาร</span>
@@ -1475,10 +1581,12 @@ export function CarBookingPage({
 
         {/* Step 4 */}
         <div
-          onClick={() => setStatusFilter(statusFilter === "stage4" ? "all" : "stage4")}
-          className={`p-3.5 bg-white rounded-2xl border transition-all cursor-pointer shadow-xs hover:shadow-md ${
-            statusFilter === "stage4" ? "border-purple-500 ring-2 ring-purple-400/30" : "border-slate-200/80 hover:border-purple-300"
-          }`}
+          onClick={() => {
+            setStatusFilter(statusFilter === "stage4" ? "all" : "stage4");
+            setActiveTab("requests");
+          }}
+          className={`p-3.5 bg-white rounded-2xl border transition-all cursor-pointer shadow-xs hover:shadow-md ${statusFilter === "stage4" ? "border-purple-500 ring-2 ring-purple-400/30" : "border-slate-200/80 hover:border-purple-300"
+            }`}
         >
           <div className="flex items-center justify-between pb-1">
             <span className="text-xs text-slate-500 font-medium">4. รอ พมจ. อนุมัติ</span>
@@ -1494,10 +1602,12 @@ export function CarBookingPage({
 
         {/* Approved */}
         <div
-          onClick={() => setStatusFilter(statusFilter === "approved" ? "all" : "approved")}
-          className={`p-3.5 bg-white rounded-2xl border transition-all cursor-pointer shadow-xs hover:shadow-md ${
-            statusFilter === "approved" ? "border-emerald-500 ring-2 ring-emerald-400/30" : "border-slate-200/80 hover:border-emerald-300"
-          }`}
+          onClick={() => {
+            setStatusFilter(statusFilter === "approved" ? "all" : "approved");
+            setActiveTab("requests");
+          }}
+          className={`p-3.5 bg-white rounded-2xl border transition-all cursor-pointer shadow-xs hover:shadow-md ${statusFilter === "approved" ? "border-emerald-500 ring-2 ring-emerald-400/30" : "border-slate-200/80 hover:border-emerald-300"
+            }`}
         >
           <div className="flex items-center justify-between pb-1">
             <span className="text-xs text-slate-500 font-medium">อนุมัติแล้ว</span>
@@ -1513,10 +1623,12 @@ export function CarBookingPage({
 
         {/* Completed */}
         <div
-          onClick={() => setStatusFilter(statusFilter === "completed" ? "all" : "completed")}
-          className={`p-3.5 bg-white rounded-2xl border transition-all cursor-pointer shadow-xs hover:shadow-md ${
-            statusFilter === "completed" ? "border-teal-500 ring-2 ring-teal-400/30" : "border-slate-200/80 hover:border-teal-300"
-          }`}
+          onClick={() => {
+            setStatusFilter(statusFilter === "completed" ? "all" : "completed");
+            setActiveTab("requests");
+          }}
+          className={`p-3.5 bg-white rounded-2xl border transition-all cursor-pointer shadow-xs hover:shadow-md ${statusFilter === "completed" ? "border-teal-500 ring-2 ring-teal-400/30" : "border-slate-200/80 hover:border-teal-300"
+            }`}
         >
           <div className="flex items-center justify-between pb-1">
             <span className="text-xs text-slate-500 font-medium">ส่งคืนแล้ว</span>
@@ -1536,11 +1648,10 @@ export function CarBookingPage({
         <button
           type="button"
           onClick={() => setActiveTab("requests")}
-          className={`pb-3.5 px-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors cursor-pointer ${
-            activeTab === "requests"
+          className={`pb-3.5 px-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors cursor-pointer ${activeTab === "requests"
               ? "border-teal-600 text-teal-700"
               : "border-transparent text-slate-500 hover:text-slate-800"
-          }`}
+            }`}
         >
           <span>📋</span>
           <span>ทะเบียนคำขอจองรถ & รายงานคืน ({bookings.length})</span>
@@ -1554,11 +1665,10 @@ export function CarBookingPage({
         <button
           type="button"
           onClick={() => setActiveTab("timeline")}
-          className={`pb-3.5 px-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors cursor-pointer ${
-            activeTab === "timeline"
+          className={`pb-3.5 px-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors cursor-pointer ${activeTab === "timeline"
               ? "border-teal-600 text-teal-700"
               : "border-transparent text-slate-500 hover:text-slate-800"
-          }`}
+            }`}
         >
           <span>📅</span>
           <span>ตารางไทม์ไลน์ภารกิจ (Gantt View)</span>
@@ -1567,11 +1677,10 @@ export function CarBookingPage({
         <button
           type="button"
           onClick={() => setActiveTab("new_request")}
-          className={`pb-3.5 px-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors cursor-pointer ${
-            activeTab === "new_request"
+          className={`pb-3.5 px-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors cursor-pointer ${activeTab === "new_request"
               ? "border-teal-600 text-teal-700"
               : "border-transparent text-slate-500 hover:text-slate-800"
-          }`}
+            }`}
         >
           <span>➕</span>
           <span>ยื่นคำขอใหม่ (พร้อมค่าน้ำมัน)</span>
@@ -1624,21 +1733,19 @@ export function CarBookingPage({
                   key={f.id}
                   type="button"
                   onClick={() => setStatusFilter(f.id)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    statusFilter === f.id
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${statusFilter === f.id
                       ? "bg-teal-700 text-white shadow-xs"
                       : "bg-slate-100 hover:bg-slate-200 text-slate-700"
-                  }`}
+                    }`}
                 >
                   <span>{f.label}</span>
                   <span
-                    className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold leading-none ${
-                      statusFilter === f.id
+                    className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold leading-none ${statusFilter === f.id
                         ? "bg-white/20 text-white"
                         : f.count > 0
-                        ? (f.badgeColor || "bg-slate-200 text-slate-800")
-                        : "bg-slate-200/60 text-slate-400"
-                    }`}
+                          ? (f.badgeColor || "bg-slate-200 text-slate-800")
+                          : "bg-slate-200/60 text-slate-400"
+                      }`}
                   >
                     {f.count}
                   </span>
@@ -1763,11 +1870,11 @@ export function CarBookingPage({
                         <button
                           type="button"
                           onClick={() => setSelectedNotifBooking(b)}
-                          className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
-                          title="ดูประวัติการแจ้งเตือน Line Notify"
+                          className="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                          title="ดูประวัติการแจ้งเตือนในระบบ WebApp"
                         >
-                          <span>📲</span>
-                          <span>Notify ({b.notifications?.length || 0})</span>
+                          <span>🔔</span>
+                          <span>Notifications ({b.notifications?.length || 0})</span>
                         </button>
 
                         {getStatusBadge(b.status)}
@@ -1785,15 +1892,15 @@ export function CarBookingPage({
                           <span className="text-slate-500 font-medium">การแจ้งเตือนงาน: </span>
                           <strong className="text-slate-900">
                             {b.status === "pending_division_head" || b.status === "pending_review" ? (
-                              <span>ส่ง Line Notify แจ้งเตือนไปยัง <span className="text-amber-800 font-bold">{b.divisionReviewerName || "หัวหน้ากลุ่ม/ฝ่าย"}</span> เพื่อพิจารณาเห็นชอบชั้นต้นแล้ว</span>
+                              <span>แจ้งเตือนศูนย์การแจ้งเตือนไปยัง <span className="text-amber-800 font-bold">{b.divisionReviewerName || "หัวหน้ากลุ่ม/ฝ่าย"}</span> เพื่อพิจารณาเห็นชอบชั้นต้นแล้ว</span>
                             ) : b.status === "pending_fleet_assignment" ? (
-                              <span>ผ่านความเห็นชอบแล้ว ➔ ส่ง Line Notify แจ้งเตือนไปยัง <span className="text-blue-800 font-bold">ฝ่ายบริหารทั่วไป (คุณเสกพล / คุณปภาวิน)</span> เพื่อจัดสรรรถและคนขับ</span>
+                              <span>ผ่านความเห็นชอบแล้ว ➔ แจ้งเตือนศูนย์การแจ้งเตือนไปยัง <span className="text-blue-800 font-bold">ฝ่ายบริหารทั่วไป (คุณเสกพล / คุณปภาวิน)</span> เพื่อจัดสรรรถและคนขับ</span>
                             ) : b.status === "pending_admin_head" ? (
-                              <span>จัดสรรรถแล้ว ➔ ส่ง Line Notify เสนอ <span className="text-indigo-800 font-bold">นายเสกพล ดิษฐโชติ (หน.ฝ่ายบริหารทั่วไป)</span> เพื่อพิจารณาเสนอความเห็น</span>
+                              <span>จัดสรรรถแล้ว ➔ แจ้งเตือนศูนย์การแจ้งเตือนเสนอ <span className="text-indigo-800 font-bold">นายเสกพล ดิษฐโชติ (หน.ฝ่ายบริหารทั่วไป)</span> เพื่อพิจารณาเสนอความเห็น</span>
                             ) : b.status === "pending_provincial" || b.status === "endorsed" ? (
-                              <span>เสนอความเห็นแล้ว ➔ ส่ง Line Notify นำกราบเรียน <span className="text-purple-800 font-bold">นางสาวมะลิวัน สิทธิโยธี (พมจ.กำแพงเพชร)</span> เพื่อโปรดพิจารณาอนุมัติ</span>
+                              <span>เสนอความเห็นแล้ว ➔ แจ้งเตือนศูนย์การแจ้งเตือนนำกราบเรียน <span className="text-purple-800 font-bold">นางสาวมะลิวัน สิทธิโยธี (พมจ.กำแพงเพชร)</span> เพื่อโปรดพิจารณาอนุมัติ</span>
                             ) : b.status === "approved" ? (
-                              <span>อนุมัติคำขอแล้ว ➔ ส่ง Line Notify แจ้งเตือน <span className="text-emerald-800 font-bold">ผู้ขอใช้รถ ({b.requesterName})</span> และ <span className="text-teal-800 font-bold">คนขับ ({b.assignedDriver})</span> เรียบร้อยแล้ว</span>
+                              <span>อนุมัติคำขอแล้ว ➔ แจ้งเตือนศูนย์การแจ้งเตือน <span className="text-emerald-800 font-bold">ผู้ขอใช้รถ ({b.requesterName})</span> และ <span className="text-teal-800 font-bold">คนขับ ({b.assignedDriver})</span> เรียบร้อยแล้ว</span>
                             ) : b.status === "completed" ? (
                               <span className="text-teal-900 font-semibold">ส่งคืนรถและกุญแจเรียบร้อย (ภารกิจเสร็จสิ้น)</span>
                             ) : (
@@ -1819,8 +1926,8 @@ export function CarBookingPage({
                       <div className="p-3.5 bg-slate-50/90 rounded-2xl border border-teal-200/80 space-y-2 text-xs animate-fade-in">
                         <div className="flex items-center justify-between font-bold text-slate-700 pb-1.5 border-b border-slate-200">
                           <span className="flex items-center gap-1.5 text-teal-900">
-                            <span>📲</span>
-                            <span>ประวัติข้อความ Line Notify และการแจ้งเตือนงานทั้งหมด ({b.notifications?.length || 0} รายการ):</span>
+                            <span>🔔</span>
+                            <span>ประวัติการแจ้งเตือนในระบบ WebApp ทั้งหมด ({b.notifications?.length || 0} รายการ):</span>
                           </span>
                           <button
                             type="button"
@@ -1839,15 +1946,15 @@ export function CarBookingPage({
                               <div key={notif.id || idx} className="p-3 bg-white rounded-xl border border-slate-200 space-y-1.5 shadow-2xs">
                                 <div className="flex flex-wrap items-center justify-between gap-1 text-[11px]">
                                   <div className="flex items-center gap-1.5">
-                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                      🟢 Line Notify
+                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-teal-100 text-teal-800 border border-teal-300">
+                                      🔔 ศูนย์การแจ้งเตือน
                                     </span>
                                     <strong className="text-slate-800">{notif.title}</strong>
                                   </div>
                                   <span className="text-[10px] text-slate-400 font-mono">{notif.timestamp}</span>
                                 </div>
-                                <div className="p-2.5 bg-[#E8F8F5] text-slate-900 rounded-lg text-[11px] border border-[#A3E4D7] leading-relaxed">
-                                  {notif.message}
+                                <div className="p-2.5 bg-teal-50/70 text-slate-900 rounded-lg text-[11px] border border-teal-200/80 leading-relaxed">
+                                  {notif.message.replace(/^\[Line Notify\]\s*/, "")}
                                 </div>
                                 <div className="text-[10px] text-slate-500 flex flex-wrap items-center justify-between gap-2 pt-0.5">
                                   <span>ส่งถึง: <strong>{notif.recipientRole}</strong> ({notif.recipientName})</span>
@@ -1873,8 +1980,13 @@ export function CarBookingPage({
                             <strong className="text-slate-800">{b.destination}</strong>
                           </div>
                           <div>
-                            <span className="text-slate-400">ผู้โดยสาร:</span>{" "}
-                            <strong className="text-slate-800">{b.passengerCount} คน</strong>
+                            <span className="text-slate-400">คนนั่งทั้งสิ้น:</span>{" "}
+                            <strong className="text-slate-800">
+                              {b.totalPassengerCountWithDriver || ((b.passengerCount || 1) + (b.requireDriver !== false ? 1 : 0))} คน
+                            </strong>
+                            <span className="text-[10px] text-slate-400 ml-1">
+                              (ผู้โดยสาร {b.passengerCount} + {b.requireDriver ? "คนขับ" : "ขับเอง"})
+                            </span>
                           </div>
                           <div>
                             <span className="text-slate-400">คนขับ:</span>{" "}
@@ -1890,9 +2002,14 @@ export function CarBookingPage({
                             <span className="flex items-center gap-1.5 font-bold">
                               <span>⛽</span>
                               <span>ของบประมาณค่าน้ำมัน: {b.fuelBudgetAmount?.toLocaleString()} บาท</span>
+                              {b.fuelConsumptionRate && (
+                                <span className="text-[10px] font-normal text-amber-700 bg-amber-100/70 px-1.5 py-0.5 rounded">
+                                  ({b.fuelConsumptionRate} บ./กม.)
+                                </span>
+                              )}
                             </span>
                             <span className="text-[11px] text-amber-800">
-                              แหล่งงบ: {b.fuelBudgetSource || "งบดำเนินงานสำนักงาน"}
+                              โครงการ/แหล่งงบ: {b.fuelProjectName || b.fuelBudgetSource || "งบดำเนินงานสำนักงาน"}
                             </span>
                           </div>
                         )}
@@ -2028,22 +2145,20 @@ export function CarBookingPage({
 
                       {/* Step 2: หน.กลุ่ม/ผู้แทนกลุ่มเห็นชอบ */}
                       <div
-                        className={`flex items-center gap-1.5 font-semibold ${
-                          b.status !== "pending_division_head" && b.status !== "pending_review" && b.status !== "rejected"
+                        className={`flex items-center gap-1.5 font-semibold ${b.status !== "pending_division_head" && b.status !== "pending_review" && b.status !== "rejected"
                             ? "text-emerald-700"
                             : b.status === "pending_division_head" || b.status === "pending_review"
-                            ? "text-amber-700"
-                            : "text-slate-400"
-                        }`}
+                              ? "text-amber-700"
+                              : "text-slate-400"
+                          }`}
                       >
                         <span
-                          className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                            b.status !== "pending_division_head" && b.status !== "pending_review" && b.status !== "rejected"
+                          className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${b.status !== "pending_division_head" && b.status !== "pending_review" && b.status !== "rejected"
                               ? "bg-emerald-100 text-emerald-700"
                               : b.status === "pending_division_head" || b.status === "pending_review"
-                              ? "bg-amber-100 text-amber-700"
-                              : "bg-slate-200 text-slate-600"
-                          }`}
+                                ? "bg-amber-100 text-amber-700"
+                                : "bg-slate-200 text-slate-600"
+                            }`}
                         >
                           {b.status !== "pending_division_head" && b.status !== "pending_review" && b.status !== "rejected" ? "✓" : "2"}
                         </span>
@@ -2056,22 +2171,20 @@ export function CarBookingPage({
 
                       {/* Step 3: จัดสรรรถและคนขับ */}
                       <div
-                        className={`flex items-center gap-1.5 font-semibold ${
-                          b.status === "pending_admin_head" || b.status === "pending_provincial" || b.status === "endorsed" || b.status === "approved" || b.status === "completed"
+                        className={`flex items-center gap-1.5 font-semibold ${b.status === "pending_admin_head" || b.status === "pending_provincial" || b.status === "endorsed" || b.status === "approved" || b.status === "completed"
                             ? "text-emerald-700"
                             : b.status === "pending_fleet_assignment"
-                            ? "text-blue-700"
-                            : "text-slate-400"
-                        }`}
+                              ? "text-blue-700"
+                              : "text-slate-400"
+                          }`}
                       >
                         <span
-                          className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                            b.status === "pending_admin_head" || b.status === "pending_provincial" || b.status === "endorsed" || b.status === "approved" || b.status === "completed"
+                          className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${b.status === "pending_admin_head" || b.status === "pending_provincial" || b.status === "endorsed" || b.status === "approved" || b.status === "completed"
                               ? "bg-emerald-100 text-emerald-700"
                               : b.status === "pending_fleet_assignment"
-                              ? "bg-blue-100 text-blue-700"
-                              : "bg-slate-200 text-slate-600"
-                          }`}
+                                ? "bg-blue-100 text-blue-700"
+                                : "bg-slate-200 text-slate-600"
+                            }`}
                         >
                           {b.status === "pending_admin_head" || b.status === "pending_provincial" || b.status === "endorsed" || b.status === "approved" || b.status === "completed" ? "✓" : "3"}
                         </span>
@@ -2084,22 +2197,20 @@ export function CarBookingPage({
 
                       {/* Step 4: หน.ฝ่ายบริหารเห็นชอบ */}
                       <div
-                        className={`flex items-center gap-1.5 font-semibold ${
-                          b.status === "pending_provincial" || b.status === "endorsed" || b.status === "approved" || b.status === "completed"
+                        className={`flex items-center gap-1.5 font-semibold ${b.status === "pending_provincial" || b.status === "endorsed" || b.status === "approved" || b.status === "completed"
                             ? "text-emerald-700"
                             : b.status === "pending_admin_head"
-                            ? "text-indigo-700"
-                            : "text-slate-400"
-                        }`}
+                              ? "text-indigo-700"
+                              : "text-slate-400"
+                          }`}
                       >
                         <span
-                          className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                            b.status === "pending_provincial" || b.status === "endorsed" || b.status === "approved" || b.status === "completed"
+                          className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${b.status === "pending_provincial" || b.status === "endorsed" || b.status === "approved" || b.status === "completed"
                               ? "bg-emerald-100 text-emerald-700"
                               : b.status === "pending_admin_head"
-                              ? "bg-indigo-100 text-indigo-700"
-                              : "bg-slate-200 text-slate-600"
-                          }`}
+                                ? "bg-indigo-100 text-indigo-700"
+                                : "bg-slate-200 text-slate-600"
+                            }`}
                         >
                           {b.status === "pending_provincial" || b.status === "endorsed" || b.status === "approved" || b.status === "completed" ? "✓" : "4"}
                         </span>
@@ -2110,22 +2221,20 @@ export function CarBookingPage({
 
                       {/* Step 5: พมจ. อนุมัติ */}
                       <div
-                        className={`flex items-center gap-1.5 font-semibold ${
-                          b.status === "approved" || b.status === "completed"
+                        className={`flex items-center gap-1.5 font-semibold ${b.status === "approved" || b.status === "completed"
                             ? "text-emerald-700"
                             : b.status === "pending_provincial" || b.status === "endorsed"
-                            ? "text-purple-700"
-                            : "text-slate-400"
-                        }`}
+                              ? "text-purple-700"
+                              : "text-slate-400"
+                          }`}
                       >
                         <span
-                          className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                            b.status === "approved" || b.status === "completed"
+                          className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${b.status === "approved" || b.status === "completed"
                               ? "bg-emerald-100 text-emerald-700"
                               : b.status === "pending_provincial" || b.status === "endorsed"
-                              ? "bg-purple-100 text-purple-700"
-                              : "bg-slate-200 text-slate-600"
-                          }`}
+                                ? "bg-purple-100 text-purple-700"
+                                : "bg-slate-200 text-slate-600"
+                            }`}
                         >
                           {b.status === "approved" || b.status === "completed" ? "✓" : "5"}
                         </span>
@@ -2136,18 +2245,16 @@ export function CarBookingPage({
 
                       {/* Step 6: ส่งคืนและตรวจรับ */}
                       <div
-                        className={`flex items-center gap-1.5 font-semibold ${
-                          b.status === "completed"
+                        className={`flex items-center gap-1.5 font-semibold ${b.status === "completed"
                             ? "text-teal-700"
                             : "text-slate-400"
-                        }`}
+                          }`}
                       >
                         <span
-                          className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                            b.status === "completed"
+                          className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${b.status === "completed"
                               ? "bg-teal-100 text-teal-800"
                               : "bg-slate-200 text-slate-600"
-                          }`}
+                            }`}
                         >
                           {b.status === "completed" ? "✓" : "6"}
                         </span>
@@ -2212,7 +2319,7 @@ export function CarBookingPage({
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
                           >
                             <span>🔔</span>
-                            <span>ส่งเตือนคืนรถ (Notify)</span>
+                            <span>แจ้งเตือนคืนรถในระบบ</span>
                           </button>
                         )}
 
@@ -2342,11 +2449,10 @@ export function CarBookingPage({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                 {/* Radio 1: หัวหน้ากลุ่ม/ฝ่ายที่สังกัด */}
                 <label
-                  className={`p-3.5 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
-                    formReviewerType === "head"
+                  className={`p-3.5 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${formReviewerType === "head"
                       ? "bg-white border-teal-500 ring-2 ring-teal-500/20 shadow-xs"
                       : "bg-teal-50/40 border-teal-200/60 hover:bg-white"
-                  }`}
+                    }`}
                 >
                   <input
                     type="radio"
@@ -2370,11 +2476,10 @@ export function CarBookingPage({
 
                 {/* Radio 2: เลือกจากข้าราชการในกลุ่มตนเอง */}
                 <label
-                  className={`p-3.5 rounded-xl border flex flex-col gap-2 cursor-pointer transition-all ${
-                    formReviewerType === "official"
+                  className={`p-3.5 rounded-xl border flex flex-col gap-2 cursor-pointer transition-all ${formReviewerType === "official"
                       ? "bg-white border-teal-500 ring-2 ring-teal-500/20 shadow-xs"
                       : "bg-teal-50/40 border-teal-200/60 hover:bg-white"
-                  }`}
+                    }`}
                 >
                   <div className="flex items-start gap-3">
                     <input
@@ -2498,9 +2603,14 @@ export function CarBookingPage({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    สถานที่ปลายทาง / พื้นที่ปฏิบัติงาน <span className="text-rose-500">*</span>
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-slate-700">
+                      สถานที่ปลายทาง / พื้นที่ปฏิบัติงาน <span className="text-rose-500">*</span>
+                    </label>
+                    <span className="text-[10px] text-teal-700 font-bold bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
+                      🎯 ปลายทางด่วน จ.กำแพงเพชร
+                    </span>
+                  </div>
                   <input
                     type="text"
                     required
@@ -2509,6 +2619,42 @@ export function CarBookingPage({
                     onChange={(e) => setFormDestination(e.target.value)}
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-teal-500 transition-colors"
                   />
+
+                  {/* District Presets Chips */}
+                  <div className="mt-2 space-y-1">
+                    <div className="flex items-center justify-between text-[10px] text-slate-500">
+                      <span>⚡ คลิกเลือกเพื่อใส่ปลายทางและระยะทางไป-กลับอัตโนมัติ:</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-2 bg-slate-100/70 rounded-xl border border-slate-200">
+                      {KAMPHAENG_PHET_DISTRICTS.map((dst) => {
+                        const isSelected = formDestination.includes(dst.name.replace("อ.", ""));
+                        return (
+                          <button
+                            key={dst.name}
+                            type="button"
+                            onClick={() => {
+                              setFormDestination(dst.destination);
+                              setFormEstimatedDistance(dst.roundTripKm);
+                              if (formFuelBudgetRequested) {
+                                setFormFuelBudgetAmount(
+                                  Math.round((dst.roundTripKm * formFuelConsumptionRate) / 50) * 50
+                                );
+                              }
+                            }}
+                            className={`px-2 py-1 rounded-lg text-[11px] transition-all cursor-pointer flex items-center gap-1 ${isSelected
+                                ? "bg-teal-600 text-white font-bold shadow-xs ring-1 ring-teal-400"
+                                : "bg-white text-slate-700 border border-slate-200 hover:border-teal-400 hover:bg-teal-50/60 font-medium"
+                              }`}
+                          >
+                            <span>{dst.name}</span>
+                            <span className={isSelected ? "text-teal-100 text-[10px]" : "text-teal-600 text-[10px]"}>
+                              ({dst.roundTripKm} กม.)
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -2543,7 +2689,7 @@ export function CarBookingPage({
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    จำนวนผู้โดยสารทั้งหมด (คน)
+                    จำนวนผู้โดยสาร (คน)
                   </label>
                   <input
                     type="number"
@@ -2553,9 +2699,13 @@ export function CarBookingPage({
                     onChange={(e) => setFormPassengerCount(Number(e.target.value))}
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:border-teal-500 transition-colors"
                   />
-                  <span className="text-[10px] text-slate-400 mt-1 block">
-                    (รวมผู้ขอใช้รถและผู้ร่วมเดินทาง)
-                  </span>
+                  <div className="text-[10px] text-teal-800 bg-teal-50/90 border border-teal-200/70 p-1.5 rounded-lg mt-1.5 font-medium leading-tight">
+                    <span>👥 มีคนนั่งทั้งสิ้น: </span>
+                    <strong className="text-teal-950 font-bold">{totalPassengerCountWithDriver} คน</strong>
+                    <span className="text-[9px] text-teal-700 block mt-0.5">
+                      (ผู้ขอ 1 + ร่วม {selectedPassengers.length} + {formRequireDriver ? "คนขับส่วนกลาง 1" : `คนขับ: ${selectedStaffDriver?.name ? selectedStaffDriver.name.split(" ")[0] : "ขับเอง"}`})
+                    </span>
+                  </div>
                 </div>
 
                 <div>
@@ -2566,10 +2716,19 @@ export function CarBookingPage({
                     type="number"
                     min={1}
                     value={formEstimatedDistance}
-                    onChange={(e) => setFormEstimatedDistance(Number(e.target.value))}
+                    onChange={(e) => {
+                      const dist = Number(e.target.value);
+                      setFormEstimatedDistance(dist);
+                      if (formFuelBudgetRequested) {
+                        setFormFuelBudgetAmount(Math.round((dist * formFuelConsumptionRate) / 50) * 50);
+                      }
+                    }}
                     placeholder="เช่น 150"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:border-teal-500 transition-colors"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:border-teal-500 transition-colors font-mono"
                   />
+                  <span className="text-[10px] text-slate-400 mt-1 block">
+                    (ไป-กลับ ตามแผนการเดินทาง)
+                  </span>
                 </div>
 
                 <div className="md:col-span-2 space-y-2">
@@ -2649,45 +2808,126 @@ export function CarBookingPage({
               </div>
             </div>
 
-            {/* Driver Requirement toggle */}
-            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/60 flex items-center justify-between">
-              <div>
-                <span className="font-bold text-xs text-slate-800">
-                  ต้องการพนักงานขับรถยนต์ราชการ
-                </span>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  หากไม่ต้องการ เจ้าหน้าที่ผู้ขอใช้รถจะต้องเป็นผู้มีใบขับขี่และรับผิดชอบการขับขี่เอง
-                </p>
-              </div>
-
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={formRequireDriver}
-                  onChange={(e) => setFormRequireDriver(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0D9488]"></div>
-              </label>
-            </div>
-
-            {/* Fuel Budget Request Section (Item 1 requirement) */}
-            <div className="p-4 bg-teal-50/50 rounded-2xl border border-teal-200 space-y-3">
+            {/* Driver Requirement toggle & Staff Driver Selection */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/60 space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="font-bold text-xs text-teal-950 flex items-center gap-1.5">
-                    <span>⛽</span>
-                    <span>ขอรับการสนับสนุนงบประมาณค่าน้ำมันเชื้อเพลิง (ถ้ามี)</span>
+                  <span className="font-bold text-xs text-slate-800">
+                    ต้องการพนักงานขับรถยนต์ราชการ
                   </span>
-                  <p className="text-[11px] text-teal-800/80 mt-0.5">
-                    ระบุจำนวนเงินและโครงการงบประมาณ หากต้องการขออนุมัติเบิกจ่ายค่าน้ำมันสำหรับภารกิจนี้
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {formRequireDriver
+                      ? "ฝ่ายบริหารทั่วไปจะเป็นผู้จัดสรรพนักงานขับรถราชการส่วนกลางให้ในขั้นตอนที่ 2"
+                      : "ไม่ใช้พนักงานขับรถส่วนกลาง — ต้องเลือกเจ้าหน้าที่ผู้รับผิดชอบขับขี่รถยนต์จากรายชื่อ"}
+                  </p>
+                </div>
+
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formRequireDriver}
+                    onChange={(e) => {
+                      const req = e.target.checked;
+                      setFormRequireDriver(req);
+                      if (!req && !formSelectedStaffDriverId) {
+                        setFormSelectedStaffDriverId(currentUser?.id || "");
+                      }
+                    }}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0D9488]"></div>
+                </label>
+              </div>
+
+              {/* Selection sub-panel when formRequireDriver is false */}
+              {!formRequireDriver && (
+                <div className="p-3.5 bg-blue-50/80 rounded-xl border border-blue-200 space-y-2.5 animate-fade-in">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-blue-950 flex items-center gap-1.5">
+                      <span>🚗</span>
+                      <span>เลือกเจ้าหน้าที่ผู้ทำหน้าที่ขับขี่รถยนต์ราชการ <span className="text-rose-500">*</span></span>
+                    </label>
+                    <span className="text-[10px] text-blue-700 bg-white px-2 py-0.5 rounded-md border border-blue-200 font-bold shadow-2xs">
+                      ระบุเจ้าหน้าที่ผู้ขับขี่
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-blue-800/80 leading-relaxed">
+                    ตามระเบียบการใช้รถราชการกรณีไม่ขอพนักงานขับรถส่วนกลาง ผู้ขอใช้รถจะต้องระบุเจ้าหน้าที่ผู้มีใบอนุญาตขับขี่และรับผิดชอบการขับขี่ในภารกิจนี้:
+                  </p>
+
+                  <select
+                    required={!formRequireDriver}
+                    value={formSelectedStaffDriverId || currentUser.id}
+                    onChange={(e) => setFormSelectedStaffDriverId(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-blue-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                  >
+                    <option value={currentUser.id}>
+                      👤 {currentUser.name} ({currentUser.position}) - [ผู้ขอใช้รถขับขี่เอง]
+                    </option>
+
+                    {selectedPassengers.length > 0 && (
+                      <optgroup label="── ผู้ร่วมเดินทางในภารกิจนี้ ──">
+                        {selectedPassengers.map((p) => (
+                          <option key={`co_${p.id}`} value={p.id}>
+                            🚗 {p.name} ({p.division || p.position})
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+
+                    <optgroup label="── ข้าราชการ/เจ้าหน้าที่สังกัด สนง.พมจ.กำแพงเพชร ──">
+                      {members
+                        .filter((m) => m.id !== currentUser.id && !selectedPassengers.some((p) => p.id === m.id))
+                        .map((m) => (
+                          <option key={`m_${m.id}`} value={m.id}>
+                            {m.name} ({m.division || m.position})
+                          </option>
+                        ))}
+                    </optgroup>
+                  </select>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-blue-200/60 text-[11px] text-blue-900">
+                    <span className="flex items-center gap-1.5">
+                      <span>✓ เจ้าหน้าที่ผู้ขับขี่ที่ระบุในคำขอ:</span>
+                      <strong className="text-blue-950 font-bold underline">
+                        {selectedStaffDriver?.name}
+                      </strong>
+                      <span className="text-blue-700 font-normal">
+                        ({selectedStaffDriver?.position})
+                      </span>
+                    </span>
+                    <span className="text-[10px] text-slate-500">
+                      * จะระบุในเอกสารขอใช้รถ &quot;โดยมี &#123;คนขับ&#125; เป็นพนักงานขับรถยนต์&quot;
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Fuel Budget Request Section (Template & Auto Distance-Rate Calculation) */}
+            <div className="p-4.5 bg-gradient-to-br from-amber-50/60 via-teal-50/50 to-white rounded-2xl border border-amber-200/80 shadow-xs space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
+                    <span className="text-base">⛽</span>
+                    <span>ขอรับการสนับสนุนงบประมาณค่าน้ำมันเชื้อเพลิงและหล่อลื่น (ถ้ามี)</span>
+                  </span>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    ระบบคำนวณระยะทางและค่าน้ำมันอัตโนมัติตามอัตราสิ้นเปลือง พร้อมระบุโครงการที่ขอเบิกตามแบบฟอร์ม
                   </p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
                     type="checkbox"
                     checked={formFuelBudgetRequested}
-                    onChange={(e) => setFormFuelBudgetRequested(e.target.checked)}
+                    onChange={(e) => {
+                      const enabled = e.target.checked;
+                      setFormFuelBudgetRequested(enabled);
+                      if (enabled) {
+                        setFormFuelBudgetAmount(calculatedFuelEstimate.rounded);
+                      }
+                    }}
                     className="sr-only peer"
                   />
                   <div className="w-11 h-6 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0D9488]"></div>
@@ -2695,34 +2935,133 @@ export function CarBookingPage({
               </div>
 
               {formFuelBudgetRequested && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-teal-200/60 text-xs">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      จำนวนเงินงบประมาณค่าน้ำมัน (บาท) <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      min={100}
-                      step={50}
-                      required={formFuelBudgetRequested}
-                      value={formFuelBudgetAmount}
-                      onChange={(e) => setFormFuelBudgetAmount(Number(e.target.value))}
-                      className="w-full px-3.5 py-2.5 bg-white border border-teal-300 rounded-xl text-xs font-mono font-bold text-teal-900 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
-                      placeholder="เช่น 1,500"
-                    />
+                <div className="space-y-4 pt-3 border-t border-amber-200/70 text-xs">
+                  {/* Rate Selection & Live Calculation Formula */}
+                  <div className="p-3.5 bg-white rounded-xl border border-amber-200/90 shadow-2xs space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <label className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                        <span>⚡</span>
+                        <span>อัตราคำนวณค่าน้ำมันต่อระยะทาง (บาท / กิโลเมตร):</span>
+                      </label>
+                      <div className="flex items-center gap-1.5">
+                        {[
+                          { label: "3.50 บ./กม. (เก๋ง/อีโคคาร์)", rate: 3.5 },
+                          { label: "4.00 บ./กม. (มาตรฐาน ดีเซล)", rate: 4.0 },
+                          { label: "4.50 บ./กม. (รถตู้ / 4WD)", rate: 4.5 },
+                        ].map((opt) => (
+                          <button
+                            key={opt.rate}
+                            type="button"
+                            onClick={() => {
+                              setFormFuelConsumptionRate(opt.rate);
+                              const newAmt = Math.round((formEstimatedDistance * opt.rate) / 50) * 50;
+                              setFormFuelBudgetAmount(newAmt);
+                            }}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${formFuelConsumptionRate === opt.rate
+                                ? "bg-amber-500 text-white shadow-xs"
+                                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                              }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Formula Bar */}
+                    <div className="p-3 bg-amber-50/80 rounded-xl border border-amber-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <div className="space-y-0.5">
+                        <div className="text-slate-600 font-medium">
+                          สูตรคำนวณ:{" "}
+                          <span className="font-mono font-bold text-slate-900">
+                            {formEstimatedDistance} กม. × {formFuelConsumptionRate.toFixed(2)} บ./กม.
+                          </span>{" "}
+                          = <span className="font-mono font-bold text-amber-900">{calculatedFuelEstimate.exact.toLocaleString()} บาท</span>
+                        </div>
+                        <div className="text-[11px] text-amber-800">
+                          ปัดเศษเบิกจ่ายราชการ (รอบละ 50 บาท):{" "}
+                          <strong className="text-amber-950 font-bold text-xs font-mono">
+                            {calculatedFuelEstimate.rounded.toLocaleString()} บาท
+                          </strong>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setFormFuelBudgetAmount(calculatedFuelEstimate.rounded)}
+                        className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer flex items-center gap-1"
+                      >
+                        <span>⚡</span>
+                        <span>ใช้อัตราคำนวณนี้ ({calculatedFuelEstimate.rounded.toLocaleString()} บาท)</span>
+                      </button>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      ระบุโครงการ / แหล่งงบประมาณที่ขอเบิก <span className="text-rose-500">*</span>
+
+                  {/* Amount & Project Selection */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        จำนวนเงินงบประมาณค่าน้ำมันที่ขอเบิก (บาท) <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        min={100}
+                        step={50}
+                        required={formFuelBudgetRequested}
+                        value={formFuelBudgetAmount}
+                        onChange={(e) => setFormFuelBudgetAmount(Number(e.target.value))}
+                        className="w-full px-3.5 py-2.5 bg-white border border-teal-300 rounded-xl text-xs font-mono font-bold text-teal-900 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                        placeholder="เช่น 1,200"
+                      />
+                      <span className="text-[10px] text-slate-400 mt-1 block">
+                        (ระบุจำนวนเงินที่จะปรากฏในช่อง &quot;จำนวน &#123;ขอเบิกบิลเติมน้ำมัน&#125; บาท&quot;)
+                      </span>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        โครงการ / แหล่งงบประมาณที่ขอเบิก <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required={formFuelBudgetRequested}
+                        value={formFuelProjectName}
+                        onChange={(e) => {
+                          setFormFuelProjectName(e.target.value);
+                          setFormFuelBudgetSource(e.target.value);
+                        }}
+                        className="w-full px-3.5 py-2.5 bg-white border border-teal-300 rounded-xl text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                        placeholder="เช่น งบดำเนินงานสำนักงาน พมจ.กำแพงเพชร"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Preset Project Chips */}
+                  <div className="space-y-1.5 pt-1">
+                    <label className="block text-[11px] font-bold text-slate-600">
+                      💡 แหล่งงบประมาณ / โครงการที่ขอเบิกบ่อย (คลิกเลือกด่วน):
                     </label>
-                    <input
-                      type="text"
-                      required={formFuelBudgetRequested}
-                      value={formFuelBudgetSource}
-                      onChange={(e) => setFormFuelBudgetSource(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-white border border-teal-300 rounded-xl text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
-                      placeholder="เช่น งบดำเนินงานกลุ่มงาน..., โครงการพัฒนาคุณภาพชีวิต..."
-                    />
+                    <div className="flex flex-wrap gap-1.5">
+                      {FUEL_PROJECT_PRESETS.map((proj) => {
+                        const isSelected = formFuelProjectName === proj;
+                        return (
+                          <button
+                            key={proj}
+                            type="button"
+                            onClick={() => {
+                              setFormFuelProjectName(proj);
+                              setFormFuelBudgetSource(proj);
+                            }}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] transition-all cursor-pointer ${isSelected
+                                ? "bg-teal-700 text-white font-bold shadow-2xs"
+                                : "bg-white text-slate-700 border border-slate-200 hover:border-teal-300 hover:bg-teal-50"
+                              }`}
+                          >
+                            {isSelected ? "✓ " : ""}{proj}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               )}
@@ -2742,7 +3081,7 @@ export function CarBookingPage({
                 className="px-6 py-2.5 bg-[#0D9488] hover:bg-[#0b7a6f] text-white rounded-xl text-sm font-bold shadow-md shadow-teal-700/20 transition-colors cursor-pointer flex items-center gap-2"
               >
                 <span>✓</span>
-                <span>ยืนยันและส่งคำขอใช้รถ (พร้อมส่ง Line Notify)</span>
+                <span>ยืนยันและส่งคำขอใช้รถ (แจ้งเตือนศูนย์การแจ้งเตือนในระบบ)</span>
               </button>
             </div>
           </form>
@@ -2772,6 +3111,7 @@ export function CarBookingPage({
           currentUser={currentUser}
           vehicles={vehicles}
           allBookings={bookings}
+          members={members}
           onDivisionEndorse={handleDivisionEndorse}
           onFleetAssign={handleFleetAssign}
           onAdminHeadEndorse={handleAdminHeadEndorse}

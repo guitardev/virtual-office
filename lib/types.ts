@@ -332,6 +332,9 @@ export interface CarBookingRequest {
   fuelBudgetRequested?: boolean;
   fuelBudgetAmount?: number;
   fuelBudgetSource?: string;
+  fuelProjectName?: string;
+  fuelConsumptionRate?: number;
+  totalPassengerCountWithDriver?: number;
   
   // สถานะและกระบวนการอนุมัติ 4 ขั้น (7-Step Workflow)
   status: BookingStatus;
@@ -405,7 +408,7 @@ export interface BookingNotificationLog {
   message: string;
   recipientRole: string; // เช่น "ผู้ขอใช้รถ", "หัวหน้ากลุ่ม", "เจ้าหน้าที่ฝ่ายบริหาร (จัดสรรรถ)", "หัวหน้าฝ่ายบริหารทั่วไป", "พมจ.กำแพงเพชร"
   recipientName: string;
-  channel: "line_notify" | "system_alert";
+  channel: "webapp_notification" | "system_alert" | "line_notify";
   status: "sent" | "delivered";
 }
 

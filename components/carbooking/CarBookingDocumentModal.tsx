@@ -162,6 +162,9 @@ export function CarBookingDocumentModal({
         purpose: booking.purpose,
         passengersList: booking.passengersList,
         passengerCount: booking.passengerCount,
+        totalPassengerCountWithDriver:
+          booking.totalPassengerCountWithDriver ||
+          (booking.passengerCount || 1) + (booking.requireDriver !== false ? 1 : 0),
         estimatedDistance: booking.estimatedDistance || 150,
         startDateThai: depDate.fullDate,
         startTime: depDate.time,
@@ -169,6 +172,9 @@ export function CarBookingDocumentModal({
         endTime: retDate.time,
         fuelBudgetRequested: booking.fuelBudgetRequested,
         fuelBudgetAmount: booking.fuelBudgetAmount,
+        fuelBudgetSource: booking.fuelBudgetSource,
+        fuelProjectName: booking.fuelProjectName,
+        fuelConsumptionRate: booking.fuelConsumptionRate,
         day: createdDate.day,
         month: createdDate.month,
         year: createdDate.year,
@@ -400,11 +406,12 @@ export function CarBookingDocumentModal({
                 </span>
               </div>
 
-              {/* Line 6: มีคนนั่ง, ระยะทางโดยประมาณ */}
+              {/* Line 6: มีคนนั่งทั้งสิ้น, ระยะทางโดยประมาณ */}
               <div className="flex items-baseline">
-                <span className="shrink-0">มีคนนั่ง </span>
+                <span className="shrink-0">มีคนนั่งทั้งสิ้น </span>
                 <span className="min-w-[40px] border-b border-dotted border-black text-center font-normal">
-                  {booking.passengerCount ?? 1}
+                  {booking.totalPassengerCountWithDriver ||
+                    ((booking.passengerCount ?? 1) + (booking.requireDriver !== false ? 1 : 0))}
                 </span>
                 <span className="shrink-0"> คน   ระยะทางโดยประมาณ </span>
                 <span className="min-w-[50px] border-b border-dotted border-black text-center font-normal">
@@ -444,7 +451,13 @@ export function CarBookingDocumentModal({
                 <span className="shrink-0">ขอเบิกน้ำมันเชื้อเพลิงและหล่อลื่น  จำนวน </span>
                 <span className="min-w-[120px] border-b border-dotted border-black text-center font-normal">
                   {booking.fuelBudgetRequested && booking.fuelBudgetAmount
-                    ? `${booking.fuelBudgetAmount.toLocaleString()} บาท`
+                    ? `${booking.fuelBudgetAmount.toLocaleString()} บาท${
+                        booking.fuelProjectName
+                          ? ` (โครงการ: ${booking.fuelProjectName})`
+                          : booking.fuelBudgetSource
+                          ? ` (${booking.fuelBudgetSource})`
+                          : ""
+                      }`
                     : "- บาท"}
                 </span>
               </div>

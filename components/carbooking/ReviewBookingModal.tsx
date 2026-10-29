@@ -9,6 +9,7 @@ interface ReviewBookingModalProps {
   currentUser: Member;
   vehicles?: Vehicle[];
   allBookings?: CarBookingRequest[];
+  members?: Member[];
   onDivisionEndorse?: (bookingId: string, notes: string) => void;
   onFleetAssign?: (bookingId: string, vehicleId: string, assignedDriver: string, notes: string) => void;
   onAdminHeadEndorse?: (bookingId: string, notes: string) => void;
@@ -24,6 +25,7 @@ export function ReviewBookingModal({
   currentUser,
   vehicles = [],
   allBookings = [],
+  members = [],
   onDivisionEndorse,
   onFleetAssign,
   onAdminHeadEndorse,
@@ -513,6 +515,40 @@ export function ReviewBookingModal({
                         className="w-full px-3 py-2 bg-white border border-blue-300 rounded-xl text-xs text-slate-900"
                       />
                     )}
+                  </div>
+                )}
+
+                {!requireDriver && (
+                  <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <label className="font-semibold text-blue-950 flex items-center gap-1.5">
+                        <span>👤</span>
+                        <span>เจ้าหน้าที่ผู้ทำหน้าที่ขับขี่ (ขับขี่เอง):</span>
+                      </label>
+                      <span className="text-[10px] bg-white px-2 py-0.5 rounded border border-blue-200 font-bold text-blue-800">
+                        ไม่ขอพนักงานขับรถส่วนกลาง
+                      </span>
+                    </div>
+
+                    <select
+                      value={assignedDriver || booking.assignedDriver || ""}
+                      onChange={(e) => setAssignedDriver(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-blue-300 rounded-xl text-xs font-semibold text-slate-900"
+                    >
+                      {booking.assignedDriver && (
+                        <option value={booking.assignedDriver}>
+                          {booking.assignedDriver} (ระบุโดยผู้ขอใช้รถ)
+                        </option>
+                      )}
+                      <option value={`${booking.requesterName} (ผู้ขอขับขี่เอง)`}>
+                        {booking.requesterName} (ผู้ขอขับขี่เอง)
+                      </option>
+                      {members.map((m) => (
+                        <option key={m.id} value={`${m.name} (เจ้าหน้าที่ขับขี่เอง)`}>
+                          {m.name} ({m.position})
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 )}
               </div>

@@ -298,49 +298,216 @@ export function buildUnifiedNotifications({
       });
   }
 
-  // ─── 4. CAR BOOKING NOTIFICATIONS ───
+  // ─── 4. CAR BOOKING NOTIFICATIONS (WEBAPP NOTIFICATION CENTER) ───
   carBookings.forEach((b) => {
-    // If Admin/Manager needs to review
-    if (
-      (currentUserRole === "admin" && b.status === "endorsed") ||
-      (currentUserRole === "manager" && b.status === "pending_review")
-    ) {
-      const notifId = `car_review_${b.id}_${b.status}`;
-      notifs.push({
-        id: notifId,
-        type: "carbooking",
-        title: `คำขอจองรถราชการ: ${b.destination}`,
-        message: `${b.requesterName} ขอใช้ยานพาหนะ วันที่ ${b.departureTime?.split("T")[0] || b.departureTime || ""}`,
-        timestamp: b.departureTime || "วันนี้",
-        createdAt: new Date().toISOString(),
-        isRead: readIds.has(notifId),
-        priority: "normal",
-        senderName: b.requesterName,
-        link: {
-          page: "carbooking",
-          targetId: b.id,
-        },
-      });
+    const myName = currentUser.name || "";
+    const myDivision = currentUser.division || "";
+    const myPosition = currentUser.position || "";
+    const isRequester =
+      b.requesterId === currentUser.id ||
+      (b.requesterName && myName && b.requesterName.trim() === myName.trim());
+
+    // Stage 1: Pending Division Head / Peer Official Review
+    if (b.status === "pending_division_head") {
+      const isDivReviewer =
+        b.divisionReviewerId === currentUser.id ||
+        (b.divisionReviewerName && myName && b.divisionReviewerName.includes(myName)) ||
+        (myDivision && myDivision === b.requesterDivision && (currentUserRole === "manager" || myPosition.includes("หัวหน้า") || currentUser.personnelType === "ข้าราชการ")) ||
+        currentUserRole === "admin";
+
+      if (isDivReviewer) {
+        const notifId = `car_stg1_${b.id}`;
+        notifs.push({
+          id: notifId,
+          type: "carbooking",
+          title: `รอความเห็นชอบ: คำขอใช้รถ ${b.requestNo} (${b.destination})`,
+          message: `${b.requesterName} (${b.requesterDivision}) ขอใช้รถไป "${b.destination}" เพื่อ ${b.purpose} รอท่านพิจารณาชั้นต้น`,
+          timestamp: b.createdAt || "วันนี้",
+          createdAt: new Date().toISOString(),
+          isRead: readIds.has(notifId),
+          priority: "urgent",
+          senderName: b.requesterName,
+          link: { page: "carbooking", targetId: b.id },
+        });
+      }
     }
 
-    // If currentUser is requester and booking was approved
-    if (b.requesterId === currentUser.id && b.status === "approved") {
-      const notifId = `car_approved_${b.id}`;
+    // Stage 2: Pending Fleet & Driver Assignment
+    if (b.status === "pending_fleet_assignment") {
+      const isFleetDispatcher =
+        b.fleetDispatcherId === currentUser.id ||
+        (b.fleetDispatcherName && myName && b.fleetDispatcherName.includes(myName)) ||
+        currentUser.id === "syno_ปภาวิน" ||
+        currentUser.id === "syno_เสกพล" ||
+        myName.includes("ปภาวิน") ||
+        myName.includes("เสกพล") ||
+        myDivision.includes("ฝ่ายบริหารทั่วไป") ||
+        currentUserRole === "admin";
+
+      if (isFleetDispatcher) {
+        const notifId = `car_stg2_${b.id}`;
+        notifs.push({
+          id: notifId,
+          type: "carbooking",
+          title: `รอจัดสรรยานพาหนะ: คำขอ ${b.requestNo}`,
+          message: `คำขอไป "${b.destination}" ผ่านความเห็นชอบชั้นต้นแล้ว รอฝ่ายบริหารจัดสรรรถและคนขับ`,
+          timestamp: b.divisionReviewerActionAt || "วันนี้",
+          createdAt: new Date().toISOString(),
+          isRead: readIds.has(notifId),
+          priority: "urgent",
+          senderName: b.divisionReviewerName || "หัวหน้ากลุ่ม",
+          link: { page: "carbooking", targetId: b.id },
+        });
+      }
+    }
+
+    // Stage 3: Pending Admin Head Endorsement
+    if (b.status === "pending_admin_head") {
+      const isAdminHead =
+        currentUser.id === "syno_เสกพล" ||
+        myName.includes("เสกพล") ||
+        (myDivision.includes("ฝ่ายบริหารทั่วไป") && (currentUserRole === "manager" || myPosition.includes("หัวหน้า"))) ||
+        currentUserRole === "admin";
+
+      if (isAdminHead) {
+        const notifId = `car_stg3_${b.id}`;
+        notifs.push({
+          id: notifId,
+          type: "carbooking",
+          title: `รอเสนอความเห็น: คำขอ ${b.requestNo} [${b.licensePlate || "-"}]`,
+          message: `รถ ${b.vehicleName || "ส่วนกลาง"} จัดสรรแล้ว (คนขับ: ${b.assignedDriver || "-"}) รอ หน.ฝ่ายบริหาร เสนอความเห็นต่อ พมจ.`,
+          timestamp: b.fleetDispatcherActionAt || "วันนี้",
+          createdAt: new Date().toISOString(),
+          isRead: readIds.has(notifId),
+          priority: "urgent",
+          senderName: b.fleetDispatcherName || "เจ้าหน้าที่จัดสรรรถ",
+          link: { page: "carbooking", targetId: b.id },
+        });
+      }
+    }
+
+    // Stage 4: Pending Provincial Head Final Approval
+    if (b.status === "pending_provincial" || b.status === "endorsed") {
+      const isProvincialHead =
+        myName.includes("มะลิวัน") ||
+        myPosition.includes("พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัด") ||
+        currentUserRole === "admin" ||
+        (currentUserRole as string) === "director";
+
+      if (isProvincialHead) {
+        const notifId = `car_stg4_${b.id}`;
+        notifs.push({
+          id: notifId,
+          type: "carbooking",
+          title: `รอ พมจ. พิจารณาอนุมัติ: คำขอ ${b.requestNo}`,
+          message: `หน.ฝ่ายบริหารเสนอความเห็นชอบแล้ว เพื่อโปรดพิจารณาอนุมัติใช้รถไป ${b.destination}`,
+          timestamp: b.adminHeadActionAt || "วันนี้",
+          createdAt: new Date().toISOString(),
+          isRead: readIds.has(notifId),
+          priority: "emergency",
+          senderName: b.adminHeadName || "หน.ฝ่ายบริหารทั่วไป",
+          link: { page: "carbooking", targetId: b.id },
+        });
+      }
+    }
+
+    // Stage 5: Approved (To Requester & Assigned Driver)
+    if (b.status === "approved") {
+      if (isRequester) {
+        const notifId = `car_approved_${b.id}`;
+        notifs.push({
+          id: notifId,
+          type: "carbooking",
+          title: `อนุมัติคำขอใช้รถราชการแล้ว (${b.requestNo})`,
+          message: `พมจ. อนุมัติคำขอไป ${b.destination} แล้ว รถ: ${b.vehicleName || "ส่วนกลาง"} [${b.licensePlate || "-"}] พลขับ: ${b.assignedDriver || "ผู้ขอขับขี่เอง"}`,
+          timestamp: b.approverActionAt || "อนุมัติแล้ว",
+          createdAt: new Date().toISOString(),
+          isRead: readIds.has(notifId),
+          priority: "normal",
+          senderName: b.approverName || "พมจ.กำแพงเพชร",
+          link: { page: "carbooking", targetId: b.id },
+        });
+      }
+
+      const isDriver =
+        b.assignedDriver &&
+        myName &&
+        (b.assignedDriver.includes(myName) || myName.includes(b.assignedDriver));
+      if (isDriver) {
+        const notifId = `car_driver_${b.id}`;
+        notifs.push({
+          id: notifId,
+          type: "carbooking",
+          title: `ภารกิจพนักงานขับรถ: คำขอ ${b.requestNo}`,
+          message: `ท่านได้รับมอบหมายขับรถ ${b.vehicleName || ""} [${b.licensePlate || "-"}] ไป ${b.destination} กำหนดออกเดินทาง ${b.departureTime?.replace("T", " ") || ""} น.`,
+          timestamp: b.departureTime?.replace("T", " ") || "ภารกิจใหม่",
+          createdAt: new Date().toISOString(),
+          isRead: readIds.has(notifId),
+          priority: "urgent",
+          senderName: "งานยานพาหนะ ฝ่ายบริหารทั่วไป",
+          link: { page: "carbooking", targetId: b.id },
+        });
+      }
+    }
+
+    // Stage 6: Rejected (To Requester)
+    if (b.status === "rejected" && isRequester) {
+      const notifId = `car_rejected_${b.id}`;
       notifs.push({
         id: notifId,
         type: "carbooking",
-        title: `อนุมัติการจองรถราชการแล้ว`,
-        message: `เดินทางไป ${b.destination} วันที่ ${b.departureTime?.split("T")[0] || b.departureTime || ""} (พลขับ: ${b.assignedDriver || "จัดสรรแล้ว"})`,
-        timestamp: "อนุมัติแล้ว",
+        title: `คำขอใช้รถไม่ได้รับการอนุมัติ (${b.requestNo})`,
+        message: `คำขอไป ${b.destination} ไม่ได้รับความเห็นชอบ/อนุมัติ: ${b.approverNotes || b.adminHeadNotes || b.divisionReviewerNotes || "ไม่ระบุเหตุผล"}`,
+        timestamp: b.approverActionAt || b.adminHeadActionAt || b.divisionReviewerActionAt || "วันนี้",
         createdAt: new Date().toISOString(),
         isRead: readIds.has(notifId),
         priority: "urgent",
-        senderName: "หัวหน้าฝ่ายบริหารทั่วไป",
-        link: {
-          page: "carbooking",
-          targetId: b.id,
-        },
+        senderName: b.approverName || b.adminHeadName || b.divisionReviewerName || "ผู้พิจารณา",
+        link: { page: "carbooking", targetId: b.id },
       });
+    }
+
+    // Return Reminder
+    const hasReminder = b.notifications?.some((n) => n.type === "return_reminder");
+    if (hasReminder && isRequester) {
+      const notifId = `car_reminder_${b.id}`;
+      notifs.push({
+        id: notifId,
+        type: "carbooking",
+        title: `แจ้งเตือนส่งคืนรถยนต์ราชการ: ${b.requestNo}`,
+        message: `ถึงกำหนดส่งคืนรถ ${b.vehicleName || ""} [${b.licensePlate || "-"}] แล้ว กรุณาตรวจสภาพ เลขไมล์ และเกจน้ำมันเพื่อปิดภารกิจ`,
+        timestamp: "ถึงกำหนดส่งคืน",
+        createdAt: new Date().toISOString(),
+        isRead: readIds.has(notifId),
+        priority: "urgent",
+        senderName: "งานยานพาหนะ ฝ่ายบริหารทั่วไป",
+        link: { page: "carbooking", targetId: b.id },
+      });
+    }
+
+    // Stage 7: Return Completed / Mission Closed
+    if (b.status === "completed") {
+      const isFleet =
+        currentUser.id === "syno_ปภาวิน" ||
+        currentUser.id === "syno_เสกพล" ||
+        myName.includes("เสกพล") ||
+        myDivision.includes("ฝ่ายบริหารทั่วไป");
+
+      if (isRequester || isFleet) {
+        const notifId = `car_returned_${b.id}`;
+        notifs.push({
+          id: notifId,
+          type: "carbooking",
+          title: `ส่งคืนยานพาหนะเรียบร้อย: ${b.requestNo}`,
+          message: `ได้รับคืนรถยนต์ ${b.vehicleName || ""} [${b.licensePlate || "-"}] และกุญแจเรียบร้อย ปิดภารกิจสมบูรณ์`,
+          timestamp: b.returnTime?.replace("T", " ") || "เสร็จสิ้น",
+          createdAt: new Date().toISOString(),
+          isRead: readIds.has(notifId),
+          priority: "normal",
+          senderName: "งานยานพาหนะ ฝ่ายบริหารทั่วไป",
+          link: { page: "carbooking", targetId: b.id },
+        });
+      }
     }
   });
 

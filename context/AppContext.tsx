@@ -1769,12 +1769,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       (n) => n.type === "circular" && !n.isRead
     ).length;
 
+    const unreadCarBookingCount = systemNotifications.filter(
+      (n) => n.type === "carbooking" && !n.isRead
+    ).length;
+
     return {
       dashboard: 0,
       chat: unreadChatCount,
       task: taskCount,
       meetings: meetingCount,
-      carbooking: carCount,
+      carbooking: unreadCarBookingCount > 0 ? unreadCarBookingCount : carCount,
       circular: unreadCircularCount,
       files: 0,
       gallery: 0,

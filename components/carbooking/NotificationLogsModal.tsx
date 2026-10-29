@@ -125,8 +125,8 @@ export function NotificationLogsModal({
               </h2>
               <p className="text-xs text-emerald-100">
                 {booking
-                  ? `ประวัติการส่ง Line Notify และ System Alerts สำหรับคำขอ ${booking.requestNo}`
-                  : `บันทึกการส่งการแจ้งเตือนไปยังบุคคลที่เกี่ยวข้องในทุกขั้นตอนการขอใช้รถ`}
+                  ? `ประวัติการแจ้งเตือนผ่านศูนย์การแจ้งเตือนในระบบ WebApp สำหรับคำขอ ${booking.requestNo}`
+                  : `บันทึกการส่งการแจ้งเตือนไปยังศูนย์การแจ้งเตือนในระบบ WebApp ในทุกขั้นตอนการขอใช้รถ`}
               </p>
             </div>
           </div>
@@ -203,7 +203,7 @@ export function NotificationLogsModal({
             </div>
           ) : (
             displayedList.map((n, idx) => {
-              const isLine = n.channel === "line_notify";
+              const isWebNotif = n.channel === "webapp_notification" || n.channel === "system_alert" || !n.channel;
               return (
                 <div
                   key={n.id || idx}
@@ -212,13 +212,9 @@ export function NotificationLogsModal({
                   <div className="flex flex-wrap items-start justify-between gap-2 pb-1.5 border-b border-slate-100">
                     <div className="flex items-center gap-2">
                       <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                          isLine
-                            ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
-                            : "bg-blue-100 text-blue-800 border border-blue-300"
-                        }`}
+                        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 text-teal-800 border border-teal-300"
                       >
-                        <span>{isLine ? "🟢 Line Notify" : "🔵 System Alert"}</span>
+                        <span>🔔 ศูนย์การแจ้งเตือน (WebApp)</span>
                       </span>
                       <span className="font-bold text-slate-900 text-xs">{n.title}</span>
                     </div>
@@ -231,12 +227,12 @@ export function NotificationLogsModal({
                     </div>
                   </div>
 
-                  {/* Simulated Line Balloon Message */}
-                  <div className="p-3 bg-[#E8F8F5] border border-[#A3E4D7] rounded-xl text-xs text-slate-800 font-body leading-relaxed space-y-1">
+                  {/* WebApp Notification Card Message */}
+                  <div className="p-3 bg-teal-50/70 border border-teal-200/80 rounded-xl text-xs text-slate-800 font-body leading-relaxed space-y-1">
                     <div className="flex items-center gap-1.5 text-[11px] font-bold text-teal-900">
-                      <span>💬 ข้อความแจ้งเตือน:</span>
+                      <span>🔔 ข้อความแจ้งเตือนศูนย์การแจ้งเตือน WebApp:</span>
                     </div>
-                    <p className="text-slate-900">{n.message}</p>
+                    <p className="text-slate-900">{n.message.replace(/^\[Line Notify\]\s*/, "")}</p>
                   </div>
 
                   {/* Recipient & Action Info */}
