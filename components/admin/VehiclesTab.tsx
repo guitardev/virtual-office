@@ -1055,14 +1055,14 @@ export function VehiclesTab({ currentUser, showToast, members }: VehiclesTabProp
                         {/* Actions (CRUD) */}
                         <td className="py-3 px-4 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1.5">
-                            {/* Document View / Print */}
+                            {/* Document View / Download DOCX */}
                             <button
                               type="button"
                               onClick={() => setSelectedDocBooking(b)}
-                              className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
-                              title="ดูและพิมพ์เอกสารขอใช้รถยนต์ราชการ"
+                              className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                              title="ดูและดาวน์โหลดเอกสารขอใช้รถ (.docx)"
                             >
-                              📄
+                              📥
                             </button>
 
                             {/* Review / Approval Modal */}

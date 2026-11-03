@@ -14,10 +14,6 @@ export function CarBookingDocumentModal({
 }: CarBookingDocumentModalProps) {
   const [isDownloading, setIsDownloading] = useState(false);
 
-  const handlePrint = () => {
-    window.print();
-  };
-
   const THAI_MONTHS_MAP: Record<string, string> = {
     "ม.ค.": "มกราคม",
     "ก.พ.": "กุมภาพันธ์",
@@ -264,19 +260,11 @@ export function CarBookingDocumentModal({
               type="button"
               onClick={handleDownloadDocx}
               disabled={isDownloading}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
-              title="ดาวน์โหลดเป็นไฟล์ Microsoft Word (.docx)"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 disabled:bg-blue-400 text-white rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition-all cursor-pointer"
+              title="ดาวน์โหลดเป็นไฟล์ Microsoft Word (.docx) เพื่อนำไปปรับแก้และพิมพ์เอกสาร"
             >
               <span>📥</span>
-              <span>{isDownloading ? "กำลังสร้างไฟล์..." : "ดาวน์โหลด Word (.docx)"}</span>
-            </button>
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#4F46E5] hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
-            >
-              <span>🖨️</span>
-              <span>พิมพ์เอกสาร (A4)</span>
+              <span>{isDownloading ? "กำลังสร้างไฟล์ Word..." : "ดาวน์โหลดไฟล์ Word (.docx)"}</span>
             </button>
             <button
               type="button"
@@ -285,6 +273,16 @@ export function CarBookingDocumentModal({
             >
               ✕ ปิด
             </button>
+          </div>
+        </div>
+
+        {/* Suggestion Banner */}
+        <div className="bg-amber-50 border-b border-amber-200/80 px-6 py-2.5 flex items-center justify-between text-xs text-amber-900 font-medium shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="text-base">💡</span>
+            <span>
+              <strong>คำแนะนำ:</strong> ให้ดาวน์โหลดไฟล์ <strong>Word (.docx)</strong> เพื่อนำไปเปิดตรวจสอบ ปรับแก้รายละเอียดเพิ่มเติมตามแบบฟอร์ม แล้วจึงสั่งพิมพ์ลงกระดาษจริง
+            </span>
           </div>
         </div>
 

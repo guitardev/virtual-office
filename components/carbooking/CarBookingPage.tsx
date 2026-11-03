@@ -584,8 +584,8 @@ export function CarBookingPage({
           requesterName: b.requesterName,
           destination: b.destination,
           notificationNotice: "ได้รับอนุญาตจาก พมจ.กำแพงเพชร เรียบร้อยแล้ว",
-          actionText: "พิมพ์เอกสาร",
-          actionIcon: "📄",
+          actionText: "แบบขอใช้รถ (Word)",
+          actionIcon: "📥",
           onAction: () => setSelectedDocBooking(b),
         });
       }
@@ -2298,10 +2298,10 @@ export function CarBookingPage({
                         <button
                           type="button"
                           onClick={() => setSelectedDocBooking(b)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 rounded-xl text-xs font-bold transition-colors cursor-pointer border border-blue-200"
                         >
-                          <span>📄</span>
-                          <span>แบบขออนุญาตใช้รถ (พิมพ์/PDF)</span>
+                          <span>📥</span>
+                          <span>แบบขออนุญาตใช้รถ (Word .docx)</span>
                         </button>
 
                         {/* Paperless Dispatch QR Code (Direct scan button) */}
