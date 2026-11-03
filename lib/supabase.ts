@@ -84,6 +84,65 @@ function createDebouncedFetcher<T>(
 }
 
 /**
+ * Subscription Multiplexer (Observer Pattern) for table-based realtime subscriptions.
+ * Ensures exactly ONE Supabase channel is opened per table, regardless of how many
+ * components or pages subscribe to it. This prevents "cannot add postgres_changes callbacks
+ * after subscribe()" collisions and excessive connection/egress usage.
+ */
+function createTableSubscriptionMultiplexer<T>(
+  tableName: string,
+  fetcher: () => Promise<T>,
+  debounceMs = 300
+) {
+  const subscribers = new Set<(data: T) => void>();
+  let channel: any = null;
+  let timer: any = null;
+
+  return (callback: (data: T) => void) => {
+    subscribers.add(callback);
+
+    if (!channel && supabase) {
+      channel = supabase
+        .channel(`public:${tableName}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: tableName },
+          () => {
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(async () => {
+              try {
+                const data = await fetcher();
+                subscribers.forEach((cb) => {
+                  try {
+                    cb(data);
+                  } catch (e) {
+                    console.error(`Error in subscriber callback for ${tableName}:`, e);
+                  }
+                });
+              } catch (err) {
+                console.warn(`Multiplexer fetcher error for ${tableName}:`, err);
+              }
+            }, debounceMs);
+          }
+        )
+        .subscribe();
+    }
+
+    return () => {
+      subscribers.delete(callback);
+      if (subscribers.size === 0 && channel) {
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
+        supabase?.removeChannel(channel);
+        channel = null;
+      }
+    };
+  };
+}
+
+/**
  * Map Supabase user row to Member object
  */
 export function mapRowToMember(row: any): Member {
@@ -317,24 +376,10 @@ export async function deleteMember(id: string): Promise<boolean> {
 /**
  * Setup Realtime Subscription for live updates
  */
+const membersMultiplexer = createTableSubscriptionMultiplexer("users", fetchMembers, 300);
+
 export function subscribeToMembers(callback: (members: Member[]) => void) {
-  if (!supabase) return () => {};
-
-  const debounced = createDebouncedFetcher(fetchMembers, callback, 300);
-  const channel = supabase
-    .channel("public:users")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "users" },
-      () => {
-        debounced();
-      }
-    )
-    .subscribe();
-
-  return () => {
-    supabase.removeChannel(channel);
-  };
+  return membersMultiplexer(callback);
 }
 
 /**
@@ -514,24 +559,10 @@ export async function saveAccessRequest(req: AccessRequest): Promise<boolean> {
 /**
  * Setup Realtime Subscription for access requests
  */
+const accessRequestsMultiplexer = createTableSubscriptionMultiplexer("access_requests", fetchAccessRequests, 300);
+
 export function subscribeToAccessRequests(callback: (requests: AccessRequest[]) => void) {
-  if (!supabase) return () => {};
-
-  const debounced = createDebouncedFetcher(fetchAccessRequests, callback, 300);
-  const channel = supabase
-    .channel("public:access_requests")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "access_requests" },
-      () => {
-        debounced();
-      }
-    )
-    .subscribe();
-
-  return () => {
-    supabase.removeChannel(channel);
-  };
+  return accessRequestsMultiplexer(callback);
 }
 
 // ==========================================
@@ -643,30 +674,53 @@ export async function fetchAuditLogs(options?: {
 
 /**
  * Setup Realtime subscription for audit_logs
- * Passes single new log incrementally when an INSERT happens, avoiding SELECT * from table
+ * Passes single new log incrementally when an INSERT happens, avoiding SELECT * from table.
+ * Multiplexed so AppContext and AuditTab share a single connection.
  */
+const auditLogSubscribers = new Set<(logOrLogs: AuditLog | AuditLog[]) => void>();
+let auditLogsChannel: any = null;
+
 export function subscribeToAuditLogs(callback: (logOrLogs: AuditLog | AuditLog[]) => void) {
   if (!supabase) return () => {};
+  auditLogSubscribers.add(callback);
 
-  const channel = supabase
-    .channel("public:audit_logs")
-    .on(
-      "postgres_changes",
-      { event: "INSERT", schema: "public", table: "audit_logs" },
-      async (payload) => {
-        if (payload?.new) {
-          const newLog = mapRowToAuditLog(payload.new);
-          callback(newLog);
-        } else {
-          const updated = await fetchAuditLogs({ limit: 50 });
-          callback(updated);
+  if (!auditLogsChannel) {
+    auditLogsChannel = supabase
+      .channel("public:audit_logs")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "audit_logs" },
+        async (payload) => {
+          if (payload?.new) {
+            const newLog = mapRowToAuditLog(payload.new);
+            auditLogSubscribers.forEach((cb) => {
+              try {
+                cb(newLog);
+              } catch (e) {
+                console.error("audit log sub error:", e);
+              }
+            });
+          } else {
+            const updated = await fetchAuditLogs({ limit: 50 });
+            auditLogSubscribers.forEach((cb) => {
+              try {
+                cb(updated);
+              } catch (e) {
+                console.error("audit log sub error:", e);
+              }
+            });
+          }
         }
-      }
-    )
-    .subscribe();
+      )
+      .subscribe();
+  }
 
   return () => {
-    supabase.removeChannel(channel);
+    auditLogSubscribers.delete(callback);
+    if (auditLogSubscribers.size === 0 && auditLogsChannel) {
+      supabase?.removeChannel(auditLogsChannel);
+      auditLogsChannel = null;
+    }
   };
 }
 
@@ -943,40 +997,16 @@ export async function saveCarBooking(booking: CarBookingRequest): Promise<boolea
   }
 }
 
+const vehiclesMultiplexer = createTableSubscriptionMultiplexer("vehicles", fetchVehicles, 300);
+
 export function subscribeToVehicles(callback: (vehicles: Vehicle[]) => void) {
-  if (!supabase) return () => {};
-  const debounced = createDebouncedFetcher(fetchVehicles, callback, 300);
-  const channel = supabase
-    .channel("public:vehicles")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "vehicles" },
-      () => {
-        debounced();
-      }
-    )
-    .subscribe();
-  return () => {
-    supabase.removeChannel(channel);
-  };
+  return vehiclesMultiplexer(callback);
 }
 
+const carBookingsMultiplexer = createTableSubscriptionMultiplexer("car_bookings", fetchCarBookings, 300);
+
 export function subscribeToCarBookings(callback: (bookings: CarBookingRequest[]) => void) {
-  if (!supabase) return () => {};
-  const debounced = createDebouncedFetcher(fetchCarBookings, callback, 300);
-  const channel = supabase
-    .channel("public:car_bookings")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "car_bookings" },
-      () => {
-        debounced();
-      }
-    )
-    .subscribe();
-  return () => {
-    supabase.removeChannel(channel);
-  };
+  return carBookingsMultiplexer(callback);
 }
 
 export async function deleteVehicle(id: string): Promise<boolean> {
@@ -1242,117 +1272,173 @@ export interface ChatGroupRealtimeHandlers {
   onChange?: () => void;
 }
 
+const chatMessageSubscribers = new Set<(() => void) | ChatRealtimeHandlers>();
+let chatMessagesChannel: any = null;
+
 export function subscribeToChatMessages(handler: (() => void) | ChatRealtimeHandlers) {
   if (!supabase) return () => {};
-  const isFunction = typeof handler === "function";
-  const channel = supabase
-    .channel("public:messages")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "messages" },
-      (payload) => {
-        if (isFunction) {
-          handler();
-          return;
-        }
+  chatMessageSubscribers.add(handler);
 
-        handler.onChange?.();
+  if (!chatMessagesChannel) {
+    chatMessagesChannel = supabase
+      .channel("public:messages")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "messages" },
+        (payload) => {
+          const isInsert = payload.eventType === "INSERT" && payload.new;
+          const isUpdate = payload.eventType === "UPDATE" && payload.new;
+          const isDelete = payload.eventType === "DELETE" && payload.old;
 
-        if (payload.eventType === "INSERT" && payload.new) {
-          const msg = mapRowToChatMessage(payload.new);
-          handler.onInsert?.(msg);
-        } else if (payload.eventType === "UPDATE" && payload.new) {
-          const msg = mapRowToChatMessage(payload.new);
-          handler.onUpdate?.(msg);
-        } else if (payload.eventType === "DELETE" && payload.old) {
-          const msgId = String(payload.old.id);
-          handler.onDelete?.(msgId);
+          const msg = isInsert || isUpdate ? mapRowToChatMessage(payload.new) : null;
+          const delId = isDelete ? String(payload.old.id) : null;
+
+          chatMessageSubscribers.forEach((h) => {
+            try {
+              if (typeof h === "function") {
+                h();
+                return;
+              }
+              h.onChange?.();
+              if (isInsert && msg) h.onInsert?.(msg);
+              else if (isUpdate && msg) h.onUpdate?.(msg);
+              else if (isDelete && delId) h.onDelete?.(delId);
+            } catch (e) {
+              console.error("Chat message sub error:", e);
+            }
+          });
         }
-      }
-    )
-    .subscribe();
+      )
+      .subscribe();
+  }
+
   return () => {
-    supabase.removeChannel(channel);
+    chatMessageSubscribers.delete(handler);
+    if (chatMessageSubscribers.size === 0 && chatMessagesChannel) {
+      supabase?.removeChannel(chatMessagesChannel);
+      chatMessagesChannel = null;
+    }
   };
 }
+
+const chatGroupSubscribers = new Set<(() => void) | ChatGroupRealtimeHandlers>();
+let chatGroupsChannel: any = null;
 
 export function subscribeToChatGroups(handler: (() => void) | ChatGroupRealtimeHandlers) {
   if (!supabase) return () => {};
-  const isFunction = typeof handler === "function";
-  const channel = supabase
-    .channel("public:chat_channels")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "chat_channels" },
-      (payload) => {
-        if (isFunction) {
-          handler();
-          return;
-        }
+  chatGroupSubscribers.add(handler);
 
-        handler.onChange?.();
+  if (!chatGroupsChannel) {
+    chatGroupsChannel = supabase
+      .channel("public:chat_channels")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "chat_channels" },
+        (payload) => {
+          const isInsert = payload.eventType === "INSERT" && payload.new;
+          const isUpdate = payload.eventType === "UPDATE" && payload.new;
+          const isDelete = payload.eventType === "DELETE" && payload.old;
 
-        if (payload.eventType === "INSERT" && payload.new) {
-          const grp = mapRowToChatGroup(payload.new);
-          handler.onInsert?.(grp);
-        } else if (payload.eventType === "UPDATE" && payload.new) {
-          const grp = mapRowToChatGroup(payload.new);
-          handler.onUpdate?.(grp);
-        } else if (payload.eventType === "DELETE" && payload.old) {
-          const grpId = String(payload.old.id);
-          handler.onDelete?.(grpId);
+          const grp = isInsert || isUpdate ? mapRowToChatGroup(payload.new) : null;
+          const delId = isDelete ? String(payload.old.id) : null;
+
+          chatGroupSubscribers.forEach((h) => {
+            try {
+              if (typeof h === "function") {
+                h();
+                return;
+              }
+              h.onChange?.();
+              if (isInsert && grp) h.onInsert?.(grp);
+              else if (isUpdate && grp) h.onUpdate?.(grp);
+              else if (isDelete && delId) h.onDelete?.(delId);
+            } catch (e) {
+              console.error("Chat group sub error:", e);
+            }
+          });
         }
-      }
-    )
-    .subscribe();
+      )
+      .subscribe();
+  }
+
   return () => {
-    supabase.removeChannel(channel);
+    chatGroupSubscribers.delete(handler);
+    if (chatGroupSubscribers.size === 0 && chatGroupsChannel) {
+      supabase?.removeChannel(chatGroupsChannel);
+      chatGroupsChannel = null;
+    }
   };
 }
 
-const activeTypingChannels = new Map<string, any>();
+interface TypingMultiplexerState {
+  channel: any;
+  subscribers: Set<(payload: { userId: string; userName: string }) => void>;
+}
+const activeTypingChannels = new Map<string, TypingMultiplexerState>();
 
 export function subscribeToTyping(
   channelId: string,
   onTyping: (payload: { userId: string; userName: string }) => void
 ) {
   if (!supabase) return () => {};
-  const channel = supabase
-    .channel(`typing:${channelId}`)
-    .on("broadcast", { event: "typing" }, ({ payload }) => {
-      if (payload) onTyping(payload);
-    })
-    .subscribe();
 
-  activeTypingChannels.set(channelId, channel);
+  let state = activeTypingChannels.get(channelId);
+  if (!state) {
+    state = {
+      channel: null,
+      subscribers: new Set(),
+    };
+    activeTypingChannels.set(channelId, state);
+  }
+
+  state.subscribers.add(onTyping);
+
+  if (!state.channel) {
+    const channel = supabase
+      .channel(`typing:${channelId}`)
+      .on("broadcast", { event: "typing" }, ({ payload }) => {
+        if (payload) {
+          state?.subscribers.forEach((cb) => {
+            try { cb(payload); } catch (e) { console.error("typing cb error:", e); }
+          });
+        }
+      })
+      .subscribe();
+    state.channel = channel;
+  }
 
   return () => {
-    activeTypingChannels.delete(channelId);
-    supabase.removeChannel(channel);
+    const current = activeTypingChannels.get(channelId);
+    if (current) {
+      current.subscribers.delete(onTyping);
+      if (current.subscribers.size === 0 && current.channel) {
+        supabase?.removeChannel(current.channel);
+        activeTypingChannels.delete(channelId);
+      }
+    }
   };
 }
 
 export function broadcastTyping(channelId: string, user: { id: string; name: string }) {
   if (!supabase) return;
-  let channel = activeTypingChannels.get(channelId);
-  if (!channel) {
-    channel = supabase.channel(`typing:${channelId}`);
-    channel.subscribe((status: string) => {
-      if (status === "SUBSCRIBED") {
-        channel.send({
-          type: "broadcast",
-          event: "typing",
-          payload: { userId: user.id, userName: user.name, timestamp: Date.now() },
-        });
-      }
+  const state = activeTypingChannels.get(channelId);
+  if (state?.channel) {
+    state.channel.send({
+      type: "broadcast",
+      event: "typing",
+      payload: { userId: user.id, userName: user.name, timestamp: Date.now() },
     });
-    activeTypingChannels.set(channelId, channel);
     return;
   }
-  channel.send({
-    type: "broadcast",
-    event: "typing",
-    payload: { userId: user.id, userName: user.name, timestamp: Date.now() },
+  const tempChannel = supabase.channel(`typing:${channelId}`);
+  tempChannel.subscribe((status: string) => {
+    if (status === "SUBSCRIBED") {
+      tempChannel.send({
+        type: "broadcast",
+        event: "typing",
+        payload: { userId: user.id, userName: user.name, timestamp: Date.now() },
+      });
+    }
   });
 }
 
@@ -1568,22 +1654,10 @@ export async function deleteTask(id: string | number): Promise<boolean> {
   }
 }
 
+const tasksMultiplexer = createTableSubscriptionMultiplexer("tasks", fetchTasks, 300);
+
 export function subscribeToTasks(callback: (tasks: TaskItem[]) => void) {
-  if (!supabase) return () => {};
-  const debounced = createDebouncedFetcher(fetchTasks, callback, 300);
-  const channel = supabase
-    .channel("public:tasks")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "tasks" },
-      () => {
-        debounced();
-      }
-    )
-    .subscribe();
-  return () => {
-    supabase.removeChannel(channel);
-  };
+  return tasksMultiplexer(callback);
 }
 
 export function mapRowToMeeting(row: any): MeetingItem {
@@ -1721,22 +1795,10 @@ export async function deleteMeeting(id: string | number): Promise<boolean> {
   }
 }
 
+const meetingsMultiplexer = createTableSubscriptionMultiplexer("meetings", fetchMeetings, 300);
+
 export function subscribeToMeetings(callback: (meetings: MeetingItem[]) => void) {
-  if (!supabase) return () => {};
-  const debounced = createDebouncedFetcher(fetchMeetings, callback, 300);
-  const channel = supabase
-    .channel("public:meetings")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "meetings" },
-      () => {
-        debounced();
-      }
-    )
-    .subscribe();
-  return () => {
-    supabase.removeChannel(channel);
-  };
+  return meetingsMultiplexer(callback);
 }
 
 
@@ -2295,47 +2357,61 @@ export interface CircularRealtimeHandlers {
 }
 
 /**
- * Subscribe to realtime changes on circular_documents
+ * Subscribe to realtime changes on circular_documents.
+ * Multiplexed so AppContext and CircularPage share a single connection.
  */
+const circularDocSubscribers = new Set<(() => void) | CircularRealtimeHandlers>();
+let circularDocsChannel: any = null;
+
 export function subscribeToCircularDocs(
   handler: (() => void) | CircularRealtimeHandlers
 ): () => void {
   if (!supabase) return () => {};
-  const isFunction = typeof handler === "function";
+  circularDocSubscribers.add(handler);
 
-  const channel = supabase
-    .channel("public:circular_docs")
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "circular_documents",
-      },
-      (payload) => {
-        if (isFunction) {
-          handler();
-          return;
+  if (!circularDocsChannel) {
+    circularDocsChannel = supabase
+      .channel("public:circular_docs")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "circular_documents",
+        },
+        (payload) => {
+          const isInsert = payload.eventType === "INSERT" && payload.new;
+          const isUpdate = payload.eventType === "UPDATE" && payload.new;
+          const isDelete = payload.eventType === "DELETE" && payload.old;
+
+          const doc = isInsert || isUpdate ? mapRowToCircularDoc(payload.new) : null;
+          const delId = isDelete ? String(payload.old.id) : null;
+
+          circularDocSubscribers.forEach((h) => {
+            try {
+              if (typeof h === "function") {
+                h();
+                return;
+              }
+              h.onChange?.();
+              if (isInsert && doc) h.onInsert?.(doc);
+              else if (isUpdate && doc) h.onUpdate?.(doc);
+              else if (isDelete && delId) h.onDelete?.(delId);
+            } catch (e) {
+              console.error("Circular doc sub error:", e);
+            }
+          });
         }
-
-        handler.onChange?.();
-
-        if (payload.eventType === "INSERT" && payload.new) {
-          const doc = mapRowToCircularDoc(payload.new);
-          handler.onInsert?.(doc);
-        } else if (payload.eventType === "UPDATE" && payload.new) {
-          const doc = mapRowToCircularDoc(payload.new);
-          handler.onUpdate?.(doc);
-        } else if (payload.eventType === "DELETE" && payload.old) {
-          const docId = String(payload.old.id);
-          handler.onDelete?.(docId);
-        }
-      }
-    )
-    .subscribe();
+      )
+      .subscribe();
+  }
 
   return () => {
-    supabase.removeChannel(channel);
+    circularDocSubscribers.delete(handler);
+    if (circularDocSubscribers.size === 0 && circularDocsChannel) {
+      supabase?.removeChannel(circularDocsChannel);
+      circularDocsChannel = null;
+    }
   };
 }
 
