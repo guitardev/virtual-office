@@ -395,7 +395,7 @@ export function ReviewBookingModal({
           </div>
 
           {/* Previous Endorsement History (if any) */}
-          {(booking.divisionReviewerNotes || booking.fleetDispatcherNotes || booking.adminHeadNotes) && (
+          {(booking.divisionReviewerNotes || booking.fleetDispatcherNotes || (booking.adminHeadNotes && booking.adminHeadActionAt)) && (
             <div className="p-4 bg-teal-50/50 rounded-2xl border border-teal-200/80 space-y-2 text-xs">
               <h4 className="font-bold text-teal-950 flex items-center gap-1.5">
                 <span>📜</span>
@@ -413,9 +413,9 @@ export function ReviewBookingModal({
                   <p className="text-slate-800 mt-0.5">"{booking.fleetDispatcherNotes}"</p>
                 </div>
               )}
-              {booking.adminHeadNotes && (
+              {booking.adminHeadNotes && booking.adminHeadActionAt && (
                 <div className="pl-3 border-l-2 border-indigo-400">
-                  <span className="text-slate-500 font-semibold">3. หัวหน้าฝ่ายบริหารทั่วไป ({booking.adminHeadName || "หน.ฝ่ายบริหาร"}):</span>
+                  <span className="text-slate-500 font-semibold">3. หัวหน้าฝ่ายบริหารทั่วไป ({booking.adminHeadName || "นายเสกพล ดิษฐโชติ"}):</span>
                   <p className="text-slate-800 mt-0.5">"{booking.adminHeadNotes}"</p>
                 </div>
               )}

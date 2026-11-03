@@ -213,9 +213,9 @@ export async function generateCarBookingDocx(bookingData: any): Promise<Buffer> 
 
   const adminHeadName = cleanPersonName(
     bookingData.adminHeadName ||
-    bookingData.fleetDispatcherName ||
-    bookingData.managerName ||
-    "นายเสกพล ดิษฐโชติ"
+    (bookingData.status === "approved" || bookingData.status === "pending_provincial"
+      ? "นายเสกพล ดิษฐโชติ"
+      : "")
   );
   let rawAdminHeadPos =
     bookingData.adminHeadPosition ||
@@ -227,8 +227,9 @@ export async function generateCarBookingDocx(bookingData: any): Promise<Buffer> 
   adminHeadPos = cleanPersonName(adminHeadPos) || "นักพัฒนาสังคมชำนาญการ";
   const adminHeadNotes =
     bookingData.adminHeadNotes ||
-    bookingData.managerNotes ||
-    (licPlate ? `เห็นควรอนุญาตให้ใช้รถยนต์ส่วนกลางหมายเลขทะเบียน ${licPlate} พนักงานขับรถ ${driver}` : "เห็นควรอนุญาตให้ใช้รถยนต์ราชการ");
+    (bookingData.adminHeadActionAt
+      ? (licPlate ? `เห็นควรอนุญาตให้ใช้รถยนต์ส่วนกลางหมายเลขทะเบียน ${licPlate} พนักงานขับรถ ${driver}` : "เห็นควรอนุญาตให้ใช้รถยนต์ราชการ")
+      : "");
 
   const isApproved = bookingData.status === "approved";
   const isRejected = bookingData.status === "rejected";

@@ -810,6 +810,11 @@ export function CarBookingPage({
         managerName: currentUser.name,
         managerNotes: notes,
         managerActionAt: nowFormatted,
+        // Clear Stage 3 fields so division reviewer can never be mistaken for admin head
+        adminHeadId: undefined,
+        adminHeadName: undefined,
+        adminHeadNotes: undefined,
+        adminHeadActionAt: undefined,
         notifications: [...(b.notifications || []), notif],
       };
     });
@@ -2081,7 +2086,7 @@ export function CarBookingPage({
                           </div>
                         </div>
 
-                        {(b.fleetDispatcherName || b.adminHeadName || b.adminHeadNotes) && (
+                        {(b.fleetDispatcherName || (b.adminHeadName && b.adminHeadActionAt)) && (
                           <div className="pt-2 border-t border-emerald-200/40 text-[11px] text-slate-600 flex flex-wrap gap-x-4 gap-y-1">
                             {b.fleetDispatcherName && (
                               <div>
@@ -2089,18 +2094,23 @@ export function CarBookingPage({
                                 <span className="font-medium text-slate-800">{b.fleetDispatcherName}</span>
                               </div>
                             )}
-                            {b.adminHeadName && (
+                            {b.adminHeadName && b.adminHeadActionAt && (
                               <div>
                                 <span className="text-slate-500">หน.ฝ่ายบริหาร:</span>{" "}
                                 <span className="font-medium text-slate-800">{b.adminHeadName}</span>
                               </div>
                             )}
-                            {(b.adminHeadNotes || b.fleetDispatcherNotes) && (
+                            {b.adminHeadNotes && b.adminHeadActionAt ? (
                               <div className="w-full text-slate-700">
-                                <span className="text-slate-500">ความเห็น:</span>{" "}
-                                <span className="italic">"{b.adminHeadNotes || b.fleetDispatcherNotes}"</span>
+                                <span className="text-slate-500">ความเห็น หน.ฝ่ายบริหาร:</span>{" "}
+                                <span className="italic">"{b.adminHeadNotes}"</span>
                               </div>
-                            )}
+                            ) : b.fleetDispatcherNotes ? (
+                              <div className="w-full text-slate-700">
+                                <span className="text-slate-500">ความเห็นผู้จัดสรร:</span>{" "}
+                                <span className="italic">"{b.fleetDispatcherNotes}"</span>
+                              </div>
+                            ) : null}
                           </div>
                         )}
                       </div>

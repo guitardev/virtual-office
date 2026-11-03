@@ -190,9 +190,12 @@ export function CarBookingDocumentModal({
         divisionReviewerName: cleanPersonName(booking.divisionReviewerName || ""),
         divisionReviewerPosition: booking.divisionReviewerPosition || (booking.divisionReviewerName ? "หัวหน้ากลุ่ม/ฝ่าย" : ""),
         divisionReviewerDate: divReviewerDate.d ? `${divReviewerDate.d} / ${divReviewerDate.m} / ${divReviewerDate.y}` : "",
-        adminHeadName: cleanPersonName(booking.adminHeadName || booking.fleetDispatcherName || booking.managerName || (booking.licensePlate && booking.licensePlate !== "-" ? "นายเสกพล ดิษฐโชติ" : "")),
+        adminHeadName: cleanPersonName(
+          booking.adminHeadName ||
+          (booking.status === "approved" || booking.status === "pending_provincial" ? "นายเสกพล ดิษฐโชติ" : "")
+        ),
         adminHeadPosition: "นักพัฒนาสังคมชำนาญการ",
-        adminHeadNotes: booking.adminHeadNotes || booking.fleetDispatcherNotes || booking.managerNotes || (booking.licensePlate && booking.licensePlate !== "-" ? `จัดสรรรถยนต์ ${cleanedVehName || ""} ทะเบียน [${booking.licensePlate}] พนักงานขับรถ: ${resolvedDriver || ""} เรียบร้อยแล้ว เพื่อโปรดพิจารณาอนุญาต` : "เพื่อโปรดพิจารณาอนุญาต"),
+        adminHeadNotes: booking.adminHeadNotes || (booking.adminHeadActionAt ? "เพื่อโปรดพิจารณาอนุญาต" : ""),
         adminHeadDate: adminHeadDate.d ? `${adminHeadDate.d} / ${adminHeadDate.m} / ${adminHeadDate.y}` : "",
         status: booking.status,
         approverName: "นางสาวมะลิวัน สิทธิโยธี",
@@ -305,17 +308,21 @@ export function CarBookingDocumentModal({
                   <span className="text-emerald-700 font-medium">พนักงานขับรถ: </span>
                   <strong className="text-emerald-950 font-bold">{resolvedDriver || "-"}</strong>
                 </div>
-                {(booking.fleetDispatcherName || booking.adminHeadName) && (
+                {(booking.fleetDispatcherName || (booking.adminHeadName && booking.adminHeadActionAt)) && (
                   <div className="sm:col-span-3 text-[11px] text-emerald-800 pt-2 border-t border-emerald-200/60 flex flex-wrap items-center gap-x-4 gap-y-1">
-                    <span>
-                      <strong>ผู้จัดสรร:</strong> {booking.fleetDispatcherName || "เจ้าหน้าที่ฝ่ายบริหารทั่วไป"} {booking.fleetDispatcherActionAt ? `(${booking.fleetDispatcherActionAt})` : ""}
-                    </span>
-                    <span>
-                      <strong>หน.ฝ่ายบริหาร:</strong> {booking.adminHeadName || "นายเสกพล ดิษฐโชติ"} {booking.adminHeadActionAt ? `(${booking.adminHeadActionAt})` : ""}
-                    </span>
-                    {(booking.adminHeadNotes || booking.fleetDispatcherNotes) && (
+                    {booking.fleetDispatcherName && (
+                      <span>
+                        <strong>ผู้จัดสรร:</strong> {booking.fleetDispatcherName} {booking.fleetDispatcherActionAt ? `(${booking.fleetDispatcherActionAt})` : ""}
+                      </span>
+                    )}
+                    {booking.adminHeadName && booking.adminHeadActionAt && (
+                      <span>
+                        <strong>หน.ฝ่ายบริหาร:</strong> {booking.adminHeadName} {booking.adminHeadActionAt ? `(${booking.adminHeadActionAt})` : ""}
+                      </span>
+                    )}
+                    {booking.adminHeadNotes && booking.adminHeadActionAt && (
                       <span className="w-full text-emerald-900">
-                        <strong>ความเห็น:</strong> "{booking.adminHeadNotes || booking.fleetDispatcherNotes}"
+                        <strong>ความเห็น หน.ฝ่ายบริหาร:</strong> "{booking.adminHeadNotes}"
                       </span>
                     )}
                   </div>

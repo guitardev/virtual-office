@@ -238,15 +238,22 @@ export function loadStoredBookings(): CarBookingRequest[] {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
 
-    // Sanitize any mock drivers in legacy stored bookings
+    // Sanitize any mock drivers in legacy stored bookings and clear incorrect admin head data
     return parsed.map((b) => {
-      if (b.assignedDriver && OBSOLETE_MOCK_DRIVERS.includes(b.assignedDriver.trim())) {
-        return {
-          ...b,
-          assignedDriver: b.requireDriver === false ? (b.requesterName || "ขับขี่เองโดยผู้ขอใช้รถ") : "รอฝ่ายบริหารจัดสรร",
-        };
+      let updated = { ...b };
+      if (updated.assignedDriver && OBSOLETE_MOCK_DRIVERS.includes(updated.assignedDriver.trim())) {
+        updated.assignedDriver = updated.requireDriver === false ? (updated.requesterName || "ขับขี่เองโดยผู้ขอใช้รถ") : "รอฝ่ายบริหารจัดสรร";
       }
-      return b;
+      // If booking has not completed Stage 3, adminHead data must not be populated with Stage 1 reviewer
+      if (updated.status === "pending_division_head" || updated.status === "pending_fleet_assignment" || updated.status === "pending_admin_head") {
+        if (!updated.adminHeadActionAt || (updated.adminHeadName && !updated.adminHeadName.includes("เสกพล"))) {
+          updated.adminHeadId = undefined;
+          updated.adminHeadName = undefined;
+          updated.adminHeadNotes = undefined;
+          updated.adminHeadActionAt = undefined;
+        }
+      }
+      return updated;
     });
   } catch (e) {
     console.error("Failed to load car bookings:", e);
