@@ -167,9 +167,9 @@ export async function generateCarBookingDocx(bookingData: any): Promise<Buffer> 
 
   if (!driver || rawDriver === "ขับขี่เองโดยผู้ขอใช้รถ" || rawDriver === "ขับขี่เอง") {
     if (bookingData.requireDriver === false || !rawDriver) {
-      driver = reqName || "นายสมชาย ใจดี";
+      driver = reqName || "พนักงานขับรถส่วนกลาง";
     } else {
-      driver = "นายสมชาย ใจดี";
+      driver = "พนักงานขับรถส่วนกลาง";
     }
   }
   const dest = bookingData.destination || "";

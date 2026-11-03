@@ -33,6 +33,7 @@ import {
   recordAuditLog,
   formatFullMemberName,
   isOperationalMember,
+  isEligibleDriver,
 } from "@/lib/supabase";
 import { CarBookingDocumentModal } from "./CarBookingDocumentModal";
 import { ReviewBookingModal } from "./ReviewBookingModal";
@@ -2899,7 +2900,7 @@ export function CarBookingPage({
 
                     <optgroup label="── ข้าราชการ/เจ้าหน้าที่สังกัด สนง.พมจ.กำแพงเพชร ──">
                       {members
-                        .filter((m) => m.id !== currentUser.id && isOperationalMember(m) && !selectedPassengers.some((p) => p.id === m.id))
+                        .filter((m) => m.id !== currentUser.id && isEligibleDriver(m) && !selectedPassengers.some((p) => p.id === m.id))
                         .map((m) => (
                           <option key={`m_${m.id}`} value={m.id}>
                             {getMemberDisplayName(m)} ({m.division || m.position})

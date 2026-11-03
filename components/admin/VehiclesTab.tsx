@@ -1140,6 +1140,7 @@ export function VehiclesTab({ currentUser, showToast, members }: VehiclesTabProp
       {(selectedManageVehicle || isCreatingVehicle) && (
         <VehicleFormModal
           vehicle={selectedManageVehicle}
+          members={members}
           onClose={() => {
             setSelectedManageVehicle(null);
             setIsCreatingVehicle(false);

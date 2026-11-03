@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { CarBookingRequest, Vehicle, Member, BookingStatus } from "@/lib/types";
-import { GOVERNMENT_DRIVERS } from "@/lib/carbooking-data";
-import { isOperationalMember } from "@/lib/rbac";
+import { isOperationalMember, isEligibleDriver, getEligibleDrivers } from "@/lib/rbac";
 
 export interface DistrictPreset {
   name: string;
@@ -170,7 +169,8 @@ export function AdminBookingFormModal({
         setVehicleId(defaultVeh.id);
         setVehicleName(defaultVeh.name);
         setLicensePlate(defaultVeh.licensePlate);
-        setAssignedDriver(defaultVeh.driverName || GOVERNMENT_DRIVERS[0]?.name || "พนักงานขับรถส่วนกลาง");
+        const eligibleDrivers = getEligibleDrivers(members);
+        setAssignedDriver(defaultVeh.driverName || eligibleDrivers[0]?.name || "พนักงานขับรถส่วนกลาง");
       }
 
       const todayStr = new Date().toISOString().slice(0, 10);
@@ -438,11 +438,11 @@ export function AdminBookingFormModal({
                     defaultValue=""
                   >
                     <option value="" disabled>
-                      เลือกจากเวร
+                      เลือกจากเจ้าหน้าที่
                     </option>
-                    {GOVERNMENT_DRIVERS.map((d, i) => (
-                      <option key={i} value={d.name}>
-                        {d.name}
+                    {getEligibleDrivers(members).map((d) => (
+                      <option key={d.id} value={d.name}>
+                        {d.name} ({d.position})
                       </option>
                     ))}
                   </select>

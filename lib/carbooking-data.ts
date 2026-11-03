@@ -1,4 +1,7 @@
 import { Vehicle, CarBookingRequest } from "./types";
+import { isEligibleDriver, getEligibleDrivers } from "./rbac";
+
+export { isEligibleDriver, getEligibleDrivers };
 
 export const INITIAL_VEHICLES: Vehicle[] = [
   {
@@ -75,7 +78,7 @@ export const INITIAL_VEHICLES: Vehicle[] = [
     licensePlate: "กค 6520 กำแพงเพชร",
     category: "รถกระบะตรวจการณ์",
     capacity: 5,
-    driverName: "นายสมหมาย มั่นคง",
+    driverName: "พนักงานขับรถเวรส่วนกลาง",
     fuelType: "ดีเซล B7",
     status: "available",
     image: "https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=800&q=80",
@@ -109,7 +112,7 @@ export const INITIAL_VEHICLES: Vehicle[] = [
     licensePlate: "นข 1422 กำแพงเพชร",
     category: "รถตู้ส่วนกลาง",
     capacity: 12,
-    driverName: "นายสมชาย มั่นคง",
+    driverName: "พนักงานขับรถเวรส่วนกลาง",
     fuelType: "ดีเซล B7",
     status: "available",
     image: "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=800&q=80",
@@ -126,7 +129,7 @@ export const INITIAL_VEHICLES: Vehicle[] = [
     licensePlate: "นข 3598 กำแพงเพชร",
     category: "รถตู้ส่วนกลาง",
     capacity: 12,
-    driverName: "นายบุญส่ง ชื่นใจ",
+    driverName: "พนักงานขับรถเวรส่วนกลาง",
     fuelType: "ดีเซล B7",
     status: "available",
     image: "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=800&q=80",
@@ -204,12 +207,7 @@ export const VEHICLE_IMAGE_PRESETS = [
   },
 ];
 
-export const GOVERNMENT_DRIVERS = [
-  { id: "drv_1", name: "นายสมชาย มั่นคง", phone: "081-234-5601", status: "พร้อมปฏิบัติหน้าที่", license: "ท.2 (ขับขี่สาธารณะ)" },
-  { id: "drv_2", name: "นายบุญส่ง ชื่นใจ", phone: "082-345-6702", status: "พร้อมปฏิบัติหน้าที่", license: "ท.2 (ขับขี่สาธารณะ)" },
-  { id: "drv_3", name: "นายอนุชา พลแสน", phone: "083-456-7803", status: "พร้อมปฏิบัติหน้าที่", license: "ท.2 (ขับขี่สาธารณะ)" },
-  { id: "drv_4", name: "นายประเสริฐ ยิ้มแย้ม", phone: "084-567-8904", status: "ติดภารกิจนอกพื้นที่", license: "ท.2 (ขับขี่สาธารณะ)" },
-];
+export const GOVERNMENT_DRIVERS: { id: string; name: string; phone: string; status: string; license: string }[] = [];
 
 export const INITIAL_BOOKING_REQUESTS: CarBookingRequest[] = [];
 
@@ -217,6 +215,15 @@ const CAR_STORAGE_KEY = "smartmso_car_bookings_v2";
 const LEGACY_CAR_STORAGE_KEY = "omnioffice_car_bookings_v2";
 const VEHICLES_STORAGE_KEY = "smartmso_vehicles_v2";
 const LEGACY_VEHICLES_STORAGE_KEY = "omnioffice_vehicles_v2";
+
+const OBSOLETE_MOCK_DRIVERS = [
+  "นายสมชาย มั่นคง",
+  "นายบุญส่ง ชื่นใจ",
+  "นายอนุชา พลแสน",
+  "นายประเสริฐ ยิ้มแย้ม",
+  "นายสมหมาย มั่นคง",
+  "นายสมชาย ใจดี",
+];
 
 export function loadStoredBookings(): CarBookingRequest[] {
   if (typeof window === "undefined") return [];
@@ -229,7 +236,18 @@ export function loadStoredBookings(): CarBookingRequest[] {
     const raw = localStorage.getItem(CAR_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+
+    // Sanitize any mock drivers in legacy stored bookings
+    return parsed.map((b) => {
+      if (b.assignedDriver && OBSOLETE_MOCK_DRIVERS.includes(b.assignedDriver.trim())) {
+        return {
+          ...b,
+          assignedDriver: b.requireDriver === false ? (b.requesterName || "ขับขี่เองโดยผู้ขอใช้รถ") : "รอฝ่ายบริหารจัดสรร",
+        };
+      }
+      return b;
+    });
   } catch (e) {
     console.error("Failed to load car bookings:", e);
     return [];
@@ -259,7 +277,15 @@ export function loadStoredVehicles(): Vehicle[] {
       return INITIAL_VEHICLES;
     }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_VEHICLES;
+    if (!Array.isArray(parsed) || parsed.length === 0) return INITIAL_VEHICLES;
+
+    // Sanitize any mock drivers in vehicles
+    return parsed.map((v) => {
+      if (v.driverName && OBSOLETE_MOCK_DRIVERS.includes(v.driverName.trim())) {
+        return { ...v, driverName: "พนักงานขับรถเวรส่วนกลาง" };
+      }
+      return v;
+    });
   } catch (e) {
     console.error("Failed to load vehicles:", e);
     return INITIAL_VEHICLES;

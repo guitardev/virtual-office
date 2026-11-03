@@ -28,6 +28,8 @@ import {
   INITIAL_AUDIT_LOGS,
   isOperationalMember,
   getOperationalMembers,
+  isEligibleDriver,
+  getEligibleDrivers,
 } from "./rbac";
 import {
   INITIAL_VEHICLES,
@@ -316,7 +318,7 @@ export function isRealMember(m: Member): boolean {
   return true;
 }
 
-export { isOperationalMember, getOperationalMembers };
+export { isOperationalMember, getOperationalMembers, isEligibleDriver, getEligibleDrivers };
 
 /**
  * Get members from local cache or fallback to INITIAL_MEMBERS

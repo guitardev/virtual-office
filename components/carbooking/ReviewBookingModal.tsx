@@ -2,8 +2,8 @@
 
 import React, { useState } from "react";
 import { CarBookingRequest, Member, Vehicle } from "@/lib/types";
-import { GOVERNMENT_DRIVERS, cleanPersonName } from "@/lib/carbooking-data";
-import { isOperationalMember } from "@/lib/rbac";
+import { cleanPersonName } from "@/lib/carbooking-data";
+import { isOperationalMember, isEligibleDriver, getEligibleDrivers } from "@/lib/rbac";
 
 interface ReviewBookingModalProps {
   booking: CarBookingRequest;
@@ -118,13 +118,28 @@ export function ReviewBookingModal({
       ? booking.vehicleId
       : availableVehicles[0]?.id || vehicles[0]?.id || "";
 
-  const availableDrivers = GOVERNMENT_DRIVERS.filter((d) => getDriverAvailability(d.name).available);
-  const defaultDriver =
-    cleanPersonName(booking.assignedDriver) && booking.assignedDriver !== "รอฝ่ายบริหารจัดสรร" && booking.assignedDriver !== "ขับขี่เองโดยผู้ขอใช้รถ"
-      ? cleanPersonName(booking.assignedDriver)
-      : (booking.requireDriver === false
-          ? cleanPersonName(booking.requesterName)
-          : (availableDrivers[0]?.name || GOVERNMENT_DRIVERS[0]?.name || "นายสมชาย มั่นคง"));
+  const eligibleDrivers = getEligibleDrivers(members);
+  const availableDrivers = eligibleDrivers.filter((d) => getDriverAvailability(d.name).available);
+
+  const isOldMockDriver = (name?: string) => {
+    if (!name) return false;
+    return ["นายสมชาย มั่นคง", "นายบุญส่ง ชื่นใจ", "นายอนุชา พลแสน", "นายประเสริฐ ยิ้มแย้ม", "นายสมชาย ใจดี", "นายสมหมาย มั่นคง"].some(
+      (m) => name.includes(m) || m.includes(name)
+    );
+  };
+
+  const rawAssigned = cleanPersonName(booking.assignedDriver);
+  const hasValidAssigned =
+    rawAssigned &&
+    rawAssigned !== "รอฝ่ายบริหารจัดสรร" &&
+    rawAssigned !== "ขับขี่เองโดยผู้ขอใช้รถ" &&
+    !isOldMockDriver(rawAssigned);
+
+  const defaultDriver = hasValidAssigned
+    ? rawAssigned
+    : (booking.requireDriver === false
+        ? cleanPersonName(booking.requesterName)
+        : (availableDrivers[0]?.name || eligibleDrivers[0]?.name || ""));
 
   // Form State for Stage 2 (Fleet & Driver Assignment)
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>(defaultVehId);
@@ -478,7 +493,7 @@ export function ReviewBookingModal({
                         onClick={() => setUseCustomDriver(!useCustomDriver)}
                         className="text-[11px] font-bold text-blue-700 hover:underline cursor-pointer"
                       >
-                        {useCustomDriver ? "← เลือกจากทำเนียบคนขับ" : "+ ระบุชื่อพนักงานอื่น"}
+                        {useCustomDriver ? "← เลือกจากทำเนียบเจ้าหน้าที่" : "+ ระบุชื่ออื่น"}
                       </button>
                     </div>
 
@@ -491,28 +506,32 @@ export function ReviewBookingModal({
                             selectedDriverAvail && !selectedDriverAvail.available ? "border-rose-300 ring-2 ring-rose-200" : "border-blue-300"
                           }`}
                         >
-                          {GOVERNMENT_DRIVERS.map((d) => {
+                          <option value="">-- เลือกเจ้าหน้าที่ผู้ปฏิบัติหน้าที่ขับรถ --</option>
+                          {eligibleDrivers.map((d) => {
                             const dAvail = getDriverAvailability(d.name);
                             return (
                               <option key={d.id} value={d.name}>
                                 {dAvail.available ? "🟢 [ว่าง] " : "🔴 [ไม่ว่าง] "}
-                                {d.name} ({d.phone} • {dAvail.reason})
+                                {d.name} ({d.position}{d.division ? ` - ${d.division}` : ""}){d.phone ? ` • โทร ${d.phone}` : ""}{dAvail.available ? "" : ` • ${dAvail.reason}`}
                               </option>
                             );
                           })}
                         </select>
+                        <p className="text-[11px] text-slate-500">
+                          * เลือกจากเจ้าหน้าที่ในสำนักงาน (ไม่รวม Admin และบุคลากรจ้างเหมาบริการ ตามระเบียบราชการ)
+                        </p>
 
                         {selectedDriverAvail && !selectedDriverAvail.available && (
                           <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-[11px] flex items-center gap-2 animate-fade-in">
                             <span className="text-sm">⚠️</span>
-                            <span><strong>แจ้งเตือน:</strong> {assignedDriver} {selectedDriverAvail.reason} แนะนำให้เลือกพนักงานขับรถที่มีสัญลักษณ์ 🟢 [ว่าง]</span>
+                            <span><strong>แจ้งเตือน:</strong> {assignedDriver} {selectedDriverAvail.reason} แนะนำให้เลือกเจ้าหน้าที่ที่มีสัญลักษณ์ 🟢 [ว่าง]</span>
                           </div>
                         )}
                       </>
                     ) : (
                       <input
                         type="text"
-                        placeholder="ระบุชื่อ-สกุล พนักงานขับรถยนต์ราชการ"
+                        placeholder="ระบุชื่อ-สกุล เจ้าหน้าที่ผู้ปฏิบัติหน้าที่ขับรถ"
                         value={customDriver}
                         onChange={(e) => setCustomDriver(e.target.value)}
                         className="w-full px-3 py-2 bg-white border border-blue-300 rounded-xl text-xs text-slate-900"
@@ -538,7 +557,7 @@ export function ReviewBookingModal({
                       onChange={(e) => setAssignedDriver(cleanPersonName(e.target.value))}
                       className="w-full px-3 py-2 bg-white border border-blue-300 rounded-xl text-xs font-semibold text-slate-900"
                     >
-                      {booking.assignedDriver && booking.assignedDriver !== "ขับขี่เองโดยผู้ขอใช้รถ" && (
+                      {booking.assignedDriver && booking.assignedDriver !== "ขับขี่เองโดยผู้ขอใช้รถ" && !isOldMockDriver(booking.assignedDriver) && (
                         <option value={cleanPersonName(booking.assignedDriver)}>
                           {cleanPersonName(booking.assignedDriver)} (ระบุโดยผู้ขอใช้รถ)
                         </option>
@@ -546,7 +565,7 @@ export function ReviewBookingModal({
                       <option value={cleanPersonName(booking.requesterName)}>
                         {cleanPersonName(booking.requesterName)} (ผู้ขอใช้รถ)
                       </option>
-                      {members.filter(isOperationalMember).map((m) => (
+                      {eligibleDrivers.map((m) => (
                         <option key={m.id} value={cleanPersonName(m.name)}>
                           {m.name} ({m.position})
                         </option>

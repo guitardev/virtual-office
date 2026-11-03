@@ -293,6 +293,36 @@ export function getOperationalMembers(members: Member[]): Member[] {
 }
 
 /**
+ * ตรวจสอบว่าสมาชิกเป็นเจ้าหน้าที่ที่มีสิทธิ์ได้รับมอบหมายเป็นพนักงานขับรถยนต์ราชการหรือไม่
+ * ตามระเบียบการใช้รถยนต์ราชการ: เลือกจากเจ้าหน้าที่ในสำนักงานได้ทุกคน ยกเว้น Admin และบุคลากรจ้างเหมาบริการ
+ */
+export function isEligibleDriver(m: Member | null | undefined): boolean {
+  if (!m || !m.id) return false;
+  // กรองบัญชีระบบ หรือสิทธิ์ Admin ออก
+  if (!isOperationalMember(m)) return false;
+
+  // กรองบุคลากรจ้างเหมาบริการออก (ตามระเบียบพัสดุและระเบียบยานพาหนะราชการ)
+  const pType = (m.personnelType || "").trim();
+  if (pType === "พนักงานจ้างเหมาบริการ" || pType.includes("จ้างเหมา") || pType.includes("เหมาบริการ")) {
+    return false;
+  }
+  const pos = (m.position || "").trim();
+  if (pos.includes("จ้างเหมา") || pos.includes("เหมาบริการ")) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * ดึงรายชื่อเจ้าหน้าที่ในสำนักงานที่มีสิทธิ์ได้รับมอบหมายเป็นพนักงานขับรถยนต์ราชการ
+ * (ไม่รวม Admin และบุคลากรจ้างเหมาบริการ)
+ */
+export function getEligibleDrivers(members: Member[]): Member[] {
+  return (members || []).filter(isEligibleDriver);
+}
+
+/**
  * ตรวจสอบสิทธิ์การเข้าถึงและการมองเห็นของงาน (Task Access & Visibility Control)
  * - individual (เฉพาะบุคคล): ผู้สร้าง, ผู้รับผิดชอบตรง, และ Admin/Manager ฝ่ายนั้น
  * - department (เฉพาะกลุ่มงาน): บุคลากรในกลุ่มงานนั้น, Manager ฝ่าย, ผู้สร้าง/ผู้รับผิดชอบ, และ Admin

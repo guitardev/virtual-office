@@ -1,12 +1,14 @@
 "use client";
 
 import React, { useState } from "react";
-import { Vehicle, VehicleStatus, FuelLevel } from "@/lib/types";
-import { GOVERNMENT_DRIVERS, VEHICLE_IMAGE_PRESETS } from "@/lib/carbooking-data";
+import { Vehicle, VehicleStatus, FuelLevel, Member } from "@/lib/types";
+import { VEHICLE_IMAGE_PRESETS } from "@/lib/carbooking-data";
+import { getEligibleDrivers } from "@/lib/rbac";
 import { RealisticFuelGauge } from "./RealisticFuelGauge";
 
 interface VehicleFormModalProps {
   vehicle?: Vehicle | null;
+  members?: Member[];
   onClose: () => void;
   onSave: (vehicle: Vehicle) => void;
 }
@@ -39,6 +41,7 @@ const FUEL_LEVEL_OPTIONS: FuelLevel[] = [
 
 export function VehicleFormModal({
   vehicle,
+  members = [],
   onClose,
   onSave,
 }: VehicleFormModalProps) {
@@ -400,9 +403,9 @@ export function VehicleFormModal({
               >
                 <option value="พนักงานขับรถเวรส่วนกลาง" className="font-body">พนักงานขับรถเวรส่วนกลาง</option>
                 <option value="ขับขี่เอง / พนักงานขับรถเวร" className="font-body">ขับขี่เอง / พนักงานขับรถเวร</option>
-                {GOVERNMENT_DRIVERS.map((d) => (
+                {getEligibleDrivers(members).map((d) => (
                   <option key={d.id} value={d.name} className="font-body">
-                    {d.name} ({d.license})
+                    {d.name} ({d.position})
                   </option>
                 ))}
               </select>
