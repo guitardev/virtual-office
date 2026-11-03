@@ -184,6 +184,8 @@ export function CarBookingDocumentModal({
         fuelBudgetSource: booking.fuelBudgetSource,
         fuelProjectName: booking.fuelProjectName,
         fuelConsumptionRate: booking.fuelConsumptionRate,
+        createdAt: booking.createdAt,
+        requesterDate: createdDate.day ? `${createdDate.day} / ${createdDate.month} / ${createdDate.year}` : "",
         day: createdDate.day,
         month: createdDate.month,
         year: createdDate.year,
@@ -507,7 +509,13 @@ export function CarBookingDocumentModal({
                   </span>
                 </div>
                 <div className="text-center tracking-widest text-black pt-0.5 text-sm">
-                  ................/.............................../.................
+                  {createdDate.day ? (
+                    <span>
+                      {createdDate.day} / {createdDate.month} / {createdDate.year}
+                    </span>
+                  ) : (
+                    <span>................/.............................../.................</span>
+                  )}
                 </div>
               </div>
             </div>

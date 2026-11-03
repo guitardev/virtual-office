@@ -202,12 +202,21 @@ export async function generateCarBookingDocx(bookingData: any): Promise<Buffer> 
   }
 
   // Date parsing
-  const topDate = parseThaiDateParts(bookingData.createdAt || bookingData.startDateThai);
-  const divDate = parseThaiDateParts(bookingData.divisionReviewerActionAt || bookingData.createdAt);
-  const admDate = bookingData.adminHeadActionAt
-    ? parseThaiDateParts(bookingData.adminHeadActionAt)
+  // Requester / Submission Date (used for top header date and requester signature block)
+  const reqDate = (bookingData.day && bookingData.month && bookingData.year)
+    ? {
+        day: String(bookingData.day).trim(),
+        month: THAI_MONTHS_MAP[bookingData.month] || String(bookingData.month).trim(),
+        year: String(bookingData.year).trim(),
+      }
+    : parseThaiDateParts(bookingData.createdAt || bookingData.requesterDate || bookingData.startDateThai);
+
+  const topDate = reqDate;
+  const divDate = parseThaiDateParts(bookingData.divisionReviewerActionAt || bookingData.divisionReviewerDate || bookingData.createdAt);
+  const admDate = (bookingData.adminHeadActionAt || bookingData.adminHeadDate)
+    ? parseThaiDateParts(bookingData.adminHeadActionAt || bookingData.adminHeadDate)
     : { day: "", month: "", year: "" };
-  const appDate = parseThaiDateParts(bookingData.approverDate || bookingData.createdAt);
+  const appDate = parseThaiDateParts(bookingData.approverActionAt || bookingData.approverDate || bookingData.createdAt);
 
   // Signatures
   const divReviewerName = cleanPersonName(bookingData.divisionReviewerName) || "";
@@ -258,11 +267,11 @@ export async function generateCarBookingDocx(bookingData: any): Promise<Buffer> 
       // Top date line
       runs =
         rText("\t                                                          วันที่ ") +
-        rDotted(topDate.day, 6) +
+        rDotted(reqDate.day, 6) +
         rText(" เดือน ") +
-        rDotted(topDate.month, 14) +
+        rDotted(reqDate.month, 14) +
         rText(" พ.ศ. ") +
-        rDotted(topDate.year, 8);
+        rDotted(reqDate.year, 8);
     } else if (fullText.includes("ข้าพเจ้า")) {
       // Requester info
       runs =
@@ -326,21 +335,27 @@ export async function generateCarBookingDocx(bookingData: any): Promise<Buffer> 
         rDotted(reqName, 26) +
         rText(" )");
       state = "requester_pos_next";
-    } else if (fullText.startsWith("ตำแหน่ง") && state === "requester_pos_next") {
+    } else if (fullText.startsWith("ตำแหน่ง") && (state === "requester_pos_next" || state === "after_requester_sig")) {
       // Requester signature position
       runs =
         rText("\t                                                           ตำแหน่ง ") +
         rDotted(reqPos, 26);
       state = "requester_date_next";
-    } else if (fullText.includes("/") && state === "requester_date_next") {
+    } else if (
+      (fullText.includes("/") || fullText.includes("{วันที่}")) &&
+      !fullText.includes("ลงชื่อ") &&
+      !fullText.includes("ตำแหน่ง") &&
+      !fullText.includes("หัวหน้า") &&
+      (state === "requester_date_next" || state === "requester_pos_next")
+    ) {
       // Requester signature date
       runs =
         rText("\t                                                                       ") +
-        rDotted(topDate.day, 4) +
+        rDotted(reqDate.day, 4) +
         rText(" / ") +
-        rDotted(topDate.month, 10) +
+        rDotted(reqDate.month, 10) +
         rText(" / ") +
-        rDotted(topDate.year, 6);
+        rDotted(reqDate.year, 6);
       state = "ready_for_next_block";
     } else if (fullText.startsWith("(") && state === "after_div_head_sig") {
       // Division reviewer signature name
@@ -349,21 +364,29 @@ export async function generateCarBookingDocx(bookingData: any): Promise<Buffer> 
         rDotted(divReviewerName, 26) +
         rText(" )");
       state = "div_pos_next";
-    } else if (fullText.startsWith("ตำแหน่ง") && state === "div_pos_next") {
+    } else if (fullText.startsWith("ตำแหน่ง") && (state === "div_pos_next" || state === "after_div_head_sig")) {
       // Division reviewer signature position
       runs =
         rText("\t                                                           ตำแหน่ง ") +
         rDotted(divReviewerPos, 26);
       state = "div_date_next";
-    } else if (fullText.includes("/") && state === "div_date_next") {
+    } else if (
+      (fullText.includes("/") || fullText.includes("{วันที่}")) &&
+      !fullText.includes("ลงชื่อ") &&
+      !fullText.includes("ตำแหน่ง") &&
+      !fullText.includes("หัวหน้า") &&
+      (state === "div_date_next" || state === "div_pos_next")
+    ) {
       // Division reviewer signature date
       runs =
         rText("\t                                                                       ") +
-        rDotted(divDate.day, 4) +
-        rText(" / ") +
-        rDotted(divDate.month, 10) +
-        rText(" / ") +
-        rDotted(divDate.year, 6);
+        (divReviewerName && divDate.day
+          ? rDotted(divDate.day, 4) +
+            rText(" / ") +
+            rDotted(divDate.month, 10) +
+            rText(" / ") +
+            rDotted(divDate.year, 6)
+          : rDotted("", 4) + rText(" / ") + rDotted("", 10) + rText(" / ") + rDotted("", 6));
       state = "ready_for_next_block";
     } else if (fullText.startsWith("ความเห็น")) {
       // Admin head opinion
@@ -377,13 +400,19 @@ export async function generateCarBookingDocx(bookingData: any): Promise<Buffer> 
         rDotted(adminHeadName, 26) +
         rText(" )");
       state = "admin_pos_next";
-    } else if (fullText.startsWith("ตำแหน่ง") && state === "admin_pos_next") {
+    } else if (fullText.startsWith("ตำแหน่ง") && (state === "admin_pos_next" || state === "after_admin_head_sig")) {
       // Admin head signature position
       runs =
         rText("\t                                                           ตำแหน่ง ") +
         rDotted(adminHeadPos, 26);
       state = "admin_date_next";
-    } else if (fullText.includes("/") && state === "admin_date_next") {
+    } else if (
+      (fullText.includes("/") || fullText.includes("{วันที่}")) &&
+      !fullText.includes("ลงชื่อ") &&
+      !fullText.includes("ตำแหน่ง") &&
+      !fullText.includes("หัวหน้า") &&
+      (state === "admin_date_next" || state === "admin_pos_next")
+    ) {
       // Admin head signature date
       runs =
         rText("\t                                                                       ") +
@@ -405,7 +434,13 @@ export async function generateCarBookingDocx(bookingData: any): Promise<Buffer> 
         rText(" ) อนุญาต   ( ") +
         rDotted(rejMark, 3) +
         rText(" ) ไม่อนุญาต");
-    } else if (fullText.includes("/") && (state === "after_provincial_sig" || state === "provincial_date_next" || i === 36)) {
+    } else if (
+      (fullText.includes("/") || fullText.includes("{วันที่}")) &&
+      !fullText.includes("ลงชื่อ") &&
+      !fullText.includes("ตำแหน่ง") &&
+      !fullText.includes("หัวหน้า") &&
+      (state === "after_provincial_sig" || state === "provincial_date_next" || i === 36)
+    ) {
       // Provincial signature date (Fix name & position are kept from template; date is filled when approved)
       const dayVal = isApproved ? appDate.day : " ";
       const monthVal = isApproved ? appDate.month : " ";
