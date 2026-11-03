@@ -93,6 +93,8 @@ export function CarBookingPage({
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
+  const isAdmin = currentUser?.role === "admin";
+
   // Modals state
   const [selectedDocBooking, setSelectedDocBooking] = useState<CarBookingRequest | null>(null);
   const [selectedReviewBooking, setSelectedReviewBooking] = useState<CarBookingRequest | null>(null);
@@ -297,14 +299,9 @@ export function CarBookingPage({
     let isMounted = true;
     fetchCarBookings().then((remoteBookings) => {
       if (!isMounted) return;
-      if (remoteBookings && remoteBookings.length > 0) {
+      if (Array.isArray(remoteBookings)) {
         setBookings(remoteBookings);
         saveStoredBookings(remoteBookings);
-      } else if (loadedBookings && loadedBookings.length > 0) {
-        // Sync local bookings to Supabase if Supabase was empty
-        loadedBookings.forEach((b) => {
-          saveCarBooking(b).catch(console.warn);
-        });
       }
     });
 
@@ -323,7 +320,7 @@ export function CarBookingPage({
     });
 
     const unsubBookings = subscribeToCarBookings((updatedBookings) => {
-      if (isMounted && updatedBookings && updatedBookings.length > 0) {
+      if (isMounted && Array.isArray(updatedBookings)) {
         setBookings(updatedBookings);
         saveStoredBookings(updatedBookings);
       }
@@ -351,10 +348,6 @@ export function CarBookingPage({
     saveStoredBookings(newBookings);
     if (targetBooking) {
       saveCarBooking(targetBooking).catch(console.error);
-    } else {
-      newBookings.forEach((b) => {
-        saveCarBooking(b).catch(console.error);
-      });
     }
   };
 
@@ -811,7 +804,8 @@ export function CarBookingPage({
       };
     });
 
-    updateAndSaveBookings(updated);
+    const updatedBooking = updated.find((b) => b.id === bookingId);
+    updateAndSaveBookings(updated, updatedBooking);
 
     recordAuditLog(
       currentUser.name,
@@ -884,7 +878,8 @@ export function CarBookingPage({
       };
     });
 
-    updateAndSaveBookings(updated);
+    const updatedBooking = updated.find((b) => b.id === bookingId);
+    updateAndSaveBookings(updated, updatedBooking);
 
     recordAuditLog(
       currentUser.name,
@@ -940,7 +935,8 @@ export function CarBookingPage({
       };
     });
 
-    updateAndSaveBookings(updated);
+    const updatedBooking = updated.find((b) => b.id === bookingId);
+    updateAndSaveBookings(updated, updatedBooking);
 
     recordAuditLog(
       currentUser.name,
@@ -1035,7 +1031,8 @@ export function CarBookingPage({
       };
     });
 
-    updateAndSaveBookings(updated);
+    const updatedBooking = updated.find((b) => b.id === bookingId);
+    updateAndSaveBookings(updated, updatedBooking);
 
     // Also mark vehicle status as in_use
     const updatedVehicles = vehicles.map((v) => {
@@ -1078,7 +1075,8 @@ export function CarBookingPage({
       };
     });
 
-    updateAndSaveBookings(updated);
+    const updatedBooking = updated.find((b) => b.id === bookingId);
+    updateAndSaveBookings(updated, updatedBooking);
     const targetBooking = bookings.find((b) => b.id === bookingId);
     recordAuditLog(
       currentUser.name,
@@ -1125,19 +1123,28 @@ export function CarBookingPage({
       };
     });
 
-    updateAndSaveBookings(updated);
+    const updatedBooking = updated.find((b) => b.id === booking.id);
+    updateAndSaveBookings(updated, updatedBooking);
     showToast(
       `🔔 แจ้งเตือนคืนรถยนต์ [${booking.licensePlate}] ไปยังคุณ ${booking.requesterName} ผ่านศูนย์การแจ้งเตือนในระบบเรียบร้อยแล้ว!`
     );
   };
 
-  // Cancel booking by requester
-  const handleCancelBooking = (booking: CarBookingRequest) => {
-    if (!confirm(`คุณต้องการยกเลิกคำขอ ${booking.requestNo} หรือไม่?`)) return;
+  // Cancel / Delete booking by requester or admin
+  const handleCancelBooking = async (booking: CarBookingRequest) => {
+    const actionLabel = isAdmin ? "ลบรายการใช้รถนี้" : `ยกเลิกคำขอ ${booking.requestNo}`;
+    if (!confirm(`คุณต้องการ${actionLabel} หรือไม่?`)) return;
     const updated = bookings.filter((b) => b.id !== booking.id);
-    updateAndSaveBookings(updated);
-    deleteCarBooking(booking.id).catch(() => { });
-    showToast(`ยกเลิกคำขอ ${booking.requestNo} สำเร็จ`);
+    setBookings(updated);
+    saveStoredBookings(updated);
+    await deleteCarBooking(booking.id);
+    recordAuditLog(
+      currentUser?.name || "ผู้ใช้งาน",
+      `${isAdmin ? "ลบรายการใช้รถยนต์ราชการ (Admin)" : "ยกเลิกคำขอใช้รถ"}: ${booking.requestNo}`,
+      `ทะเบียน: ${booking.licensePlate} (${booking.destination})`,
+      "success"
+    ).catch(console.warn);
+    showToast(`🗑️ ${actionLabel} สำเร็จ`);
   };
 
   // ─── STEP 5, 6, 7: Return Vehicle Report & Revert Vehicle Status ───
@@ -1212,7 +1219,8 @@ export function CarBookingPage({
         notifications: [...(b.notifications || []), ...notifs],
       };
     });
-    updateAndSaveBookings(updatedBookings);
+    const updatedBooking = updatedBookings.find((b) => b.id === bookingId);
+    updateAndSaveBookings(updatedBookings, updatedBooking);
 
     // 2. Step 6 & 7: Revert Vehicle Status & Update odometer and fuel level
     // If defect found -> "maintenance", else -> "available" (เคลียร์สถานะพร้อมใช้งาน)
@@ -2298,14 +2306,16 @@ export function CarBookingPage({
                           </button>
                         )}
 
-                        {/* Requester cancel option if pending */}
-                        {isMyBooking && (b.status === "pending_division_head" || b.status === "pending_review" || b.status === "pending_fleet_assignment") && (
+                        {/* Requester cancel option or Admin delete option */}
+                        {(isAdmin || (isMyBooking && (b.status === "pending_division_head" || b.status === "pending_review" || b.status === "pending_fleet_assignment"))) && (
                           <button
                             type="button"
                             onClick={() => handleCancelBooking(b)}
-                            className="px-3 py-1.5 text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                            className="px-3 py-1.5 text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-bold transition-colors cursor-pointer inline-flex items-center gap-1"
+                            title={isAdmin ? "ลบรายการใช้รถนี้ (Admin)" : "ยกเลิกคำขอ"}
                           >
-                            ยกเลิกคำขอ
+                            <span>🗑️</span>
+                            <span>{isAdmin ? "ลบคำขอ (Admin)" : "ยกเลิกคำขอ"}</span>
                           </button>
                         )}
                       </div>

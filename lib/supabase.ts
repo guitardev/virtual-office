@@ -22,7 +22,14 @@ import {
   OfficialDocumentType,
 } from "./types";
 import { INITIAL_MEMBERS, INITIAL_SYSTEM_MODULES, INITIAL_ACCESS_REQUESTS, INITIAL_AUDIT_LOGS } from "./rbac";
-import { INITIAL_VEHICLES, INITIAL_BOOKING_REQUESTS } from "./carbooking-data";
+import {
+  INITIAL_VEHICLES,
+  INITIAL_BOOKING_REQUESTS,
+  loadStoredBookings,
+  saveStoredBookings,
+  loadStoredVehicles,
+  saveStoredVehicles,
+} from "./carbooking-data";
 import { DEFAULT_CHAT_GROUPS, INITIAL_CHAT_MESSAGES } from "./chat-data";
 import { loadStoredCircularDocs, saveStoredCircularDocs } from "./circular-data";
 
@@ -922,20 +929,32 @@ export function mapCarBookingToRow(b: CarBookingRequest): any {
 }
 
 export async function fetchVehicles(): Promise<Vehicle[]> {
-  if (!supabase) return INITIAL_VEHICLES;
+  const localVehicles = loadStoredVehicles();
+  if (!supabase) return localVehicles;
   try {
     const { data, error } = await supabase
       .from("vehicles")
       .select("*")
       .order("id", { ascending: true });
-    if (error || !data || data.length === 0) return INITIAL_VEHICLES;
-    return data.map(mapRowToVehicle);
+    if (error || !data || data.length === 0) return localVehicles;
+    const liveVehicles = data.map(mapRowToVehicle);
+    saveStoredVehicles(liveVehicles);
+    return liveVehicles;
   } catch {
-    return INITIAL_VEHICLES;
+    return localVehicles;
   }
 }
 
 export async function saveVehicle(vehicle: Vehicle): Promise<boolean> {
+  try {
+    const current = loadStoredVehicles();
+    const exists = current.some((v) => v.id === vehicle.id);
+    const updated = exists ? current.map((v) => (v.id === vehicle.id ? vehicle : v)) : [vehicle, ...current];
+    saveStoredVehicles(updated);
+  } catch (err) {
+    console.warn("Could not save vehicle to local cache:", err);
+  }
+
   if (!supabase) return true;
   try {
     const row = mapVehicleToRow(vehicle);
@@ -947,20 +966,44 @@ export async function saveVehicle(vehicle: Vehicle): Promise<boolean> {
 }
 
 export async function fetchCarBookings(): Promise<CarBookingRequest[]> {
-  if (!supabase) return [];
+  const localBookings = loadStoredBookings();
+  if (!supabase) return localBookings;
   try {
     const { data, error } = await supabase
       .from("car_bookings")
       .select("*")
       .order("created_at", { ascending: false });
-    if (error || !data) return [];
-    return data.map(mapRowToCarBooking);
-  } catch {
-    return [];
+
+    if (error) {
+      console.warn("Could not fetch car bookings from Supabase, using local cache:", error.message);
+      return localBookings;
+    }
+    if (!data) {
+      saveStoredBookings([]);
+      return [];
+    }
+
+    const liveBookings = data.map(mapRowToCarBooking);
+    // Remote database is single source of truth: synchronize local storage cache
+    saveStoredBookings(liveBookings);
+    return liveBookings;
+  } catch (err) {
+    console.warn("Exception fetching car bookings from Supabase, using local cache:", err);
+    return localBookings;
   }
 }
 
 export async function saveCarBooking(booking: CarBookingRequest): Promise<boolean> {
+  // Always update local cache first
+  try {
+    const current = loadStoredBookings();
+    const exists = current.some((b) => b.id === booking.id);
+    const updated = exists ? current.map((b) => (b.id === booking.id ? booking : b)) : [booking, ...current];
+    saveStoredBookings(updated);
+  } catch (err) {
+    console.warn("Could not update local car bookings cache:", err);
+  }
+
   if (!supabase) return true;
   try {
     const row = mapCarBookingToRow(booking);
@@ -1010,6 +1053,13 @@ export function subscribeToCarBookings(callback: (bookings: CarBookingRequest[])
 }
 
 export async function deleteVehicle(id: string): Promise<boolean> {
+  try {
+    const current = loadStoredVehicles();
+    saveStoredVehicles(current.filter((v) => v.id !== id));
+  } catch (err) {
+    console.warn("Could not remove vehicle from local cache:", err);
+  }
+
   if (!supabase) return true;
   try {
     const { error } = await supabase.from("vehicles").delete().eq("id", id);
@@ -1020,11 +1070,25 @@ export async function deleteVehicle(id: string): Promise<boolean> {
 }
 
 export async function deleteCarBooking(id: string): Promise<boolean> {
+  // 1. Immediately remove from local cache so all pages and effects see it gone
+  try {
+    const current = loadStoredBookings();
+    const updated = current.filter((b) => b.id !== id);
+    saveStoredBookings(updated);
+  } catch (err) {
+    console.warn("Could not delete car booking from local cache:", err);
+  }
+
   if (!supabase) return true;
   try {
     const { error } = await supabase.from("car_bookings").delete().eq("id", id);
-    return !error;
-  } catch {
+    if (error) {
+      console.error("Error deleting car booking from Supabase:", error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("Exception deleting car booking from Supabase:", err);
     return false;
   }
 }

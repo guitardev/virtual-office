@@ -14,11 +14,14 @@ import {
   fetchVehicles,
   saveVehicle,
   deleteVehicle,
+  subscribeToVehicles,
   fetchCarBookings,
   saveCarBooking,
   deleteCarBooking,
+  subscribeToCarBookings,
   recordAuditLog,
 } from "@/lib/supabase";
+import { saveStoredBookings, saveStoredVehicles } from "@/lib/carbooking-data";
 import { RealisticFuelGauge } from "@/components/carbooking/RealisticFuelGauge";
 import { VehicleDetailModal } from "@/components/carbooking/VehicleDetailModal";
 import { VehicleFormModal } from "@/components/carbooking/VehicleFormModal";
@@ -81,6 +84,23 @@ export function VehiclesTab({ currentUser, showToast, members }: VehiclesTabProp
 
   useEffect(() => {
     refreshData();
+
+    const unsubBookings = subscribeToCarBookings((liveBookings) => {
+      if (Array.isArray(liveBookings)) {
+        setBookings(liveBookings);
+      }
+    });
+
+    const unsubVehicles = subscribeToVehicles((liveVehicles) => {
+      if (Array.isArray(liveVehicles)) {
+        setVehicles(liveVehicles);
+      }
+    });
+
+    return () => {
+      unsubBookings();
+      unsubVehicles();
+    };
   }, [refreshData]);
 
   // Statistics
@@ -176,6 +196,7 @@ export function VehiclesTab({ currentUser, showToast, members }: VehiclesTabProp
       showToast(`➕ เพิ่มรถยนต์ราชการ ${savedVehicle.licensePlate} เข้าสู่ระบบสำเร็จ`);
     }
     setVehicles(updated);
+    saveStoredVehicles(updated);
     await saveVehicle(savedVehicle);
     await recordAuditLog(
       currentUser?.name || "ผู้ดูแลระบบ",
@@ -192,7 +213,9 @@ export function VehiclesTab({ currentUser, showToast, members }: VehiclesTabProp
     if (!target) return;
     if (!confirm(`คุณต้องการลบ/ปลดระวางยานพาหนะ "${target.name} [${target.licensePlate}]" ออกจากระบบหรือไม่?`)) return;
 
-    setVehicles((prev) => prev.filter((v) => v.id !== vehicleId));
+    const updated = vehicles.filter((v) => v.id !== vehicleId);
+    setVehicles(updated);
+    saveStoredVehicles(updated);
     await deleteVehicle(vehicleId);
     await recordAuditLog(
       currentUser?.name || "ผู้ดูแลระบบ",
@@ -209,6 +232,7 @@ export function VehiclesTab({ currentUser, showToast, members }: VehiclesTabProp
       return { ...v, status: newStatus };
     });
     setVehicles(updated);
+    saveStoredVehicles(updated);
 
     const target = updated.find((v) => v.id === vehicleId);
     if (target) {
@@ -239,6 +263,7 @@ export function VehiclesTab({ currentUser, showToast, members }: VehiclesTabProp
       showToast(`➕ บันทึกรายการใช้รถ [${savedBooking.requestNo}] เข้าสู่ระบบสำเร็จ`);
     }
     setBookings(updated);
+    saveStoredBookings(updated);
     await saveCarBooking(savedBooking);
     await recordAuditLog(
       currentUser?.name || "ผู้ดูแลระบบ",
@@ -255,7 +280,9 @@ export function VehiclesTab({ currentUser, showToast, members }: VehiclesTabProp
     if (!target) return;
     if (!confirm(`คุณต้องการลบรายการใช้รถ "${target.requestNo} [${target.destination}]" ออกจากระบบหรือไม่?`)) return;
 
-    setBookings((prev) => prev.filter((b) => b.id !== bookingId));
+    const updated = bookings.filter((b) => b.id !== bookingId);
+    setBookings(updated);
+    saveStoredBookings(updated);
     await deleteCarBooking(bookingId);
     await recordAuditLog(
       currentUser?.name || "ผู้ดูแลระบบ",

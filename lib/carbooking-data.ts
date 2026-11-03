@@ -221,9 +221,12 @@ const LEGACY_VEHICLES_STORAGE_KEY = "omnioffice_vehicles_v2";
 export function loadStoredBookings(): CarBookingRequest[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw =
-      localStorage.getItem(CAR_STORAGE_KEY) ||
-      localStorage.getItem(LEGACY_CAR_STORAGE_KEY);
+    // Purge legacy storage keys to avoid resurrecting obsolete mock data
+    try {
+      localStorage.removeItem(LEGACY_CAR_STORAGE_KEY);
+    } catch {}
+
+    const raw = localStorage.getItem(CAR_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
@@ -237,6 +240,9 @@ export function saveStoredBookings(bookings: CarBookingRequest[]) {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(CAR_STORAGE_KEY, JSON.stringify(bookings));
+    try {
+      localStorage.removeItem(LEGACY_CAR_STORAGE_KEY);
+    } catch {}
   } catch (e) {
     console.error("Failed to save car bookings:", e);
   }
