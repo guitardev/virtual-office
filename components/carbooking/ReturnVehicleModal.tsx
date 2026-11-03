@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { CarBookingRequest, Vehicle, Member, VehicleReturnReport, FuelLevel } from "@/lib/types";
 import { RealisticFuelGauge } from "./RealisticFuelGauge";
 
@@ -43,10 +43,43 @@ export function ReturnVehicleModal({
   const [hasIssue, setHasIssue] = useState<boolean>(false);
   const [needsMaintenance, setNeedsMaintenance] = useState<boolean>(false);
 
-  const defaultInspector = inspectors[0] || currentUser;
-  const [inspectorId, setInspectorId] = useState<string>(defaultInspector?.id || "");
+  // ผู้ตรวจรับรถยนต์ คือคนเดียวกับ ผู้จัดสรรรถและพนักงานขับรถ (ฝ่ายบริหารทั่วไป)
+  const designatedDispatcher = useMemo(() => {
+    // 1. ค้นหาจาก fleetDispatcherId / fleetDispatcherName ที่ระบุไว้ในคำขอใช้รถ
+    if (booking.fleetDispatcherId) {
+      const match = inspectors.find((i) => i.id === booking.fleetDispatcherId);
+      if (match) return match;
+    }
+    if (booking.fleetDispatcherName) {
+      const match = inspectors.find(
+        (i) => i.name && (i.name.includes(booking.fleetDispatcherName!) || booking.fleetDispatcherName!.includes(i.name))
+      );
+      if (match) return match;
+      return {
+        id: booking.fleetDispatcherId || "dispatcher_designated",
+        name: booking.fleetDispatcherName,
+        position:
+          booking.fleetDispatcherPosition ||
+          "เจ้าหน้าที่ฝ่ายบริหารทั่วไป (ผู้จัดสรรรถ/คนขับ)",
+        division: "ฝ่ายบริหารทั่วไป",
+        role: "member" as const,
+      };
+    }
+    // 2. ถ้าในคำขอเดิมยังไม่มีฟิลด์ ให้เลือกเจ้าหน้าที่จัดสรรฝ่ายบริหารทั่วไป (นายปภาวิน หรือ นายเสกพล)
+    const paphawin = inspectors.find((i) => i.id === "syno_ปภาวิน" || i.name?.includes("ปภาวิน"));
+    if (paphawin) return paphawin;
+
+    const sekphol = inspectors.find((i) => i.id === "syno_เสกพล" || i.name?.includes("เสกพล"));
+    if (sekphol) return sekphol;
+
+    return inspectors[0] || currentUser;
+  }, [booking, inspectors, currentUser]);
+
+  const [inspectorId, setInspectorId] = useState<string>(designatedDispatcher.id);
 
   const totalDistance = Math.max(0, endMileage - startMileage);
+
+  const selectedInspector = inspectors.find((i) => i.id === inspectorId) || designatedDispatcher;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,7 +95,6 @@ export function ReturnVehicleModal({
       }
     }
 
-    const selectedInspector = inspectors.find((i) => i.id === inspectorId) || currentUser;
     const isProblemFound = hasIssue || bodyCondition === "มีความเสียหาย" || engineCondition === "พบอาการผิดปกติ";
 
     const report: VehicleReturnReport = {
@@ -436,20 +468,41 @@ export function ReturnVehicleModal({
             </div>
 
             <div>
-              <label className="block text-slate-600 mb-1 font-semibold">
-                เจ้าหน้าที่ผู้ตรวจรับรถยนต์ราชการ <span className="text-rose-500">*</span>
+              <label className="block text-slate-600 mb-1 font-semibold flex items-center justify-between">
+                <span>
+                  เจ้าหน้าที่ผู้ตรวจรับรถยนต์ราชการ <span className="text-rose-500">*</span>
+                </span>
+                <span className="text-[10px] text-teal-800 font-bold bg-teal-100 px-2 py-0.5 rounded-md border border-teal-300">
+                  ผู้จัดสรรรถและคนขับ
+                </span>
               </label>
               <select
                 value={inspectorId}
                 onChange={(e) => setInspectorId(e.target.value)}
-                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-800 font-semibold font-body"
+                className="w-full px-3 py-2 bg-teal-50/50 border border-teal-300 rounded-xl text-slate-900 font-semibold font-body focus:bg-white focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
               >
-                {inspectors.map((ins) => (
-                  <option key={ins.id} value={ins.id} className="font-body">
-                    {ins.name} ({ins.position})
-                  </option>
-                ))}
+                {inspectors.map((ins) => {
+                  const isMatchDispatcher =
+                    (booking.fleetDispatcherId && ins.id === booking.fleetDispatcherId) ||
+                    (booking.fleetDispatcherName &&
+                      ins.name &&
+                      (ins.name.includes(booking.fleetDispatcherName) || booking.fleetDispatcherName.includes(ins.name))) ||
+                    ins.id === designatedDispatcher.id;
+
+                  return (
+                    <option key={ins.id} value={ins.id} className="font-body text-slate-900">
+                      {ins.name} ({ins.position}) {isMatchDispatcher ? "⭐ [ผู้จัดสรรรถและคนขับ]" : "· ผู้จัดสรรฝ่ายบริหาร"}
+                    </option>
+                  );
+                })}
               </select>
+              <p className="text-[10px] text-teal-700 mt-1 flex items-center gap-1 font-medium">
+                <span>✓</span>
+                <span>
+                  ผู้ตรวจรับรถยนต์คือบุคคลเดียวกับผู้จัดสรรรถและพนักงานขับรถ:{" "}
+                  <strong>{selectedInspector.name}</strong>
+                </span>
+              </p>
             </div>
           </div>
           </div>

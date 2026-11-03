@@ -521,24 +521,29 @@ export function buildUnifiedNotifications({
 
     // Stage 7: Return Completed / Mission Closed
     if (b.status === "completed") {
-      const isFleet =
+      const isFleetOrInspector =
         currentUser.id === "syno_ปภาวิน" ||
         currentUser.id === "syno_เสกพล" ||
         myName.includes("เสกพล") ||
+        myName.includes("ปภาวิน") ||
+        (b.returnReport?.inspectorId && b.returnReport.inspectorId === currentUser.id) ||
+        (b.returnReport?.inspectorName && myName && b.returnReport.inspectorName.includes(myName)) ||
+        (b.fleetDispatcherId && b.fleetDispatcherId === currentUser.id) ||
+        (b.fleetDispatcherName && myName && b.fleetDispatcherName.includes(myName)) ||
         myDivision.includes("ฝ่ายบริหารทั่วไป");
 
-      if (isRequester || isFleet) {
+      if (isRequester || isFleetOrInspector) {
         const notifId = `car_returned_${b.id}`;
         notifs.push({
           id: notifId,
           type: "carbooking",
           title: `ส่งคืนยานพาหนะเรียบร้อย: ${b.requestNo}`,
-          message: `ได้รับคืนรถยนต์ ${b.vehicleName || ""} [${b.licensePlate || "-"}] และกุญแจเรียบร้อย ปิดภารกิจสมบูรณ์`,
+          message: `ได้รับคืนรถยนต์ ${b.vehicleName || ""} [${b.licensePlate || "-"}] และกุญแจเรียบร้อย ตรวจรับโดย ${b.returnReport?.inspectorName || b.fleetDispatcherName || "ผู้จัดสรรรถและคนขับ"} ปิดภารกิจสมบูรณ์`,
           timestamp: b.returnTime?.replace("T", " ") || "เสร็จสิ้น",
           createdAt: new Date().toISOString(),
           isRead: readIds.has(notifId),
           priority: "normal",
-          senderName: "งานยานพาหนะ ฝ่ายบริหารทั่วไป",
+          senderName: b.returnReport?.inspectorName || b.fleetDispatcherName || "งานยานพาหนะ ฝ่ายบริหารทั่วไป",
           link: { page: "carbooking", targetId: b.id },
         });
       }

@@ -93,6 +93,10 @@ export function VehicleReturnDocumentModal({
                 <span className="font-semibold text-slate-800">{booking.assignedDriver || "ขับขี่เอง"}</span>
               </div>
               <div className="sm:col-span-2">
+                <span className="text-slate-500">ผู้จัดสรรและตรวจรับรถยนต์:</span>{" "}
+                <span className="font-semibold text-teal-900">{report.inspectorName}</span>
+              </div>
+              <div className="sm:col-span-2">
                 <span className="text-slate-500">ภารกิจที่ปฏิบัติ:</span>{" "}
                 <span className="font-semibold text-slate-800">{booking.purpose} ณ {booking.destination}</span>
               </div>
@@ -197,7 +201,7 @@ export function VehicleReturnDocumentModal({
             <div className="p-5 rounded-2xl border border-teal-200 bg-teal-50/40 flex flex-col justify-between h-44">
               <div>
                 <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
-                  เจ้าหน้าที่ผู้ตรวจรับรถยนต์
+                  เจ้าหน้าที่ผู้จัดสรรและตรวจรับรถยนต์
                 </div>
                 <div className="h-10 flex items-center justify-center italic text-teal-800 font-body text-sm">
                   (ลงชื่ออิเล็กทรอนิกส์)
@@ -207,8 +211,8 @@ export function VehicleReturnDocumentModal({
                 <div className="text-xs font-bold text-slate-900">
                   ({report.inspectorName.split(" (")[0]})
                 </div>
-                <div className="text-[10px] text-slate-500">{report.inspectorName.split(" (")[1]?.replace(")", "") || "เจ้าหน้าที่ยานพาหนะ"}</div>
-                <div className="text-[9px] text-emerald-600 font-mono mt-1">✓ ตรวจรับสภาพเรียบร้อย</div>
+                <div className="text-[10px] text-slate-500">{report.inspectorName.split(" (")[1]?.replace(")", "") || "เจ้าหน้าที่ฝ่ายบริหารทั่วไป"}</div>
+                <div className="text-[9px] text-emerald-600 font-mono mt-1">✓ ตรวจรับสภาพเรียบร้อย (ผู้จัดสรรรถ/คนขับ)</div>
               </div>
             </div>
           </div>

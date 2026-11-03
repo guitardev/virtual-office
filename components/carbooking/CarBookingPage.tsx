@@ -273,6 +273,45 @@ export function CarBookingPage({
     return [adminHead, paphawin];
   }, [members]);
 
+  // เจ้าหน้าที่ผู้ตรวจรับรถยนต์ (บุคคลเดียวกับผู้จัดสรรรถและพนักงานขับรถ - ฝ่ายบริหารทั่วไป)
+  const eligibleInspectors = useMemo(() => {
+    if (!selectedReturnBooking) return fleetDispatchers as Member[];
+
+    const list: Member[] = [];
+    const dispId = selectedReturnBooking.fleetDispatcherId;
+    const dispName = selectedReturnBooking.fleetDispatcherName;
+
+    // 1. ค้นหาผู้จัดสรรที่ระบุไว้ในคำขอนี้
+    const matched = members.find(
+      (m) =>
+        (dispId && m.id === dispId) ||
+        (dispName && m.name && (m.name.includes(dispName) || dispName.includes(m.name)))
+    );
+    if (matched) {
+      list.push(matched);
+    } else if (dispName) {
+      list.push({
+        id: dispId || "dispatcher_designated",
+        name: dispName,
+        position:
+          selectedReturnBooking.fleetDispatcherPosition ||
+          "เจ้าหน้าที่ฝ่ายบริหารทั่วไป (ผู้จัดสรรรถ/คนขับ)",
+        division: "ฝ่ายบริหารทั่วไป",
+        role: "member",
+      } as unknown as Member);
+    }
+
+    // 2. เสริมด้วยเจ้าหน้าที่ฝ่ายบริหารทั่วไปผู้รับผิดชอบจัดสรรรถ (นายปภาวิน, นายเสกพล)
+    fleetDispatchers.forEach((fd) => {
+      if (!list.some((item) => item.id === fd.id || (item.name && fd.name && item.name.includes(fd.name)))) {
+        const fullMem = members.find((m) => m.id === fd.id || (m.name && fd.name && m.name.includes(fd.name)));
+        list.push(fullMem || (fd as Member));
+      }
+    });
+
+    return list.length > 0 ? list : (fleetDispatchers as Member[]);
+  }, [selectedReturnBooking, members, fleetDispatchers]);
+
   // Real-time Conflict Guard calculations
   const conflictDetails = useMemo(() => {
     return getConflictingBookings(
@@ -1305,10 +1344,9 @@ export function CarBookingPage({
       timestamp: nowFormatted,
       type: "return_completed",
       title: "ส่งคืนรถยนต์และกุญแจเรียบร้อย",
-      message: `🏁 ส่งคืนรถยนต์ ${licensePlate} เรียบร้อยแล้ว (กุญแจรถ: ${report.keyReturned ? "ส่งคืนแล้ว" : "ยังไม่ส่งคืน"}) เลขไมล์: ${report.endMileage.toLocaleString()} กม. (ระยะวิ่งจริง ${report.totalDistance.toLocaleString()} กม.) เกจน้ำมัน: ${report.endFuelLevel
-        } ผู้ตรวจรับ: ${report.inspectorName}`,
-      recipientRole: "เจ้าหน้าที่ยานพาหนะ",
-      recipientName: "ฝ่ายบริหารทั่วไป (งานยานพาหนะ)",
+      message: `🏁 ส่งคืนรถยนต์ ${licensePlate} เรียบร้อยแล้ว (กุญแจรถ: ${report.keyReturned ? "ส่งคืนแล้ว" : "ยังไม่ส่งคืน"}) เลขไมล์: ${report.endMileage.toLocaleString()} กม. (ระยะวิ่งจริง ${report.totalDistance.toLocaleString()} กม.) เกจน้ำมัน: ${report.endFuelLevel} ผู้ตรวจรับ (ผู้จัดสรรรถและคนขับ): ${report.inspectorName}`,
+      recipientRole: "เจ้าหน้าที่ผู้จัดสรรและตรวจรับรถ",
+      recipientName: report.inspectorName,
       channel: "webapp_notification",
       status: "delivered",
     };
@@ -1376,11 +1414,11 @@ export function CarBookingPage({
 
     if (hasDefect) {
       showToast(
-        `⚠️ บันทึกการส่งคืนรถ [${licensePlate}] และรายงานแจ้งซ่อมสำเร็จ! ระบบได้ปรับสถานะเป็น "ซ่อมบำรุง" และแจ้งเตือนด่วนไปยังหัวหน้าฝ่ายบริหารทั่วไปผ่านศูนย์การแจ้งเตือนแล้ว`
+        `⚠️ บันทึกการส่งคืนรถ [${licensePlate}] และรายงานแจ้งซ่อมสำเร็จ! ตรวจรับโดย ${report.inspectorName} (ผู้จัดสรรรถ/คนขับ) ระบบได้ปรับสถานะเป็น "ซ่อมบำรุง" และแจ้งเตือนด่วนไปยังหัวหน้าฝ่ายบริหารทั่วไปผ่านศูนย์การแจ้งเตือนแล้ว`
       );
     } else {
       showToast(
-        `✅ ส่งคืนรถยนต์ราชการ [${licensePlate}] พร้อมส่งกุญแจคืนเรียบร้อย! ระบบคำนวณระยะวิ่งจริง ${report.totalDistance.toLocaleString()} กม. และเคลียร์สถานะเป็น "พร้อมใช้งาน"`
+        `✅ ส่งคืนรถยนต์ราชการ [${licensePlate}] พร้อมส่งกุญแจคืนเรียบร้อย! ตรวจรับโดย ${report.inspectorName} (ผู้จัดสรรรถ/คนขับ) คำนวณระยะวิ่งจริง ${report.totalDistance.toLocaleString()} กม. และเคลียร์สถานะเป็น "พร้อมใช้งาน"`
       );
     }
   };
@@ -2306,7 +2344,7 @@ export function CarBookingPage({
                             </span>
                           </div>
                           <div>
-                            <span className="text-slate-500">ผู้ตรวจรับ: </span>
+                            <span className="text-slate-500">ผู้ตรวจรับ (ผู้จัดสรร): </span>
                             <span className="font-semibold text-slate-800">
                               {b.returnReport.inspectorName}
                             </span>
@@ -2442,7 +2480,11 @@ export function CarBookingPage({
                         >
                           {b.status === "completed" ? "✓" : "6"}
                         </span>
-                        <span>6. ส่งกุญแจคืน & ตรวจรับ</span>
+                        <span>
+                          {b.status === "completed"
+                            ? `6. ตรวจรับรถคืน (${b.returnReport?.inspectorName ? b.returnReport.inspectorName.split(" ")[0] : (b.fleetDispatcherName ? b.fleetDispatcherName.split(" ")[0] : "ฝ่ายบริหาร")})`
+                            : "6. ส่งกุญแจคืน & ตรวจรับ"}
+                        </span>
                       </div>
                     </div>
 
@@ -3327,7 +3369,7 @@ export function CarBookingPage({
             vehicles.find((v) => v.id === selectedReturnBooking.vehicleId) || vehicles[0]
           }
           currentUser={currentUser}
-          inspectors={members && members.length > 0 ? members : [currentUser]}
+          inspectors={eligibleInspectors}
           onClose={() => setSelectedReturnBooking(null)}
           onSubmitReturn={handleReturnVehicle}
         />
