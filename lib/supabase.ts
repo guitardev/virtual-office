@@ -150,20 +150,99 @@ function createTableSubscriptionMultiplexer<T>(
 }
 
 /**
+ * Known Thai honorific prefixes and abbreviations
+ */
+export const KNOWN_THAI_PREFIXES = [
+  "นางสาว",
+  "นาง",
+  "นาย",
+  "น.ส.",
+  "ดร.",
+  "ว่าที่ ร.ต. หญิง",
+  "ว่าที่ ร.ต.",
+  "ว่าที่ร้อยตรี",
+  "ร.ต.อ.",
+  "พ.ต.ต.",
+  "พ.ต.ท.",
+  "พ.ต.อ.",
+  "พล.ต.",
+  "พล.ต.ท.",
+  "พล.ต.อ.",
+  "Mr.",
+  "Mrs.",
+  "Ms.",
+  "Dr.",
+];
+
+/**
+ * Formats and ensures a member's full name starts with an appropriate title/prefix.
+ * Prevents double prefixes (e.g. "นายนาย...", "นางสาวนางสาว...")
+ * and respects Thai vs English formatting.
+ */
+export function formatFullMemberName(
+  prefix?: string | null,
+  name?: string | null,
+  firstName?: string | null,
+  lastName?: string | null
+): string {
+  const p = (prefix || "").trim();
+  const f = (firstName || "").trim();
+  const l = (lastName || "").trim();
+  let baseName = (name || "").trim();
+
+  // If baseName is empty, try to construct it from firstName and lastName
+  if (!baseName) {
+    baseName = [f, l].filter(Boolean).join(" ").trim();
+  }
+
+  // If still empty
+  if (!baseName) {
+    return p || "ผู้ใช้งาน";
+  }
+
+  // If no prefix is requested, return baseName as is
+  if (!p) {
+    return baseName;
+  }
+
+  // Check if baseName already starts with the requested prefix (exact match or with trailing space)
+  if (baseName.startsWith(p)) {
+    return baseName;
+  }
+
+  // Check if baseName already starts with any other recognized prefix
+  const alreadyHasPrefix = KNOWN_THAI_PREFIXES.some(
+    (known) => baseName.startsWith(known)
+  );
+  if (alreadyHasPrefix) {
+    return baseName;
+  }
+
+  // Determine whether to add a space between prefix and name
+  // Standard Thai names do not have space between นาย/นาง/นางสาว and first name (e.g. นายสมชาย, นางสาวสมหญิง)
+  // Prefix with dot or space (e.g. "ว่าที่ ร.ต.") or English names use space
+  const isThai = /^[\u0E00-\u0E7F]/.test(baseName);
+  const needsSpace = !isThai || p.includes(".") || p.includes(" ");
+
+  return needsSpace ? `${p} ${baseName}` : `${p}${baseName}`;
+}
+
+/**
  * Map Supabase user row to Member object
  */
 export function mapRowToMember(row: any): Member {
+  const prefix = row.prefix ?? "";
+  const firstName = row.first_name || (row.name ? row.name.split(" ")[0] : "");
+  const lastName = row.last_name ?? "";
+  const fullName = formatFullMemberName(prefix, row.name, firstName, lastName);
+
   return {
     id: row.id,
-    prefix: row.prefix ?? "",
-    firstName: row.first_name || (row.name ? row.name.split(" ")[0] : ""),
-    lastName: row.last_name ?? "",
+    prefix,
+    firstName,
+    lastName,
     nickname: row.nickname || undefined,
-    name:
-      row.name ||
-      `${row.prefix ? row.prefix + " " : ""}${row.first_name || ""} ${row.last_name || ""}`.trim() ||
-      row.first_name ||
-      "ผู้ใช้งาน",
+    name: fullName,
     personnelType: row.personnel_type ? (row.personnel_type as PersonnelType) : undefined,
     position: row.position || "รอกำหนดตำแหน่ง",
     division: row.division || "รอกำหนดกลุ่มงาน",
@@ -180,7 +259,7 @@ export function mapRowToMember(row: any): Member {
           day: "numeric",
         })
       : "1 ม.ค. 2024",
-    avatarText: (row.first_name || row.name || "U").slice(0, 2),
+    avatarText: (firstName || fullName || "U").slice(0, 2),
     avatarUrl: row.avatar_url || undefined,
   };
 }
@@ -189,13 +268,20 @@ export function mapRowToMember(row: any): Member {
  * Map Member object to Supabase user row
  */
 export function mapMemberToRow(member: Member): any {
+  const fullName = formatFullMemberName(
+    member.prefix,
+    member.name,
+    member.firstName,
+    member.lastName
+  );
+
   return {
     id: member.id,
     prefix: member.prefix || "",
     first_name: member.firstName || member.name,
     last_name: member.lastName || "",
     nickname: member.nickname || null,
-    name: member.name,
+    name: fullName,
     personnel_type: member.personnelType || null,
     position: member.position || "รอกำหนดตำแหน่ง",
     division: member.division || "รอกำหนดกลุ่มงาน",
@@ -240,7 +326,10 @@ export function getLocalMembers(): Member[] {
     if (!raw) return INITIAL_MEMBERS;
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed.filter(isRealMember);
+      return parsed.filter(isRealMember).map((m: Member) => ({
+        ...m,
+        name: formatFullMemberName(m.prefix, m.name, m.firstName, m.lastName),
+      }));
     }
     return INITIAL_MEMBERS;
   } catch {
@@ -254,7 +343,10 @@ export function getLocalMembers(): Member[] {
 export function saveLocalMembers(members: Member[]) {
   if (typeof window === "undefined") return;
   try {
-    const cleanMembers = members.filter(isRealMember);
+    const cleanMembers = members.filter(isRealMember).map((m) => ({
+      ...m,
+      name: formatFullMemberName(m.prefix, m.name, m.firstName, m.lastName),
+    }));
     localStorage.setItem(MEMBERS_STORAGE_KEY, JSON.stringify(cleanMembers));
   } catch (e) {
     console.warn("Could not save members to localStorage:", e);
@@ -289,13 +381,23 @@ export async function fetchMembers(): Promise<Member[]> {
     const mergedLive = liveMembers.map((live) => {
       const local = localMap.get(live.id);
       if (!local) return live;
+      const prefix = live.prefix || local.prefix || "";
+      const firstName = live.firstName || local.firstName || "";
+      const lastName = live.lastName || local.lastName || "";
+      // If live.name from DB is more complete or has prefix, prefer live.name
+      const chosenName =
+        live.name && live.name.length >= (local.name?.length || 0)
+          ? live.name
+          : local.name || live.name;
+      const formattedName = formatFullMemberName(prefix, chosenName, firstName, lastName);
+
       // Preserve local customizations if present and non-placeholder
       return {
         ...live,
-        prefix: local.prefix || live.prefix,
-        firstName: local.firstName || live.firstName,
-        lastName: local.lastName || live.lastName,
-        name: local.name || live.name,
+        prefix: prefix,
+        firstName: firstName,
+        lastName: lastName,
+        name: formattedName,
         nickname: local.nickname || live.nickname,
         position: local.position && local.position !== "รอกำหนดตำแหน่ง" ? local.position : live.position,
         division: local.division && local.division !== "รอกำหนดกลุ่มงาน" ? local.division : live.division,
@@ -309,7 +411,12 @@ export async function fetchMembers(): Promise<Member[]> {
       };
     });
     // Preserve local-only real members (e.g. offline created users or local LINE profiles not yet synced)
-    const localOnly = localMembers.filter((m) => !liveIds.has(m.id) && isRealMember(m));
+    const localOnly = localMembers
+      .filter((m) => !liveIds.has(m.id) && isRealMember(m))
+      .map((m) => ({
+        ...m,
+        name: formatFullMemberName(m.prefix, m.name, m.firstName, m.lastName),
+      }));
     const mergedMembers = [...mergedLive, ...localOnly];
 
     // Keep local cache up-to-date with latest records

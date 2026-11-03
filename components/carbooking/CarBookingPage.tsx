@@ -31,6 +31,7 @@ import {
   subscribeToVehicles,
   subscribeToCarBookings,
   recordAuditLog,
+  formatFullMemberName,
 } from "@/lib/supabase";
 import { CarBookingDocumentModal } from "./CarBookingDocumentModal";
 import { ReviewBookingModal } from "./ReviewBookingModal";
@@ -117,6 +118,12 @@ export function CarBookingPage({
   const [formRequireDriver, setFormRequireDriver] = useState<boolean>(true);
   const [formSelectedStaffDriverId, setFormSelectedStaffDriverId] = useState<string>(currentUser?.id || "");
 
+  // Helper to ensure member name always has full prefix
+  const getMemberDisplayName = (m?: Member | null) => {
+    if (!m) return "";
+    return formatFullMemberName(m.prefix, m.name, m.firstName, m.lastName);
+  };
+
   // Selected passengers from members DropDown list
   const [selectedPassengers, setSelectedPassengers] = useState<Member[]>([]);
 
@@ -124,22 +131,23 @@ export function CarBookingPage({
     if (!memberId) return;
     const found = members.find((m) => m.id === memberId);
     if (!found) return;
+    const displayName = getMemberDisplayName(found);
     if (selectedPassengers.some((p) => p.id === memberId)) {
-      showToast(`⚠️ ${found.name} มีอยู่ในรายชื่อผู้ร่วมเดินทางแล้ว`);
+      showToast(`⚠️ ${displayName} มีอยู่ในรายชื่อผู้ร่วมเดินทางแล้ว`);
       return;
     }
-    const updated = [...selectedPassengers, found];
+    const updated = [...selectedPassengers, { ...found, name: displayName }];
     setSelectedPassengers(updated);
-    const namesStr = updated.map((p) => `${p.name} (${p.division || p.position})`).join(", ");
+    const namesStr = updated.map((p) => `${getMemberDisplayName(p)} (${p.division || p.position})`).join(", ");
     setFormPassengersList(namesStr);
     setFormPassengerCount(1 + updated.length);
-    showToast(`✓ เพิ่ม ${found.name} เป็นผู้ร่วมเดินทาง`);
+    showToast(`✓ เพิ่ม ${displayName} เป็นผู้ร่วมเดินทาง`);
   };
 
   const handleRemovePassenger = (memberId: string) => {
     const updated = selectedPassengers.filter((p) => p.id !== memberId);
     setSelectedPassengers(updated);
-    const namesStr = updated.map((p) => `${p.name} (${p.division || p.position})`).join(", ");
+    const namesStr = updated.map((p) => `${getMemberDisplayName(p)} (${p.division || p.position})`).join(", ");
     setFormPassengersList(namesStr);
     setFormPassengerCount(Math.max(1, 1 + updated.length));
   };
@@ -251,7 +259,7 @@ export function CarBookingPage({
     );
     const paphawin = {
       id: paphawinMember?.id || "syno_ปภาวิน",
-      name: paphawinMember?.name || "ปภาวิน",
+      name: paphawinMember?.name || "นายปภาวิน",
       position:
         paphawinMember?.position && paphawinMember.position !== "รอกำหนดตำแหน่ง"
           ? paphawinMember.position
@@ -2763,9 +2771,10 @@ export function CarBookingPage({
                       .filter((m) => m.id !== currentUser?.id)
                       .map((m) => {
                         const isAdded = selectedPassengers.some((p) => p.id === m.id);
+                        const displayName = getMemberDisplayName(m);
                         return (
                           <option key={m.id} value={m.id} disabled={isAdded}>
-                            {isAdded ? "✓ (เลือกแล้ว) " : "+ "}{m.name} ({m.division || m.position})
+                            {isAdded ? "✓ (เลือกแล้ว) " : "+ "}{displayName} ({m.division || m.position})
                           </option>
                         );
                       })}
@@ -2779,7 +2788,7 @@ export function CarBookingPage({
                           key={p.id}
                           className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-teal-200 text-teal-950 rounded-lg text-xs font-medium shadow-2xs"
                         >
-                          <span>👤 {p.name}</span>
+                          <span>👤 {getMemberDisplayName(p)}</span>
                           <span className="text-[10px] text-teal-600 font-normal">
                             ({p.division || p.position})
                           </span>
@@ -2874,14 +2883,14 @@ export function CarBookingPage({
                     className="w-full px-3.5 py-2.5 bg-white border border-blue-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-2xs"
                   >
                     <option value={currentUser.id}>
-                      👤 {currentUser.name} ({currentUser.position}) - [ผู้ขอใช้รถขับขี่เอง]
+                      👤 {getMemberDisplayName(currentUser)} ({currentUser.position}) - [ผู้ขอใช้รถขับขี่เอง]
                     </option>
 
                     {selectedPassengers.length > 0 && (
                       <optgroup label="── ผู้ร่วมเดินทางในภารกิจนี้ ──">
                         {selectedPassengers.map((p) => (
                           <option key={`co_${p.id}`} value={p.id}>
-                            🚗 {p.name} ({p.division || p.position})
+                            🚗 {getMemberDisplayName(p)} ({p.division || p.position})
                           </option>
                         ))}
                       </optgroup>
@@ -2892,7 +2901,7 @@ export function CarBookingPage({
                         .filter((m) => m.id !== currentUser.id && !selectedPassengers.some((p) => p.id === m.id))
                         .map((m) => (
                           <option key={`m_${m.id}`} value={m.id}>
-                            {m.name} ({m.division || m.position})
+                            {getMemberDisplayName(m)} ({m.division || m.position})
                           </option>
                         ))}
                     </optgroup>
