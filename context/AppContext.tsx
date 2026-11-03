@@ -753,11 +753,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         });
       });
 
-      const unsubscribeAudit = subscribeToAuditLogs(() => {
-        fetchAuditLogs().then((logs) => {
-          if (logs && logs.length > 0) {
-            setAuditLogs(logs);
-          }
+      const unsubscribeAudit = subscribeToAuditLogs((logOrLogs) => {
+        setAuditLogs((prev) => {
+          if (!logOrLogs) return prev;
+          if (Array.isArray(logOrLogs)) return logOrLogs;
+          if (prev.some((l) => l.id === logOrLogs.id)) return prev;
+          return [logOrLogs, ...prev].slice(0, 100);
         });
       });
 

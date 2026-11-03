@@ -6,6 +6,7 @@ import { DigitalSignaturePad } from "./DigitalSignaturePad";
 import { CirculationPrintSlip } from "./CirculationPrintSlip";
 import { toThaiShortDate, toThaiDate } from "@/lib/thai-numerals";
 import { getFileCategoryInfo } from "./NewCircularModal";
+import { fetchCircularDocScannedPages } from "@/lib/supabase";
 
 export function getCircularFileDisplayUrl(fileUrl?: string): string {
   if (!fileUrl) return "/virtual-office/circular_docs/sample.pdf";
@@ -66,6 +67,21 @@ export function CircularViewerModal({
     }
   }, [doc.id, doc.attachments, selectedAttId]);
 
+  // On-demand fetch of heavy scanned pages (to keep general list queries light)
+  const [onDemandScannedPages, setOnDemandScannedPages] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    setOnDemandScannedPages(null);
+    const existing = doc.attachments?.[0]?.scannedPages || doc.scannedPages;
+    if ((!existing || existing.length === 0) && (doc.totalPages || 0) > 0) {
+      fetchCircularDocScannedPages(doc.id).then((pages) => {
+        if (pages && pages.length > 0) {
+          setOnDemandScannedPages(pages);
+        }
+      });
+    }
+  }, [doc.id, doc.attachments, doc.scannedPages, doc.totalPages]);
+
   const activeAttachment: CircularAttachment | null =
     (doc.attachments && doc.attachments.find((a) => a.id === selectedAttId)) ||
     doc.attachments?.[0] ||
@@ -74,7 +90,8 @@ export function CircularViewerModal({
   const activeFileName = activeAttachment?.name || doc.fileName;
   const activeFileSize = activeAttachment?.size ?? doc.fileSize;
   const activeFileUrl = activeAttachment?.url || doc.fileUrl;
-  const activeScannedPages = activeAttachment?.scannedPages || doc.scannedPages;
+  const activeScannedPages =
+    activeAttachment?.scannedPages || doc.scannedPages || onDemandScannedPages || undefined;
   const activeCategory = getFileCategoryInfo(activeFileName, activeAttachment?.type);
 
   // Admin IDs set for statistics exclusion

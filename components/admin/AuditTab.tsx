@@ -42,7 +42,7 @@ export function AuditTab({
   const refreshLogs = useCallback(async () => {
     setLoading(true);
     try {
-      const fresh = await fetchAuditLogs({ limit: 500 });
+      const fresh = await fetchAuditLogs({ limit: 100 });
       if (fresh && fresh.length > 0) {
         setAuditLogs(fresh);
         setIsLive(true);
@@ -54,11 +54,23 @@ export function AuditTab({
     }
   }, [setAuditLogs]);
 
+  const auditLogsRef = React.useRef(auditLogs);
+  useEffect(() => {
+    auditLogsRef.current = auditLogs;
+  }, [auditLogs]);
+
   // Load on mount + Realtime subscription
   useEffect(() => {
     refreshLogs();
-    const unsub = subscribeToAuditLogs((updated) => {
-      setAuditLogs(updated);
+    const unsub = subscribeToAuditLogs((logOrLogs) => {
+      if (!logOrLogs) return;
+      if (Array.isArray(logOrLogs)) {
+        setAuditLogs(logOrLogs);
+      } else {
+        const current = auditLogsRef.current;
+        if (current.some((l) => l.id === logOrLogs.id)) return;
+        setAuditLogs([logOrLogs, ...current]);
+      }
     });
     return unsub;
   }, [refreshLogs, setAuditLogs]);

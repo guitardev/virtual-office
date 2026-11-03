@@ -411,3 +411,118 @@ export function cleanPersonName(name?: string | null): string {
   return name.replace(/\s*\([^)]*\)\s*/g, " ").trim();
 }
 
+export const THAI_MONTHS_MAP: Record<string, string> = {
+  "1": "มกราคม", "01": "มกราคม", "ม.ค.": "มกราคม", "มกราคม": "มกราคม",
+  "2": "กุมภาพันธ์", "02": "กุมภาพันธ์", "ก.พ.": "กุมภาพันธ์", "กุมภาพันธ์": "กุมภาพันธ์",
+  "3": "มีนาคม", "03": "มีนาคม", "มี.ค.": "มีนาคม", "มีนาคม": "มีนาคม",
+  "4": "เมษายน", "04": "เมษายน", "เม.ย.": "เมษายน", "เมษายน": "เมษายน",
+  "5": "พฤษภาคม", "05": "พฤษภาคม", "พ.ค.": "พฤษภาคม", "พฤษภาคม": "พฤษภาคม",
+  "6": "มิถุนายน", "06": "มิถุนายน", "มิ.ย.": "มิถุนายน", "มิถุนายน": "มิถุนายน",
+  "7": "กรกฎาคม", "07": "กรกฎาคม", "ก.ค.": "กรกฎาคม", "กรกฎาคม": "กรกฎาคม",
+  "8": "สิงหาคม", "08": "สิงหาคม", "ส.ค.": "สิงหาคม", "สิงหาคม": "สิงหาคม",
+  "9": "กันยายน", "09": "กันยายน", "ก.ย.": "กันยายน", "กันยายน": "กันยายน",
+  "10": "ตุลาคม", "ต.ค.": "ตุลาคม", "ตุลาคม": "ตุลาคม",
+  "11": "พฤศจิกายน", "พ.ย.": "พฤศจิกายน", "พฤศจิกายน": "พฤศจิกายน",
+  "12": "ธันวาคม", "ธ.ค.": "ธันวาคม", "ธันวาคม": "ธันวาคม",
+};
+
+export interface ThaiDateParts {
+  day: string;
+  month: string;
+  year: string;
+}
+
+export interface ThaiDateTimeParts extends ThaiDateParts {
+  time: string;
+  fullDate: string;
+}
+
+/**
+ * Robust Thai Date parser handling:
+ * - Slash formats: "29 / 10 / 2569", "29/ต.ค./2569", "29 / ตุลาคม / 2569"
+ * - Thai formatted strings: "29 ต.ค. 2569 17:40 น.", "29 ตุลาคม 2569"
+ * - Standard ISO strings: "2026-10-29T17:40:00", "2026-10-29"
+ * Returns null if input is empty, invalid, or placeholder dots.
+ */
+export function parseThaiDate(input?: any): ThaiDateParts | null {
+  if (!input) return null;
+  const str = String(input).trim();
+  if (
+    !str ||
+    str === "-" ||
+    str === "undefined" ||
+    str === "null" ||
+    str.includes("...") ||
+    str === "................/.............................../................."
+  ) {
+    return null;
+  }
+
+  // Pattern 1: Slash format e.g. "29 / 10 / 2569" or "29/ต.ค./2569" or "29 / ตุลาคม / 2569"
+  const slashMatch = str.match(/(\d{1,2})\s*\/\s*([^\s\/]+)\s*\/\s*(\d{2,4})/);
+  if (slashMatch) {
+    const day = slashMatch[1];
+    let month = slashMatch[2].trim();
+    let year = slashMatch[3];
+    if (year.length === 2) year = `25${year}`;
+    if (Number(year) < 2400) year = String(Number(year) + 543);
+    if (THAI_MONTHS_MAP[month]) month = THAI_MONTHS_MAP[month];
+    return { day, month, year };
+  }
+
+  // Pattern 2: Thai formatted string e.g. "29 ต.ค. 2569 17:40 น." or "29 ตุลาคม 2569"
+  const thaiMatch = str.match(/(\d{1,2})\s+([^\s\d,]+)\s+(\d{4})/);
+  if (thaiMatch) {
+    const day = thaiMatch[1];
+    let month = thaiMatch[2].trim();
+    let year = thaiMatch[3];
+    if (Number(year) < 2400) year = String(Number(year) + 543);
+    if (THAI_MONTHS_MAP[month]) month = THAI_MONTHS_MAP[month];
+    return { day, month, year };
+  }
+
+  // Pattern 3: Standard ISO or Date string e.g. "2026-10-29T17:40:00" or "2026-10-29"
+  try {
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      const day = d.getDate().toString();
+      const month = d.toLocaleDateString("th-TH", { month: "long" });
+      const year = (d.getFullYear() + 543).toString();
+      return { day, month, year };
+    }
+  } catch {}
+
+  return null;
+}
+
+/**
+ * Parses Thai Date and Time for departure and return inputs
+ */
+export function parseThaiDateTime(input?: any): ThaiDateTimeParts | null {
+  if (!input) return null;
+  const str = String(input).trim();
+  const dateParts = parseThaiDate(str);
+  if (!dateParts) return null;
+
+  let time = "";
+  const timeMatch = str.match(/(\d{1,2})[:.](\d{2})/);
+  if (timeMatch) {
+    time = `${timeMatch[1].padStart(2, "0")}.${timeMatch[2]}`;
+  } else {
+    try {
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) {
+        const h = d.getHours().toString().padStart(2, "0");
+        const m = d.getMinutes().toString().padStart(2, "0");
+        time = `${h}.${m}`;
+      }
+    } catch {}
+  }
+
+  return {
+    ...dateParts,
+    time: time || "08.30",
+    fullDate: `${dateParts.day} ${dateParts.month} ${dateParts.year}`,
+  };
+}
+

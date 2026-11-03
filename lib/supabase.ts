@@ -62,6 +62,28 @@ export const supabase = isSupabaseConfigured()
   : null;
 
 /**
+ * Debounce helper to prevent rapid bursts of realtime events from flooding queries
+ */
+function createDebouncedFetcher<T>(
+  fetcher: () => Promise<T>,
+  callback: (data: T) => void,
+  delayMs = 300
+) {
+  let timer: any = null;
+  return () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(async () => {
+      try {
+        const data = await fetcher();
+        callback(data);
+      } catch (err) {
+        console.warn("Debounced fetcher error:", err);
+      }
+    }, delayMs);
+  };
+}
+
+/**
  * Map Supabase user row to Member object
  */
 export function mapRowToMember(row: any): Member {
@@ -298,14 +320,14 @@ export async function deleteMember(id: string): Promise<boolean> {
 export function subscribeToMembers(callback: (members: Member[]) => void) {
   if (!supabase) return () => {};
 
+  const debounced = createDebouncedFetcher(fetchMembers, callback, 300);
   const channel = supabase
-    .channel(`public:users_${Math.random().toString(36).slice(2, 8)}`)
+    .channel("public:users")
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "users" },
-      async () => {
-        const updated = await fetchMembers();
-        callback(updated);
+      () => {
+        debounced();
       }
     )
     .subscribe();
@@ -495,14 +517,14 @@ export async function saveAccessRequest(req: AccessRequest): Promise<boolean> {
 export function subscribeToAccessRequests(callback: (requests: AccessRequest[]) => void) {
   if (!supabase) return () => {};
 
+  const debounced = createDebouncedFetcher(fetchAccessRequests, callback, 300);
   const channel = supabase
-    .channel(`public:access_requests_${Math.random().toString(36).slice(2, 8)}`)
+    .channel("public:access_requests")
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "access_requests" },
-      async () => {
-        const updated = await fetchAccessRequests();
-        callback(updated);
+      () => {
+        debounced();
       }
     )
     .subscribe();
@@ -591,7 +613,7 @@ export async function fetchAuditLogs(options?: {
       .from("audit_logs")
       .select("*")
       .order("timestamp", { ascending: false })
-      .limit(options?.limit ?? 200);
+      .limit(options?.limit ?? 50);
 
     if (options?.status) {
       query = query.eq("status", options.status);
@@ -621,18 +643,24 @@ export async function fetchAuditLogs(options?: {
 
 /**
  * Setup Realtime subscription for audit_logs
+ * Passes single new log incrementally when an INSERT happens, avoiding SELECT * from table
  */
-export function subscribeToAuditLogs(callback: (logs: AuditLog[]) => void) {
+export function subscribeToAuditLogs(callback: (logOrLogs: AuditLog | AuditLog[]) => void) {
   if (!supabase) return () => {};
 
   const channel = supabase
-    .channel(`public:audit_logs_${Math.random().toString(36).slice(2, 8)}`)
+    .channel("public:audit_logs")
     .on(
       "postgres_changes",
       { event: "INSERT", schema: "public", table: "audit_logs" },
-      async () => {
-        const updated = await fetchAuditLogs();
-        callback(updated);
+      async (payload) => {
+        if (payload?.new) {
+          const newLog = mapRowToAuditLog(payload.new);
+          callback(newLog);
+        } else {
+          const updated = await fetchAuditLogs({ limit: 50 });
+          callback(updated);
+        }
       }
     )
     .subscribe();
@@ -917,14 +945,14 @@ export async function saveCarBooking(booking: CarBookingRequest): Promise<boolea
 
 export function subscribeToVehicles(callback: (vehicles: Vehicle[]) => void) {
   if (!supabase) return () => {};
+  const debounced = createDebouncedFetcher(fetchVehicles, callback, 300);
   const channel = supabase
-    .channel(`public:vehicles_${Math.random().toString(36).slice(2, 8)}`)
+    .channel("public:vehicles")
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "vehicles" },
-      async () => {
-        const updated = await fetchVehicles();
-        callback(updated);
+      () => {
+        debounced();
       }
     )
     .subscribe();
@@ -935,14 +963,14 @@ export function subscribeToVehicles(callback: (vehicles: Vehicle[]) => void) {
 
 export function subscribeToCarBookings(callback: (bookings: CarBookingRequest[]) => void) {
   if (!supabase) return () => {};
+  const debounced = createDebouncedFetcher(fetchCarBookings, callback, 300);
   const channel = supabase
-    .channel(`public:car_bookings_${Math.random().toString(36).slice(2, 8)}`)
+    .channel("public:car_bookings")
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "car_bookings" },
-      async () => {
-        const updated = await fetchCarBookings();
-        callback(updated);
+      () => {
+        debounced();
       }
     )
     .subscribe();
@@ -1218,7 +1246,7 @@ export function subscribeToChatMessages(handler: (() => void) | ChatRealtimeHand
   if (!supabase) return () => {};
   const isFunction = typeof handler === "function";
   const channel = supabase
-    .channel(`public:messages_${Math.random().toString(36).slice(2, 8)}`)
+    .channel("public:messages")
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "messages" },
@@ -1252,7 +1280,7 @@ export function subscribeToChatGroups(handler: (() => void) | ChatGroupRealtimeH
   if (!supabase) return () => {};
   const isFunction = typeof handler === "function";
   const channel = supabase
-    .channel(`public:chat_channels_${Math.random().toString(36).slice(2, 8)}`)
+    .channel("public:chat_channels")
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "chat_channels" },
@@ -1542,14 +1570,14 @@ export async function deleteTask(id: string | number): Promise<boolean> {
 
 export function subscribeToTasks(callback: (tasks: TaskItem[]) => void) {
   if (!supabase) return () => {};
+  const debounced = createDebouncedFetcher(fetchTasks, callback, 300);
   const channel = supabase
-    .channel(`public:tasks_${Math.random().toString(36).slice(2, 8)}`)
+    .channel("public:tasks")
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "tasks" },
-      async () => {
-        const updated = await fetchTasks();
-        callback(updated);
+      () => {
+        debounced();
       }
     )
     .subscribe();
@@ -1695,14 +1723,14 @@ export async function deleteMeeting(id: string | number): Promise<boolean> {
 
 export function subscribeToMeetings(callback: (meetings: MeetingItem[]) => void) {
   if (!supabase) return () => {};
+  const debounced = createDebouncedFetcher(fetchMeetings, callback, 300);
   const channel = supabase
-    .channel(`public:meetings_${Math.random().toString(36).slice(2, 8)}`)
+    .channel("public:meetings")
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "meetings" },
-      async () => {
-        const updated = await fetchMeetings();
-        callback(updated);
+      () => {
+        debounced();
       }
     )
     .subscribe();
@@ -2108,6 +2136,7 @@ export function mapCircularDocToRow(doc: CircularDocument): any {
 
 /**
  * Fetch circular documents from Supabase with fallback to local cache
+ * Note: Excludes heavy 'scanned_pages' column to minimize bandwidth/egress
  */
 export async function fetchCircularDocs(): Promise<CircularDocument[]> {
   const local = loadStoredCircularDocs();
@@ -2116,7 +2145,9 @@ export async function fetchCircularDocs(): Promise<CircularDocument[]> {
   try {
     const { data, error } = await supabase
       .from("circular_documents")
-      .select("*")
+      .select(
+        "id, doc_number, title, issued_date, sender_org, doc_type, reference_doc, attachment_list, urgency, secret_level, summary, file_url, file_name, file_size, total_pages, created_by, created_by_name, created_at, deadline, target_criteria, recipients, total_count, acknowledged_count, status"
+      )
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -2150,6 +2181,26 @@ export async function fetchCircularDocs(): Promise<CircularDocument[]> {
   } catch (err) {
     console.warn("Exception fetching circular documents from Supabase:", err);
     return local;
+  }
+}
+
+/**
+ * Fetch heavy scanned pages for a single circular document on-demand
+ */
+export async function fetchCircularDocScannedPages(id: string): Promise<string[]> {
+  if (!supabase || !id) return [];
+  try {
+    const { data, error } = await supabase
+      .from("circular_documents")
+      .select("scanned_pages")
+      .eq("id", id)
+      .single();
+
+    if (error || !data) return [];
+    return Array.isArray(data.scanned_pages) ? data.scanned_pages : [];
+  } catch (err) {
+    console.warn("Could not fetch circular doc scanned pages:", err);
+    return [];
   }
 }
 
@@ -2253,7 +2304,7 @@ export function subscribeToCircularDocs(
   const isFunction = typeof handler === "function";
 
   const channel = supabase
-    .channel(`public:circular_docs_${Math.random().toString(36).slice(2, 8)}`)
+    .channel("public:circular_docs")
     .on(
       "postgres_changes",
       {
