@@ -204,32 +204,24 @@ export async function generateCarBookingDocx(bookingData: any): Promise<Buffer> 
   // Date parsing
   const topDate = parseThaiDateParts(bookingData.createdAt || bookingData.startDateThai);
   const divDate = parseThaiDateParts(bookingData.divisionReviewerActionAt || bookingData.createdAt);
-  const admDate = parseThaiDateParts(bookingData.adminHeadActionAt || bookingData.fleetDispatcherActionAt || bookingData.createdAt);
+  const admDate = bookingData.adminHeadActionAt
+    ? parseThaiDateParts(bookingData.adminHeadActionAt)
+    : { day: "", month: "", year: "" };
   const appDate = parseThaiDateParts(bookingData.approverDate || bookingData.createdAt);
 
   // Signatures
-  const divReviewerName = cleanPersonName(bookingData.divisionReviewerName) || "นายวรวุฒิ พึ่งพัก";
-  const divReviewerPos = bookingData.divisionReviewerPosition || "นักพัฒนาสังคมชำนาญการพิเศษ (หัวหน้ากลุ่มการพัฒนาสังคมและสวัสดิการ)";
+  const divReviewerName = cleanPersonName(bookingData.divisionReviewerName) || "";
+  const divReviewerPos = bookingData.divisionReviewerPosition || (bookingData.divisionReviewerName ? "หัวหน้ากลุ่ม/ฝ่าย" : "");
 
-  const adminHeadName = cleanPersonName(
-    bookingData.adminHeadName ||
-    (bookingData.status === "approved" || bookingData.status === "pending_provincial"
-      ? "นายเสกพล ดิษฐโชติ"
-      : "")
-  );
-  let rawAdminHeadPos =
-    bookingData.adminHeadPosition ||
-    "นักพัฒนาสังคมชำนาญการ";
-  let adminHeadPos = rawAdminHeadPos
-    .replace(/\s*\(หัวหน้าฝ่ายบริหารทั่วไป\)/gi, "")
-    .replace(/\s*หัวหน้าฝ่ายบริหารทั่วไป/gi, "")
-    .trim();
-  adminHeadPos = cleanPersonName(adminHeadPos) || "นักพัฒนาสังคมชำนาญการ";
+  const adminHeadName = cleanPersonName(bookingData.adminHeadName) || "นายเสกพล ดิษฐโชติ";
+  const adminHeadPos = "นักพัฒนาสังคมชำนาญการ";
   const adminHeadNotes =
     bookingData.adminHeadNotes ||
     (bookingData.adminHeadActionAt
       ? (licPlate ? `เห็นควรอนุญาตให้ใช้รถยนต์ส่วนกลางหมายเลขทะเบียน ${licPlate} พนักงานขับรถ ${driver}` : "เห็นควรอนุญาตให้ใช้รถยนต์ราชการ")
-      : "");
+      : (bookingData.status === "approved" || bookingData.status === "pending_provincial" || bookingData.status === "pending_admin_head"
+          ? (licPlate ? `ตรวจสอบความพร้อมแล้ว จัดสรรรถยนต์ทะเบียน ${licPlate} พนักงานขับรถ ${driver} เห็นควรอนุญาต` : "เห็นควรอนุญาตให้ใช้รถยนต์ราชการ")
+          : ""));
 
   const isApproved = bookingData.status === "approved";
   const isRejected = bookingData.status === "rejected";
@@ -395,11 +387,13 @@ export async function generateCarBookingDocx(bookingData: any): Promise<Buffer> 
       // Admin head signature date
       runs =
         rText("\t                                                                       ") +
-        rDotted(admDate.day, 4) +
-        rText(" / ") +
-        rDotted(admDate.month, 10) +
-        rText(" / ") +
-        rDotted(admDate.year, 6);
+        (bookingData.adminHeadActionAt && admDate.day
+          ? rDotted(admDate.day, 4) +
+            rText(" / ") +
+            rDotted(admDate.month, 10) +
+            rText(" / ") +
+            rDotted(admDate.year, 6)
+          : rDotted("", 4) + rText(" / ") + rDotted("", 10) + rText(" / ") + rDotted("", 6));
       state = "ready_for_next_block";
     } else if (fullText.includes("อนุญาต") && fullText.includes("ไม่อนุญาต")) {
       // Approval checkboxes

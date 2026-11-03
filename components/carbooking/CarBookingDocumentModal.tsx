@@ -141,7 +141,7 @@ export function CarBookingDocumentModal({
   };
 
   const divReviewerDate = parseShortDate(booking.divisionReviewerActionAt);
-  const adminHeadDate = parseShortDate(booking.adminHeadActionAt || booking.fleetDispatcherActionAt);
+  const adminHeadDate = parseShortDate(booking.adminHeadActionAt);
   const approverDate = parseShortDate(booking.approverActionAt);
 
   const resolvedDriver =
@@ -190,13 +190,16 @@ export function CarBookingDocumentModal({
         divisionReviewerName: cleanPersonName(booking.divisionReviewerName || ""),
         divisionReviewerPosition: booking.divisionReviewerPosition || (booking.divisionReviewerName ? "หัวหน้ากลุ่ม/ฝ่าย" : ""),
         divisionReviewerDate: divReviewerDate.d ? `${divReviewerDate.d} / ${divReviewerDate.m} / ${divReviewerDate.y}` : "",
-        adminHeadName: cleanPersonName(
-          booking.adminHeadName ||
-          (booking.status === "approved" || booking.status === "pending_provincial" ? "นายเสกพล ดิษฐโชติ" : "")
-        ),
+        adminHeadName: cleanPersonName(booking.adminHeadName) || "นายเสกพล ดิษฐโชติ",
         adminHeadPosition: "นักพัฒนาสังคมชำนาญการ",
-        adminHeadNotes: booking.adminHeadNotes || (booking.adminHeadActionAt ? "เพื่อโปรดพิจารณาอนุญาต" : ""),
-        adminHeadDate: adminHeadDate.d ? `${adminHeadDate.d} / ${adminHeadDate.m} / ${adminHeadDate.y}` : "",
+        adminHeadNotes:
+          booking.adminHeadNotes ||
+          (booking.adminHeadActionAt
+            ? "เห็นควรอนุญาตให้ใช้รถยนต์ราชการ"
+            : (booking.licensePlate && booking.licensePlate !== "-"
+                ? `ตรวจสอบความพร้อมแล้ว จัดสรรรถยนต์ ${cleanedVehName || ""} ทะเบียน [${booking.licensePlate}] พนักงานขับรถ: ${resolvedDriver || ""} เห็นควรอนุญาต`
+                : "")),
+        adminHeadDate: (booking.adminHeadActionAt && adminHeadDate.d) ? `${adminHeadDate.d} / ${adminHeadDate.m} / ${adminHeadDate.y}` : "",
         status: booking.status,
         approverName: "นางสาวมะลิวัน สิทธิโยธี",
         approverPosition: "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
@@ -549,11 +552,11 @@ export function CarBookingDocumentModal({
                 <span className="shrink-0">ความเห็น </span>
                 <span className="flex-1 border-b border-dotted border-black px-2 font-normal">
                   {booking.adminHeadNotes ||
-                    booking.fleetDispatcherNotes ||
-                    booking.managerNotes ||
-                    (booking.licensePlate && booking.licensePlate !== "-"
-                      ? `ตรวจสอบแล้ว จัดสรรรถยนต์ ${cleanVehicleName(booking.vehicleName, booking.licensePlate)} ทะเบียน [${booking.licensePlate}] พนักงานขับรถ: ${resolvedDriver || ""} เรียบร้อยแล้ว เห็นควรอนุญาต`
-                      : "เพื่อโปรดพิจารณาอนุญาต")}
+                    (booking.adminHeadActionAt
+                      ? "เห็นควรอนุญาตให้ใช้รถยนต์ราชการ"
+                      : booking.licensePlate && booking.licensePlate !== "-"
+                      ? `ตรวจสอบความพร้อมแล้ว จัดสรรรถยนต์ ${cleanVehicleName(booking.vehicleName, booking.licensePlate)} ทะเบียน [${booking.licensePlate}] พนักงานขับรถ: ${resolvedDriver || ""} เห็นควรอนุญาต`
+                      : "..................................................................................................................................................................................")}
                 </span>
               </div>
             </div>
@@ -569,28 +572,18 @@ export function CarBookingDocumentModal({
                 <div className="flex items-baseline justify-center">
                   <span>( </span>
                   <span className="min-w-[180px] border-b border-dotted border-black px-1 text-center font-normal">
-                    {cleanPersonName(
-                      booking.adminHeadName ||
-                        (booking.licensePlate && booking.licensePlate !== "-"
-                          ? "นายเสกพล ดิษฐโชติ"
-                          : "")
-                    ) || "\u00A0"}
+                    {cleanPersonName(booking.adminHeadName) || "นายเสกพล ดิษฐโชติ"}
                   </span>
                   <span> )</span>
                 </div>
                 <div className="flex items-baseline justify-center">
                   <span className="shrink-0">ตำแหน่ง </span>
                   <span className="min-w-[180px] border-b border-dotted border-black px-1 text-center font-normal">
-                    {((booking as any).adminHeadPosition
-                      ? cleanPersonName((booking as any).adminHeadPosition).replace(/\s*\(หัวหน้าฝ่ายบริหารทั่วไป\)/gi, "").replace(/\s*หัวหน้าฝ่ายบริหารทั่วไป/gi, "").trim()
-                      : (booking.adminHeadName?.includes("เสกพล") ||
-                        (booking.licensePlate && booking.licensePlate !== "-")
-                          ? "นักพัฒนาสังคมชำนาญการ"
-                          : "\u00A0"))}
+                    นักพัฒนาสังคมชำนาญการ
                   </span>
                 </div>
                 <div className="text-center tracking-widest text-black pt-0.5 text-sm">
-                  {(booking.adminHeadActionAt || booking.fleetDispatcherActionAt) && adminHeadDate.d ? (
+                  {booking.adminHeadActionAt && adminHeadDate.d ? (
                     <span>{adminHeadDate.d} / {adminHeadDate.m} / {adminHeadDate.y}</span>
                   ) : (
                     <span>................/.............................../.................</span>
