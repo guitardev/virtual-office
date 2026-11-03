@@ -266,6 +266,33 @@ export const INITIAL_AUDIT_LOGS: AuditLog[] = [];
 export const INITIAL_ACCESS_REQUESTS: AccessRequest[] = [];
 
 /**
+ * ตรวจสอบว่าสมาชิกเป็นบุคลากรปฏิบัติงานทั่วไป (Operational Member) หรือไม่
+ * เพื่อคัดกรองบัญชีผู้ดูแลระบบ (Admin/System Admin) ออกจากตัวเลือกในทุกระบบ
+ * (เช่น ผู้ร่วมเดินทาง, ผู้ขับขี่, ผู้รับผิดชอบงาน, ผู้เข้าร่วมประชุม, ผู้รับหนังสือเวียน)
+ */
+export function isOperationalMember(m: Member | null | undefined): boolean {
+  if (!m || !m.id) return false;
+  // กรองบัญชีระบบ หรือสิทธิ์ Admin ออกจากตัวเลือกปฏิบัติงาน
+  if (m.role === "admin") return false;
+  if (
+    m.id === "syno_admin" ||
+    m.id === "syno_guitardev" ||
+    m.id === "usr_1" ||
+    m.id === "usr_mock"
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * ดึงเฉพาะรายชื่อบุคลากรปฏิบัติงาน (ไม่รวมผู้ดูแลระบบ Admin) สำหรับแสดงเป็นตัวเลือกในระบบต่างๆ
+ */
+export function getOperationalMembers(members: Member[]): Member[] {
+  return members.filter(isOperationalMember);
+}
+
+/**
  * ตรวจสอบสิทธิ์การเข้าถึงและการมองเห็นของงาน (Task Access & Visibility Control)
  * - individual (เฉพาะบุคคล): ผู้สร้าง, ผู้รับผิดชอบตรง, และ Admin/Manager ฝ่ายนั้น
  * - department (เฉพาะกลุ่มงาน): บุคลากรในกลุ่มงานนั้น, Manager ฝ่าย, ผู้สร้าง/ผู้รับผิดชอบ, และ Admin

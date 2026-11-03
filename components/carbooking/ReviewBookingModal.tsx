@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { CarBookingRequest, Member, Vehicle } from "@/lib/types";
 import { GOVERNMENT_DRIVERS, cleanPersonName } from "@/lib/carbooking-data";
+import { isOperationalMember } from "@/lib/rbac";
 
 interface ReviewBookingModalProps {
   booking: CarBookingRequest;
@@ -545,7 +546,7 @@ export function ReviewBookingModal({
                       <option value={cleanPersonName(booking.requesterName)}>
                         {cleanPersonName(booking.requesterName)} (ผู้ขอใช้รถ)
                       </option>
-                      {members.map((m) => (
+                      {members.filter(isOperationalMember).map((m) => (
                         <option key={m.id} value={cleanPersonName(m.name)}>
                           {m.name} ({m.position})
                         </option>

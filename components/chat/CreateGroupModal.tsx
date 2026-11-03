@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { Member, ChatGroup } from "@/lib/types";
+import { isOperationalMember } from "@/lib/rbac";
 
 interface CreateGroupModalProps {
   currentUser: Member | null;
@@ -27,6 +28,7 @@ export function CreateGroupModal({
   const availableIcons = ["🌟", "📋", "📁", "🤝", "🚀", "💡", "🎯", "🛡️", "📢", "💬"];
 
   const filteredMembers = availableMembers.filter((m) => {
+    if (!isOperationalMember(m) && m.id !== currentUser?.id) return false;
     if (!memberSearch.trim()) return true;
     const q = memberSearch.toLowerCase();
     return (
@@ -45,7 +47,11 @@ export function CreateGroupModal({
   };
 
   const handleSelectAll = () => {
-    setSelectedMemberIds(availableMembers.map((m) => m.id));
+    setSelectedMemberIds(
+      availableMembers
+        .filter((m) => isOperationalMember(m) || m.id === currentUser?.id)
+        .map((m) => m.id)
+    );
   };
 
   const handleClearAll = () => {

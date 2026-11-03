@@ -19,7 +19,7 @@ import {
   isSupabaseConfigured,
   recordAuditLog,
 } from "@/lib/supabase";
-import { GOVERNMENT_DIVISIONS } from "@/lib/rbac";
+import { GOVERNMENT_DIVISIONS, isOperationalMember } from "@/lib/rbac";
 import { NewCircularModal } from "./NewCircularModal";
 import { CircularViewerModal } from "./CircularViewerModal";
 import { CirculationPrintSlip } from "./CirculationPrintSlip";
@@ -317,7 +317,7 @@ export const CircularPage: React.FC<CircularPageProps> = ({
     return (
       <NewCircularModal
         currentUser={currentUser}
-        availableMembers={members}
+        availableMembers={members.filter(isOperationalMember)}
         initialScannedPages={scannedPagesForNewDoc}
         initialFileName={scannedDocNameForNewDoc}
         onClose={() => {

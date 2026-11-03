@@ -32,6 +32,7 @@ import {
   subscribeToCarBookings,
   recordAuditLog,
   formatFullMemberName,
+  isOperationalMember,
 } from "@/lib/supabase";
 import { CarBookingDocumentModal } from "./CarBookingDocumentModal";
 import { ReviewBookingModal } from "./ReviewBookingModal";
@@ -130,7 +131,7 @@ export function CarBookingPage({
   const handleAddPassenger = (memberId: string) => {
     if (!memberId) return;
     const found = members.find((m) => m.id === memberId);
-    if (!found) return;
+    if (!found || !isOperationalMember(found)) return;
     const displayName = getMemberDisplayName(found);
     if (selectedPassengers.some((p) => p.id === memberId)) {
       showToast(`⚠️ ${displayName} มีอยู่ในรายชื่อผู้ร่วมเดินทางแล้ว`);
@@ -229,7 +230,7 @@ export function CarBookingPage({
   // Step 1: Filter Government Officials (ข้าราชการ) in the same division
   const divisionOfficials = useMemo(() => {
     const userDiv = currentUser?.division || "กลุ่มการพัฒนาสังคมและสวัสดิการ";
-    const inDiv = members.filter((m) => m.division === userDiv && m.id !== currentUser?.id);
+    const inDiv = members.filter((m) => m.division === userDiv && m.id !== currentUser?.id && isOperationalMember(m));
     const officials = inDiv.filter((m) => m.personnelType === "ข้าราชการ" || m.role === "manager");
     return officials.length > 0 ? officials : (inDiv.length > 0 ? inDiv : [detectedDivisionHead as any]);
   }, [members, currentUser, detectedDivisionHead]);
@@ -2766,9 +2767,9 @@ export function CarBookingPage({
                     onChange={(e) => handleAddPassenger(e.target.value)}
                     className="w-full px-3.5 py-2.5 bg-white border border-teal-300 rounded-xl text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-teal-500 shadow-2xs font-medium"
                   >
-                    <option value="">-- คลิกเพื่อเลือกเจ้าหน้าที่เป็นผู้ร่วมเดินทาง ({members.length} ท่าน) --</option>
+                    <option value="">-- คลิกเพื่อเลือกเจ้าหน้าที่เป็นผู้ร่วมเดินทาง ({members.filter(isOperationalMember).length} ท่าน) --</option>
                     {members
-                      .filter((m) => m.id !== currentUser?.id)
+                      .filter((m) => m.id !== currentUser?.id && isOperationalMember(m))
                       .map((m) => {
                         const isAdded = selectedPassengers.some((p) => p.id === m.id);
                         const displayName = getMemberDisplayName(m);
@@ -2898,7 +2899,7 @@ export function CarBookingPage({
 
                     <optgroup label="── ข้าราชการ/เจ้าหน้าที่สังกัด สนง.พมจ.กำแพงเพชร ──">
                       {members
-                        .filter((m) => m.id !== currentUser.id && !selectedPassengers.some((p) => p.id === m.id))
+                        .filter((m) => m.id !== currentUser.id && isOperationalMember(m) && !selectedPassengers.some((p) => p.id === m.id))
                         .map((m) => (
                           <option key={`m_${m.id}`} value={m.id}>
                             {getMemberDisplayName(m)} ({m.division || m.position})

@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { Member, ChatGroup, Role } from "@/lib/types";
-import { ROLE_CONFIG } from "@/lib/rbac";
+import { ROLE_CONFIG, isOperationalMember } from "@/lib/rbac";
 
 interface GroupMembersDrawerProps {
   group: ChatGroup;
@@ -175,7 +175,7 @@ export function GroupMembersDrawer({
             className="w-full px-2.5 py-1.5 bg-white border border-indigo-200 rounded-xl text-xs text-slate-800"
           >
             <option value="">-- เลือกบุคลากร --</option>
-            {nonGroupMembers.map((m) => (
+            {nonGroupMembers.filter(isOperationalMember).map((m) => (
               <option key={m.id} value={m.id}>
                 {m.name} ({m.position} - {m.division})
               </option>

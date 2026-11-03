@@ -8,6 +8,7 @@ import {
   canUserEditTask,
   canUserDeleteTask,
   GOVERNMENT_DIVISIONS,
+  isOperationalMember,
 } from "@/lib/rbac";
 
 interface TasksPageProps {
@@ -48,7 +49,11 @@ export function TasksPage({
   const [taskPriority, setTaskPriority] = useState<"high" | "medium" | "low">("medium");
   const [taskDue, setTaskDue] = useState("");
   const [taskVisibility, setTaskVisibility] = useState<TaskVisibility>("department");
-  const [taskAssigneeId, setTaskAssigneeId] = useState(currentUser?.id || (members[0]?.id ?? ""));
+  const [taskAssigneeId, setTaskAssigneeId] = useState(
+    currentUser && isOperationalMember(currentUser)
+      ? currentUser.id
+      : members.find(isOperationalMember)?.id || ""
+  );
   const [taskTagsInput, setTaskTagsInput] = useState("");
   const [newSubtasks, setNewSubtasks] = useState<{ id: string; text: string; done: boolean }[]>([]);
   const [currentSubtaskText, setCurrentSubtaskText] = useState("");
@@ -190,7 +195,11 @@ export function TasksPage({
     setTaskPriority("medium");
     setTaskDue("");
     setTaskVisibility("department");
-    setTaskAssigneeId(currentUser?.id || (members[0]?.id ?? ""));
+    setTaskAssigneeId(
+      currentUser && isOperationalMember(currentUser)
+        ? currentUser.id
+        : members.find(isOperationalMember)?.id || ""
+    );
     setTaskTagsInput("");
     setNewSubtasks([]);
     setCurrentSubtaskText("");
@@ -1124,7 +1133,7 @@ export function TasksPage({
                     onChange={(e) => setTaskAssigneeId(e.target.value)}
                     className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:border-indigo-500 transition-colors"
                   >
-                    {members.map((m) => (
+                    {members.filter(isOperationalMember).map((m) => (
                       <option key={m.id} value={m.id}>
                         {m.name} ({m.position})
                       </option>
@@ -1554,7 +1563,7 @@ export function TasksPage({
                         onChange={(e) => setEditAssigneeId(e.target.value)}
                         className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:border-indigo-500"
                       >
-                        {members.map((m) => (
+                        {members.filter(isOperationalMember).map((m) => (
                           <option key={m.id} value={m.id}>
                             {m.name}
                           </option>

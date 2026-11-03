@@ -21,7 +21,14 @@ import {
   CircularSecretLevel,
   OfficialDocumentType,
 } from "./types";
-import { INITIAL_MEMBERS, INITIAL_SYSTEM_MODULES, INITIAL_ACCESS_REQUESTS, INITIAL_AUDIT_LOGS } from "./rbac";
+import {
+  INITIAL_MEMBERS,
+  INITIAL_SYSTEM_MODULES,
+  INITIAL_ACCESS_REQUESTS,
+  INITIAL_AUDIT_LOGS,
+  isOperationalMember,
+  getOperationalMembers,
+} from "./rbac";
 import {
   INITIAL_VEHICLES,
   INITIAL_BOOKING_REQUESTS,
@@ -308,6 +315,8 @@ export function isRealMember(m: Member): boolean {
   if (m.id === "usr_1" || m.id === "usr_mock") return false;
   return true;
 }
+
+export { isOperationalMember, getOperationalMembers };
 
 /**
  * Get members from local cache or fallback to INITIAL_MEMBERS

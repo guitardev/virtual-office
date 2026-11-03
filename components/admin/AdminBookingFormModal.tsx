@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { CarBookingRequest, Vehicle, Member, BookingStatus } from "@/lib/types";
 import { GOVERNMENT_DRIVERS } from "@/lib/carbooking-data";
+import { isOperationalMember } from "@/lib/rbac";
 
 export interface DistrictPreset {
   name: string;
@@ -155,7 +156,7 @@ export function AdminBookingFormModal({
       const randomNum = Math.floor(Math.random() * 900) + 100;
       setRequestNo(`ขอใช้รถ-2569/${randomNum}`);
 
-      const defaultMem = currentUser || members[0];
+      const defaultMem = (currentUser && isOperationalMember(currentUser)) ? currentUser : members.find(isOperationalMember) || members[0];
       if (defaultMem) {
         setSelectedMemberId(defaultMem.id);
         setRequesterName(defaultMem.name);
@@ -338,7 +339,7 @@ export function AdminBookingFormModal({
                   className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:border-teal-500 text-xs"
                 >
                   <option value="">-- กำหนดเอง หรือเลือกสมาชิก --</option>
-                  {members.map((m) => (
+                  {members.filter(isOperationalMember).map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.name} ({m.position || "เจ้าหน้าที่"}) - {m.division || "-"}
                     </option>

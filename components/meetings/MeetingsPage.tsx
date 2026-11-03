@@ -19,6 +19,7 @@ import {
   MEETING_TEMPLATES,
   MeetingPresetTemplate,
 } from "@/lib/meeting-data";
+import { isOperationalMember } from "@/lib/rbac";
 
 interface MeetingsPageProps {
   meetings: MeetingItem[];
@@ -1302,7 +1303,7 @@ export function MeetingsPage({
                   <div className="flex items-center gap-1.5 text-[10px]">
                     <button
                       type="button"
-                      onClick={() => setSelectedAttendeeIds(members.map((m) => m.id))}
+                      onClick={() => setSelectedAttendeeIds(members.filter(isOperationalMember).map((m) => m.id))}
                       className="text-indigo-600 hover:text-indigo-800 font-bold underline cursor-pointer"
                     >
                       เลือกทุกคน
@@ -1313,7 +1314,7 @@ export function MeetingsPage({
                       onClick={() =>
                         setSelectedAttendeeIds(
                           members
-                            .filter((m) => m.role === "manager" || m.role === "admin")
+                            .filter((m) => m.role === "manager")
                             .map((m) => m.id)
                         )
                       }
@@ -1333,7 +1334,7 @@ export function MeetingsPage({
                 </div>
 
                 <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-2xl max-h-40 overflow-y-auto space-y-1">
-                  {members.map((m) => {
+                  {members.filter(isOperationalMember).map((m) => {
                     const isChecked = selectedAttendeeIds.includes(m.id);
                     return (
                       <label

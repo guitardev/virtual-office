@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import { ChatGroup, Member, Role } from "@/lib/types";
-import { ROLE_CONFIG, GOVERNMENT_DIVISIONS } from "@/lib/rbac";
+import { ROLE_CONFIG, GOVERNMENT_DIVISIONS, isOperationalMember } from "@/lib/rbac";
 import { saveChatGroup, deleteChatGroup, recordAuditLog } from "@/lib/supabase";
 
 interface ChannelsTabProps {
@@ -135,7 +135,7 @@ export function ChannelsTab({
         type: formType,
         division: formDivision || undefined,
         isOfficial: formType !== "custom",
-        memberIds: formMemberIds.length > 0 ? formMemberIds : members.map((m) => m.id),
+        memberIds: formMemberIds.length > 0 ? formMemberIds : members.filter(isOperationalMember).map((m) => m.id),
         createdAt: new Date().toLocaleDateString("th-TH", {
           year: "numeric",
           month: "short",

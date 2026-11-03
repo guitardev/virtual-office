@@ -10,7 +10,7 @@ import {
   CircularTargetCriteria,
   PersonnelType,
 } from "@/lib/types";
-import { GOVERNMENT_DIVISIONS, GOVERNMENT_PERSONNEL_TYPES } from "@/lib/rbac";
+import { GOVERNMENT_DIVISIONS, GOVERNMENT_PERSONNEL_TYPES, isOperationalMember } from "@/lib/rbac";
 import { resolveTargetRecipients } from "@/lib/circular-data";
 import { getUserNasSid, getClientSynologyConfig, uploadNasFileDirect } from "@/lib/synology";
 import { DocumentScannerModal } from "./DocumentScannerModal";
@@ -810,7 +810,7 @@ export function NewCircularModal({
                     เลือกบุคลากรรายบุคคลเพิ่มเติม (ถ้ามี):
                   </label>
                   <div className="max-h-36 overflow-y-auto space-y-1 p-2 bg-white rounded-xl border border-slate-200">
-                    {availableMembers.map((member) => {
+                    {availableMembers.filter(isOperationalMember).map((member) => {
                       const isSelected = selectedSpecificIds.includes(member.id);
                       return (
                         <div

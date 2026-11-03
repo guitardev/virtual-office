@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import { Member, Role } from "@/lib/types";
-import { GOVERNMENT_DIVISIONS, ROLE_CONFIG } from "@/lib/rbac";
+import { GOVERNMENT_DIVISIONS, ROLE_CONFIG, isOperationalMember } from "@/lib/rbac";
 import { recordAuditLog, saveMember } from "@/lib/supabase";
 
 interface DivisionsTabProps {
@@ -315,7 +315,7 @@ export function DivisionsTab({ currentUser, members, setMembers, showToast }: Di
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800"
                 >
                   <option value="">-- เลือกบุคลากร --</option>
-                  {members.map((m) => (
+                  {members.filter(isOperationalMember).map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.name} — {m.position} ({m.division})
                     </option>
