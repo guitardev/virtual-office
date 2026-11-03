@@ -353,6 +353,63 @@ export function CarBookingPage({
     };
   }, []);
 
+  // ─── Auto-detect bookings past returnTime to dispatch system return reminder log ───
+  useEffect(() => {
+    const checkReturnDueBookings = () => {
+      const now = Date.now();
+      let hasUpdates = false;
+      const updated = bookings.map((b) => {
+        if (b.status !== "approved" || !b.returnTime) return b;
+        const retTime = new Date(b.returnTime).getTime();
+        if (!isNaN(retTime) && now >= retTime) {
+          const alreadyHasReminder = b.notifications?.some((n) => n.type === "return_reminder");
+          if (!alreadyHasReminder) {
+            hasUpdates = true;
+            const nowFormatted =
+              new Date().toLocaleDateString("th-TH", {
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              }) + " น.";
+
+            const autoReminderNotif: BookingNotificationLog = {
+              id: `notif_${Date.now()}_auto_rem_${b.id}`,
+              timestamp: nowFormatted,
+              type: "return_reminder",
+              title: `แจ้งเตือนคืนรถในระบบ: คำขอ ${b.requestNo}`,
+              message: `⚠️ ถึงกำหนดเวลาเดินทางกลับที่ระบุในระบบแล้ว (${b.returnTime.replace("T", " ")} น.) รถ [${b.licensePlate || "-"}] กรุณานำรถส่งคืน ณ สำนักงาน และรายงานผลการตรวจสภาพ เลขไมล์ เกจน้ำมันในระบบเพื่อปิดภารกิจ`,
+              recipientRole: "ผู้ขอใช้รถ / คณะเดินทาง",
+              recipientName: b.requesterName,
+              channel: "webapp_notification",
+              status: "delivered",
+            };
+
+            sendBrowserNotification("แจ้งเตือนถึงกำหนดส่งคืนรถราชการ", {
+              body: `คำขอ ${b.requestNo} (${b.licensePlate}) ถึงเวลาส่งคืนรถแล้ว`,
+            });
+
+            return {
+              ...b,
+              notifications: [...(b.notifications || []), autoReminderNotif],
+            };
+          }
+        }
+        return b;
+      });
+
+      if (hasUpdates) {
+        setBookings(updated);
+        saveStoredBookings(updated);
+      }
+    };
+
+    checkReturnDueBookings();
+    const interval = setInterval(checkReturnDueBookings, 60000);
+    return () => clearInterval(interval);
+  }, [bookings]);
+
   const updateAndSaveBookings = (newBookings: CarBookingRequest[], targetBooking?: CarBookingRequest) => {
     setBookings(newBookings);
     saveStoredBookings(newBookings);
@@ -418,9 +475,16 @@ export function CarBookingPage({
     };
   }, [vehicles, bookings]);
 
-  // Active / Approved bookings that are on mission or due for return
+  // Active / Approved bookings that are due for return (หลังเวลาเดินทางกลับที่ระบุในระบบ หรือ มีการแจ้งเตือนคืนรถ)
   const activeReturnDueBookings = useMemo(() => {
-    return bookings.filter((b) => b.status === "approved");
+    const now = Date.now();
+    return bookings.filter((b) => {
+      if (b.status !== "approved") return false;
+      if (!b.returnTime) return false;
+      const retTime = new Date(b.returnTime).getTime();
+      const hasReminder = b.notifications?.some((n) => n.type === "return_reminder");
+      return (!isNaN(retTime) && now >= retTime) || Boolean(hasReminder);
+    });
   }, [bookings]);
 
   // ─── PENDING ACTION ITEMS & NOTIFICATIONS FOR CURRENT USER ───
@@ -556,43 +620,74 @@ export function CarBookingPage({
         });
       }
 
-      // Driver Assignment Notice
+      // Driver Assignment Notice (ก่อนถึงเวลาเดินทางกลับ)
       if (
         b.assignedDriver &&
         myName &&
         b.assignedDriver.includes(myName) &&
         b.status === "approved"
       ) {
-        items.push({
-          id: `drv_${b.id}`,
-          requestNo: b.requestNo,
-          stageLabel: "ภารกิจพนักงานขับรถ",
-          badgeColor: "bg-teal-100 text-teal-900 border border-teal-300",
-          title: `ท่านได้รับมอบหมายขับรถ ${b.vehicleName || ""} [${b.licensePlate || "-"}] ไป ${b.destination}`,
-          requesterName: b.requesterName,
-          destination: b.destination,
-          notificationNotice: `เวลาเดินทาง: ${b.departureTime.replace("T", " ")} น.`,
-          actionText: "ดูข้อมูลภารกิจ",
-          actionIcon: "🚗",
-          onAction: () => setSelectedDocBooking(b),
-        });
+        const retTime = b.returnTime ? new Date(b.returnTime).getTime() : NaN;
+        const isPastReturn = !isNaN(retTime) && Date.now() >= retTime;
+        if (!isPastReturn) {
+          items.push({
+            id: `drv_${b.id}`,
+            requestNo: b.requestNo,
+            stageLabel: "ภารกิจพนักงานขับรถ",
+            badgeColor: "bg-teal-100 text-teal-900 border border-teal-300",
+            title: `ท่านได้รับมอบหมายขับรถ ${b.vehicleName || ""} [${b.licensePlate || "-"}] ไป ${b.destination}`,
+            requesterName: b.requesterName,
+            destination: b.destination,
+            notificationNotice: `เวลาเดินทาง: ${b.departureTime.replace("T", " ")} น. ถึง ${b.returnTime ? b.returnTime.replace("T", " ") + " น." : ""}`,
+            actionText: "ดูข้อมูลภารกิจ",
+            actionIcon: "🚗",
+            onAction: () => setSelectedDocBooking(b),
+          });
+        }
       }
 
-      // Requester Notice when Approved
+      // Requester Notice when Approved (สิ้นสุดขั้นตอนขอใช้รถ - ก่อนถึงเวลาเดินทางกลับ)
       if (isMyBooking && b.status === "approved") {
-        items.push({
-          id: `req_app_${b.id}`,
-          requestNo: b.requestNo,
-          stageLabel: "อนุมัติเรียบร้อยแล้ว",
-          badgeColor: "bg-emerald-100 text-emerald-900 border border-emerald-300",
-          title: `คำขอ ${b.requestNo} ได้รับการอนุมัติแล้ว! รถ [${b.licensePlate || "-"}] คนขับ: ${b.assignedDriver || "-"}`,
-          requesterName: b.requesterName,
-          destination: b.destination,
-          notificationNotice: "ได้รับอนุญาตจาก พมจ.กำแพงเพชร เรียบร้อยแล้ว",
-          actionText: "แบบขอใช้รถ (Word)",
-          actionIcon: "📥",
-          onAction: () => setSelectedDocBooking(b),
-        });
+        const retTime = b.returnTime ? new Date(b.returnTime).getTime() : NaN;
+        const isPastReturn = !isNaN(retTime) && Date.now() >= retTime;
+        if (!isPastReturn) {
+          items.push({
+            id: `req_app_${b.id}`,
+            requestNo: b.requestNo,
+            stageLabel: "สิ้นสุดขั้นตอนขอใช้รถ (อนุมัติแล้ว)",
+            badgeColor: "bg-emerald-100 text-emerald-900 border border-emerald-300",
+            title: `คำขอ ${b.requestNo} ได้รับการอนุมัติแล้ว! รถ [${b.licensePlate || "-"}] คนขับ: ${b.assignedDriver || "-"}`,
+            requesterName: b.requesterName,
+            destination: b.destination,
+            notificationNotice: `สิ้นสุดขั้นตอนขอใช้รถแล้ว ➔ ระบบจะแจ้งเตือนส่งคืนรถหลังเวลาเดินทางกลับ (${b.returnTime ? b.returnTime.replace("T", " ") + " น." : ""})`,
+            actionText: "แบบขอใช้รถ (Word)",
+            actionIcon: "📥",
+            onAction: () => setSelectedDocBooking(b),
+          });
+        }
+      }
+
+      // ─── หลังเวลาเดินทางกลับที่ระบุในระบบ: แจ้งเตือนคืนรถในระบบ ───
+      if (b.status === "approved" && b.returnTime) {
+        const retTime = new Date(b.returnTime).getTime();
+        const isPastReturn = (!isNaN(retTime) && Date.now() >= retTime) || b.notifications?.some((n) => n.type === "return_reminder");
+        const isDriver = Boolean(b.assignedDriver && myName && (b.assignedDriver.includes(myName) || myName.includes(b.assignedDriver)));
+
+        if (isPastReturn && (isMyBooking || isDriver || isFleetStaff || isAdminHead)) {
+          items.push({
+            id: `return_alert_${b.id}`,
+            requestNo: b.requestNo,
+            stageLabel: "🔔 แจ้งเตือนคืนรถในระบบ",
+            badgeColor: "bg-amber-100 text-amber-900 border-2 border-amber-400 animate-pulse",
+            title: `ถึงกำหนดส่งคืนรถราชการ ${b.requestNo} [${b.licensePlate || "-"}] (${b.destination})`,
+            requesterName: b.requesterName,
+            destination: b.destination,
+            notificationNotice: `เลยเวลาเดินทางกลับที่ระบุในระบบแล้ว (${b.returnTime.replace("T", " ")} น.) กรุณารายงานส่งคืนรถและกุญแจ`,
+            actionText: "รายงานส่งคืนรถ",
+            actionIcon: "🔄",
+            onAction: () => setSelectedReturnBooking(b),
+          });
+        }
       }
     }
 
@@ -1823,9 +1918,17 @@ export function CarBookingPage({
                   b.requesterId === currentUser.id ||
                   (Boolean(currentUser.name) && b.requesterName === currentUser.name);
 
-                const canReportReturn =
-                  b.status === "approved" &&
-                  (isMyBooking || currentUser.role === "admin" || currentUser.role === "manager");
+                const isAssignedDriver = Boolean(
+                  b.assignedDriver &&
+                  currentUser.name &&
+                  (b.assignedDriver.includes(currentUser.name) || currentUser.name.includes(b.assignedDriver))
+                );
+
+                const isPastReturnTime = Boolean(
+                  b.returnTime &&
+                  (Date.now() >= new Date(b.returnTime).getTime() ||
+                    b.notifications?.some((n) => n.type === "return_reminder"))
+                );
 
                 // Step 1: หัวหน้ากลุ่มหรือข้าราชการในกลุ่มเห็นชอบ
                 // กฎระเบียบราชการ: ผู้ขอใช้รถไม่สามารถพิจารณาเห็นชอบคำขอของตนเองได้ (!isMyBooking)
@@ -1887,6 +1990,15 @@ export function CarBookingPage({
                   (b.status === "pending_provincial" || b.status === "endorsed") &&
                   (isProvincialHead || isAdminHeadAuthorized || currentUser.role === "admin");
 
+                const canReportReturn =
+                  b.status === "approved" &&
+                  (isMyBooking ||
+                    isAssignedDriver ||
+                    currentUser.role === "admin" ||
+                    currentUser.role === "manager" ||
+                    isFleetDispatcherAuthorized ||
+                    isAdminHeadAuthorized);
+
                 return (
                   <div
                     key={b.id}
@@ -1930,9 +2042,21 @@ export function CarBookingPage({
                     </div>
 
                     {/* Active Stakeholder Notification Notice Banner */}
-                    <div className="p-3 bg-linear-to-r from-teal-50/80 via-slate-50 to-amber-50/50 rounded-2xl border border-teal-200/70 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <div
+                      className={`p-3 rounded-2xl border text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${
+                        b.status === "approved" && isPastReturnTime
+                          ? "bg-linear-to-r from-amber-50 via-rose-50/40 to-amber-50 border-amber-300 ring-1 ring-amber-400/40"
+                          : "bg-linear-to-r from-teal-50/80 via-slate-50 to-amber-50/50 border-teal-200/70"
+                      }`}
+                    >
                       <div className="flex items-center gap-2">
-                        <span className="w-6 h-6 rounded-lg bg-teal-100 text-teal-800 flex items-center justify-center text-xs font-bold shrink-0">
+                        <span
+                          className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
+                            b.status === "approved" && isPastReturnTime
+                              ? "bg-amber-100 text-amber-900 animate-pulse"
+                              : "bg-teal-100 text-teal-800"
+                          }`}
+                        >
                           🔔
                         </span>
                         <div>
@@ -1947,7 +2071,15 @@ export function CarBookingPage({
                             ) : b.status === "pending_provincial" || b.status === "endorsed" ? (
                               <span>เสนอความเห็นแล้ว ➔ แจ้งเตือนศูนย์การแจ้งเตือนนำกราบเรียน <span className="text-purple-800 font-bold">นางสาวมะลิวัน สิทธิโยธี (พมจ.กำแพงเพชร)</span> เพื่อโปรดพิจารณาอนุมัติ (เมื่อเอกสารลงนามแล้ว หน.ฝ่ายบริหาร มีอำนาจอนุมัติแทนในระบบ)</span>
                             ) : b.status === "approved" ? (
-                              <span>อนุมัติคำขอแล้ว ➔ แจ้งเตือนศูนย์การแจ้งเตือน <span className="text-emerald-800 font-bold">ผู้ขอใช้รถ ({b.requesterName})</span> และ <span className="text-teal-800 font-bold">คนขับ ({b.assignedDriver})</span> เรียบร้อยแล้ว</span>
+                              isPastReturnTime ? (
+                                <span className="text-amber-900 font-bold">
+                                  🔔 เลยเวลาเดินทางกลับที่ระบุในระบบแล้ว ({b.returnTime ? b.returnTime.replace("T", " ") : "-"} น.) ➔ กรุณารายงานส่งคืนรถในระบบ (บันทึกไมล์/เกจน้ำมัน/กุญแจ)
+                                </span>
+                              ) : (
+                                <span>
+                                  อนุมัติคำขอแล้ว (สิ้นสุดขั้นตอนขอใช้รถ) ➔ ระบบจะแจ้งเตือนส่งคืนรถอัตโนมัติหลังเวลาเดินทางกลับที่ระบุ ({b.returnTime ? b.returnTime.replace("T", " ") : "-"} น.)
+                                </span>
+                              )
                             ) : b.status === "completed" ? (
                               <span className="text-teal-900 font-semibold">ส่งคืนรถและกุญแจเรียบร้อย (ภารกิจเสร็จสิ้น)</span>
                             ) : (
@@ -2370,10 +2502,14 @@ export function CarBookingPage({
                           <button
                             type="button"
                             onClick={() => handleSendReturnReminder(b)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                              isPastReturnTime
+                                ? "bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-400 shadow-xs animate-pulse"
+                                : "bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200"
+                            }`}
                           >
                             <span>🔔</span>
-                            <span>แจ้งเตือนคืนรถในระบบ</span>
+                            <span>{isPastReturnTime ? "แจ้งเตือนคืนรถในระบบ (เลยกำหนดเวลา)" : "แจ้งเตือนคืนรถในระบบ"}</span>
                           </button>
                         )}
 
@@ -2382,7 +2518,11 @@ export function CarBookingPage({
                           <button
                             type="button"
                             onClick={() => setSelectedReturnBooking(b)}
-                            className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                            className={`inline-flex items-center gap-1.5 px-4 py-1.5 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer ${
+                              isPastReturnTime
+                                ? "bg-linear-to-r from-amber-600 via-teal-700 to-teal-800 hover:from-amber-700 hover:to-teal-900 ring-2 ring-amber-400/60"
+                                : "bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800"
+                            }`}
                           >
                             <span>🔄</span>
                             <span>รายงานส่งคืนรถ (บันทึกไมล์/น้ำมัน/กุญแจ)</span>

@@ -423,7 +423,7 @@ export function buildUnifiedNotifications({
       }
     }
 
-    // Stage 5: Approved (To Requester & Assigned Driver)
+    // Stage 5: Approved (To Requester & Assigned Driver) - สิ้นสุดขั้นตอนขอใช้รถ
     if (b.status === "approved") {
       if (isRequester) {
         const notifId = `car_approved_${b.id}`;
@@ -431,7 +431,7 @@ export function buildUnifiedNotifications({
           id: notifId,
           type: "carbooking",
           title: `อนุมัติคำขอใช้รถราชการแล้ว (${b.requestNo})`,
-          message: `พมจ. อนุมัติคำขอไป ${b.destination} แล้ว รถ: ${b.vehicleName || "ส่วนกลาง"} [${b.licensePlate || "-"}] พลขับ: ${b.assignedDriver || "ผู้ขอขับขี่เอง"}`,
+          message: `${b.approverName || "พมจ.กำแพงเพชร"} ได้พิจารณาอนุมัติคำขอเรียบร้อยแล้ว (สิ้นสุดขั้นตอนขอใช้รถ) รถ: ${b.vehicleName || "ส่วนกลาง"} [${b.licensePlate || "-"}] พลขับ: ${b.assignedDriver || "ผู้ขอขับขี่เอง"} โดยระบบจะแจ้งเตือนส่งคืนรถหลังเวลาเดินทางกลับ (${b.returnTime ? b.returnTime.replace("T", " ") + " น." : ""})`,
           timestamp: b.approverActionAt || "อนุมัติแล้ว",
           createdAt: new Date().toISOString(),
           isRead: readIds.has(notifId),
@@ -479,22 +479,44 @@ export function buildUnifiedNotifications({
       });
     }
 
-    // Return Reminder
-    const hasReminder = b.notifications?.some((n) => n.type === "return_reminder");
-    if (hasReminder && isRequester) {
-      const notifId = `car_reminder_${b.id}`;
-      notifs.push({
-        id: notifId,
-        type: "carbooking",
-        title: `แจ้งเตือนส่งคืนรถยนต์ราชการ: ${b.requestNo}`,
-        message: `ถึงกำหนดส่งคืนรถ ${b.vehicleName || ""} [${b.licensePlate || "-"}] แล้ว กรุณาตรวจสภาพ เลขไมล์ และเกจน้ำมันเพื่อปิดภารกิจ`,
-        timestamp: "ถึงกำหนดส่งคืน",
-        createdAt: new Date().toISOString(),
-        isRead: readIds.has(notifId),
-        priority: "urgent",
-        senderName: "งานยานพาหนะ ฝ่ายบริหารทั่วไป",
-        link: { page: "carbooking", targetId: b.id },
-      });
+    // Return Reminder (แจ้งเตือนคืนรถในระบบ หลังเวลาเดินทางกลับที่ระบุในระบบ)
+    if (b.status === "approved" && b.returnTime) {
+      const retTimeMs = new Date(b.returnTime).getTime();
+      const isPastReturnTime = !isNaN(retTimeMs) && Date.now() >= retTimeMs;
+      const hasManualReminder = b.notifications?.some((n) => n.type === "return_reminder");
+
+      if (isPastReturnTime || hasManualReminder) {
+        const isDriver =
+          Boolean(b.assignedDriver && myName && (b.assignedDriver.includes(myName) || myName.includes(b.assignedDriver)));
+
+        const isFleetOrAdmin =
+          currentUser.id === "syno_ปภาวิน" ||
+          currentUser.id === "syno_เสกพล" ||
+          myName.includes("ปภาวิน") ||
+          myName.includes("เสกพล") ||
+          myDivision.includes("ฝ่ายบริหารทั่วไป") ||
+          currentUserRole === "admin";
+
+        if (isRequester || isDriver || isFleetOrAdmin) {
+          const notifId = `car_reminder_${b.id}`;
+          notifs.push({
+            id: notifId,
+            type: "carbooking",
+            title: isPastReturnTime
+              ? `🔔 แจ้งเตือนคืนรถในระบบ: คำขอ ${b.requestNo} [${b.licensePlate || "-"}]`
+              : `แจ้งเตือนส่งคืนรถยนต์ราชการ: ${b.requestNo}`,
+            message: isPastReturnTime
+              ? `เลยเวลาเดินทางกลับที่ระบุในระบบแล้ว (${b.returnTime.replace("T", " ")} น.) กรุณาส่งคืนรถ ${b.vehicleName || ""} และรายงานผลการตรวจสภาพ เลขไมล์ เกจน้ำมันในระบบเพื่อปิดภารกิจ`
+              : `ถึงกำหนดส่งคืนรถ ${b.vehicleName || ""} [${b.licensePlate || "-"}] แล้ว กรุณาตรวจสภาพ เลขไมล์ และเกจน้ำมันเพื่อส่งคืนรถในระบบ`,
+            timestamp: b.returnTime ? b.returnTime.replace("T", " ") + " น." : "ถึงกำหนดส่งคืน",
+            createdAt: new Date().toISOString(),
+            isRead: readIds.has(notifId),
+            priority: "emergency",
+            senderName: "ระบบแจ้งเตือนการคืนรถอัตโนมัติ (ฝ่ายบริหารทั่วไป)",
+            link: { page: "carbooking", targetId: b.id },
+          });
+        }
+      }
     }
 
     // Stage 7: Return Completed / Mission Closed
