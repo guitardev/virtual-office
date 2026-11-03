@@ -370,6 +370,7 @@ export interface CarBookingRequest {
   // ขั้นที่ 4: การอนุมัติของ พมจ. (Admin)
   approverId?: string;
   approverName?: string;
+  actingApproverName?: string; // กรณี หน.ฝ่ายบริหาร อนุมัติแทนในระบบเมื่อเอกสารลงนามแล้ว
   approverNotes?: string;
   approverActionAt?: string;
   

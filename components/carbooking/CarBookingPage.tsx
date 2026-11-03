@@ -442,7 +442,7 @@ export function CarBookingPage({
     const myName = currentUser.name || "";
     const myDivision = currentUser.division || "";
     const myPosition = currentUser.position || "";
-    const myRole = currentUser.role || "";
+    const myRole = (currentUser.role || "") as string;
 
     const isFleetStaff =
       currentUser.id === "syno_ปภาวิน" ||
@@ -531,22 +531,27 @@ export function CarBookingPage({
         });
       }
 
-      // Stage 4: Pending Provincial Head Approval
+      // Stage 4: Pending Provincial Head Approval (พมจ. หรือ หน.ฝ่ายบริหารทั่วไปอนุมัติแทนเมื่อเอกสารลงนามแล้ว)
       if (
         (b.status === "pending_provincial" || b.status === "endorsed") &&
-        isProvincialHead
+        (isProvincialHead || isAdminHead || myRole === "admin")
       ) {
+        const isActingForProvincial = isAdminHead && !isProvincialHead;
         items.push({
           id: `stg4_${b.id}`,
           requestNo: b.requestNo,
-          stageLabel: "ขั้นที่ 4: รอ พมจ. พิจารณาอนุมัติ",
+          stageLabel: isActingForProvincial
+            ? "ขั้นที่ 4: อนุมัติแทน พมจ. (เอกสารลงนามแล้ว)"
+            : "ขั้นที่ 4: รอ พมจ. พิจารณาอนุมัติ",
           badgeColor: "bg-purple-100 text-purple-900 border border-purple-300",
-          title: `พิจารณาอนุมัติคำขอใช้รถราชการ ${b.requestNo} (${b.destination})`,
+          title: isActingForProvincial
+            ? `อนุมัติแทน พมจ. (เอกสารลงนามแล้ว) คำขอ ${b.requestNo} (${b.destination})`
+            : `นำกราบเรียน นางสาวมะลิวัน สิทธิโยธี (พมจ.กำแพงเพชร) เพื่อโปรดพิจารณาอนุมัติ (${b.destination})`,
           requesterName: b.requesterName,
           destination: b.destination,
-          notificationNotice: "แจ้งเตือนถึงนางสาวมะลิวัน สิทธิโยธี (พมจ.กำแพงเพชร)",
-          actionText: "พิจารณาอนุมัติ",
-          actionIcon: "⚖️",
+          notificationNotice: "นำกราบเรียน นางสาวมะลิวัน สิทธิโยธี (พมจ.กำแพงเพชร) เพื่อโปรดพิจารณาอนุมัติ",
+          actionText: isActingForProvincial ? "อนุมัติแทน พมจ. (ลงนามแล้ว)" : "พิจารณาอนุมัติ",
+          actionIcon: "👑",
           onAction: () => setSelectedReviewBooking(b),
         });
       }
@@ -926,15 +931,15 @@ export function CarBookingPage({
       id: `notif_${Date.now()}_adm_head`,
       timestamp: nowFormatted,
       type: "admin_head_endorsed",
-      title: "หัวหน้าฝ่ายบริหารทั่วไปเห็นชอบคำขอใช้รถ",
-      message: `👔 คำขอใช้รถ ${target.requestNo} ผ่านความเห็นชอบจากหัวหน้าฝ่ายบริหารทั่วไป (${currentUser.name}) เสนอ พมจ.กำแพงเพชร (นางสาวมะลิวัน สิทธิโยธี) เพื่อโปรดพิจารณาอนุมัติ`,
+      title: "นำกราบเรียน นางสาวมะลิวัน สิทธิโยธี (พมจ.กำแพงเพชร) เพื่อโปรดพิจารณาอนุมัติ",
+      message: `👔 คำขอใช้รถ ${target.requestNo} ผ่านความเห็นชอบจากหัวหน้าฝ่ายบริหารทั่วไป (${currentUser.name}) เสนอความเห็นแล้ว นำกราบเรียน นางสาวมะลิวัน สิทธิโยธี (พมจ.กำแพงเพชร) เพื่อโปรดพิจารณาอนุมัติ (เมื่อเอกสารลงนามแล้ว หน.ฝ่ายบริหาร มีอำนาจอนุมัติแทนในระบบ)`,
       recipientRole: "พมจ.กำแพงเพชร",
       recipientName: "นางสาวมะลิวัน สิทธิโยธี",
       channel: "webapp_notification",
       status: "delivered",
     };
-    sendBrowserNotification("หน.ฝ่ายบริหารเสนอความเห็นคำขอใช้รถ", {
-      body: `คำขอ ${target.requestNo} ผ่านความเห็นชอบแล้ว เสนอ พมจ.กำแพงเพชร พิจารณาอนุมัติ`,
+    sendBrowserNotification("นำกราบเรียน พมจ.กำแพงเพชร เพื่อโปรดพิจารณาอนุมัติ", {
+      body: `คำขอ ${target.requestNo} ผ่านความเห็นชอบจาก หน.ฝ่ายบริหารทั่วไปแล้ว นำกราบเรียน นางสาวมะลิวัน สิทธิโยธี (พมจ.กำแพงเพชร) เพื่อโปรดพิจารณาอนุมัติ`,
     });
 
     const updated = bookings.map((b) => {
@@ -956,16 +961,16 @@ export function CarBookingPage({
     recordAuditLog(
       currentUser.name,
       `หัวหน้าฝ่ายบริหารเห็นชอบคำขอใช้รถ: ${target.requestNo}`,
-      `ความเห็น: ${notes || "เห็นชอบ"} - เสนอ พมจ. ขออนุมัติ`,
+      `ความเห็น: ${notes || "เห็นชอบ"} - นำกราบเรียน พมจ. เพื่อโปรดพิจารณาอนุมัติ`,
       "success"
     ).catch(console.warn);
 
     setSelectedReviewBooking(null);
-    showToast(`✓ หัวหน้าฝ่ายบริหารเห็นชอบคำขอ ${target.requestNo} แล้ว! แจ้งเตือนเสนอ พมจ.กำแพงเพชร ผ่านศูนย์การแจ้งเตือน`);
+    showToast(`✓ หัวหน้าฝ่ายบริหารเสนอความเห็นคำขอ ${target.requestNo} แล้ว! แจ้งเตือนศูนย์การแจ้งเตือนนำกราบเรียน นางสาวมะลิวัน สิทธิโยธี (พมจ.กำแพงเพชร) เพื่อโปรดพิจารณาอนุมัติ`);
   };
 
   // ─── STEP 4.2: Provincial Final Approval ───
-  // พมจ. ขออนุมัติ & อนุมัติ -> Notifications ไปที่ผู้ขอใช้รถ
+  // พมจ. ขออนุมัติ & อนุมัติ (หรือ หน.ฝ่ายบริหาร อนุมัติแทนเมื่อเอกสารลงนามแล้ว) -> Notifications ไปที่ผู้ขอใช้รถ
   const handleProvincialApprove = (bookingId: string, notes: string) => {
     const nowFormatted =
       new Date().toLocaleDateString("th-TH", {
@@ -979,6 +984,10 @@ export function CarBookingPage({
     const target = bookings.find((b) => b.id === bookingId);
     if (!target) return;
 
+    const isActingForProvincial =
+      !currentUser.name.includes("มะลิวัน") &&
+      !currentUser.position?.includes("พัฒนาสังคม");
+
     // Stakeholders Notifications:
     // 1. Notify Requester
     const notifRequester: BookingNotificationLog = {
@@ -986,7 +995,11 @@ export function CarBookingPage({
       timestamp: nowFormatted,
       type: "approved",
       title: "พมจ.กำแพงเพชร อนุมัติคำขอใช้รถยนต์ราชการ",
-      message: `🎉 คำขอ ${target.requestNo} ได้รับการอนุมัติแล้วจาก พมจ.กำแพงเพชร พาหนะ: ${target.vehicleName} [${target.licensePlate}] พนักงานขับรถ: ${target.assignedDriver || "พนักงานขับรถเวร"} พร้อมออกเดินทางได้`,
+      message: `🎉 คำขอ ${target.requestNo} ได้รับการอนุมัติแล้วจาก พมจ.กำแพงเพชร${
+        isActingForProvincial
+          ? ` (หน.ฝ่ายบริหารทั่วไป ${currentUser.name} บันทึกอนุมัติแทนในระบบหลังลงนามในเอกสาร)`
+          : ""
+      } พาหนะ: ${target.vehicleName} [${target.licensePlate}] พนักงานขับรถ: ${target.assignedDriver || "พนักงานขับรถเวร"} พร้อมออกเดินทางได้`,
       recipientRole: "ผู้ขอใช้รถ",
       recipientName: target.requesterName,
       channel: "webapp_notification",
@@ -1039,7 +1052,8 @@ export function CarBookingPage({
         ...b,
         status: "approved" as BookingStatus,
         approverId: currentUser.id,
-        approverName: currentUser.name,
+        approverName: "นางสาวมะลิวัน สิทธิโยธี",
+        actingApproverName: isActingForProvincial ? currentUser.name : undefined,
         approverNotes: notes,
         approverActionAt: nowFormatted,
         notifications: [...(b.notifications || []), ...newNotifs],
@@ -1059,13 +1073,17 @@ export function CarBookingPage({
     setSelectedReviewBooking(null);
     recordAuditLog(
       currentUser.name,
-      `พมจ. อนุมัติคำขอใช้รถราชการ: ${target.requestNo}`,
-      `พาหนะ: ${target.vehicleName} [${target.licensePlate}] - ปลายทาง: ${target.destination}`,
+      isActingForProvincial
+        ? `หน.ฝ่ายบริหาร อนุมัติแทน พมจ. (เอกสารลงนามแล้ว): ${target.requestNo}`
+        : `พมจ. อนุมัติคำขอใช้รถราชการ: ${target.requestNo}`,
+      `พาหนะ: ${target.vehicleName} [${target.licensePlate}] - ปลายทาง: ${target.destination} - บันทึก: ${notes}`,
       "success"
     ).catch(console.warn);
 
     showToast(
-      `👑 พมจ.กำแพงเพชร อนุมัติเรียบร้อย! และระบบได้แจ้งเตือนไปยังคุณ ${target.requesterName} และพนักงานขับรถผ่านศูนย์การแจ้งเตือนแล้ว`
+      isActingForProvincial
+        ? `👑 บันทึกอนุมัติแทน พมจ. (เอกสารลงนามแล้ว) สำหรับคำขอ ${target.requestNo} สำเร็จ! และระบบได้แจ้งเตือนผู้ขอใช้รถและพลขับแล้ว`
+        : `👑 พมจ.กำแพงเพชร อนุมัติเรียบร้อย! และระบบได้แจ้งเตือนไปยังคุณ ${target.requesterName} และพนักงานขับรถผ่านศูนย์การแจ้งเตือนแล้ว`
     );
   };
 
@@ -1859,10 +1877,15 @@ export function CarBookingPage({
                   b.status === "pending_admin_head" &&
                   (currentUser.role === "admin" || isAdminHeadAuthorized);
 
-                // Step 4: พมจ. พิจารณาอนุมัติ
+                // Step 4: พมจ. พิจารณาอนุมัติ หรือ หน.ฝ่ายบริหารอนุมัติแทนเมื่อเอกสารลงนามแล้ว
+                const isProvincialHead =
+                  currentUser.position?.includes("พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัด") ||
+                  currentUser.name.includes("มะลิวัน") ||
+                  currentUser.role === "admin";
+
                 const canReviewStage4 =
                   (b.status === "pending_provincial" || b.status === "endorsed") &&
-                  currentUser.role === "admin";
+                  (isProvincialHead || isAdminHeadAuthorized || currentUser.role === "admin");
 
                 return (
                   <div
@@ -1922,7 +1945,7 @@ export function CarBookingPage({
                             ) : b.status === "pending_admin_head" ? (
                               <span>จัดสรรรถแล้ว ➔ แจ้งเตือนศูนย์การแจ้งเตือนเสนอ <span className="text-indigo-800 font-bold">นายเสกพล ดิษฐโชติ (หน.ฝ่ายบริหารทั่วไป)</span> เพื่อพิจารณาเสนอความเห็น</span>
                             ) : b.status === "pending_provincial" || b.status === "endorsed" ? (
-                              <span>เสนอความเห็นแล้ว ➔ แจ้งเตือนศูนย์การแจ้งเตือนนำกราบเรียน <span className="text-purple-800 font-bold">นางสาวมะลิวัน สิทธิโยธี (พมจ.กำแพงเพชร)</span> เพื่อโปรดพิจารณาอนุมัติ</span>
+                              <span>เสนอความเห็นแล้ว ➔ แจ้งเตือนศูนย์การแจ้งเตือนนำกราบเรียน <span className="text-purple-800 font-bold">นางสาวมะลิวัน สิทธิโยธี (พมจ.กำแพงเพชร)</span> เพื่อโปรดพิจารณาอนุมัติ (เมื่อเอกสารลงนามแล้ว หน.ฝ่ายบริหาร มีอำนาจอนุมัติแทนในระบบ)</span>
                             ) : b.status === "approved" ? (
                               <span>อนุมัติคำขอแล้ว ➔ แจ้งเตือนศูนย์การแจ้งเตือน <span className="text-emerald-800 font-bold">ผู้ขอใช้รถ ({b.requesterName})</span> และ <span className="text-teal-800 font-bold">คนขับ ({b.assignedDriver})</span> เรียบร้อยแล้ว</span>
                             ) : b.status === "completed" ? (
@@ -2402,15 +2425,19 @@ export function CarBookingPage({
                           </button>
                         )}
 
-                        {/* Stage 4 Review: Provincial Approval */}
+                        {/* Stage 4 Review: Provincial Approval / Admin Head acting on behalf */}
                         {canReviewStage4 && (
                           <button
                             type="button"
                             onClick={() => setSelectedReviewBooking(b)}
-                            className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                            className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
                           >
                             <span>👑</span>
-                            <span>พิจารณาอนุมัติ (พมจ.)</span>
+                            <span>
+                              {isAdminHeadAuthorized && !isProvincialHead
+                                ? "อนุมัติแทน พมจ. (เอกสารลงนามแล้ว)"
+                                : "พิจารณาอนุมัติ (พมจ.)"}
+                            </span>
                           </button>
                         )}
                       </div>

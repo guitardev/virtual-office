@@ -394,13 +394,25 @@ export function buildUnifiedNotifications({
         currentUserRole === "admin" ||
         (currentUserRole as string) === "director";
 
-      if (isProvincialHead) {
+      const isAdminHead =
+        currentUser.id === "syno_เสกพล" ||
+        myName.includes("เสกพล") ||
+        (myDivision.includes("ฝ่ายบริหารทั่วไป") &&
+          (currentUserRole === "manager" || myPosition.includes("หัวหน้า"))) ||
+        currentUserRole === "admin";
+
+      if (isProvincialHead || isAdminHead) {
         const notifId = `car_stg4_${b.id}`;
+        const isActing = isAdminHead && !isProvincialHead;
         notifs.push({
           id: notifId,
           type: "carbooking",
-          title: `รอ พมจ. พิจารณาอนุมัติ: คำขอ ${b.requestNo}`,
-          message: `หน.ฝ่ายบริหารเสนอความเห็นชอบแล้ว เพื่อโปรดพิจารณาอนุมัติใช้รถไป ${b.destination}`,
+          title: isActing
+            ? `อนุมัติแทน พมจ. (เมื่อเอกสารลงนามแล้ว): คำขอ ${b.requestNo}`
+            : `นำกราบเรียน นางสาวมะลิวัน สิทธิโยธี (พมจ.กำแพงเพชร) เพื่อโปรดพิจารณาอนุมัติ`,
+          message: isActing
+            ? `คำขอใช้รถ ${b.requestNo} (${b.destination}) ผ่านความเห็นชอบแล้ว เมื่อเอกสารลงนามแล้ว หน.ฝ่ายบริหาร มีอำนาจอนุมัติแทน พมจ. ในระบบ`
+            : `👔 หน.ฝ่ายบริหารทั่วไป (${b.adminHeadName || "นายเสกพล ดิษฐโชติ"}) เสนอความเห็นชอบแล้ว นำกราบเรียน นางสาวมะลิวัน สิทธิโยธี (พมจ.กำแพงเพชร) เพื่อโปรดพิจารณาอนุมัติคำขอใช้รถ ${b.requestNo} (${b.destination})`,
           timestamp: b.adminHeadActionAt || "วันนี้",
           createdAt: new Date().toISOString(),
           isRead: readIds.has(notifId),

@@ -61,6 +61,17 @@ export function ReviewBookingModal({
     (currentUser.division?.includes("ฝ่ายบริหารทั่วไป") &&
       (currentUser.position?.includes("หัวหน้า") || currentUser.role === "manager"));
 
+  // ผู้มีสิทธิ์อนุมัติ (Stage 4): พมจ. หรือ หน.ฝ่ายบริหารทั่วไป (อนุมัติแทน พมจ. ในระบบเมื่อเอกสารลงนามแล้ว)
+  const isProvincialApprover =
+    currentUser.position?.includes("พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัด") ||
+    currentUser.name.includes("มะลิวัน") ||
+    currentUser.role === "admin";
+
+  const isActingForProvincial = isAdminHeadAuthorized && !isProvincialApprover;
+
+  const canApproveStage4 =
+    isProvincialApprover || isAdminHeadAuthorized || currentUser.role === "admin";
+
   // Check vehicle status and time overlap with other active bookings
   const getVehicleAvailability = (veh: Vehicle) => {
     if (veh.status === "maintenance") {
@@ -153,7 +164,12 @@ export function ReviewBookingModal({
     if (isStage1) return "เห็นชอบตามขอ เพื่อประโยชน์แก่ทางราชการ";
     if (isStage2) return "ตรวจสอบความพร้อมแล้ว รถและคนขับมีสถานะว่าง พร้อมจัดสรร เสนอหัวหน้าฝ่ายบริหารทั่วไปเพื่อโปรดพิจารณา";
     if (isStage3) return "ตรวจสอบความถูกต้องเรียบร้อยแล้ว เห็นควรอนุมัติเพื่อโปรดพิจารณา";
-    if (isStage4) return "อนุมัติให้ใช้รถยนต์ราชการตามขอ โดยให้ปฏิบัติตามระเบียบว่าด้วยการใช้รถราชการอย่างเคร่งครัด";
+    if (isStage4) {
+      if (isActingForProvincial) {
+        return "เอกสารแบบขอใช้รถผ่านการลงนามอนุมัติจาก พมจ.กำแพงเพชร เรียบร้อยแล้ว หัวหน้าฝ่ายบริหารทั่วไปบันทึกอนุมัติแทนในระบบ";
+      }
+      return "อนุมัติให้ใช้รถยนต์ราชการตามขอ โดยให้ปฏิบัติตามระเบียบว่าด้วยการใช้รถราชการอย่างเคร่งครัด";
+    }
     return "";
   };
 
@@ -245,7 +261,11 @@ export function ReviewBookingModal({
         onEndorse(booking.id, booking.assignedDriver || "", notes.trim());
       }
     } else if (isStage4) {
-      // Step 4.2: Provincial Governor (พมจ.) Approval
+      if (!canApproveStage4) {
+        alert("เฉพาะ พมจ.กำแพงเพชร หรือ หัวหน้าฝ่ายบริหารทั่วไป (กรณีเอกสารลงนามแล้ว) เท่านั้นที่มีสิทธิ์อนุมัติในขั้นตอนนี้");
+        return;
+      }
+      // Step 4.2: Provincial Governor (พมจ.) Approval or Admin Head acting on behalf
       if (onProvincialApprove) {
         onProvincialApprove(booking.id, notes.trim());
       } else if (onApprove) {
@@ -279,10 +299,18 @@ export function ReviewBookingModal({
         bg: "bg-gradient-to-r from-teal-500/10 via-emerald-500/10 to-transparent border-teal-200",
       };
     }
+    if (isStage4 && isActingForProvincial) {
+      return {
+        icon: "👑",
+        title: "ขั้นที่ 4: บันทึกอนุมัติแทน พมจ. (เอกสารลงนามแล้ว)",
+        subtitle: "เอกสารแบบขอใช้รถผ่านการลงนามจาก พมจ.กำแพงเพชร แล้ว · หัวหน้าฝ่ายบริหารทั่วไปบันทึกอนุมัติแทนในระบบ",
+        bg: "bg-gradient-to-r from-purple-500/15 via-indigo-500/10 to-transparent border-purple-200",
+      };
+    }
     return {
       icon: "👑",
       title: "ขั้นที่ 4: พิจารณาอนุมัติขั้นสุดท้าย (พมจ.กำแพงเพชร)",
-      subtitle: "อนุมัติการใช้รถยนต์ราชการและแจ้งเตือน Line Notify ไปยังผู้ขอใช้รถ",
+      subtitle: "อนุมัติการใช้รถยนต์ราชการและแจ้งเตือนไปยังผู้ขอใช้รถและพลขับ",
       bg: "bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-transparent border-emerald-200",
     };
   };
@@ -611,6 +639,17 @@ export function ReviewBookingModal({
           ) : (
             /* Notes / Endorsement textarea */
             <div className="space-y-2">
+              {isStage4 && isActingForProvincial && (
+                <div className="p-3.5 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-2xl text-xs text-purple-900 flex items-start gap-2.5 shadow-2xs mb-2">
+                  <span className="text-base">📝</span>
+                  <div>
+                    <p className="font-bold text-purple-950">อำนาจอนุมัติแทน พมจ. ในระบบ (เมื่อเอกสารลงนามแล้ว)</p>
+                    <p className="text-purple-800 mt-0.5 leading-relaxed">
+                      เมื่อเอกสารใบขออนุญาตใช้รถราชการได้รับการลงนามอนุมัติจาก นางสาวมะลิวัน สิทธิโยธี (พมจ.กำแพงเพชร) เป็นลายลักษณ์อักษรแล้ว ท่านในฐานะหัวหน้าฝ่ายบริหารทั่วไปมีอำนาจกดอนุมัติแทนในระบบได้ทันที
+                    </p>
+                  </div>
+                </div>
+              )}
               <label className="block text-xs font-bold text-slate-800">
                 {isStage1
                   ? "ความเห็นหัวหน้ากลุ่ม/ฝ่าย หรือ ข้าราชการในกลุ่ม"
@@ -618,6 +657,8 @@ export function ReviewBookingModal({
                   ? "บันทึกการจัดสรรยานพาหนะและพนักงานขับรถ"
                   : isStage3
                   ? "ความเห็นหัวหน้าฝ่ายบริหารทั่วไป (เสนอ พมจ.)"
+                  : isActingForProvincial
+                  ? "บันทึกการอนุมัติแทน พมจ. (ระบุรายละเอียดการลงนามในเอกสาร)"
                   : "คำสั่งการและข้อสั่งการของ พมจ.กำแพงเพชร"}
               </label>
               <textarea
@@ -673,6 +714,19 @@ export function ReviewBookingModal({
                   ปิดหน้าต่าง
                 </button>
               </div>
+            ) : isStage4 && currentUser.role !== "admin" && !canApproveStage4 ? (
+              <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3">
+                <span className="text-xs text-purple-800 bg-purple-50 px-3.5 py-2 rounded-xl border border-purple-200 font-medium">
+                  ℹ️ คำขออยู่ในขั้นตอนรอ พมจ. พิจารณาอนุมัติ หรือ หัวหน้าฝ่ายบริหารทั่วไปอนุมัติแทนในระบบ (เมื่อเอกสารลงนามแล้ว)
+                </span>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer shrink-0"
+                >
+                  ปิดหน้าต่าง
+                </button>
+              </div>
             ) : (
               <>
                 <button
@@ -702,6 +756,8 @@ export function ReviewBookingModal({
                         ? "bg-blue-600 hover:bg-blue-700 shadow-blue-600/20"
                         : isStage3
                         ? "bg-teal-600 hover:bg-teal-700 shadow-teal-600/20"
+                        : isActingForProvincial
+                        ? "bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 shadow-purple-600/20"
                         : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20"
                     }`}
                   >
@@ -713,7 +769,9 @@ export function ReviewBookingModal({
                         ? "บันทึกการจัดสรร & เสนอหัวหน้าฝ่ายบริหาร"
                         : isStage3
                         ? "เห็นชอบและเสนอ พมจ. ขออนุมัติ"
-                        : "👑 อนุมัติการใช้รถราชการ (พร้อมส่ง Line Notify)"}
+                        : isActingForProvincial
+                        ? "👑 บันทึกอนุมัติแทน พมจ. (เอกสารลงนามแล้ว)"
+                        : "👑 อนุมัติการใช้รถราชการ (พมจ.)"}
                     </span>
                   </button>
                 </div>

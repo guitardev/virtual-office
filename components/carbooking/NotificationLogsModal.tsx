@@ -70,12 +70,12 @@ export function NotificationLogsModal({
       }
       // 4. Admin Head match
       const isAdminHead = currentUser.id === "syno_เสกพล" || myName.includes("เสกพล");
-      if (isAdminHead && n.recipientRole?.includes("หัวหน้าฝ่ายบริหาร")) {
+      if (isAdminHead && (n.recipientRole?.includes("หัวหน้าฝ่ายบริหาร") || n.type === "admin_head_endorsed")) {
         return true;
       }
       // 5. Provincial head match
       const isProvincial = myPosition.includes("พัฒนาสังคม") || myName.includes("มะลิวัน");
-      if (isProvincial && (n.recipientRole?.includes("พมจ") || n.recipientRole?.includes("พัฒนาสังคมและความมั่นคง"))) {
+      if (isProvincial && (n.recipientRole?.includes("พมจ") || n.recipientRole?.includes("พัฒนาสังคมและความมั่นคง") || n.title?.includes("นำกราบเรียน"))) {
         return true;
       }
       // 6. Requester match
