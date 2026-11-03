@@ -274,14 +274,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <button
                   type="button"
                   onClick={() => toggleGroupCollapse(group.id)}
-                  className="w-full px-2.5 py-1 flex items-center justify-between text-[11px] font-bold text-slate-400 hover:text-slate-200 transition-colors group/header cursor-pointer select-none rounded-lg hover:bg-slate-800/40"
+                  className="w-full px-2.5 py-1.5 flex items-center justify-between text-slate-100 hover:text-white transition-all group/header cursor-pointer select-none rounded-xl hover:bg-slate-800/60 border border-transparent hover:border-slate-700/50 mt-2 mb-1"
                   title={isGroupCollapsed ? `คลิกเพื่อขยายกลุ่ม ${group.title}` : `คลิกเพื่อยุบกลุ่ม ${group.title}`}
                 >
-                  <span className="truncate flex items-center gap-1.5">
-                    {group.icon && <span className="text-xs opacity-75">{group.icon}</span>}
-                    <span>{group.title}</span>
+                  <span className="truncate flex items-center gap-2">
+                    {group.icon && (
+                      <span className="text-lg leading-none shrink-0 drop-shadow-xs">
+                        {group.icon}
+                      </span>
+                    )}
+                    <span className="text-[13.5px] sm:text-sm font-bold text-slate-100 tracking-tight">
+                      {group.title}
+                    </span>
                   </span>
-                  <span className="text-[10px] text-slate-500 group-hover/header:text-slate-300 transition-transform">
+                  <span className="text-xs text-slate-400 group-hover/header:text-slate-200 transition-transform">
                     {isGroupCollapsed ? "▸" : "▾"}
                   </span>
                 </button>
@@ -290,7 +296,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               )}
 
               {(!isGroupCollapsed || isCollapsed) && (
-                <div className="space-y-1">
+                <div className={`space-y-0.5 ${!isCollapsed ? "pl-1.5" : ""}`}>
                   {group.items.map((item) => {
                     const itemRoute = MODULE_TO_ROUTE[item.id] || `/${item.id}`;
                     const isActive =
@@ -339,15 +345,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                             : "text-slate-300 hover:bg-slate-800 hover:text-white"
                         }`}
                       >
-                        <div className={`flex items-center ${isCollapsed ? "justify-center" : "space-x-2.5 min-w-0"}`}>
+                        <div className={`flex items-center ${isCollapsed ? "justify-center" : "space-x-2 min-w-0"}`}>
                           <span
                             className={`shrink-0 transition-transform ${
-                              isCollapsed ? "text-xl" : "text-base"
+                              isCollapsed ? "text-xl" : "text-sm"
                             } ${isActive ? "scale-110" : "group-hover:scale-105"}`}
                           >
-                            {sysModule?.icon || item.icon}
+                            {item.icon || sysModule?.icon}
                           </span>
-                          <span className={isCollapsed ? "sr-only" : "truncate text-xs sm:text-[13px]"}>
+                          <span className={isCollapsed ? "sr-only" : "truncate text-xs font-medium"}>
                             {moduleTitle}
                           </span>
                         </div>
