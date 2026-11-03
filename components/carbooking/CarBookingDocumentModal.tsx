@@ -191,7 +191,8 @@ export function CarBookingDocumentModal({
         year: createdDate.year,
         divisionReviewerName: cleanPersonName(booking.divisionReviewerName || ""),
         divisionReviewerPosition: booking.divisionReviewerPosition || (booking.divisionReviewerName ? "หัวหน้ากลุ่ม/ฝ่าย" : ""),
-        divisionReviewerDate: divReviewerDate.d ? `${divReviewerDate.d} / ${divReviewerDate.m} / ${divReviewerDate.y}` : "",
+        divisionReviewerActionAt: booking.divisionReviewerActionAt,
+        divisionReviewerDate: (booking.divisionReviewerActionAt && divReviewerDate.d) ? `${divReviewerDate.d} / ${divReviewerDate.m} / ${divReviewerDate.y}` : "",
         adminHeadName: cleanPersonName(booking.adminHeadName) || "นายเสกพล ดิษฐโชติ",
         adminHeadPosition: "นักพัฒนาสังคมชำนาญการ",
         adminHeadNotes:
@@ -201,11 +202,13 @@ export function CarBookingDocumentModal({
             : (booking.licensePlate && booking.licensePlate !== "-"
                 ? `ตรวจสอบความพร้อมแล้ว จัดสรรรถยนต์ ${cleanedVehName || ""} ทะเบียน [${booking.licensePlate}] พนักงานขับรถ: ${resolvedDriver || ""} เห็นควรอนุญาต`
                 : "")),
+        adminHeadActionAt: booking.adminHeadActionAt,
         adminHeadDate: (booking.adminHeadActionAt && adminHeadDate.d) ? `${adminHeadDate.d} / ${adminHeadDate.m} / ${adminHeadDate.y}` : "",
         status: booking.status,
         approverName: "นางสาวมะลิวัน สิทธิโยธี",
         approverPosition: "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
-        approverDate: approverDate.d ? `${approverDate.d} / ${approverDate.m} / ${approverDate.y}` : "",
+        approverActionAt: booking.approverActionAt,
+        approverDate: (booking.approverActionAt && approverDate.d) ? `${approverDate.d} / ${approverDate.m} / ${approverDate.y}` : "",
       };
 
       const res = await fetch("/api/carbooking/download-docx", {

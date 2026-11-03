@@ -108,36 +108,66 @@ function cleanVehicleName(vehName?: string, plate?: string): string {
   return cleaned || "รถยนต์ส่วนกลาง";
 }
 
-function parseThaiDateParts(dateStr?: string): { day: string; month: string; year: string } {
-  if (dateStr) {
-    const match = dateStr.match(/(\d{1,2})\s+([^\s\d,]+)\s+(\d{4})/);
-    if (match) {
-      const day = match[1];
-      let month = match[2];
-      const year = match[3];
+function parseThaiDateParts(dateStr?: string, fallbackToNow: boolean = true): { day: string; month: string; year: string } {
+  if (dateStr && dateStr.trim()) {
+    const trimmed = dateStr.trim();
+
+    // 1. Slash format: "3 / 11 / 2569" or "3 / พ.ย. / 2569" or "3 / พฤศจิกายน / 2569" or "3/11/2569"
+    const slashMatch = trimmed.match(/^(\d{1,2})\s*\/\s*([^\s/]+)\s*\/\s*(\d{2,4})$/);
+    if (slashMatch) {
+      const day = slashMatch[1];
+      let month = slashMatch[2].trim();
+      let year = slashMatch[3].trim();
+      if (/^\d+$/.test(month)) {
+        const mNum = parseInt(month, 10);
+        const THAI_MONTH_NAMES = [
+          "", "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
+          "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"
+        ];
+        month = THAI_MONTH_NAMES[mNum] || month;
+      } else if (THAI_MONTHS_MAP[month]) {
+        month = THAI_MONTHS_MAP[month];
+      }
+      if (year.length === 2) year = `25${year}`;
+      return { day, month, year };
+    }
+
+    // 2. Space format: "3 พฤศจิกายน 2569" or "3 พ.ย. 2569"
+    const spaceMatch = trimmed.match(/^(\d{1,2})\s+([^\s\d,\/]+)\s+(\d{4})/);
+    if (spaceMatch) {
+      const day = spaceMatch[1];
+      let month = spaceMatch[2].trim();
+      const year = spaceMatch[3].trim();
       if (THAI_MONTHS_MAP[month]) {
         month = THAI_MONTHS_MAP[month];
       }
       return { day, month, year };
     }
 
+    // 3. ISO / Standard Date
     try {
-      const d = new Date(dateStr);
+      const d = new Date(trimmed);
       if (!isNaN(d.getTime())) {
+        const fullYear = d.getFullYear();
         return {
           day: d.getDate().toString(),
           month: d.toLocaleDateString("th-TH", { month: "long" }),
-          year: (d.getFullYear() + 543).toString(),
+          year: (fullYear < 2400 ? fullYear + 543 : fullYear).toString(),
         };
       }
     } catch {}
   }
 
+  if (!fallbackToNow) {
+    return { day: "", month: "", year: "" };
+  }
+
   const now = new Date();
+  const fullYear = now.getFullYear();
   return {
     day: now.getDate().toString(),
     month: now.toLocaleDateString("th-TH", { month: "long" }),
-    year: (now.getFullYear() + 543).toString(),
+    year: (fullYear < 2400 ? fullYear + 543 : fullYear).toString(),
   };
 }
 
@@ -201,22 +231,42 @@ export async function generateCarBookingDocx(bookingData: any): Promise<Buffer> 
     }
   }
 
+  const isApproved = bookingData.status === "approved";
+  const isRejected = bookingData.status === "rejected";
+
   // Date parsing
-  // Requester / Submission Date (used for top header date and requester signature block)
+  // 1. วันที่ยื่นคำขอ (Request Submission Date)
+  // ให้ใช้วันที่ยื่นคำขอเป็นสำคัญ (วัน/เดือน/ปี ที่ส่งมา หรือ createdAt/requesterDate ในระบบ)
+  // ห้ามดึงมาจากวันที่เดินทาง (startDateThai) โดยเด็ดขาด
   const reqDate = (bookingData.day && bookingData.month && bookingData.year)
     ? {
         day: String(bookingData.day).trim(),
         month: THAI_MONTHS_MAP[bookingData.month] || String(bookingData.month).trim(),
         year: String(bookingData.year).trim(),
       }
-    : parseThaiDateParts(bookingData.createdAt || bookingData.requesterDate || bookingData.startDateThai);
+    : parseThaiDateParts(bookingData.createdAt || bookingData.requesterDate, true);
 
   const topDate = reqDate;
-  const divDate = parseThaiDateParts(bookingData.divisionReviewerActionAt || bookingData.divisionReviewerDate || bookingData.createdAt);
-  const admDate = (bookingData.adminHeadActionAt || bookingData.adminHeadDate)
-    ? parseThaiDateParts(bookingData.adminHeadActionAt || bookingData.adminHeadDate)
+
+  // 2. วันที่พิจารณาของหัวหน้ากลุ่ม/ฝ่าย ในระบบ
+  const hasDivReview = Boolean(bookingData.divisionReviewerActionAt || bookingData.divisionReviewerDate);
+  const divDate = hasDivReview
+    ? parseThaiDateParts(bookingData.divisionReviewerActionAt || bookingData.divisionReviewerDate, false)
     : { day: "", month: "", year: "" };
-  const appDate = parseThaiDateParts(bookingData.approverActionAt || bookingData.approverDate || bookingData.createdAt);
+
+  // 3. วันที่พิจารณาของหัวหน้าฝ่ายบริหารทั่วไป ในระบบ
+  const hasAdminReview = Boolean(bookingData.adminHeadActionAt || bookingData.adminHeadDate);
+  const admDate = hasAdminReview
+    ? parseThaiDateParts(bookingData.adminHeadActionAt || bookingData.adminHeadDate, false)
+    : { day: "", month: "", year: "" };
+
+  // 4. วันที่พิจารณาอนุมัติของผู้อนุญาต (พมจ.) ในระบบ
+  const hasApproverAction = Boolean(bookingData.approverActionAt || bookingData.approverDate);
+  const appDate = (isApproved && hasApproverAction)
+    ? parseThaiDateParts(bookingData.approverActionAt || bookingData.approverDate, false)
+    : (isApproved
+        ? parseThaiDateParts(bookingData.approverActionAt || bookingData.approverDate || bookingData.createdAt, true)
+        : { day: "", month: "", year: "" });
 
   // Signatures
   const divReviewerName = cleanPersonName(bookingData.divisionReviewerName) || "";
@@ -231,9 +281,6 @@ export async function generateCarBookingDocx(bookingData: any): Promise<Buffer> 
       : (bookingData.status === "approved" || bookingData.status === "pending_provincial" || bookingData.status === "pending_admin_head"
           ? (licPlate ? `ตรวจสอบความพร้อมแล้ว จัดสรรรถยนต์ทะเบียน ${licPlate} พนักงานขับรถ ${driver} เห็นควรอนุญาต` : "เห็นควรอนุญาตให้ใช้รถยนต์ราชการ")
           : ""));
-
-  const isApproved = bookingData.status === "approved";
-  const isRejected = bookingData.status === "rejected";
   const approverName = cleanPersonName(
     bookingData.approverName || "นางสาวมะลิวัน สิทธิโยธี"
   );
@@ -441,17 +488,16 @@ export async function generateCarBookingDocx(bookingData: any): Promise<Buffer> 
       !fullText.includes("หัวหน้า") &&
       (state === "after_provincial_sig" || state === "provincial_date_next" || i === 36)
     ) {
-      // Provincial signature date (Fix name & position are kept from template; date is filled when approved)
-      const dayVal = isApproved ? appDate.day : " ";
-      const monthVal = isApproved ? appDate.month : " ";
-      const yearVal = isApproved ? appDate.year : " ";
+      // Provincial signature date (only filled if approved and date available in system)
       runs =
         rText("\t                 ") +
-        rDotted(dayVal, 4) +
-        rText(" / ") +
-        rDotted(monthVal, 10) +
-        rText(" / ") +
-        rDotted(yearVal, 6);
+        (isApproved && appDate.day
+          ? rDotted(appDate.day, 4) +
+            rText(" / ") +
+            rDotted(appDate.month, 10) +
+            rText(" / ") +
+            rDotted(appDate.year, 6)
+          : rDotted("", 4) + rText(" / ") + rDotted("", 10) + rText(" / ") + rDotted("", 6));
     }
 
     if (runs !== null) {
