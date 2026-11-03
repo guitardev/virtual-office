@@ -17,40 +17,40 @@ export interface NavGroup {
 export const NAV_GROUPS: NavGroup[] = [
   {
     id: "overview",
-    title: "ภาพรวมสำนักงาน",
-    icon: "🏛️",
+    title: "ภาพรวม",
+    icon: "📊",
     items: [
       { id: "dashboard", label: "หน้าแรก", icon: "📊" },
-      { id: "reports", label: "รายงานและสถิติ", icon: "📈" },
-    ],
-  },
-  {
-    id: "collaboration",
-    title: "การประสานงาน & สื่อสาร",
-    icon: "💬",
-    items: [
-      { id: "chat", label: "แชททีม", icon: "💬" },
-      { id: "task", label: "งานและโปรเจกต์", icon: "📋" },
-      { id: "meetings", label: "การประชุม", icon: "📹" },
+      { id: "reports", label: "รายงาน", icon: "📈" },
     ],
   },
   {
     id: "operations",
-    title: "สารบรรณ & บริการองค์กร",
-    icon: "📑",
+    title: "งาน & บริการ",
+    icon: "💼",
     items: [
-      { id: "circular", label: "เวียนหนังสือราชการ", icon: "📜" },
-      { id: "carbooking", label: "รถยนต์สำนักงาน", icon: "🚗" },
-      { id: "files", label: "คลังเอกสาร NAS", icon: "📁" },
-      { id: "gallery", label: "คลังภาพและสื่อ", icon: "📸" },
+      { id: "circular", label: "หนังสือเวียน", icon: "📜" },
+      { id: "task", label: "ภารกิจงาน", icon: "📋" },
+      { id: "meetings", label: "การประชุม", icon: "📹" },
+      { id: "chat", label: "แชททีม", icon: "💬" },
+      { id: "carbooking", label: "รถราชการ", icon: "🚗" },
+    ],
+  },
+  {
+    id: "storage",
+    title: "คลังข้อมูล",
+    icon: "🗄️",
+    items: [
+      { id: "files", label: "เอกสาร NAS", icon: "📁" },
+      { id: "gallery", label: "ภาพ & สื่อ", icon: "📸" },
     ],
   },
   {
     id: "settings",
-    title: "ระบบและการตั้งค่า",
+    title: "การจัดการ",
     icon: "⚙️",
     items: [
-      { id: "admin", label: "ระบบจัดการ & RBAC", icon: "⚙️" },
+      { id: "admin", label: "จัดการระบบ", icon: "⚙️" },
       { id: "user", label: "ข้อมูลส่วนตัว", icon: "👤" },
     ],
   },

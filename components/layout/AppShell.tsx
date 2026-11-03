@@ -300,7 +300,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     const sysModule = systemModules[item.id];
                     const isModuleOpen = sysModule?.enabled !== false;
                     const badgeCount = isHydrated ? navBadges[item.id] || 0 : 0;
-                    const moduleTitle = sysModule?.name ? sysModule.name.split(" (")[0] : item.label;
+                    const moduleTitle = item.label || (sysModule?.name ? sysModule.name.split(" (")[0] : "");
 
                     return (
                       <Link

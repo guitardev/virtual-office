@@ -34,15 +34,15 @@ export const ROLE_CONFIG: Record<Role, RoleInfo> = {
 export const MODULE_NAMES: Record<ModuleId, { name: string; icon: string; desc: string }> = {
   dashboard: { name: "หน้าแรก (Dashboard)", icon: "📊", desc: "ภาพรวมสำนักงาน สถิติ และงานเร่งด่วน" },
   chat: { name: "แชททีม (Chat)", icon: "💬", desc: "การสื่อสารระหว่างสมาชิกและห้องแชทองค์กร" },
-  circular: { name: "เวียนหนังสือราชการ (Circular)", icon: "📜", desc: "ระบบเวียนหนังสือราชการ รับทราบ และลงนามดิจิทัล" },
-  task: { name: "งานและโปรเจกต์ (Tasks)", icon: "📋", desc: "กระดานติดตามงานแบบ Kanban" },
+  circular: { name: "หนังสือเวียน (Circular)", icon: "📜", desc: "ระบบเวียนหนังสือราชการ รับทราบ และลงนามดิจิทัล" },
+  task: { name: "ภารกิจงาน (Tasks)", icon: "📋", desc: "กระดานติดตามงานแบบ Kanban" },
   meetings: { name: "การประชุม (Meetings)", icon: "📹", desc: "ตารางประชุมและห้องสนทนาออนไลน์" },
-  carbooking: { name: "รถยนต์สำนักงาน (Car Booking)", icon: "🚗", desc: "ระบบจองยานพาหนะส่วนกลาง" },
+  carbooking: { name: "รถราชการ (Car Booking)", icon: "🚗", desc: "ระบบจองยานพาหนะส่วนกลาง" },
   user: { name: "ข้อมูลส่วนตัว (Profile)", icon: "👤", desc: "ข้อมูลผู้ใช้และการตั้งค่าส่วนบุคคล" },
-  admin: { name: "ระบบจัดการ (Admin Panel)", icon: "⚙️", desc: "การจัดการสมาชิกและกำหนดสิทธิ์ RBAC" },
-  reports: { name: "รายงานและสถิติ (Reports)", icon: "📈", desc: "รายงานสถิติการใช้งานและดาวน์โหลดสรุป" },
-  files: { name: "คลังเอกสาร NAS (File Station)", icon: "📁", desc: "ระบบจัดเก็บและจัดการไฟล์ตามสิทธิ์ Synology NAS" },
-  gallery: { name: "คลังภาพและสื่อ (Synology Photos)", icon: "📸", desc: "คลังจัดเก็บและสืบค้นภาพถ่าย/วิดีโอกิจกรรมราชการ" },
+  admin: { name: "จัดการระบบ (Admin Panel)", icon: "⚙️", desc: "การจัดการสมาชิกและกำหนดสิทธิ์ RBAC" },
+  reports: { name: "รายงาน (Reports)", icon: "📈", desc: "รายงานสถิติการใช้งานและดาวน์โหลดสรุป" },
+  files: { name: "เอกสาร NAS (File Station)", icon: "📁", desc: "ระบบจัดเก็บและจัดการไฟล์ตามสิทธิ์ Synology NAS" },
+  gallery: { name: "ภาพ & สื่อ (Synology Photos)", icon: "📸", desc: "คลังจัดเก็บและสืบค้นภาพถ่าย/วิดีโอกิจกรรมราชการ" },
 };
 
 export const INITIAL_SYSTEM_MODULES: Record<ModuleId, SystemModule> = {
@@ -64,7 +64,7 @@ export const INITIAL_SYSTEM_MODULES: Record<ModuleId, SystemModule> = {
   },
   circular: {
     id: "circular",
-    name: "เวียนหนังสือราชการ (Circular)",
+    name: "หนังสือเวียน (Circular)",
     icon: "📜",
     desc: "ระบบเวียนหนังสือราชการ รับทราบ และลงนามดิจิทัล",
     enabled: true,
@@ -72,7 +72,7 @@ export const INITIAL_SYSTEM_MODULES: Record<ModuleId, SystemModule> = {
   },
   task: {
     id: "task",
-    name: "งานและโปรเจกต์ (Tasks)",
+    name: "ภารกิจงาน (Tasks)",
     icon: "📋",
     desc: "กระดานติดตามงานแบบ Kanban",
     enabled: true,
@@ -88,7 +88,7 @@ export const INITIAL_SYSTEM_MODULES: Record<ModuleId, SystemModule> = {
   },
   carbooking: {
     id: "carbooking",
-    name: "รถยนต์สำนักงาน (Car Booking)",
+    name: "รถราชการ (Car Booking)",
     icon: "🚗",
     desc: "ระบบจองยานพาหนะส่วนกลาง",
     enabled: true,
@@ -96,7 +96,7 @@ export const INITIAL_SYSTEM_MODULES: Record<ModuleId, SystemModule> = {
   },
   reports: {
     id: "reports",
-    name: "รายงานและสถิติ (Reports)",
+    name: "รายงาน (Reports)",
     icon: "📈",
     desc: "รายงานสถิติการใช้งานและดาวน์โหลดสรุป",
     enabled: true,
@@ -104,7 +104,7 @@ export const INITIAL_SYSTEM_MODULES: Record<ModuleId, SystemModule> = {
   },
   admin: {
     id: "admin",
-    name: "ระบบจัดการ (Admin Panel)",
+    name: "จัดการระบบ (Admin Panel)",
     icon: "⚙️",
     desc: "การจัดการสมาชิกและกำหนดสิทธิ์ RBAC",
     enabled: true,
@@ -120,7 +120,7 @@ export const INITIAL_SYSTEM_MODULES: Record<ModuleId, SystemModule> = {
   },
   files: {
     id: "files",
-    name: "คลังเอกสาร NAS (File Station)",
+    name: "เอกสาร NAS (File Station)",
     icon: "📁",
     desc: "ระบบจัดเก็บและจัดการไฟล์ตามสิทธิ์ Synology NAS",
     enabled: true,
@@ -128,7 +128,7 @@ export const INITIAL_SYSTEM_MODULES: Record<ModuleId, SystemModule> = {
   },
   gallery: {
     id: "gallery",
-    name: "คลังภาพและสื่อ (Synology Photos)",
+    name: "ภาพ & สื่อ (Synology Photos)",
     icon: "📸",
     desc: "คลังจัดเก็บและสืบค้นภาพถ่าย/วิดีโอกิจกรรมราชการ",
     enabled: true,

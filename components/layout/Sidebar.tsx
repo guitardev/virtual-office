@@ -2,13 +2,16 @@ import Link from "next/link";
 
 const pages = [
   { id: "dashboard", label: "หน้าแรก", icon: "📊" },
-  { id: "chat", label: "แชท", icon: "💬" },
-  { id: "task", label: "งาน", icon: "📋" },
-  { id: "meetings", label: "การประชุม", icon: "📹" },
-  { id: "carbooking", label: "รถยนต์สำนักงาน", icon: "🚗" },
-  { id: "user", label: "ผู้ใช้", icon: "👤" },
-  { id: "admin", label: "ระบบจัดการ", icon: "⚙️" },
   { id: "reports", label: "รายงาน", icon: "📈" },
+  { id: "circular", label: "หนังสือเวียน", icon: "📜" },
+  { id: "task", label: "ภารกิจงาน", icon: "📋" },
+  { id: "meetings", label: "การประชุม", icon: "📹" },
+  { id: "chat", label: "แชททีม", icon: "💬" },
+  { id: "carbooking", label: "รถราชการ", icon: "🚗" },
+  { id: "files", label: "เอกสาร NAS", icon: "📁" },
+  { id: "gallery", label: "ภาพ & สื่อ", icon: "📸" },
+  { id: "admin", label: "จัดการระบบ", icon: "⚙️" },
+  { id: "user", label: "ข้อมูลส่วนตัว", icon: "👤" },
 ];
 
 export function Sidebar({ open, onClose }) {
