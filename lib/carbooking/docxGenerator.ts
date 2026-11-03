@@ -32,6 +32,10 @@ function rText(text: string, isBold: boolean = false): string {
   }</w:rPr>${inner}</w:r>`;
 }
 
+function rBr(): string {
+  return `<w:r><w:rPr><w:rFonts w:ascii="TH SarabunPSK" w:cs="TH SarabunPSK" w:eastAsia="TH SarabunPSK" w:hAnsi="TH SarabunPSK"/><w:sz w:val="32"/><w:szCs w:val="32"/></w:rPr><w:br/></w:r>`;
+}
+
 // Generates text with Underline style = Dotted (<w:u w:val="dotted"/>)
 function rDotted(text?: string, minWidthChars: number = 0): string {
   let val = (text || "").trim();
@@ -343,18 +347,20 @@ export async function generateCarBookingDocx(bookingData: any): Promise<Buffer> 
         rText(" หมายเลขทะเบียน ") +
         rDotted(licPlate, 20);
     } else if (fullText.includes("เป็นพนักงานขับรถยนต์ไปราชการที่")) {
-      // Driver and mission
+      // Driver and mission + soft line break + passengers (matching user's perfected 1-page layout)
       runs =
         rText("โดยมี ") +
-        rDotted(driver, 24) +
+        rDotted(driver, 20) +
         rText(" เป็นพนักงานขับรถยนต์ไปราชการที่ ") +
-        rDotted(dest, 45) +
+        rDotted(dest, 35) +
         rText(" เพื่อ ") +
-        rDotted(purpose, 45) +
-        rText("  พร้อมด้วย");
-    } else if (fullText.includes("รายชื่อผู้ร่วมเดินทาง") || i === 6) {
-      // Passengers
-      runs = rDotted(passengers, 65);
+        rDotted(purpose, 30) +
+        rBr() +
+        rText("พร้อมด้วย") +
+        rDotted(passengers, 55);
+    } else if (fullText.includes("รายชื่อผู้ร่วมเดินทาง")) {
+      // Legacy template fallback if passenger line is separate
+      runs = "";
     } else if (fullText.includes("มีคนนั่งทั้งสิ้น") || fullText.includes("มีคนนั่ง")) {
       // Passenger count and distance
       runs =
@@ -490,12 +496,19 @@ export async function generateCarBookingDocx(bookingData: any): Promise<Buffer> 
         rText(" ) อนุญาต   ( ") +
         rDotted(rejMark, 3) +
         rText(" ) ไม่อนุญาต");
+    } else if (fullText.startsWith("(") && state === "after_provincial_sig") {
+      // Provincial approver signature name
+      runs =
+        rText("\t                                                             ( ") +
+        rDotted(approverName, 26) +
+        rText(" )");
+      state = "provincial_date_next";
     } else if (
       (fullText.includes("/") || fullText.includes("{วันที่}")) &&
       !fullText.includes("ลงชื่อ") &&
       !fullText.includes("ตำแหน่ง") &&
       !fullText.includes("หัวหน้า") &&
-      (state === "after_provincial_sig" || state === "provincial_date_next" || i === 36)
+      (state === "after_provincial_sig" || state === "provincial_date_next" || i >= 34)
     ) {
       // Provincial signature date (only filled if approved and date available in system)
       runs =
@@ -507,6 +520,7 @@ export async function generateCarBookingDocx(bookingData: any): Promise<Buffer> 
             rText(" / ") +
             rDotted(appDate.year, 6)
           : rDotted("", 4) + rText(" / ") + rDotted("", 10) + rText(" / ") + rDotted("", 6));
+      state = "ready_for_next_block";
     }
 
     if (runs !== null) {
