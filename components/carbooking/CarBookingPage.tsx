@@ -140,7 +140,7 @@ export function CarBookingPage({
     }
     const updated = [...selectedPassengers, { ...found, name: displayName }];
     setSelectedPassengers(updated);
-    const namesStr = updated.map((p) => `${getMemberDisplayName(p)} (${p.division || p.position})`).join(", ");
+    const namesStr = updated.map((p) => getMemberDisplayName(p)).join(", ");
     setFormPassengersList(namesStr);
     setFormPassengerCount(1 + updated.length);
     showToast(`✓ เพิ่ม ${displayName} เป็นผู้ร่วมเดินทาง`);
@@ -149,7 +149,7 @@ export function CarBookingPage({
   const handleRemovePassenger = (memberId: string) => {
     const updated = selectedPassengers.filter((p) => p.id !== memberId);
     setSelectedPassengers(updated);
-    const namesStr = updated.map((p) => `${getMemberDisplayName(p)} (${p.division || p.position})`).join(", ");
+    const namesStr = updated.map((p) => getMemberDisplayName(p)).join(", ");
     setFormPassengersList(namesStr);
     setFormPassengerCount(Math.max(1, 1 + updated.length));
   };
@@ -710,7 +710,7 @@ export function CarBookingPage({
       departureTime: formDepartureTime,
       returnTime: formReturnTime,
       passengerCount: Number(formPassengerCount) || 1,
-      passengersList: formPassengersList.trim() || `${currentUser.name}`,
+      passengersList: (formPassengersList.trim() || `${currentUser.name}`).replace(/\s*[\(\uFF08][^)\uFF09]*[\)\uFF09]\s*/g, " ").trim(),
       estimatedDistance: Number(formEstimatedDistance) || 150,
       requireDriver: formRequireDriver,
       assignedDriver: formRequireDriver
@@ -2801,9 +2801,6 @@ export function CarBookingPage({
                           className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-teal-200 text-teal-950 rounded-lg text-xs font-medium shadow-2xs"
                         >
                           <span>👤 {getMemberDisplayName(p)}</span>
-                          <span className="text-[10px] text-teal-600 font-normal">
-                            ({p.division || p.position})
-                          </span>
                           <button
                             type="button"
                             onClick={() => handleRemovePassenger(p.id)}

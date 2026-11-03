@@ -32,7 +32,17 @@ export function CarBookingDocumentModal({
   // Helper to remove appended position in parentheses from names e.g. "นายธนวัฒน์ แกมขุนทด (นักพัฒนาสังคม)" -> "นายธนวัฒน์ แกมขุนทด"
   const cleanPersonName = (name?: string) => {
     if (!name) return "";
-    return name.replace(/\s*\([^)]*\)\s*$/g, "").trim();
+    return name.replace(/\s*[\(\uFF08][^)\uFF09]*[\)\uFF09]\s*/g, " ").trim();
+  };
+
+  // Helper to remove parenthesized division/position from passengers list e.g. "นางสาวดวงใจ สมบูรณ์ (กลุ่ม...)" -> "นางสาวดวงใจ สมบูรณ์"
+  const cleanPassengersList = (passengers?: string | null) => {
+    if (!passengers || passengers.trim() === "-" || !passengers.trim()) return "-";
+    return passengers
+      .split(/[,;\n]+/)
+      .map((p) => p.replace(/\s*[\(\uFF08][^)\uFF09]*[\)\uFF09]\s*/g, " ").trim())
+      .filter(Boolean)
+      .join(", ");
   };
 
   // Helper to remove duplicate plate from vehicle name e.g. "รถยนต์ส่วนกลาง (กฉ 5196 กำแพงเพชร)" -> "รถยนต์ส่วนกลาง"
@@ -165,7 +175,7 @@ export function CarBookingDocumentModal({
         assignedDriver: resolvedDriver,
         destination: booking.destination,
         purpose: booking.purpose,
-        passengersList: booking.passengersList,
+        passengersList: cleanPassengersList(booking.passengersList),
         passengerCount: booking.passengerCount,
         totalPassengerCountWithDriver:
           booking.totalPassengerCountWithDriver ||
@@ -424,7 +434,7 @@ export function CarBookingDocumentModal({
               {/* Line 5: ผู้ร่วมเดินทาง (passengersList) */}
               <div className="flex items-baseline">
                 <span className="flex-1 border-b border-dotted border-black px-2 font-normal">
-                  {booking.passengersList || "\u00A0"}
+                  {cleanPassengersList(booking.passengersList) || "\u00A0"}
                 </span>
               </div>
 

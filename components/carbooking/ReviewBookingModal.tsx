@@ -376,7 +376,7 @@ export function ReviewBookingModal({
               </div>
               <div>
                 <span className="text-slate-400">จำนวนผู้โดยสาร:</span>{" "}
-                <strong className="text-slate-800">{booking.passengerCount} คน</strong> ({booking.passengersList || "ไม่มีรายชื่อเพิ่มเติม"})
+                <strong className="text-slate-800">{booking.passengerCount} คน</strong> ({booking.passengersList ? booking.passengersList.replace(/\s*[\(\uFF08][^)\uFF09]*[\)\uFF09]\s*/g, " ").trim() : "ไม่มีรายชื่อเพิ่มเติม"})
               </div>
             </div>
 

@@ -95,6 +95,15 @@ export function cleanPersonName(name?: string | null): string {
   return name.replace(/\s*\([^)]*\)\s*/g, " ").trim();
 }
 
+export function cleanPassengersList(passengers?: string | null): string {
+  if (!passengers || passengers.trim() === "-" || !passengers.trim()) return "-";
+  return passengers
+    .split(/[,;\n]+/)
+    .map((p) => p.replace(/\s*[\(\uFF08][^)\uFF09]*[\)\uFF09]\s*/g, " ").trim())
+    .filter(Boolean)
+    .join(", ");
+}
+
 function cleanVehicleName(vehName?: string, plate?: string): string {
   if (!vehName) return "รถยนต์ส่วนกลาง";
   let cleaned = vehName;
@@ -204,7 +213,7 @@ export async function generateCarBookingDocx(bookingData: any): Promise<Buffer> 
   }
   const dest = bookingData.destination || "";
   const purpose = bookingData.purpose || "";
-  const passengers = bookingData.passengersList || "-";
+  const passengers = cleanPassengersList(bookingData.passengersList);
   
   // Total passengers with driver
   const calcTotalPassengers = bookingData.totalPassengerCountWithDriver
