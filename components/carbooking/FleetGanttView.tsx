@@ -18,7 +18,7 @@ export function FleetGanttView({
   onRequestVehicle,
 }: FleetGanttViewProps) {
   // Navigation State
-  const [viewMode, setViewMode] = useState<"day" | "week">("day");
+  const [viewMode, setViewMode] = useState<"day" | "week" | "month">("day");
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     const today = new Date();
     return new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -63,13 +63,27 @@ export function FleetGanttView({
     return days;
   }, [selectedDate]);
 
+  // Month Days Array
+  const monthDays = useMemo(() => {
+    const year = selectedDate.getFullYear();
+    const month = selectedDate.getMonth();
+    const totalDays = new Date(year, month + 1, 0).getDate();
+    const days: Date[] = [];
+    for (let i = 1; i <= totalDays; i++) {
+      days.push(new Date(year, month, i));
+    }
+    return days;
+  }, [selectedDate]);
+
   // Date Navigation Handlers
   const handlePrev = () => {
     const newDate = new Date(selectedDate);
     if (viewMode === "day") {
       newDate.setDate(selectedDate.getDate() - 1);
-    } else {
+    } else if (viewMode === "week") {
       newDate.setDate(selectedDate.getDate() - 7);
+    } else {
+      newDate.setMonth(selectedDate.getMonth() - 1);
     }
     setSelectedDate(newDate);
   };
@@ -78,8 +92,10 @@ export function FleetGanttView({
     const newDate = new Date(selectedDate);
     if (viewMode === "day") {
       newDate.setDate(selectedDate.getDate() + 1);
-    } else {
+    } else if (viewMode === "week") {
       newDate.setDate(selectedDate.getDate() + 7);
+    } else {
+      newDate.setMonth(selectedDate.getMonth() + 1);
     }
     setSelectedDate(newDate);
   };
@@ -117,6 +133,13 @@ export function FleetGanttView({
       year: "numeric",
       month: "long",
       day: "numeric",
+    });
+  };
+
+  const formatThaiMonth = (date: Date) => {
+    return date.toLocaleDateString("th-TH", {
+      month: "long",
+      year: "numeric",
     });
   };
 
@@ -232,37 +255,83 @@ export function FleetGanttView({
     return ((currentHour - START_HOUR) / TOTAL_HOURS) * 100;
   }, [selectedDate, START_HOUR, END_HOUR, TOTAL_HOURS]);
 
-  // Utilization Stats for the Selected Date
-  const dayStats = useMemo(() => {
-    const targetDayStart = new Date(
-      selectedDate.getFullYear(),
-      selectedDate.getMonth(),
-      selectedDate.getDate(),
-      0,
-      0,
-      0
-    ).toISOString();
+  // Utilization Stats for the Selected Period (Day / Week / Month)
+  const periodStats = useMemo(() => {
+    let periodStart: string;
+    let periodEnd: string;
+    let label = "ภารกิจในวัน:";
 
-    const targetDayEnd = new Date(
-      selectedDate.getFullYear(),
-      selectedDate.getMonth(),
-      selectedDate.getDate(),
-      23,
-      59,
-      59
-    ).toISOString();
+    if (viewMode === "day") {
+      periodStart = new Date(
+        selectedDate.getFullYear(),
+        selectedDate.getMonth(),
+        selectedDate.getDate(),
+        0,
+        0,
+        0
+      ).toISOString();
+      periodEnd = new Date(
+        selectedDate.getFullYear(),
+        selectedDate.getMonth(),
+        selectedDate.getDate(),
+        23,
+        59,
+        59
+      ).toISOString();
+      label = "ภารกิจในวัน:";
+    } else if (viewMode === "week") {
+      const start = weekDays[0];
+      const end = weekDays[6];
+      periodStart = new Date(
+        start.getFullYear(),
+        start.getMonth(),
+        start.getDate(),
+        0,
+        0,
+        0
+      ).toISOString();
+      periodEnd = new Date(
+        end.getFullYear(),
+        end.getMonth(),
+        end.getDate(),
+        23,
+        59,
+        59
+      ).toISOString();
+      label = "ภารกิจในสัปดาห์:";
+    } else {
+      const start = monthDays[0];
+      const end = monthDays[monthDays.length - 1];
+      periodStart = new Date(
+        start.getFullYear(),
+        start.getMonth(),
+        start.getDate(),
+        0,
+        0,
+        0
+      ).toISOString();
+      periodEnd = new Date(
+        end.getFullYear(),
+        end.getMonth(),
+        end.getDate(),
+        23,
+        59,
+        59
+      ).toISOString();
+      label = "ภารกิจในเดือน:";
+    }
 
-    const activeBookingsToday = bookings.filter((b) => {
+    const activeBookings = bookings.filter((b) => {
       if (b.status === "rejected") return false;
       return isTimeRangeOverlap(
-        targetDayStart,
-        targetDayEnd,
+        periodStart,
+        periodEnd,
         b.departureTime,
         b.returnTime
       );
     });
 
-    const activeVehiclesSet = new Set(activeBookingsToday.map((b) => b.vehicleId));
+    const activeVehiclesSet = new Set(activeBookings.map((b) => b.vehicleId));
     const totalVehicles = vehicles.length;
     const inUseVehicles = activeVehiclesSet.size;
     const availableVehicles = Math.max(0, totalVehicles - inUseVehicles);
@@ -270,12 +339,13 @@ export function FleetGanttView({
       totalVehicles > 0 ? Math.round((inUseVehicles / totalVehicles) * 100) : 0;
 
     return {
-      activeMissionsCount: activeBookingsToday.length,
+      label,
+      activeMissionsCount: activeBookings.length,
       inUseVehicles,
       availableVehicles,
       utilizationRate,
     };
-  }, [selectedDate, bookings, vehicles]);
+  }, [selectedDate, viewMode, weekDays, monthDays, bookings, vehicles]);
 
   return (
     <div className="space-y-4">
@@ -314,12 +384,20 @@ export function FleetGanttView({
               <span className="text-xl">📅</span>
               <div>
                 <div className="text-sm font-bold text-slate-900">
-                  {formatThaiDate(selectedDate)}
+                  {viewMode === "month"
+                    ? `เดือน${formatThaiMonth(selectedDate)}`
+                    : formatThaiDate(selectedDate)}
                 </div>
                 {viewMode === "week" && (
                   <div className="text-[11px] text-teal-700 font-medium">
                     สัปดาห์: {weekDays[0].toLocaleDateString("th-TH", { day: "numeric", month: "short" })} -{" "}
                     {weekDays[6].toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" })}
+                  </div>
+                )}
+                {viewMode === "month" && (
+                  <div className="text-[11px] text-teal-700 font-medium">
+                    วันที่ 1 - {monthDays.length}{" "}
+                    {selectedDate.toLocaleDateString("th-TH", { month: "short", year: "numeric" })} ({monthDays.length} วัน)
                   </div>
                 )}
               </div>
@@ -352,6 +430,17 @@ export function FleetGanttView({
               >
                 รายสัปดาห์ (7 วัน)
               </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("month")}
+                className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                  viewMode === "month"
+                    ? "bg-white text-teal-800 shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                รายเดือน ({monthDays.length} วัน)
+              </button>
             </div>
 
             {/* Category Filter */}
@@ -382,23 +471,23 @@ export function FleetGanttView({
         {/* Fleet Utilization Metric Bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-slate-100 text-xs">
           <div className="p-2.5 bg-slate-50 rounded-xl flex items-center justify-between">
-            <span className="text-slate-500">ภารกิจในวัน:</span>
+            <span className="text-slate-500">{periodStats.label}</span>
             <span className="font-bold text-slate-800 font-mono text-sm">
-              {dayStats.activeMissionsCount} ภารกิจ
+              {periodStats.activeMissionsCount} ภารกิจ
             </span>
           </div>
 
           <div className="p-2.5 bg-slate-50 rounded-xl flex items-center justify-between">
             <span className="text-slate-500">รถพร้อมใช้งาน:</span>
             <span className="font-bold text-emerald-700 font-mono text-sm">
-              {dayStats.availableVehicles} คัน
+              {periodStats.availableVehicles} คัน
             </span>
           </div>
 
           <div className="p-2.5 bg-slate-50 rounded-xl flex items-center justify-between">
             <span className="text-slate-500">รถติดภารกิจ:</span>
             <span className="font-bold text-amber-700 font-mono text-sm">
-              {dayStats.inUseVehicles} คัน
+              {periodStats.inUseVehicles} คัน
             </span>
           </div>
 
@@ -408,11 +497,11 @@ export function FleetGanttView({
               <div className="w-16 h-2 bg-slate-200 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-teal-600 rounded-full"
-                  style={{ width: `${dayStats.utilizationRate}%` }}
+                  style={{ width: `${periodStats.utilizationRate}%` }}
                 />
               </div>
               <span className="font-bold text-teal-800 font-mono">
-                {dayStats.utilizationRate}%
+                {periodStats.utilizationRate}%
               </span>
             </div>
           </div>
@@ -449,7 +538,7 @@ export function FleetGanttView({
       {/* Gantt Matrix Canvas */}
       <div className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
-          <div className="min-w-[850px]">
+          <div className={viewMode === "month" ? "min-w-[1550px]" : "min-w-[850px]"}>
             {/* Header Columns */}
             <div className="flex border-b border-slate-200 bg-slate-50/80 sticky top-0 z-20">
               {/* Left Column: Vehicle Header */}
@@ -472,7 +561,7 @@ export function FleetGanttView({
                     </div>
                   ))}
                 </div>
-              ) : (
+              ) : viewMode === "week" ? (
                 <div className="flex-1 flex">
                   {weekDays.map((wDay) => {
                     const todayFlag = isToday(wDay);
@@ -495,6 +584,49 @@ export function FleetGanttView({
                           <span className="text-[10px] text-slate-400 font-normal">
                             {wDay.toLocaleDateString("th-TH", { month: "short" })}
                           </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex-1 flex">
+                  {monthDays.map((mDay) => {
+                    const todayFlag = isToday(mDay);
+                    const dayOfWeek = mDay.getDay();
+                    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+                    return (
+                      <div
+                        key={mDay.toISOString()}
+                        className={`min-w-[42px] flex-1 py-2 px-0.5 text-center border-r border-slate-200/60 ${
+                          todayFlag
+                            ? "bg-teal-100/90 font-bold border-b-2 border-b-teal-600"
+                            : isWeekend
+                            ? "bg-slate-100/70"
+                            : ""
+                        }`}
+                      >
+                        <div
+                          className={`text-[10px] ${
+                            todayFlag
+                              ? "text-teal-900 font-bold"
+                              : isWeekend
+                              ? "text-rose-500 font-semibold"
+                              : "text-slate-500 font-medium"
+                          }`}
+                        >
+                          {mDay.toLocaleDateString("th-TH", { weekday: "narrow" })}
+                        </div>
+                        <div
+                          className={`text-xs font-mono font-bold mt-0.5 ${
+                            todayFlag
+                              ? "text-teal-800"
+                              : isWeekend
+                              ? "text-rose-600"
+                              : "text-slate-800"
+                          }`}
+                        >
+                          {mDay.getDate()}
                         </div>
                       </div>
                     );
@@ -635,7 +767,7 @@ export function FleetGanttView({
                             );
                           })}
                       </div>
-                    ) : (
+                    ) : viewMode === "week" ? (
                       // Week View Row
                       <div className="flex-1 flex h-20">
                         {weekDays.map((wDay) => {
@@ -669,12 +801,86 @@ export function FleetGanttView({
                                     <div
                                       key={b.id}
                                       onClick={() => onSelectBooking?.(b)}
+                                      onMouseEnter={(e) => {
+                                        const rect = e.currentTarget.getBoundingClientRect();
+                                        setPopoverBooking({
+                                          booking: b,
+                                          x: rect.left + rect.width / 2,
+                                          y: rect.top,
+                                        });
+                                      }}
+                                      onMouseLeave={() => setPopoverBooking(null)}
                                       className={`p-1 rounded-lg text-[10px] border cursor-pointer truncate transition-transform hover:scale-[1.02] ${colorClasses}`}
                                       title={`${b.requestNo}: ${b.destination} (${b.requesterName})`}
                                     >
                                       <div className="font-bold truncate">{b.destination}</div>
                                       <div className="text-[9px] opacity-90 truncate font-mono">
                                         {b.requestNo}
+                                      </div>
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      // Month View Row
+                      <div className="flex-1 flex h-20">
+                        {monthDays.map((mDay) => {
+                          const dayBookings = getBookingsForVehicleAndDay(car.id, mDay);
+                          const todayFlag = isToday(mDay);
+                          const isWeekend = mDay.getDay() === 0 || mDay.getDay() === 6;
+
+                          return (
+                            <div
+                              key={mDay.toISOString()}
+                              className={`min-w-[42px] flex-1 border-r border-slate-100 p-0.5 flex flex-col gap-1 overflow-y-auto ${
+                                todayFlag
+                                  ? "bg-teal-50/40"
+                                  : isWeekend
+                                  ? "bg-slate-50/50"
+                                  : ""
+                              }`}
+                            >
+                              {dayBookings.length === 0 ? (
+                                <div
+                                  onClick={() =>
+                                    onRequestVehicle?.(
+                                      car.id,
+                                      `${mDay.toISOString().slice(0, 10)}T08:30`
+                                    )
+                                  }
+                                  className="h-full flex items-center justify-center text-[10px] text-slate-300 hover:text-teal-600 hover:bg-teal-50/60 rounded-lg cursor-pointer transition-colors"
+                                  title={`ว่าง - คลิกเพื่อยื่นขอจองรถในวันที่ ${mDay.getDate()} ${mDay.toLocaleDateString("th-TH", { month: "short" })}`}
+                                >
+                                  -
+                                </div>
+                              ) : (
+                                dayBookings.map((b) => {
+                                  const colorClasses = getBookingColorClasses(b.status);
+                                  return (
+                                    <div
+                                      key={b.id}
+                                      onClick={() => onSelectBooking?.(b)}
+                                      onMouseEnter={(e) => {
+                                        const rect = e.currentTarget.getBoundingClientRect();
+                                        setPopoverBooking({
+                                          booking: b,
+                                          x: rect.left + rect.width / 2,
+                                          y: rect.top,
+                                        });
+                                      }}
+                                      onMouseLeave={() => setPopoverBooking(null)}
+                                      className={`p-1 rounded-md text-[9px] border cursor-pointer truncate transition-transform hover:scale-105 shadow-2xs ${colorClasses}`}
+                                      title={`${b.requestNo}: ${b.destination} (${b.requesterName})`}
+                                    >
+                                      <div className="font-bold truncate leading-tight">
+                                        {b.destination}
+                                      </div>
+                                      <div className="text-[8px] opacity-90 truncate font-mono">
+                                        {b.requestNo.slice(-7)}
                                       </div>
                                     </div>
                                   );
