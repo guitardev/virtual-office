@@ -503,3 +503,4 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
     </div>
   );
 }
+
