@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { Member, Role, ModuleId, SystemModule, AccessRequest, AuditLog, MeetingItem, CircularDocument } from "@/lib/types";
+import { Member, Role, ModuleId, SystemModule, AccessRequest, AuditLog, MeetingItem, CircularDocument, MeetingRoomMaster } from "@/lib/types";
 import { MembersTab } from "./MembersTab";
 import { RequestsTab } from "./RequestsTab";
 import { MatrixTab } from "./MatrixTab";
@@ -68,6 +68,8 @@ interface AdminPageProps {
   chatGroups?: ChatGroup[];
   setChatGroups?: (groups: ChatGroup[]) => void;
   onSelectChatGroup?: (groupId: string) => void;
+  rooms?: MeetingRoomMaster[];
+  setRooms?: React.Dispatch<React.SetStateAction<MeetingRoomMaster[]>>;
 }
 
 export function AdminPage({
@@ -112,6 +114,8 @@ export function AdminPage({
   chatGroups,
   setChatGroups,
   onSelectChatGroup,
+  rooms,
+  setRooms,
 }: AdminPageProps) {
   // Compute stats
   const stats = useMemo(() => {
@@ -375,6 +379,8 @@ export function AdminPage({
               meetings={meetings || []}
               setMeetings={setMeetings}
               showToast={showToast}
+              rooms={rooms}
+              setRooms={setRooms}
             />
           )}
 

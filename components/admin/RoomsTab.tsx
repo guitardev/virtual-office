@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import { MeetingItem, Member, MeetingRoomMaster } from "@/lib/types";
-import { DEFAULT_ROOMS, loadStoredRooms, saveStoredRooms } from "@/lib/meeting-data";
+import { DEFAULT_ROOMS } from "@/lib/meeting-data";
 import {
   recordAuditLog,
   saveMeeting,
@@ -17,44 +17,43 @@ interface RoomsTabProps {
   meetings: MeetingItem[];
   setMeetings?: (meetings: MeetingItem[]) => void;
   showToast: (msg: string) => void;
+  rooms?: MeetingRoomMaster[];
+  setRooms?: React.Dispatch<React.SetStateAction<MeetingRoomMaster[]>>;
 }
 
-export function RoomsTab({ currentUser, meetings, setMeetings, showToast }: RoomsTabProps) {
-  const [rooms, setRooms] = useState<MeetingRoomMaster[]>(() => loadStoredRooms());
+export function RoomsTab({
+  currentUser,
+  meetings,
+  setMeetings,
+  showToast,
+  rooms: propRooms,
+  setRooms: propSetRooms,
+}: RoomsTabProps) {
+  // In-memory rooms: prefer parent/AppContext SSOT, fallback to memory DEFAULT_ROOMS
+  const [internalRooms, setInternalRooms] = useState<MeetingRoomMaster[]>(() => DEFAULT_ROOMS);
+  const rooms = propRooms || internalRooms;
+  const setRooms = propSetRooms || setInternalRooms;
 
   useEffect(() => {
-    // 1. Fetch live rooms from Supabase
-    fetchMeetingRooms().then((liveRooms) => {
-      if (liveRooms && liveRooms.length > 0) {
-        setRooms(liveRooms);
-      }
-    });
+    // If not supplied by parent AppContext, fetch and subscribe directly from Supabase
+    if (!propRooms) {
+      fetchMeetingRooms().then((liveRooms) => {
+        if (liveRooms && liveRooms.length > 0) {
+          setRooms(liveRooms);
+        }
+      });
 
-    // 2. Realtime subscribe to Supabase meeting_rooms changes
-    const unsubscribe = subscribeToMeetingRooms((liveRooms) => {
-      if (liveRooms && liveRooms.length > 0) {
-        setRooms(liveRooms);
-      }
-    });
+      const unsubscribe = subscribeToMeetingRooms((liveRooms) => {
+        if (liveRooms && liveRooms.length > 0) {
+          setRooms(liveRooms);
+        }
+      });
 
-    // 3. Local custom event & storage listeners
-    const handleRoomsUpdated = (e: Event) => {
-      const customEvent = e as CustomEvent<MeetingRoomMaster[]>;
-      if (customEvent.detail) {
-        setRooms(customEvent.detail);
-      } else {
-        setRooms(loadStoredRooms());
-      }
-    };
-    window.addEventListener("smartmso_rooms_updated", handleRoomsUpdated);
-    window.addEventListener("storage", handleRoomsUpdated);
-
-    return () => {
-      unsubscribe();
-      window.removeEventListener("smartmso_rooms_updated", handleRoomsUpdated);
-      window.removeEventListener("storage", handleRoomsUpdated);
-    };
-  }, []);
+      return () => {
+        unsubscribe();
+      };
+    }
+  }, [propRooms, setRooms]);
 
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
@@ -67,11 +66,6 @@ export function RoomsTab({ currentUser, meetings, setMeetings, showToast }: Room
     status: "available" as "available" | "maintenance",
     notes: "",
   });
-
-  const saveRoomsToStorage = (updated: MeetingRoomMaster[]) => {
-    setRooms(updated);
-    saveStoredRooms(updated);
-  };
 
   const handleOpenAdd = () => {
     setEditingRoom(null);
@@ -122,7 +116,7 @@ export function RoomsTab({ currentUser, meetings, setMeetings, showToast }: Room
       ? rooms.map((r) => (r.id === roomObj.id ? roomObj : r))
       : [...rooms, roomObj];
 
-    saveRoomsToStorage(updated);
+    setRooms(updated);
     saveMeetingRoom(roomObj).catch(console.warn);
     await recordAuditLog(
       currentUser?.name || "Admin",
@@ -138,7 +132,7 @@ export function RoomsTab({ currentUser, meetings, setMeetings, showToast }: Room
   const handleToggleStatus = async (r: MeetingRoomMaster) => {
     const nextStatus: "available" | "maintenance" = r.status === "available" ? "maintenance" : "available";
     const updated = rooms.map((item) => (item.id === r.id ? { ...item, status: nextStatus } : item));
-    saveRoomsToStorage(updated);
+    setRooms(updated);
     const updatedRoom = updated.find((item) => item.id === r.id);
     if (updatedRoom) {
       saveMeetingRoom(updatedRoom).catch(console.warn);
@@ -155,7 +149,7 @@ export function RoomsTab({ currentUser, meetings, setMeetings, showToast }: Room
   const handleDelete = async (r: MeetingRoomMaster) => {
     if (!window.confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบห้อง "${r.name}" ออกจากสารบบ?`)) return;
     const updated = rooms.filter((item) => item.id !== r.id);
-    saveRoomsToStorage(updated);
+    setRooms(updated);
     deleteMeetingRoom(r.id).catch(console.warn);
     await recordAuditLog(
       currentUser?.name || "Admin",

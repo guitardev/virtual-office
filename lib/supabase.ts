@@ -42,7 +42,7 @@ import {
 } from "./carbooking-data";
 import { DEFAULT_CHAT_GROUPS, INITIAL_CHAT_MESSAGES } from "./chat-data";
 import { loadStoredCircularDocs, saveStoredCircularDocs } from "./circular-data";
-import { loadStoredRooms, saveStoredRooms } from "./meeting-data";
+import { DEFAULT_ROOMS } from "./meeting-data";
 
 // Environment variables from Vercel Marketplace Supabase Integration
 const supabaseUrl =
@@ -404,23 +404,24 @@ export async function fetchMembers(): Promise<Member[]> {
           : local.name || live.name;
       const formattedName = formatFullMemberName(prefix, chosenName, firstName, lastName);
 
-      // Preserve local customizations if present and non-placeholder
+      // Live database from Supabase is Single Source of Truth; fallback to local only when live is missing
       return {
+        ...local,
         ...live,
         prefix: prefix,
         firstName: firstName,
         lastName: lastName,
         name: formattedName,
-        nickname: local.nickname || live.nickname,
-        position: local.position && local.position !== "รอกำหนดตำแหน่ง" ? local.position : live.position,
-        division: local.division && local.division !== "รอกำหนดกลุ่มงาน" ? local.division : live.division,
-        department: local.department || live.department,
-        personnelType: local.personnelType || live.personnelType,
-        phone: local.phone && local.phone !== "-" ? local.phone : live.phone,
-        lineId: local.lineId && local.lineId !== "-" ? local.lineId : live.lineId,
-        avatarUrl: local.avatarUrl || live.avatarUrl,
-        avatarText: local.avatarText || live.avatarText,
-        role: local.role || live.role,
+        nickname: live.nickname || local.nickname,
+        position: live.position && live.position !== "รอกำหนดตำแหน่ง" ? live.position : local.position || live.position,
+        division: live.division && live.division !== "รอกำหนดกลุ่มงาน" ? live.division : local.division || live.division,
+        department: live.department || local.department,
+        personnelType: live.personnelType || local.personnelType,
+        phone: live.phone && live.phone !== "-" ? live.phone : local.phone || live.phone,
+        lineId: live.lineId && live.lineId !== "-" ? live.lineId : local.lineId || live.lineId,
+        avatarUrl: live.avatarUrl || local.avatarUrl,
+        avatarText: live.avatarText || local.avatarText,
+        role: live.role || local.role,
       };
     });
     // Preserve local-only real members (e.g. offline created users or local LINE profiles not yet synced)
@@ -2024,31 +2025,42 @@ export function mapMeetingRoomToRow(room: MeetingRoomMaster): any {
   };
 }
 
+// In-memory cache for meeting rooms (Single Source of Truth is Supabase; avoid localStorage desync)
+let inMemoryMeetingRooms: MeetingRoomMaster[] | null = null;
+
 export async function fetchMeetingRooms(): Promise<MeetingRoomMaster[]> {
-  const localRooms = loadStoredRooms();
-  if (!supabase) return localRooms;
+  if (!supabase) return inMemoryMeetingRooms || DEFAULT_ROOMS;
   try {
     const { data, error } = await supabase
       .from("meeting_rooms")
       .select("*")
       .order("id", { ascending: true });
-    if (error || !data || data.length === 0) return localRooms;
+
+    if (error) {
+      console.warn("fetchMeetingRooms error:", error.message);
+      return inMemoryMeetingRooms || DEFAULT_ROOMS;
+    }
+
+    if (!data || data.length === 0) {
+      return inMemoryMeetingRooms || DEFAULT_ROOMS;
+    }
+
     const liveRooms = data.map(mapRowToMeetingRoom);
-    saveStoredRooms(liveRooms);
+    inMemoryMeetingRooms = liveRooms;
     return liveRooms;
-  } catch {
-    return localRooms;
+  } catch (err) {
+    console.warn("Exception in fetchMeetingRooms:", err);
+    return inMemoryMeetingRooms || DEFAULT_ROOMS;
   }
 }
 
 export async function saveMeetingRoom(room: MeetingRoomMaster): Promise<boolean> {
-  try {
-    const current = loadStoredRooms();
-    const exists = current.some((r) => r.id === room.id);
-    const updated = exists ? current.map((r) => (r.id === room.id ? room : r)) : [...current, room];
-    saveStoredRooms(updated);
-  } catch (err) {
-    console.warn("Could not save meeting room to local cache:", err);
+  // Optimistically update in-memory cache
+  if (inMemoryMeetingRooms) {
+    const exists = inMemoryMeetingRooms.some((r) => r.id === room.id);
+    inMemoryMeetingRooms = exists
+      ? inMemoryMeetingRooms.map((r) => (r.id === room.id ? room : r))
+      : [...inMemoryMeetingRooms, room];
   }
 
   if (!supabase) return true;
@@ -2066,11 +2078,9 @@ export async function saveMeetingRoom(room: MeetingRoomMaster): Promise<boolean>
 }
 
 export async function deleteMeetingRoom(id: string): Promise<boolean> {
-  try {
-    const current = loadStoredRooms();
-    saveStoredRooms(current.filter((r) => r.id !== id));
-  } catch (err) {
-    console.warn("Could not remove meeting room from local cache:", err);
+  // Update in-memory cache
+  if (inMemoryMeetingRooms) {
+    inMemoryMeetingRooms = inMemoryMeetingRooms.filter((r) => r.id !== id);
   }
 
   if (!supabase) return true;

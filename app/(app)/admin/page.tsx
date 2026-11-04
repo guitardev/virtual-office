@@ -44,6 +44,8 @@ export default function AdminRoute() {
     showToast,
     meetings,
     setMeetings,
+    meetingRooms,
+    setMeetingRooms,
     setMembers,
     circularDocs,
     chatGroups,
@@ -88,6 +90,8 @@ export default function AdminRoute() {
       showToast={showToast}
       meetings={meetings}
       setMeetings={setMeetings}
+      rooms={meetingRooms}
+      setRooms={setMeetingRooms}
       setMembers={setMembers}
       circularDocs={circularDocs}
       onOpenCircularDoc={(docId) => {

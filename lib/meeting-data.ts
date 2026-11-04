@@ -142,31 +142,28 @@ export const ROOM_PRESETS = DEFAULT_ROOMS.map((r) => r.name);
 
 export const STORAGE_MEETING_ROOMS_KEY = "smartmso_meeting_rooms_master";
 
+/**
+ * Return default meeting rooms in memory.
+ * Proactively purges legacy localStorage key to avoid display inconsistencies or resurrected deleted rooms.
+ */
 export function loadStoredRooms(): MeetingRoomMaster[] {
-  if (typeof window === "undefined") return DEFAULT_ROOMS;
-  try {
-    const raw = localStorage.getItem(STORAGE_MEETING_ROOMS_KEY);
-    if (!raw) {
-      localStorage.setItem(STORAGE_MEETING_ROOMS_KEY, JSON.stringify(DEFAULT_ROOMS));
-      return DEFAULT_ROOMS;
-    }
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
-    }
-  } catch (e) {
-    console.error("Failed to load meeting rooms:", e);
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.removeItem(STORAGE_MEETING_ROOMS_KEY);
+    } catch {}
   }
   return DEFAULT_ROOMS;
 }
 
-export function saveStoredRooms(rooms: MeetingRoomMaster[]) {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(STORAGE_MEETING_ROOMS_KEY, JSON.stringify(rooms));
-    window.dispatchEvent(new CustomEvent("smartmso_rooms_updated", { detail: rooms }));
-  } catch (e) {
-    console.error("Failed to save meeting rooms:", e);
+/**
+ * Deprecated: Meeting rooms are now centrally stored in Supabase with in-memory caching.
+ * Ensures localStorage does not hold stale meeting rooms.
+ */
+export function saveStoredRooms(_rooms: MeetingRoomMaster[]) {
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.removeItem(STORAGE_MEETING_ROOMS_KEY);
+    } catch {}
   }
 }
 

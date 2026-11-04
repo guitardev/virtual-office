@@ -24,7 +24,7 @@ import {
   ROOM_PRESETS,
   MEETING_TEMPLATES,
   MeetingPresetTemplate,
-  loadStoredRooms,
+  DEFAULT_ROOMS,
   checkMeetingRoomConflict,
 } from "@/lib/meeting-data";
 import { isOperationalMember } from "@/lib/rbac";
@@ -38,6 +38,8 @@ interface MeetingsPageProps {
   setMeetings?: React.Dispatch<React.SetStateAction<MeetingItem[]>>;
   members?: Member[];
   onNavigateToAdminRooms?: () => void;
+  rooms?: MeetingRoomMaster[];
+  setRooms?: React.Dispatch<React.SetStateAction<MeetingRoomMaster[]>>;
 }
 
 export function MeetingsPage({
@@ -47,43 +49,34 @@ export function MeetingsPage({
   setMeetings,
   members = [],
   onNavigateToAdminRooms,
+  rooms: propRooms,
+  setRooms: propSetRooms,
 }: MeetingsPageProps) {
-  // Rooms master data from localStorage / admin
-  const [rooms, setRooms] = useState<MeetingRoomMaster[]>(() => loadStoredRooms());
+  // In-memory rooms: prefer parent/AppContext SSOT, fallback to memory DEFAULT_ROOMS
+  const [internalRooms, setInternalRooms] = useState<MeetingRoomMaster[]>(() => DEFAULT_ROOMS);
+  const rooms = propRooms || internalRooms;
+  const setRooms = propSetRooms || setInternalRooms;
 
   useEffect(() => {
-    // 1. Fetch live rooms from Supabase
-    fetchMeetingRooms().then((liveRooms) => {
-      if (liveRooms && liveRooms.length > 0) {
-        setRooms(liveRooms);
-      }
-    });
+    // If not supplied by parent AppContext, fetch and subscribe directly from Supabase
+    if (!propRooms) {
+      fetchMeetingRooms().then((liveRooms) => {
+        if (liveRooms && liveRooms.length > 0) {
+          setRooms(liveRooms);
+        }
+      });
 
-    // 2. Realtime subscribe to Supabase meeting_rooms changes
-    const unsubscribe = subscribeToMeetingRooms((liveRooms) => {
-      if (liveRooms && liveRooms.length > 0) {
-        setRooms(liveRooms);
-      }
-    });
+      const unsubscribe = subscribeToMeetingRooms((liveRooms) => {
+        if (liveRooms && liveRooms.length > 0) {
+          setRooms(liveRooms);
+        }
+      });
 
-    // 3. Local custom event & storage listeners
-    const handleRoomsUpdated = (e: Event) => {
-      const customEvent = e as CustomEvent<MeetingRoomMaster[]>;
-      if (customEvent.detail) {
-        setRooms(customEvent.detail);
-      } else {
-        setRooms(loadStoredRooms());
-      }
-    };
-    window.addEventListener("smartmso_rooms_updated", handleRoomsUpdated);
-    window.addEventListener("storage", handleRoomsUpdated);
-
-    return () => {
-      unsubscribe();
-      window.removeEventListener("smartmso_rooms_updated", handleRoomsUpdated);
-      window.removeEventListener("storage", handleRoomsUpdated);
-    };
-  }, []);
+      return () => {
+        unsubscribe();
+      };
+    }
+  }, [propRooms, setRooms]);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState("");

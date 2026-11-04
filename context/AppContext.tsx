@@ -16,7 +16,9 @@ import {
   ChatMessage,
   ChatGroup,
   CircularDocument,
+  MeetingRoomMaster,
 } from "@/lib/types";
+import { DEFAULT_ROOMS } from "@/lib/meeting-data";
 import {
   ROLE_CONFIG,
   MODULE_NAMES,
@@ -63,6 +65,8 @@ import {
   subscribeToTasks,
   fetchMeetings,
   subscribeToMeetings,
+  fetchMeetingRooms,
+  subscribeToMeetingRooms,
   fetchCarBookings,
   subscribeToCarBookings,
   fetchChatMessages,
@@ -133,6 +137,8 @@ interface AppContextType {
   toggleTaskStatus: (id: string | number) => void;
   meetings: MeetingItem[];
   setMeetings: React.Dispatch<React.SetStateAction<MeetingItem[]>>;
+  meetingRooms: MeetingRoomMaster[];
+  setMeetingRooms: React.Dispatch<React.SetStateAction<MeetingRoomMaster[]>>;
   carBookings: CarBookingRequest[];
   setCarBookings: React.Dispatch<React.SetStateAction<CarBookingRequest[]>>;
   circularDocs: CircularDocument[];
@@ -261,6 +267,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(INITIAL_AUDIT_LOGS);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [meetings, setMeetings] = useState<MeetingItem[]>([]);
+  const [meetingRooms, setMeetingRooms] = useState<MeetingRoomMaster[]>(DEFAULT_ROOMS);
   const [carBookings, setCarBookings] = useState<CarBookingRequest[]>([]);
   const [adminTab, setAdminTab] = useState<AdminTabId>("members");
   const [memberSearch, setMemberSearch] = useState("");
@@ -656,6 +663,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       });
 
+      fetchMeetingRooms().then((liveRooms) => {
+        if (liveRooms && liveRooms.length > 0) {
+          setMeetingRooms(liveRooms);
+        }
+      });
+
       fetchCarBookings().then((liveBookings) => {
         if (liveBookings) {
           setCarBookings(liveBookings);
@@ -799,6 +812,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         });
       });
 
+      const unsubscribeMeetingRooms = subscribeToMeetingRooms((updatedRooms) => {
+        if (updatedRooms && updatedRooms.length > 0) {
+          setMeetingRooms(updatedRooms);
+        }
+      });
+
       const unsubscribeCarBookings = subscribeToCarBookings((updatedBookings) => {
         setCarBookings((prev) => {
           if (prev && prev.length > 0 && updatedBookings.length > prev.length) {
@@ -884,6 +903,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         unsubscribeAudit();
         unsubscribeTasks();
         unsubscribeMeetings();
+        unsubscribeMeetingRooms();
         unsubscribeCarBookings();
         unsubscribeChat();
         unsubscribeCircular();
@@ -1955,6 +1975,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     toggleTaskStatus,
     meetings,
     setMeetings,
+    meetingRooms,
+    setMeetingRooms,
     carBookings,
     setCarBookings,
     circularDocs,

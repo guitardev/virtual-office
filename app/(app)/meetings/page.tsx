@@ -14,6 +14,8 @@ export default function MeetingsRoute() {
     setMeetings,
     members,
     setAdminTab,
+    meetingRooms,
+    setMeetingRooms,
   } = useAppContext();
 
   if (!currentUser) return null;
@@ -25,6 +27,8 @@ export default function MeetingsRoute() {
       currentUser={currentUser}
       setMeetings={setMeetings}
       members={members}
+      rooms={meetingRooms}
+      setRooms={setMeetingRooms}
       onNavigateToAdminRooms={() => {
         setAdminTab("rooms");
         router.push("/admin");
