@@ -281,6 +281,78 @@ export function generateAllMeetingsIcs(meetings: MeetingItem[]): string {
   return lines.join("\r\n");
 }
 
+export const THAI_MONTH_NAMES = [
+  "มกราคม",
+  "กุมภาพันธ์",
+  "มีนาคม",
+  "เมษายน",
+  "พฤษภาคม",
+  "มิถุนายน",
+  "กรกฎาคม",
+  "สิงหาคม",
+  "กันยายน",
+  "ตุลาคม",
+  "พฤศจิกายน",
+  "ธันวาคม",
+];
+
+export const THAI_SHORT_MONTH_NAMES = [
+  "ม.ค.",
+  "ก.พ.",
+  "มี.ค.",
+  "เม.ย.",
+  "พ.ค.",
+  "มิ.ย.",
+  "ก.ค.",
+  "ส.ค.",
+  "ก.ย.",
+  "ต.ค.",
+  "พ.ย.",
+  "ธ.ค.",
+];
+
+export const THAI_DAY_NAMES = [
+  "อาทิตย์",
+  "จันทร์",
+  "อังคาร",
+  "พุธ",
+  "พฤหัสบดี",
+  "ศุกร์",
+  "เสาร์",
+];
+
+export const THAI_SHORT_DAY_NAMES = [
+  "อา.",
+  "จ.",
+  "อ.",
+  "พ.",
+  "พฤ.",
+  "ศ.",
+  "ส.",
+];
+
+/**
+ * Get ISO date string YYYY-MM-DD for a meeting safely
+ */
+export function getMeetingIsoDate(meeting: MeetingItem): string {
+  const { startDate } = getMeetingDateRange(meeting);
+  const y = startDate.getFullYear();
+  const m = String(startDate.getMonth() + 1).padStart(2, "0");
+  const d = String(startDate.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Format a Date to full Thai formal string (e.g. วันพุธที่ 4 พฤศจิกายน 2569)
+ */
+export function formatThaiDateHeader(date: Date): string {
+  const dayName = THAI_DAY_NAMES[date.getDay()];
+  const day = date.getDate();
+  const monthName = THAI_MONTH_NAMES[date.getMonth()];
+  const year = date.getFullYear() + 543;
+  return `วัน${dayName}ที่ ${day} ${monthName} ${year}`;
+}
+
 /**
  * Trigger download of full office calendar .ics
  */

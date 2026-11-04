@@ -22,6 +22,8 @@ import {
   checkMeetingRoomConflict,
 } from "@/lib/meeting-data";
 import { isOperationalMember } from "@/lib/rbac";
+import { MeetingCalendarView } from "./MeetingCalendarView";
+import { RoomBookingView } from "./RoomBookingView";
 
 interface MeetingsPageProps {
   meetings: MeetingItem[];
@@ -66,6 +68,9 @@ export function MeetingsPage({
   const [selectedType, setSelectedType] = useState<"all" | MeetingType>("all");
   const [selectedRoomFilter, setSelectedRoomFilter] = useState<string>("all");
   const [timeframe, setTimeframe] = useState<"upcoming" | "all" | "past">("all");
+
+  // View Mode: Calendar | Room Booking | List
+  const [activeView, setActiveView] = useState<"calendar" | "rooms" | "list">("calendar");
 
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
@@ -134,6 +139,21 @@ export function MeetingsPage({
       setSelectedAttendeeIds([]);
     }
     setShowAddModal(true);
+  };
+
+  // Direct Room Booking from RoomBookingView
+  const handleBookRoom = (roomName: string, dateIso: string) => {
+    handleOpenAddModal();
+    setFormLocation(roomName);
+    setFormType("onsite");
+    setFormDate(dateIso);
+    showToast(`🏛️ เลือกห้อง "${roomName}" เรียบร้อย`);
+  };
+
+  // Direct Date Booking from CalendarView
+  const handleAddMeetingForDate = (dateIso: string) => {
+    handleOpenAddModal();
+    setFormDate(dateIso);
   };
 
   // Helper to open Edit Modal with existing meeting data
@@ -469,12 +489,93 @@ export function MeetingsPage({
             className="px-4 py-2.5 bg-[#4F46E5] hover:bg-indigo-700 text-white rounded-2xl text-xs sm:text-sm font-bold shadow-md shadow-indigo-600/25 transition-all cursor-pointer flex items-center justify-center gap-1.5"
           >
             <span>➕</span>
-            <span>สร้างการประชุมใหม่</span>
+            <span>จองห้อง / สร้างการประชุม</span>
           </button>
         </div>
       </div>
 
-      {/* ─── FILTERS & SEARCH BAR ─── */}
+      {/* ─── VIEW MODE SWITCHER & QUICK STATUS ─── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 shadow-2xs">
+        <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl">
+          <button
+            type="button"
+            onClick={() => setActiveView("calendar")}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeView === "calendar"
+                ? "bg-white text-indigo-700 shadow-2xs font-extrabold"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <span>📅</span>
+            <span>ปฏิทินการประชุม</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveView("rooms")}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeView === "rooms"
+                ? "bg-white text-indigo-700 shadow-2xs font-extrabold"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <span>🏛️</span>
+            <span>จองห้องประชุม</span>
+            <span className="text-[10px] px-1.5 py-0.2 bg-teal-50 text-teal-700 rounded-full border border-teal-200">
+              {rooms.length} ห้อง
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveView("list")}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeView === "list"
+                ? "bg-white text-indigo-700 shadow-2xs font-extrabold"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <span>📋</span>
+            <span>รายการนัดหมาย</span>
+            <span className="text-[10px] px-1.5 py-0.2 bg-indigo-50 text-indigo-700 rounded-full border border-indigo-200">
+              {meetings.length}
+            </span>
+          </button>
+        </div>
+
+        <div className="text-[11px] text-slate-500 font-medium px-2 flex items-center gap-2">
+          <span>🏛️ ห้องว่างพร้อมใช้ {rooms.filter((r) => r.status === "available").length}/{rooms.length}</span>
+          <span>•</span>
+          <span>👥 สมาชิกในระบบ {members.length} ท่าน</span>
+        </div>
+      </div>
+
+      {/* ─── ACTIVE VIEW: CALENDAR VIEW ─── */}
+      {activeView === "calendar" && (
+        <MeetingCalendarView
+          meetings={meetings}
+          rooms={rooms}
+          onSelectMeeting={setSelectedMeeting}
+          onAddMeetingForDate={handleAddMeetingForDate}
+        />
+      )}
+
+      {/* ─── ACTIVE VIEW: ROOM BOOKING TIMETABLE ─── */}
+      {activeView === "rooms" && (
+        <RoomBookingView
+          rooms={rooms}
+          meetings={meetings}
+          currentUser={currentUser}
+          onBookRoom={handleBookRoom}
+          onSelectMeeting={setSelectedMeeting}
+          onNavigateToAdminRooms={onNavigateToAdminRooms}
+        />
+      )}
+
+      {/* ─── ACTIVE VIEW: LIST & CARD VIEW ─── */}
+      {activeView === "list" && (
+        <>
+          {/* ─── FILTERS & SEARCH BAR ─── */}
       <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-2xs space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           {/* Search Box */}
@@ -919,6 +1020,8 @@ export function MeetingsPage({
             );
           })}
         </div>
+      )}
+        </>
       )}
 
       {/* ─── MODAL: MEETING DETAIL VIEW ─── */}
