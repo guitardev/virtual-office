@@ -874,6 +874,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     </button>
                     <button
                       type="button"
+                      onClick={() => setNotificationTab("meeting")}
+                      className={`px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                        notificationTab === "meeting"
+                          ? "bg-indigo-600 text-white shadow-xs"
+                          : "text-slate-500 hover:bg-slate-100"
+                      }`}
+                    >
+                      <span>📅 ประชุม</span>
+                      <span className="text-[10px] opacity-80">
+                        ({systemNotifications.filter((n) => n.type === "meeting").length})
+                      </span>
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setNotificationTab("other")}
                       className={`px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
                         notificationTab === "other"
@@ -883,7 +897,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     >
                       <span>📬 คำขอ/งาน</span>
                       <span className="text-[10px] opacity-80">
-                        ({systemNotifications.filter((n) => n.type !== "chat" && n.type !== "circular").length})
+                        ({systemNotifications.filter((n) => n.type !== "chat" && n.type !== "circular" && n.type !== "meeting").length})
                       </span>
                     </button>
                   </div>
@@ -893,8 +907,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       const displayedNotifs = systemNotifications.filter((n) => {
                         if (notificationTab === "chat") return n.type === "chat";
                         if (notificationTab === "circular") return n.type === "circular";
+                        if (notificationTab === "meeting") return n.type === "meeting";
                         if (notificationTab === "other")
-                          return n.type !== "chat" && n.type !== "circular";
+                          return n.type !== "chat" && n.type !== "circular" && n.type !== "meeting";
                         return true;
                       });
 
@@ -938,6 +953,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                                   💬
                                 </div>
                               )
+                            ) : notif.type === "meeting" ? (
+                              <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-800 font-bold text-sm flex items-center justify-center">
+                                📅
+                              </div>
                             ) : notif.type === "circular" ? (
                               <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 font-bold text-sm flex items-center justify-center">
                                 📜

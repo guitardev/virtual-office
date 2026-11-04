@@ -77,6 +77,21 @@ export function MeetingsPage({
   const [selectedMeeting, setSelectedMeeting] = useState<MeetingItem | null>(null);
   const [calendarDropdownId, setCalendarDropdownId] = useState<string | number | null>(null);
 
+  // Auto-open meeting details if navigated from notification (?meetingId=...)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const targetMeetingId = params.get("meetingId");
+      if (targetMeetingId && meetings.length > 0) {
+        const target = meetings.find((m) => String(m.id) === targetMeetingId);
+        if (target) {
+          setSelectedMeeting(target);
+        }
+      }
+    } catch {}
+  }, [meetings]);
+
   // Form State for Create/Edit Meeting
   const [editingMeetingId, setEditingMeetingId] = useState<string | null>(null);
   const [formTitle, setFormTitle] = useState("");

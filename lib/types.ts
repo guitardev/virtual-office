@@ -551,7 +551,7 @@ export interface CircularDocument {
 }
 
 // ─── UNIFIED SYSTEM NOTIFICATIONS TYPES ───
-export type NotificationType = "chat" | "circular" | "access_request" | "carbooking" | "task";
+export type NotificationType = "chat" | "circular" | "access_request" | "carbooking" | "task" | "meeting";
 export type NotificationPriority = "normal" | "urgent" | "emergency";
 
 export interface SystemNotification {

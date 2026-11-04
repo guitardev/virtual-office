@@ -147,8 +147,8 @@ interface AppContextType {
   unreadNotifCount: number;
   showNotificationDropdown: boolean;
   setShowNotificationDropdown: React.Dispatch<React.SetStateAction<boolean>>;
-  notificationTab: "all" | "chat" | "circular" | "other";
-  setNotificationTab: React.Dispatch<React.SetStateAction<"all" | "chat" | "circular" | "other">>;
+  notificationTab: "all" | "chat" | "circular" | "meeting" | "other";
+  setNotificationTab: React.Dispatch<React.SetStateAction<"all" | "chat" | "circular" | "meeting" | "other">>;
   handleMarkAsRead: (id: string) => void;
   handleMarkAllAsRead: () => void;
   handleNotificationClick: (notif: SystemNotification, router: any) => void;
@@ -280,7 +280,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // ─── UNIFIED SYSTEM NOTIFICATIONS STATE ───
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
-  const [notificationTab, setNotificationTab] = useState<"all" | "chat" | "circular" | "other">("all");
+  const [notificationTab, setNotificationTab] = useState<"all" | "chat" | "circular" | "meeting" | "other">("all");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatGroups, setChatGroups] = useState<ChatGroup[]>([]);
   const [circularDocs, setCircularDocs] = useState<CircularDocument[]>([]);
@@ -785,7 +785,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
 
       const unsubscribeMeetings = subscribeToMeetings((updatedMeetings) => {
-        setMeetings(updatedMeetings);
+        setMeetings((prev) => {
+          if (prev && prev.length > 0 && updatedMeetings.length > prev.length) {
+            const newM = updatedMeetings[0];
+            if (newM && newM.organizer?.id !== currentUser?.id) {
+              showToast(`📅 นัดหมายการประชุมใหม่: ${newM.title} (${newM.dateStr})`);
+              sendBrowserNotification(`📅 นัดหมายการประชุมใหม่: ${newM.title}`, {
+                body: `วันที่: ${newM.dateStr} เวลา: ${newM.timeStr}\nสถานที่: ${newM.location}`,
+              });
+            }
+          }
+          return updatedMeetings;
+        });
       });
 
       const unsubscribeCarBookings = subscribeToCarBookings((updatedBookings) => {
@@ -1681,6 +1692,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       accessRequests,
       carBookings,
       tasks,
+      meetings,
       allMembers: members,
     });
   }, [
@@ -1692,6 +1704,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     accessRequests,
     carBookings,
     tasks,
+    meetings,
     members,
     readNotifRevision,
   ]);
@@ -1741,6 +1754,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       router.push("/carbooking");
     } else if (notif.link.page === "task") {
       router.push("/tasks");
+    } else if (notif.link.page === "meetings") {
+      router.push(`/meetings${notif.link.targetId ? `?meetingId=${notif.link.targetId}` : ""}`);
     }
   };
 

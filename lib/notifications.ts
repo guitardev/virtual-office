@@ -6,10 +6,12 @@ import {
   AccessRequest,
   CarBookingRequest,
   TaskItem,
+  MeetingItem,
   Member,
   Role,
 } from "./types";
 import { getGroupMembers } from "./chat-data";
+import { getAttendeeName, getMeetingIsoDate } from "./calendar";
 
 export const NOTIFICATION_READ_IDS_KEY = "smartmso_read_notif_ids";
 export const BROWSER_NOTIF_ENABLED_KEY = "smartmso_browser_notifs_enabled";
@@ -135,6 +137,7 @@ export function buildUnifiedNotifications({
   accessRequests,
   carBookings,
   tasks,
+  meetings,
   allMembers,
 }: {
   currentUser: Member | null;
@@ -145,6 +148,7 @@ export function buildUnifiedNotifications({
   accessRequests: AccessRequest[];
   carBookings: CarBookingRequest[];
   tasks?: TaskItem[];
+  meetings?: MeetingItem[];
   allMembers: Member[];
 }): SystemNotification[] {
   if (!currentUser) return [];
@@ -579,6 +583,72 @@ export function buildUnifiedNotifications({
       link: {
         page: "task",
         targetId: String(task.id),
+      },
+    });
+  });
+
+  // ─── 6. MEETING & ROOM BOOKING NOTIFICATIONS ───
+  meetings?.forEach((m) => {
+    if (m.status === "cancelled") return;
+
+    const myName = (currentUser.name || "").trim().toLowerCase();
+    const myId = currentUser.id;
+    const isOrganizer =
+      m.organizer?.id === myId ||
+      Boolean(m.organizer?.name && myName && m.organizer.name.toLowerCase().includes(myName));
+
+    // Check if user is an attendee
+    const isAttendee = (m.attendees || []).some((att) => {
+      const attName = getAttendeeName(att).toLowerCase();
+      const attId = typeof att === "object" ? att.id : undefined;
+      return (
+        attId === myId ||
+        (myName && (attName.includes(myName) || myName.includes(attName))) ||
+        attName.includes("ทุกคน") ||
+        attName.includes("ข้าราชการ") ||
+        attName.includes("เจ้าหน้าที่")
+      );
+    });
+
+    const isAdminOrManager = currentUserRole === "admin" || currentUserRole === "manager";
+
+    // Only notify if user is attendee, organizer, or admin/manager
+    if (!isAttendee && !isOrganizer && !isAdminOrManager) return;
+
+    const notifId = `meeting_${m.id}`;
+    let priority: "normal" | "urgent" | "emergency" = "normal";
+    if (m.category === "urgent") {
+      priority = "emergency";
+    } else if (m.category === "management") {
+      priority = "urgent";
+    }
+
+    const isRoomBooking = m.type !== "online" && m.location && !m.location.includes("Google Meet");
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const meetingIso = getMeetingIsoDate(m);
+    const isToday = meetingIso === todayIso;
+
+    let title = `📅 นัดหมายการประชุม: ${m.title}`;
+    if (isToday) {
+      title = `⏰ [วันนี้] การประชุม: ${m.title}`;
+      if (priority === "normal") priority = "urgent";
+    } else if (isRoomBooking && isAdminOrManager && !isOrganizer) {
+      title = `🏛️ จองห้องประชุม: ${m.location}`;
+    }
+
+    notifs.push({
+      id: notifId,
+      type: "meeting",
+      title,
+      message: `${m.dateStr} (${m.timeStr}) · สถานที่: ${m.location}${m.meetingLink ? ` (ลิงก์: ${m.meetingLink})` : ""}`,
+      timestamp: isToday ? `วันนี้ ${m.timeStr}` : m.dateStr,
+      createdAt: m.createdAt || m.startTime || new Date().toISOString(),
+      isRead: readIds.has(notifId),
+      priority,
+      senderName: m.organizer?.name || "ผู้จัดประชุม",
+      link: {
+        page: "meetings",
+        targetId: String(m.id),
       },
     });
   });
