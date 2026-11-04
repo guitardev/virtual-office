@@ -41,6 +41,7 @@ export default function DashboardRoute() {
       rolePermissions={rolePermissions}
       circularDocs={circularDocs}
       carBookings={carBookings}
+      onNavigate={(route: string) => router.push(route)}
       onOpenCircularDoc={(docId) => {
         router.push(`/circular?docId=${docId}`);
       }}

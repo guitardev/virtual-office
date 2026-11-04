@@ -9,7 +9,7 @@ interface DataHubPageProps {
   members?: Member[];
 }
 
-interface MissionGroup {
+export interface MissionGroup {
   id: string;
   name: string;
   shortName: string;
@@ -25,7 +25,7 @@ interface MissionGroup {
   systems: { name: string; desc: string; url: string; badge: string; icon: string }[];
 }
 
-const MISSION_GROUPS: MissionGroup[] = [
+export const MISSION_GROUPS: MissionGroup[] = [
   {
     id: "admin",
     name: "ฝ่ายบริหารทั่วไป",
