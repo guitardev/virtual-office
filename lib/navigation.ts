@@ -41,8 +41,18 @@ export const NAV_GROUPS: NavGroup[] = [
     title: "คลังข้อมูล",
     icon: "🗄️",
     items: [
+      { id: "datahub", label: "ระบบรวมข้อมูล", icon: "🗃️" },
       { id: "files", label: "เอกสาร NAS", icon: "📁" },
       { id: "gallery", label: "ภาพ & สื่อ", icon: "📸" },
+    ],
+  },
+  {
+    id: "tools",
+    title: "เครื่องมือ & Tools",
+    icon: "🛠️",
+    items: [
+      { id: "qrcode", label: "QR Code", icon: "📱" },
+      { id: "bgremove", label: "BG Remove", icon: "✂️" },
     ],
   },
   {
@@ -66,8 +76,11 @@ export const MODULE_TO_ROUTE: Record<ModuleId, string> = {
   meetings: "/meetings",
   circular: "/circular",
   carbooking: "/carbooking",
+  datahub: "/data-hub",
   files: "/files",
   gallery: "/gallery",
+  qrcode: "/tools/qrcode",
+  bgremove: "/tools/bgremove",
   admin: "/admin",
   user: "/user",
 };
@@ -82,8 +95,12 @@ export const ROUTE_TO_MODULE: Record<string, ModuleId> = {
   "/meetings": "meetings",
   "/circular": "circular",
   "/carbooking": "carbooking",
+  "/data-hub": "datahub",
   "/files": "files",
   "/gallery": "gallery",
+  "/tools": "qrcode",
+  "/tools/qrcode": "qrcode",
+  "/tools/bgremove": "bgremove",
   "/admin": "admin",
   "/user": "user",
 };

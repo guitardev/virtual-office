@@ -22,7 +22,10 @@ export type ModuleId =
   | "admin"
   | "reports"
   | "files"
-  | "gallery";
+  | "gallery"
+  | "datahub"
+  | "qrcode"
+  | "bgremove";
 
 export interface RoleInfo {
   id: Role;

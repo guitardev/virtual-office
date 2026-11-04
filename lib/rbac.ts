@@ -43,6 +43,9 @@ export const MODULE_NAMES: Record<ModuleId, { name: string; icon: string; desc: 
   reports: { name: "รายงาน (Reports)", icon: "📈", desc: "รายงานสถิติการใช้งานและดาวน์โหลดสรุป" },
   files: { name: "เอกสาร NAS (File Station)", icon: "📁", desc: "ระบบจัดเก็บและจัดการไฟล์ตามสิทธิ์ Synology NAS" },
   gallery: { name: "ภาพ & สื่อ (Synology Photos)", icon: "📸", desc: "คลังจัดเก็บและสืบค้นภาพถ่าย/วิดีโอกิจกรรมราชการ" },
+  datahub: { name: "ระบบรวมข้อมูล", icon: "🗃️", desc: "ศูนย์รวมข้อมูลและสถิติตามกลุ่มภารกิจงาน" },
+  qrcode: { name: "QR Code", icon: "📱", desc: "เครื่องมือสร้าง QR Code ถาวร" },
+  bgremove: { name: "BG Remove", icon: "✂️", desc: "เครื่องมือลบพื้นหลังภาพ" },
 };
 
 export const INITIAL_SYSTEM_MODULES: Record<ModuleId, SystemModule> = {
@@ -134,6 +137,30 @@ export const INITIAL_SYSTEM_MODULES: Record<ModuleId, SystemModule> = {
     enabled: true,
     maintenanceNotice: "ระบบคลังภาพและสื่อเปิดให้บริการปกติ",
   },
+  datahub: {
+    id: "datahub",
+    name: "ระบบรวมข้อมูล",
+    icon: "🗃️",
+    desc: "ศูนย์รวมข้อมูลและสถิติตามกลุ่มภารกิจงาน",
+    enabled: true,
+    maintenanceNotice: "ระบบรวมข้อมูลภารกิจงานเปิดให้บริการปกติ",
+  },
+  qrcode: {
+    id: "qrcode",
+    name: "QR Code",
+    icon: "📱",
+    desc: "เครื่องมือสร้าง QR Code ถาวร",
+    enabled: true,
+    maintenanceNotice: "เครื่องมือ QR Code เปิดให้บริการปกติ",
+  },
+  bgremove: {
+    id: "bgremove",
+    name: "BG Remove",
+    icon: "✂️",
+    desc: "เครื่องมือลบพื้นหลังภาพ",
+    enabled: true,
+    maintenanceNotice: "เครื่องมือ BG Remove เปิดให้บริการปกติ",
+  },
 };
 
 // Default Matrix: Which role can access which module
@@ -150,6 +177,9 @@ export const INITIAL_ROLE_PERMISSIONS: Record<Role, Record<ModuleId, boolean>> =
     reports: true,
     files: true,
     gallery: true,
+    datahub: true,
+    qrcode: true,
+    bgremove: true,
   },
   manager: {
     dashboard: true,
@@ -163,6 +193,9 @@ export const INITIAL_ROLE_PERMISSIONS: Record<Role, Record<ModuleId, boolean>> =
     reports: true,
     files: true,
     gallery: true,
+    datahub: true,
+    qrcode: true,
+    bgremove: true,
   },
   member: {
     dashboard: true,
@@ -176,6 +209,9 @@ export const INITIAL_ROLE_PERMISSIONS: Record<Role, Record<ModuleId, boolean>> =
     reports: false, // Regular members cannot view company reports
     files: true,
     gallery: true,
+    datahub: true,
+    qrcode: true,
+    bgremove: true,
   },
   guest: {
     dashboard: false, // Guests cannot view internal dashboard
@@ -189,6 +225,9 @@ export const INITIAL_ROLE_PERMISSIONS: Record<Role, Record<ModuleId, boolean>> =
     reports: false,
     files: false,
     gallery: false,
+    datahub: false,
+    qrcode: true,
+    bgremove: true,
   },
 };
 
