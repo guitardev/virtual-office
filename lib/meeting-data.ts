@@ -1,4 +1,5 @@
-import { MeetingCategory, MeetingType, MeetingItem } from "./types";
+import { MeetingCategory, MeetingType, MeetingItem, MeetingRoomMaster } from "./types";
+import { getMeetingDateRange } from "./calendar";
 
 export interface MeetingPresetTemplate {
   id: string;
@@ -80,14 +81,141 @@ export const MEETING_TYPE_CONFIG: Record<
   },
 };
 
-export const ROOM_PRESETS = [
-  "ห้องประชุม 1 (ศาลากลางจังหวัด ชั้น 2)",
-  "ห้องประชุม 2 (ศาลากลางจังหวัด ชั้น 4)",
-  "ห้องประชุมกลุ่มนโยบายและวิชาการ",
-  "ห้องประชุมกลุ่มการพัฒนาสังคมและสวัสดิการ",
-  "ห้องประชุมฝ่ายบริหารทั่วไป",
-  "ห้องประชุม War Room ศูนย์ปฏิบัติการ พมจ.",
+export const DEFAULT_ROOMS: MeetingRoomMaster[] = [
+  {
+    id: "room_1",
+    name: "ห้องประชุม 1 (ศาลากลางจังหวัด ชั้น 2)",
+    building: "ศาลากลางจังหวัดกำแพงเพชร (อาคารใหม่ ชั้น 2)",
+    capacity: 40,
+    equipment: ["จอโปรเจกเตอร์ 4K", "ไมโครโฟนไร้สาย 4 ตัว", "เครื่องเสียงห้องประชุม", "กล้อง Hybrid PTZ (Zoom/Meet)", "WiFi ความเร็วสูง"],
+    status: "available",
+    notes: "ห้องประชุมใหญ่สำหรับประชุมข้าราชการประจำเดือนและคณะทำงานจังหวัด",
+  },
+  {
+    id: "room_2",
+    name: "ห้องประชุม 2 (ศาลากลางจังหวัด ชั้น 4)",
+    building: "ศาลากลางจังหวัดกำแพงเพชร (อาคารใหม่ ชั้น 4)",
+    capacity: 25,
+    equipment: ["Smart TV 75 นิ้ว", "Soundbar + ไมค์คอนเฟอเรนซ์", "กล้อง Web Conference", "ไวท์บอร์ด"],
+    status: "available",
+    notes: "ห้องประชุมขนาดกลาง เหมาะสำหรับการประชุมพิจารณาโครงการและติดตามงาน",
+  },
+  {
+    id: "room_3",
+    name: "ห้องประชุมกลุ่มนโยบายและวิชาการ",
+    building: "สำนักงาน พมจ. กำแพงเพชร (ห้องกลุ่มนโยบาย)",
+    capacity: 12,
+    equipment: ["Smart TV 55 นิ้ว", "ลำโพงบลูทูธพกพา", "สาย HDMI / Wireless Cast"],
+    status: "available",
+    notes: "การประชุมภายในกลุ่มงานและวิเคราะห์ข้อมูลสถิติ",
+  },
+  {
+    id: "room_4",
+    name: "ห้องประชุมกลุ่มการพัฒนาสังคมและสวัสดิการ",
+    building: "สำนักงาน พมจ. กำแพงเพชร (ห้องกลุ่มสวัสดิการ)",
+    capacity: 15,
+    equipment: ["จอ Monitor 65 นิ้ว", "ไมค์ห้องประชุม", "แท่นบรรยาย"],
+    status: "available",
+    notes: "ประชุมทีมช่วยเหลือผู้ประสบปัญหาทางสังคมและเครือข่าย พม.",
+  },
+  {
+    id: "room_5",
+    name: "ห้องประชุมฝ่ายบริหารทั่วไป",
+    building: "สำนักงาน พมจ. กำแพงเพชร (ห้องฝ่ายบริหาร)",
+    capacity: 10,
+    equipment: ["จอ Monitor 43 นิ้ว", "สายเชื่อมต่อสารบรรณและบัญชี"],
+    status: "available",
+    notes: "ประชุมการเงิน พัสดุ และงานธุรการทั่วไป",
+  },
+  {
+    id: "room_6",
+    name: "ห้องประชุม War Room ศูนย์ปฏิบัติการ พมจ.",
+    building: "สำนักงาน พมจ. กำแพงเพชร (War Room 1300)",
+    capacity: 8,
+    equipment: ["Multi-Screen Video Wall", "ระบบ Hotline 1300 บูรณาการ", "ไมค์ตั้งโต๊ะ", "บันทึกเสียงอัตโนมัติ"],
+    status: "available",
+    notes: "ศูนย์ประสานงานสถานการณ์ฉุกเฉินและช่วยเหลือรายกรณีเร่งด่วน",
+  },
 ];
+
+export const ROOM_PRESETS = DEFAULT_ROOMS.map((r) => r.name);
+
+export const STORAGE_MEETING_ROOMS_KEY = "smartmso_meeting_rooms_master";
+
+export function loadStoredRooms(): MeetingRoomMaster[] {
+  if (typeof window === "undefined") return DEFAULT_ROOMS;
+  try {
+    const raw = localStorage.getItem(STORAGE_MEETING_ROOMS_KEY);
+    if (!raw) {
+      localStorage.setItem(STORAGE_MEETING_ROOMS_KEY, JSON.stringify(DEFAULT_ROOMS));
+      return DEFAULT_ROOMS;
+    }
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed;
+    }
+  } catch (e) {
+    console.error("Failed to load meeting rooms:", e);
+  }
+  return DEFAULT_ROOMS;
+}
+
+export function saveStoredRooms(rooms: MeetingRoomMaster[]) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(STORAGE_MEETING_ROOMS_KEY, JSON.stringify(rooms));
+    window.dispatchEvent(new CustomEvent("smartmso_rooms_updated", { detail: rooms }));
+  } catch (e) {
+    console.error("Failed to save meeting rooms:", e);
+  }
+}
+
+export function checkMeetingRoomConflict(
+  roomNameOrId: string,
+  startDateTime: Date | string,
+  endDateTime: Date | string,
+  meetings: MeetingItem[],
+  excludeMeetingId?: string | number
+): { hasConflict: boolean; conflictingMeetings: MeetingItem[] } {
+  if (!roomNameOrId || roomNameOrId.includes("ออนไลน์") || roomNameOrId.includes("Google Meet")) {
+    return { hasConflict: false, conflictingMeetings: [] };
+  }
+
+  const newStart = new Date(startDateTime).getTime();
+  const newEnd = new Date(endDateTime).getTime();
+
+  if (isNaN(newStart) || isNaN(newEnd)) {
+    return { hasConflict: false, conflictingMeetings: [] };
+  }
+
+  const conflictingMeetings = meetings.filter((m) => {
+    if (excludeMeetingId && String(m.id) === String(excludeMeetingId)) return false;
+    if (m.status === "cancelled") return false;
+    if (m.type === "online") return false;
+
+    // Check location matching room name
+    const mLoc = (m.location || "").trim().toLowerCase();
+    const targetRoom = roomNameOrId.trim().toLowerCase();
+    const isSameRoom =
+      mLoc === targetRoom ||
+      mLoc.includes(targetRoom) ||
+      targetRoom.includes(mLoc);
+
+    if (!isSameRoom) return false;
+
+    const { startDate, endDate } = getMeetingDateRange(m);
+    const mStart = startDate.getTime();
+    const mEnd = endDate.getTime();
+
+    // Standard interval overlap: (StartA < EndB) and (EndA > StartB)
+    return newStart < mEnd && newEnd > mStart;
+  });
+
+  return {
+    hasConflict: conflictingMeetings.length > 0,
+    conflictingMeetings,
+  };
+}
 
 export const MEETING_TEMPLATES: MeetingPresetTemplate[] = [
   {

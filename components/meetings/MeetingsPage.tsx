@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
-import { MeetingItem, Member, MeetingCategory, MeetingType } from "@/lib/types";
+import React, { useState, useMemo, useEffect } from "react";
+import { MeetingItem, Member, MeetingCategory, MeetingType, MeetingRoomMaster } from "@/lib/types";
 import { saveMeeting, deleteMeeting, recordAuditLog } from "@/lib/supabase";
 import {
   createGoogleCalendarUrl,
@@ -18,6 +18,8 @@ import {
   ROOM_PRESETS,
   MEETING_TEMPLATES,
   MeetingPresetTemplate,
+  loadStoredRooms,
+  checkMeetingRoomConflict,
 } from "@/lib/meeting-data";
 import { isOperationalMember } from "@/lib/rbac";
 
@@ -27,6 +29,7 @@ interface MeetingsPageProps {
   currentUser?: Member | null;
   setMeetings?: React.Dispatch<React.SetStateAction<MeetingItem[]>>;
   members?: Member[];
+  onNavigateToAdminRooms?: () => void;
 }
 
 export function MeetingsPage({
@@ -35,11 +38,33 @@ export function MeetingsPage({
   currentUser,
   setMeetings,
   members = [],
+  onNavigateToAdminRooms,
 }: MeetingsPageProps) {
+  // Rooms master data from localStorage / admin
+  const [rooms, setRooms] = useState<MeetingRoomMaster[]>(() => loadStoredRooms());
+
+  useEffect(() => {
+    const handleRoomsUpdated = (e: Event) => {
+      const customEvent = e as CustomEvent<MeetingRoomMaster[]>;
+      if (customEvent.detail) {
+        setRooms(customEvent.detail);
+      } else {
+        setRooms(loadStoredRooms());
+      }
+    };
+    window.addEventListener("smartmso_rooms_updated", handleRoomsUpdated);
+    window.addEventListener("storage", handleRoomsUpdated);
+    return () => {
+      window.removeEventListener("smartmso_rooms_updated", handleRoomsUpdated);
+      window.removeEventListener("storage", handleRoomsUpdated);
+    };
+  }, []);
+
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<"all" | MeetingCategory>("all");
   const [selectedType, setSelectedType] = useState<"all" | MeetingType>("all");
+  const [selectedRoomFilter, setSelectedRoomFilter] = useState<string>("all");
   const [timeframe, setTimeframe] = useState<"upcoming" | "all" | "past">("all");
 
   // Modals
@@ -63,6 +88,31 @@ export function MeetingsPage({
   const [formDescription, setFormDescription] = useState("");
   const [selectedAttendeeIds, setSelectedAttendeeIds] = useState<string[]>([]);
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+
+  // Selected Room Master metadata
+  const selectedRoomMaster = useMemo(() => {
+    if (formType === "online" || !formLocation.trim()) return null;
+    const trimmed = formLocation.trim().toLowerCase();
+    return (
+      rooms.find(
+        (r) =>
+          r.name.toLowerCase() === trimmed ||
+          r.id.toLowerCase() === trimmed ||
+          r.name.toLowerCase().includes(trimmed) ||
+          trimmed.includes(r.name.toLowerCase())
+      ) || null
+    );
+  }, [rooms, formLocation, formType]);
+
+  // Real-time Room Conflict Guard
+  const roomConflict = useMemo(() => {
+    if (formType === "online" || !formLocation.trim() || !formDate || !formStartTime || !formEndTime) {
+      return { hasConflict: false, conflictingMeetings: [] };
+    }
+    const start = new Date(`${formDate}T${formStartTime}:00`);
+    const end = new Date(`${formDate}T${formEndTime}:00`);
+    return checkMeetingRoomConflict(formLocation, start, end, meetings, editingMeetingId || undefined);
+  }, [formType, formLocation, formDate, formStartTime, formEndTime, meetings, editingMeetingId]);
 
   // Helper to open Add Modal with fresh defaults
   const handleOpenAddModal = () => {
@@ -158,6 +208,25 @@ export function MeetingsPage({
     if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
       showToast("⚠️ รูปแบบวันที่หรือเวลาไม่ถูกต้อง");
       return;
+    }
+
+    // Check room maintenance status
+    if (formType !== "online" && selectedRoomMaster && selectedRoomMaster.status === "maintenance") {
+      alert(
+        `⚠️ ห้องประชุม "${selectedRoomMaster.name}" อยู่ในสถานะ "ปิดปรับปรุง (Maintenance)"\nไม่สามารถบันทึกการจองได้ กรุณาเลือกห้องอื่นหรือติดต่อผู้ดูแลระบบ`
+      );
+      return;
+    }
+
+    // Check room conflict
+    if (formType !== "online" && roomConflict.hasConflict) {
+      const conflictList = roomConflict.conflictingMeetings
+        .map((m) => `• ${m.title} (${m.timeStr})`)
+        .join("\n");
+      const confirmSave = window.confirm(
+        `⚠️ คำเตือน: พบการจองห้องประชุมซ้ำซ้อนในช่วงเวลาดังกล่าว!\n\nสถานที่: ${formLocation}\nรายการที่จองซ้อนอยู่:\n${conflictList}\n\nคุณแน่ใจหรือไม่ว่าต้องการยืนยันบันทึกการจองนี้?`
+      );
+      if (!confirmSave) return;
     }
 
     const dateStr = startDateTime.toLocaleDateString("th-TH", {
@@ -334,9 +403,17 @@ export function MeetingsPage({
           return false;
         }
       }
+      // Room filter
+      if (selectedRoomFilter !== "all") {
+        const mLoc = (m.location || "").toLowerCase();
+        const target = selectedRoomFilter.toLowerCase();
+        if (!mLoc.includes(target) && !target.includes(mLoc)) {
+          return false;
+        }
+      }
       return true;
     });
-  }, [meetings, selectedCategory, selectedType, timeframe, searchQuery]);
+  }, [meetings, selectedCategory, selectedType, selectedRoomFilter, timeframe, searchQuery]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -359,6 +436,18 @@ export function MeetingsPage({
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
+          {onNavigateToAdminRooms &&
+            (currentUser?.role === "admin" || currentUser?.role === "manager") && (
+              <button
+                type="button"
+                onClick={onNavigateToAdminRooms}
+                className="px-3.5 py-2.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                title="เข้าสู่ศูนย์บริหารจัดการห้องประชุม & สถานที่ราชการ (Admin Rooms Master)"
+              >
+                <span>🏛️</span>
+                <span>สารบบห้องประชุม (Admin)</span>
+              </button>
+            )}
           {meetings.length > 0 && (
             <button
               type="button"
@@ -535,6 +624,32 @@ export function MeetingsPage({
               <span>ไฮบริด</span>
             </button>
           </div>
+
+          {/* Room Filter */}
+          <div className="flex items-center gap-1.5 w-full sm:w-auto pt-2 sm:pt-0 sm:border-l sm:border-slate-100 sm:pl-3">
+            <span className="text-[11px] font-bold text-slate-400 mr-1">ห้องประชุม:</span>
+            <select
+              value={selectedRoomFilter}
+              onChange={(e) => setSelectedRoomFilter(e.target.value)}
+              className="px-2.5 py-1 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-medium focus:outline-none focus:border-indigo-500 cursor-pointer"
+            >
+              <option value="all">ห้องประชุมทั้งหมด ({rooms.length} ห้อง)</option>
+              {rooms.map((r) => (
+                <option key={r.id} value={r.name}>
+                  {r.status === "maintenance" ? "🔴 [ปิดปรับปรุง] " : "🟢 "}{r.name}
+                </option>
+              ))}
+            </select>
+            {selectedRoomFilter !== "all" && (
+              <button
+                type="button"
+                onClick={() => setSelectedRoomFilter("all")}
+                className="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold underline cursor-pointer"
+              >
+                ล้าง
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -543,7 +658,7 @@ export function MeetingsPage({
         <div className="bg-white p-12 rounded-3xl border border-slate-200/80 text-center space-y-3 shadow-2xs">
           <span className="text-5xl block mb-2">📹</span>
           <h3 className="font-bold font-heading text-lg text-slate-800">
-            {searchQuery || selectedCategory !== "all" || selectedType !== "all"
+            {searchQuery || selectedCategory !== "all" || selectedType !== "all" || selectedRoomFilter !== "all"
               ? "ไม่พบนัดหมายการประชุมตามเงื่อนไขที่เลือก"
               : "ยังไม่มีนัดหมายการประชุมในระบบ"}
           </h3>
@@ -551,13 +666,14 @@ export function MeetingsPage({
             ท่านสามารถสร้างการประชุมใหม่ กำหนดสถานที่ ระเบียบวาระ และเชิญบุคลากร พร้อมบันทึกลง Google Calendar ได้ทันที
           </p>
           <div className="pt-2 flex items-center justify-center gap-2">
-            {(searchQuery || selectedCategory !== "all" || selectedType !== "all") && (
+            {(searchQuery || selectedCategory !== "all" || selectedType !== "all" || selectedRoomFilter !== "all") && (
               <button
                 type="button"
                 onClick={() => {
                   setSearchQuery("");
                   setSelectedCategory("all");
                   setSelectedType("all");
+                  setSelectedRoomFilter("all");
                   setTimeframe("all");
                 }}
                 className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
@@ -637,9 +753,22 @@ export function MeetingsPage({
                   </div>
 
                   {/* Location */}
-                  <div className="flex items-start gap-1.5 text-xs text-slate-600 mb-2">
+                  <div className="flex items-center gap-1.5 text-xs text-slate-600 mb-2 flex-wrap">
                     <span className="shrink-0 text-slate-400">📍</span>
                     <span className="font-medium text-slate-700 line-clamp-1">{m.location}</span>
+                    {(() => {
+                      const r = rooms.find(
+                        (room) =>
+                          room.name.toLowerCase() === (m.location || "").toLowerCase() ||
+                          (m.location || "").toLowerCase().includes(room.name.toLowerCase())
+                      );
+                      if (!r) return null;
+                      return (
+                        <span className="shrink-0 text-[10px] px-1.5 py-0.5 bg-teal-50 text-teal-700 rounded-md border border-teal-200/60 font-semibold">
+                          จุ {r.capacity} คน
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   {/* Agenda snippet */}
@@ -874,6 +1003,29 @@ export function MeetingsPage({
                   <div className="text-slate-800 font-bold">
                     {selectedMeeting.location}
                   </div>
+                  {(() => {
+                    const r = rooms.find(
+                      (room) =>
+                        room.name.toLowerCase() === (selectedMeeting.location || "").toLowerCase() ||
+                        (selectedMeeting.location || "").toLowerCase().includes(room.name.toLowerCase())
+                    );
+                    if (!r) return null;
+                    return (
+                      <div className="mt-2 p-2.5 bg-white rounded-xl border border-slate-200/80 text-[11px] text-slate-600 space-y-1">
+                        <div className="flex items-center justify-between gap-1.5">
+                          <span className="font-semibold text-slate-800">🏛️ {r.building}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 bg-teal-50 text-teal-700 rounded-md border border-teal-200/60 font-bold">
+                            {r.capacity} ที่นั่ง
+                          </span>
+                        </div>
+                        {r.equipment && r.equipment.length > 0 && (
+                          <div className="text-[10px] text-slate-500">
+                            อุปกรณ์: {r.equipment.join(", ")}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                   {selectedMeeting.meetingLink && (
                     <div className="mt-1.5">
                       <a
@@ -1220,28 +1372,47 @@ export function MeetingsPage({
                 </div>
               </div>
 
-              {/* Location & Room Preset */}
+              {/* Location & Room Master Preset */}
               {formType !== "online" && (
-                <div>
-                  <div className="flex items-center justify-between mb-1">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
                     <label className="block text-xs font-bold text-slate-700">
                       สถานที่ / ห้องประชุม <span className="text-rose-500">*</span>
                     </label>
-                    <span className="text-[10px] text-slate-400">เลือกจากห้องมาตรฐานหรือพิมพ์เอง</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-slate-400">เลือกจากสารบบห้องประชุมหรือระบุเอง</span>
+                      {onNavigateToAdminRooms &&
+                        (currentUser?.role === "admin" || currentUser?.role === "manager") && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowAddModal(false);
+                              onNavigateToAdminRooms();
+                            }}
+                            className="text-[10px] text-teal-700 hover:text-teal-900 font-bold underline cursor-pointer"
+                          >
+                            ⚙️ จัดการสารบบห้อง
+                          </button>
+                        )}
+                    </div>
                   </div>
                   <div className="space-y-1.5">
                     <select
+                      value={rooms.some((r) => r.name === formLocation) ? formLocation : ""}
                       onChange={(e) => {
                         if (e.target.value) setFormLocation(e.target.value);
                       }}
-                      className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-700"
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-700 focus:bg-white focus:border-indigo-500 transition-colors"
                     >
-                      <option value="">-- เลือกจากห้องประชุมของสำนักงาน --</option>
-                      {ROOM_PRESETS.map((room) => (
-                        <option key={room} value={room}>
-                          {room}
-                        </option>
-                      ))}
+                      <option value="">-- เลือกจากห้องประชุมในสารบบ ({rooms.length} ห้อง) --</option>
+                      {rooms.map((room) => {
+                        const isMaint = room.status === "maintenance";
+                        return (
+                          <option key={room.id} value={room.name}>
+                            {isMaint ? `🔴 [ปิดปรับปรุง] ` : `🟢 `}{room.name} (จุ {room.capacity} คน)
+                          </option>
+                        );
+                      })}
                     </select>
                     <input
                       type="text"
@@ -1252,6 +1423,87 @@ export function MeetingsPage({
                       className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:border-indigo-500 transition-colors"
                     />
                   </div>
+
+                  {/* Room Master Details Card */}
+                  {selectedRoomMaster && (
+                    <div
+                      className={`p-3 rounded-xl border text-xs space-y-1.5 transition-all ${
+                        selectedRoomMaster.status === "maintenance"
+                          ? "bg-rose-50/80 border-rose-200 text-rose-800"
+                          : "bg-teal-50/70 border-teal-200/80 text-teal-900"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 font-bold">
+                          <span>{selectedRoomMaster.status === "maintenance" ? "🔴" : "🏛️"}</span>
+                          <span>{selectedRoomMaster.name}</span>
+                        </div>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            selectedRoomMaster.status === "maintenance"
+                              ? "bg-rose-200 text-rose-800"
+                              : "bg-emerald-100 text-emerald-800"
+                          }`}
+                        >
+                          {selectedRoomMaster.status === "maintenance"
+                            ? "ปิดปรับปรุง (งดรับจอง)"
+                            : "พร้อมใช้งาน"}
+                        </span>
+                      </div>
+                      <div className="text-[11px] opacity-80 flex flex-wrap gap-x-4 gap-y-1">
+                        <span>📍 {selectedRoomMaster.building}</span>
+                        <span>👥 รองรับสูงสุด {selectedRoomMaster.capacity} ที่นั่ง</span>
+                      </div>
+                      {selectedRoomMaster.equipment && selectedRoomMaster.equipment.length > 0 && (
+                        <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                          <span className="text-[10px] font-bold opacity-75">อุปกรณ์:</span>
+                          {selectedRoomMaster.equipment.map((eq, i) => (
+                            <span
+                              key={i}
+                              className="px-1.5 py-0.5 bg-white/80 border border-teal-200/60 rounded text-[10px]"
+                            >
+                              {eq}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {selectedRoomMaster.notes && (
+                        <div className="text-[10px] italic opacity-75 pt-0.5">
+                          💡 {selectedRoomMaster.notes}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Room Conflict Guard Warning */}
+                  {roomConflict.hasConflict && (
+                    <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-amber-900 text-xs space-y-1.5 animate-pulse">
+                      <div className="flex items-center gap-1.5 font-bold text-amber-800">
+                        <span className="text-sm">⚠️</span>
+                        <span>
+                          ตรวจพบการจองห้องประชุมซ้ำซ้อน ({roomConflict.conflictingMeetings.length} รายการ)
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-amber-700 leading-relaxed">
+                        ห้องนี้มีการจองไว้แล้วในช่วงเวลาทับซ้อน กรุณาตรวจสอบเวลาหรือเปลี่ยนห้องประชุม:
+                      </p>
+                      <div className="space-y-1 mt-1">
+                        {roomConflict.conflictingMeetings.map((cm) => (
+                          <div
+                            key={cm.id}
+                            className="bg-white/90 p-2 rounded-lg border border-amber-200 text-[11px]"
+                          >
+                            <div className="font-semibold text-slate-800">{cm.title}</div>
+                            <div className="text-slate-500 text-[10px] flex items-center gap-2 mt-0.5">
+                              <span>📅 {cm.dateStr}</span>
+                              <span>⏰ {cm.timeStr}</span>
+                              <span>👤 {cm.organizer?.name || "ไม่ระบุผู้จัด"}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

@@ -238,6 +238,17 @@ export interface MeetingItem {
   createdAt?: string;
 }
 
+export interface MeetingRoomMaster {
+  id: string;
+  name: string;
+  building: string;
+  capacity: number;
+  equipment: string[];
+  status: "available" | "maintenance";
+  notes?: string;
+  image?: string;
+}
+
 export type VehicleStatus = "available" | "in_use" | "maintenance";
 
 export type FuelLevel =

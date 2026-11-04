@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
-import { MeetingItem, Member } from "@/lib/types";
-import { ROOM_PRESETS } from "@/lib/meeting-data";
+import React, { useState, useMemo, useEffect } from "react";
+import { MeetingItem, Member, MeetingRoomMaster } from "@/lib/types";
+import { DEFAULT_ROOMS, loadStoredRooms, saveStoredRooms } from "@/lib/meeting-data";
 import { recordAuditLog, saveMeeting } from "@/lib/supabase";
 
 interface RoomsTabProps {
@@ -12,83 +12,25 @@ interface RoomsTabProps {
   showToast: (msg: string) => void;
 }
 
-export interface MeetingRoomMaster {
-  id: string;
-  name: string;
-  building: string;
-  capacity: number;
-  equipment: string[];
-  status: "available" | "maintenance";
-  notes?: string;
-}
-
-const DEFAULT_ROOMS: MeetingRoomMaster[] = [
-  {
-    id: "room_1",
-    name: "ห้องประชุม 1 (ศาลากลางจังหวัด ชั้น 2)",
-    building: "ศาลากลางจังหวัดกำแพงเพชร (อาคารใหม่ ชั้น 2)",
-    capacity: 40,
-    equipment: ["จอโปรเจกเตอร์ 4K", "ไมโครโฟนไร้สาย 4 ตัว", "เครื่องเสียงห้องประชุม", "กล้อง Hybrid PTZ (Zoom/Meet)", "WiFi ความเร็วสูง"],
-    status: "available",
-    notes: "ห้องประชุมใหญ่สำหรับประชุมข้าราชการประจำเดือนและคณะทำงานจังหวัด",
-  },
-  {
-    id: "room_2",
-    name: "ห้องประชุม 2 (ศาลากลางจังหวัด ชั้น 4)",
-    building: "ศาลากลางจังหวัดกำแพงเพชร (อาคารใหม่ ชั้น 4)",
-    capacity: 25,
-    equipment: ["Smart TV 75 นิ้ว", "Soundbar + ไมค์คอนเฟอเรนซ์", "กล้อง Web Conference", "ไวท์บอร์ด"],
-    status: "available",
-    notes: "ห้องประชุมขนาดกลาง เหมาะสำหรับการประชุมพิจารณาโครงการและติดตามงาน",
-  },
-  {
-    id: "room_3",
-    name: "ห้องประชุมกลุ่มนโยบายและวิชาการ",
-    building: "สำนักงาน พมจ. กำแพงเพชร (ห้องกลุ่มนโยบาย)",
-    capacity: 12,
-    equipment: ["Smart TV 55 นิ้ว", "ลำโพงบลูทูธพกพา", "สาย HDMI / Wireless Cast"],
-    status: "available",
-    notes: "การประชุมภายในกลุ่มงานและวิเคราะห์ข้อมูลสถิติ",
-  },
-  {
-    id: "room_4",
-    name: "ห้องประชุมกลุ่มการพัฒนาสังคมและสวัสดิการ",
-    building: "สำนักงาน พมจ. กำแพงเพชร (ห้องกลุ่มสวัสดิการ)",
-    capacity: 15,
-    equipment: ["จอ Monitor 65 นิ้ว", "ไมค์ห้องประชุม", "แท่นบรรยาย"],
-    status: "available",
-    notes: "ประชุมทีมช่วยเหลือผู้ประสบปัญหาทางสังคมและเครือข่าย พม.",
-  },
-  {
-    id: "room_5",
-    name: "ห้องประชุมฝ่ายบริหารทั่วไป",
-    building: "สำนักงาน พมจ. กำแพงเพชร (ห้องฝ่ายบริหาร)",
-    capacity: 10,
-    equipment: ["จอ Monitor 43 นิ้ว", "สายเชื่อมต่อสารบรรณและบัญชี"],
-    status: "available",
-    notes: "ประชุมการเงิน พัสดุ และงานธุรการทั่วไป",
-  },
-  {
-    id: "room_6",
-    name: "ห้องประชุม War Room ศูนย์ปฏิบัติการ พมจ.",
-    building: "สำนักงาน พมจ. กำแพงเพชร (War Room 1300)",
-    capacity: 8,
-    equipment: ["Multi-Screen Video Wall", "ระบบ Hotline 1300 บูรณาการ", "ไมค์ตั้งโต๊ะ", "บันทึกเสียงอัตโนมัติ"],
-    status: "available",
-    notes: "ศูนย์ประสานงานสถานการณ์ฉุกเฉินและช่วยเหลือรายกรณีเร่งด่วน",
-  },
-];
-
 export function RoomsTab({ currentUser, meetings, setMeetings, showToast }: RoomsTabProps) {
-  const [rooms, setRooms] = useState<MeetingRoomMaster[]>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem("smartmso_meeting_rooms_master");
-        if (saved) return JSON.parse(saved);
-      } catch {}
-    }
-    return DEFAULT_ROOMS;
-  });
+  const [rooms, setRooms] = useState<MeetingRoomMaster[]>(() => loadStoredRooms());
+
+  useEffect(() => {
+    const handleRoomsUpdated = (e: Event) => {
+      const customEvent = e as CustomEvent<MeetingRoomMaster[]>;
+      if (customEvent.detail) {
+        setRooms(customEvent.detail);
+      } else {
+        setRooms(loadStoredRooms());
+      }
+    };
+    window.addEventListener("smartmso_rooms_updated", handleRoomsUpdated);
+    window.addEventListener("storage", handleRoomsUpdated);
+    return () => {
+      window.removeEventListener("smartmso_rooms_updated", handleRoomsUpdated);
+      window.removeEventListener("storage", handleRoomsUpdated);
+    };
+  }, []);
 
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
@@ -104,11 +46,7 @@ export function RoomsTab({ currentUser, meetings, setMeetings, showToast }: Room
 
   const saveRoomsToStorage = (updated: MeetingRoomMaster[]) => {
     setRooms(updated);
-    if (typeof window !== "undefined") {
-      try {
-        localStorage.setItem("smartmso_meeting_rooms_master", JSON.stringify(updated));
-      } catch {}
-    }
+    saveStoredRooms(updated);
   };
 
   const handleOpenAdd = () => {
