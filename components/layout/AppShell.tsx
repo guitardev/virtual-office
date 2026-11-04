@@ -1042,7 +1042,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 )}
                 <div className="hidden sm:block text-left">
                   <span className="block text-xs font-bold text-slate-800 leading-tight">
-                    {currentUser.name.split(" ")[0]}
+                    {(currentUser.name || `${currentUser.prefix || ""} ${currentUser.firstName || ""}`).trim().split(" ")[0]}
                   </span>
                   <span className="block text-[10px] text-indigo-600 font-semibold">
                     {ROLE_CONFIG[currentUserRole]?.label?.split(" ")[0]}

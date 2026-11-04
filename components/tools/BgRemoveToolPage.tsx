@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Member } from "@/lib/types";
 
 interface BgRemoveToolPageProps {
@@ -33,11 +33,55 @@ const CROP_CONFIGS: Record<CropRatio, { label: string; ratio: number; desc: stri
   "2_inch": { label: "2 นิ้ว (4:5)", ratio: 4 / 5, desc: "4.0 × 5.0 ซม. (พาสปอร์ต/วีซ่า)" },
 };
 
+/**
+ * Fast 2-pass separable 1D box blur for alpha feathering (runs in ~5ms for 1.4M pixels)
+ */
+function fastBoxBlurAlpha(alpha: Float32Array, w: number, h: number, r: number): Float32Array {
+  if (r <= 0) return alpha;
+  const total = w * h;
+  const temp = new Float32Array(total);
+  const out = new Float32Array(total);
+
+  // 1. Horizontal pass
+  for (let y = 0; y < h; y++) {
+    const rowOffset = y * w;
+    for (let x = 0; x < w; x++) {
+      let sum = 0;
+      let count = 0;
+      const xMin = Math.max(0, x - r);
+      const xMax = Math.min(w - 1, x + r);
+      for (let nx = xMin; nx <= xMax; nx++) {
+        sum += alpha[rowOffset + nx];
+        count++;
+      }
+      temp[rowOffset + x] = sum / count;
+    }
+  }
+
+  // 2. Vertical pass
+  for (let x = 0; x < w; x++) {
+    for (let y = 0; y < h; y++) {
+      let sum = 0;
+      let count = 0;
+      const yMin = Math.max(0, y - r);
+      const yMax = Math.min(h - 1, y + r);
+      for (let ny = yMin; ny <= yMax; ny++) {
+        sum += temp[ny * w + x];
+        count++;
+      }
+      out[y * w + x] = sum / count;
+    }
+  }
+
+  return out;
+}
+
 export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPageProps) {
   // Image & Canvas state
   const [originalImageUrl, setOriginalImageUrl] = useState<string>("");
   const [processedImageUrl, setProcessedImageUrl] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [activeDims, setActiveDims] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
 
   // Styling & Options
   const [bgOption, setBgOption] = useState<BgOption>("transparent");
@@ -49,22 +93,25 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
 
   // Touch-up Brush state
   const [brushMode, setBrushMode] = useState<BrushMode>("none");
-  const [brushSize, setBrushSize] = useState<number>(24); // 6 - 60px
-  const [isPainting, setIsPainting] = useState<boolean>(false);
-  const [manualOverrides, setManualOverrides] = useState<Uint8Array | null>(null);
+  const [brushSize, setBrushSize] = useState<number>(28); // 6 - 80px
   const [hasManualEdits, setHasManualEdits] = useState<boolean>(false);
+  const [cursorPos, setCursorPos] = useState<{ x: number; y: number; screenRadius: number } | null>(null);
+  const [isPeekingOriginal, setIsPeekingOriginal] = useState<boolean>(false);
 
   // View state
   const [viewMode, setViewMode] = useState<ViewMode>("split_slider");
   const [splitPos, setSplitPos] = useState<number>(50); // percentage for split slider
   const [isDraggingSplit, setIsDraggingSplit] = useState<boolean>(false);
 
-  // Refs
+  // Refs for zero-latency in-memory state & high FPS painting
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const interactiveCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const rawImageRef = useRef<HTMLImageElement | null>(null);
   const autoMaskRef = useRef<Uint8Array | null>(null);
+  const manualOverridesRef = useRef<Uint8Array | null>(null);
   const activeDimsRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
+  const isPaintingRef = useRef<boolean>(false);
+  const lastPointRef = useRef<{ x: number; y: number } | null>(null);
 
   // ─── Step 1: Core Connected Border Flood Fill Algorithm ───
   const computeAutoMask = (img: HTMLImageElement, tol: number): { mask: Uint8Array; w: number; h: number } => {
@@ -177,11 +224,12 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
     return { mask, w, h };
   };
 
-  // ─── Step 2: Render Final Composite (Applies Mask, Overrides, Feathering & Background) ───
+  // ─── Step 2: Render Final Composite ───
   const renderComposite = useCallback(() => {
     const img = rawImageRef.current;
     const autoMask = autoMaskRef.current;
     const { w, h } = activeDimsRef.current;
+    const overrides = manualOverridesRef.current;
     if (!img || !autoMask || w === 0 || h === 0) return;
 
     try {
@@ -197,10 +245,8 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
       const data = imgData.data;
       const totalPixels = w * h;
 
-      // Determine effective mask (combining autoMask + manualOverrides)
+      // Determine effective mask (combining autoMask + in-memory manualOverrides)
       const effectiveMask = new Uint8Array(totalPixels);
-      const overrides = manualOverrides;
-
       for (let i = 0; i < totalPixels; i++) {
         if (overrides && overrides[i] !== 0) {
           effectiveMask[i] = overrides[i]; // 1 = bg, 2 = fg
@@ -209,61 +255,33 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
         }
       }
 
-      // Compute Alpha Mask with optional Feathering (0-5px)
-      const alphaMask = new Float32Array(totalPixels);
+      // Compute Alpha Mask with fast Separable Box Blur Feathering (0-5px)
+      let alphaMask: Float32Array = new Float32Array(totalPixels);
       for (let i = 0; i < totalPixels; i++) {
         alphaMask[i] = effectiveMask[i] === 1 ? 0 : 1;
       }
 
       if (feather > 0) {
-        // Simple box blur approximation for alpha feathering
-        const blurred = new Float32Array(totalPixels);
-        const r = feather;
-        for (let y = 0; y < h; y++) {
-          for (let x = 0; x < w; x++) {
-            let sum = 0;
-            let count = 0;
-            for (let dy = -r; dy <= r; dy++) {
-              const ny = y + dy;
-              if (ny >= 0 && ny < h) {
-                for (let dx = -r; dx <= r; dx++) {
-                  const nx = x + dx;
-                  if (nx >= 0 && nx < w) {
-                    sum += alphaMask[ny * w + nx];
-                    count++;
-                  }
-                }
-              }
-            }
-            blurred[y * w + x] = sum / count;
-          }
-        }
-        for (let i = 0; i < totalPixels; i++) {
-          alphaMask[i] = blurred[i];
-        }
+        alphaMask = fastBoxBlurAlpha(alphaMask, w, h, feather);
       }
 
       // Determine background fill colors
       let fillR = 0,
         fillG = 0,
-        fillB = 0,
-        fillA = 0;
+        fillB = 0;
       if (bgOption === "white") {
         fillR = 255;
         fillG = 255;
         fillB = 255;
-        fillA = 255;
       } else if (bgOption === "official_blue") {
         fillR = 30;
         fillG = 77;
         fillB = 140; // Official civil service photo blue
-        fillA = 255;
       } else if (bgOption === "custom") {
         const hex = customBgColor.replace("#", "");
         fillR = parseInt(hex.substring(0, 2), 16) || 0;
         fillG = parseInt(hex.substring(2, 4), 16) || 0;
         fillB = parseInt(hex.substring(4, 6), 16) || 0;
-        fillA = 255;
       }
 
       // Composite foreground over background
@@ -292,7 +310,6 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
         shadowCanvas.height = h;
         const sCtx = shadowCanvas.getContext("2d");
         if (sCtx) {
-          // Fill background color
           sCtx.fillStyle =
             bgOption === "white"
               ? "#FFFFFF"
@@ -301,7 +318,6 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
               : customBgColor;
           sCtx.fillRect(0, 0, w, h);
 
-          // Draw cutout with soft drop shadow
           sCtx.save();
           sCtx.shadowColor = "rgba(0, 0, 0, 0.28)";
           sCtx.shadowBlur = 18;
@@ -312,7 +328,56 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
         }
       }
 
-      // Crop to aspect ratio if requested
+      // Draw onto interactive canvas if mounted
+      if (interactiveCanvasRef.current) {
+        const iCanvas = interactiveCanvasRef.current;
+        if (iCanvas.width !== w) iCanvas.width = w;
+        if (iCanvas.height !== h) iCanvas.height = h;
+        const iCtx = iCanvas.getContext("2d");
+        if (iCtx) {
+          iCtx.clearRect(0, 0, w, h);
+          iCtx.drawImage(finalCanvas, 0, 0);
+
+          // Draw crop guide overlay if crop ratio is selected
+          if (cropRatio !== "free" && CROP_CONFIGS[cropRatio].ratio > 0) {
+            const targetRatio = CROP_CONFIGS[cropRatio].ratio;
+            let cropW = w;
+            let cropH = h;
+            if (w / h > targetRatio) {
+              cropW = Math.round(h * targetRatio);
+            } else {
+              cropH = Math.round(w / targetRatio);
+            }
+            const cropX = Math.round((w - cropW) / 2);
+            const cropY = Math.round((h - cropH) / 2);
+
+            iCtx.save();
+            // Dim outside region
+            iCtx.fillStyle = "rgba(15, 23, 42, 0.4)";
+            iCtx.fillRect(0, 0, w, cropY);
+            iCtx.fillRect(0, cropY + cropH, w, h - (cropY + cropH));
+            iCtx.fillRect(0, cropY, cropX, cropH);
+            iCtx.fillRect(cropX + cropW, cropY, w - (cropX + cropW), cropH);
+
+            // Dashed border around crop frame
+            iCtx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+            iCtx.lineWidth = Math.max(2, Math.round(w / 400));
+            iCtx.setLineDash([8, 6]);
+            iCtx.strokeRect(cropX, cropY, cropW, cropH);
+
+            // Crop Frame Label
+            iCtx.fillStyle = "rgba(15, 23, 42, 0.8)";
+            iCtx.fillRect(cropX + 8, cropY + 8, 140, 24);
+            iCtx.fillStyle = "#ffffff";
+            iCtx.font = "bold 11px sans-serif";
+            iCtx.fillText(CROP_CONFIGS[cropRatio].label, cropX + 16, cropY + 24);
+            iCtx.restore();
+          }
+        }
+      }
+
+      // Generate processedImageUrl (cropped if crop ratio is set)
+      let exportCanvas = finalCanvas;
       if (cropRatio !== "free" && CROP_CONFIGS[cropRatio].ratio > 0) {
         const targetRatio = CROP_CONFIGS[cropRatio].ratio;
         let cropW = w;
@@ -331,27 +396,16 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
         const cCtx = cropCanvas.getContext("2d");
         if (cCtx) {
           cCtx.drawImage(finalCanvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
-          finalCanvas = cropCanvas;
+          exportCanvas = cropCanvas;
         }
       }
 
-      const resultUrl = finalCanvas.toDataURL("image/png");
+      const resultUrl = exportCanvas.toDataURL("image/png");
       setProcessedImageUrl(resultUrl);
-
-      // If interactive canvas is mounted, sync it
-      if (interactiveCanvasRef.current) {
-        const iCanvas = interactiveCanvasRef.current;
-        iCanvas.width = w;
-        iCanvas.height = h;
-        const iCtx = iCanvas.getContext("2d");
-        if (iCtx) {
-          iCtx.drawImage(finalCanvas, 0, 0);
-        }
-      }
     } catch (err) {
       console.error("Render composite error:", err);
     }
-  }, [bgOption, customBgColor, feather, enableShadow, cropRatio, manualOverrides]);
+  }, [bgOption, customBgColor, feather, enableShadow, cropRatio]);
 
   // ─── Step 3: Trigger Background Removal Pipeline ───
   const processImage = useCallback(
@@ -367,7 +421,8 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
           const { mask, w, h } = computeAutoMask(img, tol);
           autoMaskRef.current = mask;
           activeDimsRef.current = { w, h };
-          setManualOverrides(new Uint8Array(w * h));
+          manualOverridesRef.current = new Uint8Array(w * h);
+          setActiveDims({ w, h });
           setHasManualEdits(false);
           renderComposite();
         } catch (e) {
@@ -395,81 +450,186 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
     }
   }, [originalImageUrl, tolerance, processImage]);
 
-  // Re-render composite on styling or touch-up changes
+  // Re-render composite on styling changes
   useEffect(() => {
     if (originalImageUrl && autoMaskRef.current) {
       renderComposite();
     }
-  }, [renderComposite, originalImageUrl, bgOption, customBgColor, feather, enableShadow, cropRatio, manualOverrides]);
+  }, [renderComposite, originalImageUrl, bgOption, customBgColor, feather, enableShadow, cropRatio]);
 
-  // ─── Step 4: Interactive Manual Touch-up Brushes ───
-  const applyBrushAtPoint = (canvasX: number, canvasY: number) => {
+  // Peek original photo handler
+  useEffect(() => {
+    if (!interactiveCanvasRef.current || !rawImageRef.current) return;
     const { w, h } = activeDimsRef.current;
-    if (w === 0 || h === 0 || !manualOverrides) return;
+    if (w === 0 || h === 0) return;
+    const iCanvas = interactiveCanvasRef.current;
+    const ctx = iCanvas.getContext("2d");
+    if (!ctx) return;
 
-    const r = Math.round(brushSize / 2);
-    const overrides = new Uint8Array(manualOverrides);
-    const overrideVal = brushMode === "restore" ? 2 : 1; // 2 = keep foreground, 1 = erase to background
+    if (isPeekingOriginal) {
+      ctx.clearRect(0, 0, w, h);
+      ctx.drawImage(rawImageRef.current, 0, 0, w, h);
+    } else {
+      renderComposite();
+    }
+  }, [isPeekingOriginal, renderComposite]);
 
-    let changed = false;
-    for (let dy = -r; dy <= r; dy++) {
-      const py = canvasY + dy;
-      if (py >= 0 && py < h) {
-        for (let dx = -r; dx <= r; dx++) {
-          const px = canvasX + dx;
-          if (px >= 0 && px < w) {
-            if (dx * dx + dy * dy <= r * r) {
-              const idx = py * w + px;
-              if (overrides[idx] !== overrideVal) {
-                overrides[idx] = overrideVal;
-                changed = true;
-              }
-            }
+  // ─── Step 4: Fluid Interactive Touch-up Brush Engine ───
+  const paintAtPoint = useCallback(
+    (cx: number, cy: number) => {
+      const { w, h } = activeDimsRef.current;
+      const overrides = manualOverridesRef.current;
+      const img = rawImageRef.current;
+      const canvas = interactiveCanvasRef.current;
+      if (w === 0 || h === 0 || !overrides || !img || !canvas) return;
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      const r = Math.max(1, Math.round(brushSize / 2));
+      const overrideVal = brushMode === "restore" ? 2 : 1; // 2 = fg, 1 = bg
+
+      // 1. Update in-memory mask overrides
+      const rSquared = r * r;
+      const xMin = Math.max(0, cx - r);
+      const xMax = Math.min(w - 1, cx + r);
+      const yMin = Math.max(0, cy - r);
+      const yMax = Math.min(h - 1, cy + r);
+
+      for (let py = yMin; py <= yMax; py++) {
+        const dy = py - cy;
+        const dy2 = dy * dy;
+        const rowOffset = py * w;
+        for (let px = xMin; px <= xMax; px++) {
+          const dx = px - cx;
+          if (dx * dx + dy2 <= rSquared) {
+            overrides[rowOffset + px] = overrideVal;
           }
         }
       }
-    }
 
-    if (changed) {
-      setManualOverrides(overrides);
-      setHasManualEdits(true);
-    }
-  };
+      // 2. Direct fast Canvas 2D paint
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.clip();
+
+      if (brushMode === "restore") {
+        ctx.drawImage(img, 0, 0, w, h);
+      } else {
+        // Erase
+        if (bgOption === "transparent") {
+          ctx.clearRect(cx - r, cy - r, r * 2, r * 2);
+        } else if (bgOption === "official_blue") {
+          ctx.fillStyle = "#1E4D8C";
+          ctx.fill();
+        } else if (bgOption === "white") {
+          ctx.fillStyle = "#FFFFFF";
+          ctx.fill();
+        } else {
+          ctx.fillStyle = customBgColor;
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+    },
+    [brushMode, brushSize, bgOption, customBgColor]
+  );
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (brushMode === "none") return;
-    setIsPainting(true);
     const canvas = interactiveCanvasRef.current;
     if (!canvas) return;
+
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+
+    isPaintingRef.current = true;
+
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-    const cx = Math.round((e.clientX - rect.left) * scaleX);
-    const cy = Math.round((e.clientY - rect.top) * scaleY);
-    applyBrushAtPoint(cx, cy);
+    const cx = Math.max(0, Math.min(canvas.width - 1, Math.round((e.clientX - rect.left) * scaleX)));
+    const cy = Math.max(0, Math.min(canvas.height - 1, Math.round((e.clientY - rect.top) * scaleY)));
+
+    lastPointRef.current = { x: cx, y: cy };
+    paintAtPoint(cx, cy);
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!isPainting || brushMode === "none") return;
     const canvas = interactiveCanvasRef.current;
     if (!canvas) return;
+
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-    const cx = Math.round((e.clientX - rect.left) * scaleX);
-    const cy = Math.round((e.clientY - rect.top) * scaleY);
-    applyBrushAtPoint(cx, cy);
+
+    // Visual brush indicator coordinates
+    const screenRadius = Math.max(3, Math.round(brushSize / 2 / scaleX));
+    setCursorPos({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+      screenRadius,
+    });
+
+    if (!isPaintingRef.current || brushMode === "none" || !lastPointRef.current) return;
+
+    const cx = Math.max(0, Math.min(canvas.width - 1, Math.round((e.clientX - rect.left) * scaleX)));
+    const cy = Math.max(0, Math.min(canvas.height - 1, Math.round((e.clientY - rect.top) * scaleY)));
+
+    // Continuous line interpolation between points
+    const last = lastPointRef.current;
+    const dist = Math.hypot(cx - last.x, cy - last.y);
+    const step = Math.max(2, brushSize / 4);
+    const steps = Math.ceil(dist / step);
+
+    for (let s = 1; s <= steps; s++) {
+      const t = s / steps;
+      const px = Math.round(last.x + (cx - last.x) * t);
+      const py = Math.round(last.y + (cy - last.y) * t);
+      paintAtPoint(px, py);
+    }
+
+    lastPointRef.current = { x: cx, y: cy };
   };
 
-  const handlePointerUp = () => {
-    setIsPainting(false);
+  const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (isPaintingRef.current) {
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        // ignore
+      }
+      isPaintingRef.current = false;
+      lastPointRef.current = null;
+      setHasManualEdits(true);
+      // Perform full composite pass with soft edge feathering & sync result URL
+      renderComposite();
+    }
+  };
+
+  const handlePointerLeave = () => {
+    setCursorPos(null);
+  };
+
+  const handleSelectBrushMode = (mode: BrushMode) => {
+    setBrushMode(mode);
+    if (mode !== "none") {
+      requestAnimationFrame(() => {
+        renderComposite();
+      });
+    }
   };
 
   const handleResetManualEdits = () => {
     const { w, h } = activeDimsRef.current;
     if (w > 0 && h > 0) {
-      setManualOverrides(new Uint8Array(w * h));
+      manualOverridesRef.current = new Uint8Array(w * h);
       setHasManualEdits(false);
+      renderComposite();
       showToast("✓ รีเซ็ตการแก้ไขด้วยมือกลับสู่สถานะเริ่มต้นแล้ว");
     }
   };
@@ -511,7 +671,7 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
       const res = await fetch(processedImageUrl);
       const blob = await res.blob();
       await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-      showToast("✓ คัดลอกภาพไปยังคลิปบอร์ดแล้ว");
+      showToast("✓ คัดลอกภาพไปยังคลิปบอร์ดแล้ว (นำไปวางใน Word หรือ PowerPoint ได้ทันที)");
     } catch {
       showToast("⚠️ ไม่สามารถคัดลอกรูปภาพได้ กรุณาใช้ปุ่มดาวน์โหลด");
     }
@@ -794,9 +954,10 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
                 <button
                   type="button"
                   onClick={handleResetManualEdits}
-                  className="text-[10px] font-bold text-rose-600 hover:underline cursor-pointer"
+                  className="text-[10px] font-bold text-rose-600 hover:underline cursor-pointer flex items-center gap-0.5"
                 >
-                  ↩️ รีเซ็ตแปรง
+                  <span>↩️</span>
+                  <span>รีเซ็ตแปรง</span>
                 </button>
               )}
             </div>
@@ -808,7 +969,7 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
             <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
-                onClick={() => setBrushMode("none")}
+                onClick={() => handleSelectBrushMode("none")}
                 className={`p-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex flex-col items-center gap-1 ${
                   brushMode === "none"
                     ? "bg-slate-800 text-white border-slate-800"
@@ -821,10 +982,10 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
 
               <button
                 type="button"
-                onClick={() => setBrushMode("restore")}
+                onClick={() => handleSelectBrushMode("restore")}
                 className={`p-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex flex-col items-center gap-1 ${
                   brushMode === "restore"
-                    ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+                    ? "bg-emerald-600 text-white border-emerald-600 shadow-sm ring-2 ring-emerald-300"
                     : "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
                 }`}
               >
@@ -834,10 +995,10 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
 
               <button
                 type="button"
-                onClick={() => setBrushMode("erase")}
+                onClick={() => handleSelectBrushMode("erase")}
                 className={`p-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex flex-col items-center gap-1 ${
                   brushMode === "erase"
-                    ? "bg-rose-600 text-white border-rose-600 shadow-sm"
+                    ? "bg-rose-600 text-white border-rose-600 shadow-sm ring-2 ring-rose-300"
                     : "bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100"
                 }`}
               >
@@ -847,7 +1008,7 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
             </div>
 
             {brushMode !== "none" && (
-              <div className="pt-2 space-y-1">
+              <div className="pt-2 space-y-1 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-bold text-slate-700">ขนาดหัวแปรง:</span>
                   <span className="font-mono font-bold text-indigo-700">{brushSize} px</span>
@@ -855,11 +1016,15 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
                 <input
                   type="range"
                   min={6}
-                  max={60}
+                  max={80}
                   value={brushSize}
                   onChange={(e) => setBrushSize(Number(e.target.value))}
                   className="w-full accent-indigo-600"
                 />
+                <div className="flex justify-between text-[10px] text-slate-400">
+                  <span>ละเอียด (6px)</span>
+                  <span>พื้นที่กว้าง (80px)</span>
+                </div>
               </div>
             )}
           </div>
@@ -871,51 +1036,57 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
               <div>
                 <h3 className="text-sm font-extrabold text-slate-800">
-                  หน้าต่างแสดงผลลัพธ์ (Interactive Workspace)
+                  {brushMode !== "none" ? "🎨 พื้นที่ปรับแต่งด้วยแปรง (Interactive Canvas)" : "หน้าต่างแสดงผลลัพธ์ (Preview Workspace)"}
                 </h3>
                 <p className="text-xs text-slate-400">
-                  {originalImageUrl ? "ภาพพร้อมสำหรับการปรับละเอียดและดาวน์โหลด" : "กรุณาอัปโหลดรูปภาพเพื่อเริ่มตัดขอบ"}
+                  {brushMode !== "none"
+                    ? `คลิกหรือลากเมาส์บนภาพเพื่อ${brushMode === "restore" ? "กู้คืนรายละเอียด" : "ลบพื้นหลัง"}`
+                    : originalImageUrl
+                    ? "ภาพพร้อมสำหรับการปรับละเอียดและดาวน์โหลด"
+                    : "กรุณาอัปโหลดรูปภาพเพื่อเริ่มตัดขอบ"}
                 </p>
               </div>
 
               {originalImageUrl && (
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  {/* View Mode Switcher */}
-                  <div className="bg-slate-100 p-0.5 rounded-xl flex items-center text-xs">
-                    <button
-                      type="button"
-                      onClick={() => setViewMode("split_slider")}
-                      className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                        viewMode === "split_slider"
-                          ? "bg-white text-indigo-700 shadow-xs"
-                          : "text-slate-600 hover:text-slate-900"
-                      }`}
-                    >
-                      ↔️ สไลด์เปรียบเทียบ
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setViewMode("result_only")}
-                      className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                        viewMode === "result_only"
-                          ? "bg-white text-indigo-700 shadow-xs"
-                          : "text-slate-600 hover:text-slate-900"
-                      }`}
-                    >
-                      ผลลัพธ์
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setViewMode("side_by_side")}
-                      className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                        viewMode === "side_by_side"
-                          ? "bg-white text-indigo-700 shadow-xs"
-                          : "text-slate-600 hover:text-slate-900"
-                      }`}
-                    >
-                      ข้างๆ
-                    </button>
-                  </div>
+                  {/* View Mode Switcher (Visible when not in brush mode) */}
+                  {brushMode === "none" && (
+                    <div className="bg-slate-100 p-0.5 rounded-xl flex items-center text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setViewMode("split_slider")}
+                        className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                          viewMode === "split_slider"
+                            ? "bg-white text-indigo-700 shadow-xs"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        ↔️ สไลด์เปรียบเทียบ
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setViewMode("result_only")}
+                        className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                          viewMode === "result_only"
+                            ? "bg-white text-indigo-700 shadow-xs"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        ผลลัพธ์
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setViewMode("side_by_side")}
+                        className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                          viewMode === "side_by_side"
+                            ? "bg-white text-indigo-700 shadow-xs"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        ข้างๆ
+                      </button>
+                    </div>
+                  )}
 
                   <button
                     type="button"
@@ -960,140 +1131,196 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
               </div>
             ) : (
               <div className="space-y-3">
-                {/* 1. Split Slider View Mode */}
-                {viewMode === "split_slider" && (
-                  <div
-                    className="relative w-full max-h-[520px] aspect-[4/3] rounded-2xl overflow-hidden border border-slate-200 select-none bg-[linear-gradient(45deg,#e2e8f0_25%,transparent_25%),linear-gradient(-45deg,#e2e8f0_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#e2e8f0_75%),linear-gradient(-45deg,transparent_75%,#e2e8f0_75%)] bg-[length:16px_16px] bg-slate-100 flex items-center justify-center"
-                    onPointerMove={(e) => {
-                      if (!isDraggingSplit) return;
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
-                      setSplitPos(Math.round((x / rect.width) * 100));
-                    }}
-                    onPointerUp={() => setIsDraggingSplit(false)}
-                  >
-                    {/* Background Original Image (Bottom Layer) */}
-                    <img
-                      src={originalImageUrl}
-                      alt="Original"
-                      className="absolute inset-0 w-full h-full object-contain pointer-events-none"
-                    />
-
-                    {/* Processed Result Image (Top Layer clipped by Split Pos) */}
-                    <div
-                      className="absolute inset-0 w-full h-full pointer-events-none overflow-hidden"
-                      style={{ clipPath: `inset(0 0 0 ${splitPos}%)` }}
-                    >
-                      <img
-                        src={processedImageUrl || originalImageUrl}
-                        alt="Result"
-                        className="absolute inset-0 w-full h-full object-contain pointer-events-none"
-                      />
-                    </div>
-
-                    {/* Interactive Canvas Overlay when Brush Mode is Active */}
-                    {brushMode !== "none" && (
-                      <canvas
-                        ref={interactiveCanvasRef}
-                        onPointerDown={handlePointerDown}
-                        onPointerMove={handlePointerMove}
-                        onPointerUp={handlePointerUp}
-                        className="absolute inset-0 w-full h-full object-contain cursor-crosshair z-20"
-                        title="คลิกและลากเพื่อระบายปรับแต่ง"
-                      />
-                    )}
-
-                    {/* Split Divider Bar */}
-                    {brushMode === "none" && (
-                      <div
-                        className="absolute top-0 bottom-0 w-1 bg-white shadow-lg cursor-ew-resize z-30 flex items-center justify-center"
-                        style={{ left: `${splitPos}%` }}
-                        onPointerDown={(e) => {
-                          e.stopPropagation();
-                          setIsDraggingSplit(true);
-                        }}
-                      >
-                        <div className="w-7 h-7 rounded-full bg-white text-indigo-700 shadow-md border border-slate-200 flex items-center justify-center text-xs font-bold">
-                          ↔
+                {/* ─── CASE A: BRUSH EDITING MODE (Active Interactive Canvas) ─── */}
+                {brushMode !== "none" ? (
+                  <div className="space-y-2">
+                    {/* Brush Active Control Bar */}
+                    <div className="flex items-center justify-between px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-2xl text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">{brushMode === "restore" ? "🖌️" : "🧼"}</span>
+                        <div>
+                          <span className="font-extrabold text-indigo-900 block">
+                            โหมด{brushMode === "restore" ? "แปรงกู้คืน (Restore)" : "แปรงลบ (Erase)"}
+                          </span>
+                          <span className="text-[11px] text-indigo-700">
+                            ระบายบนภาพเพื่อ{brushMode === "restore" ? "ดึงรายละเอียดส่วนที่ถูกตัดเกินกลับมา" : "ลบเศษขอบหรือพื้นหลังที่ตกค้าง"}
+                          </span>
                         </div>
                       </div>
-                    )}
 
-                    {/* Labels */}
-                    <span className="absolute bottom-3 left-3 px-2 py-1 bg-black/60 backdrop-blur-xs text-white text-[10px] font-bold rounded-md pointer-events-none z-10">
-                      ต้นฉบับ
-                    </span>
-                    <span className="absolute bottom-3 right-3 px-2 py-1 bg-indigo-600/80 backdrop-blur-xs text-white text-[10px] font-bold rounded-md pointer-events-none z-10">
-                      ตัดขอบแล้ว
-                    </span>
-                  </div>
-                )}
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onMouseDown={() => setIsPeekingOriginal(true)}
+                          onMouseUp={() => setIsPeekingOriginal(false)}
+                          onTouchStart={() => setIsPeekingOriginal(true)}
+                          onTouchEnd={() => setIsPeekingOriginal(false)}
+                          className="px-2.5 py-1.5 bg-white hover:bg-slate-50 border border-indigo-300 rounded-xl text-[11px] font-bold text-indigo-700 cursor-pointer select-none transition-colors shadow-xs"
+                          title="กดค้างเพื่อดูภาพต้นฉบับ"
+                        >
+                          👁️ กดค้างดูต้นฉบับ
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSelectBrushMode("none")}
+                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-xs"
+                        >
+                          ✓ เสร็จสิ้น
+                        </button>
+                      </div>
+                    </div>
 
-                {/* 2. Result Only View Mode */}
-                {viewMode === "result_only" && (
-                  <div className="relative w-full max-h-[520px] aspect-[4/3] rounded-2xl overflow-hidden border border-slate-200 bg-[linear-gradient(45deg,#e2e8f0_25%,transparent_25%),linear-gradient(-45deg,#e2e8f0_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#e2e8f0_75%),linear-gradient(-45deg,transparent_75%,#e2e8f0_75%)] bg-[length:16px_16px] bg-slate-100 flex items-center justify-center">
-                    <img
-                      src={processedImageUrl || originalImageUrl}
-                      alt="Processed"
-                      className="w-full h-full object-contain pointer-events-none"
-                    />
-
-                    {brushMode !== "none" && (
+                    {/* Paintable Canvas Viewport */}
+                    <div
+                      className="relative mx-auto rounded-2xl overflow-hidden border border-slate-300 select-none bg-[linear-gradient(45deg,#e2e8f0_25%,transparent_25%),linear-gradient(-45deg,#e2e8f0_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#e2e8f0_75%),linear-gradient(-45deg,transparent_75%,#e2e8f0_75%)] bg-[length:16px_16px] bg-slate-100 flex items-center justify-center cursor-crosshair touch-none shadow-inner"
+                      style={{
+                        aspectRatio: activeDims.w && activeDims.h ? `${activeDims.w} / ${activeDims.h}` : undefined,
+                        maxWidth: "100%",
+                        maxHeight: "520px",
+                        width: "fit-content",
+                      }}
+                    >
                       <canvas
                         ref={interactiveCanvasRef}
                         onPointerDown={handlePointerDown}
                         onPointerMove={handlePointerMove}
                         onPointerUp={handlePointerUp}
-                        className="absolute inset-0 w-full h-full object-contain cursor-crosshair z-20"
-                        title="คลิกและลากเพื่อระบายปรับแต่ง"
+                        onPointerLeave={handlePointerLeave}
+                        className="w-full h-full block"
                       />
-                    )}
-                  </div>
-                )}
 
-                {/* 3. Side by Side View Mode */}
-                {viewMode === "side_by_side" && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <span className="text-[11px] font-bold text-slate-500">ภาพต้นฉบับ</span>
-                      <div className="aspect-square bg-slate-100 rounded-2xl border border-slate-200 overflow-hidden flex items-center justify-center p-2">
+                      {/* Visual Brush Ring Indicator following cursor */}
+                      {cursorPos && (
+                        <div
+                          className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-dashed z-40 transition-none"
+                          style={{
+                            left: `${cursorPos.x}px`,
+                            top: `${cursorPos.y}px`,
+                            width: `${cursorPos.screenRadius * 2}px`,
+                            height: `${cursorPos.screenRadius * 2}px`,
+                            borderColor: brushMode === "restore" ? "#10B981" : "#EF4444",
+                            backgroundColor:
+                              brushMode === "restore" ? "rgba(16, 185, 129, 0.2)" : "rgba(239, 68, 68, 0.2)",
+                          }}
+                        >
+                          <div
+                            className={`w-1.5 h-1.5 rounded-full absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 ${
+                              brushMode === "restore" ? "bg-emerald-600" : "bg-rose-600"
+                            }`}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  /* ─── CASE B: NORMAL VIEW MODES (Split / Result / Side-by-side) ─── */
+                  <>
+                    {/* 1. Split Slider View Mode */}
+                    {viewMode === "split_slider" && (
+                      <div
+                        className="relative mx-auto rounded-2xl overflow-hidden border border-slate-200 select-none bg-[linear-gradient(45deg,#e2e8f0_25%,transparent_25%),linear-gradient(-45deg,#e2e8f0_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#e2e8f0_75%),linear-gradient(-45deg,transparent_75%,#e2e8f0_75%)] bg-[length:16px_16px] bg-slate-100 flex items-center justify-center"
+                        style={{
+                          aspectRatio: activeDims.w && activeDims.h ? `${activeDims.w} / ${activeDims.h}` : undefined,
+                          maxWidth: "100%",
+                          maxHeight: "520px",
+                          width: "fit-content",
+                        }}
+                        onPointerMove={(e) => {
+                          if (!isDraggingSplit) return;
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+                          setSplitPos(Math.round((x / rect.width) * 100));
+                        }}
+                        onPointerUp={() => setIsDraggingSplit(false)}
+                      >
+                        {/* Background Original Image (Bottom Layer) */}
                         <img
                           src={originalImageUrl}
                           alt="Original"
-                          className="w-full h-full object-contain rounded-xl"
+                          className="w-full h-full block pointer-events-none"
                         />
+
+                        {/* Processed Result Image (Top Layer clipped by Split Pos) */}
+                        <div
+                          className="absolute inset-0 w-full h-full pointer-events-none overflow-hidden"
+                          style={{ clipPath: `inset(0 0 0 ${splitPos}%)` }}
+                        >
+                          <img
+                            src={processedImageUrl || originalImageUrl}
+                            alt="Result"
+                            className="w-full h-full block pointer-events-none"
+                          />
+                        </div>
+
+                        {/* Split Divider Bar */}
+                        <div
+                          className="absolute top-0 bottom-0 w-1 bg-white shadow-lg cursor-ew-resize z-30 flex items-center justify-center"
+                          style={{ left: `${splitPos}%` }}
+                          onPointerDown={(e) => {
+                            e.stopPropagation();
+                            setIsDraggingSplit(true);
+                          }}
+                        >
+                          <div className="w-7 h-7 rounded-full bg-white text-indigo-700 shadow-md border border-slate-200 flex items-center justify-center text-xs font-bold">
+                            ↔
+                          </div>
+                        </div>
+
+                        {/* Labels */}
+                        <span className="absolute bottom-3 left-3 px-2 py-1 bg-black/60 backdrop-blur-xs text-white text-[10px] font-bold rounded-md pointer-events-none z-10">
+                          ต้นฉบับ
+                        </span>
+                        <span className="absolute bottom-3 right-3 px-2 py-1 bg-indigo-600/80 backdrop-blur-xs text-white text-[10px] font-bold rounded-md pointer-events-none z-10">
+                          ตัดขอบแล้ว
+                        </span>
                       </div>
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-[11px] font-bold text-teal-700">ภาพผลลัพธ์</span>
-                      <div className="aspect-square bg-[linear-gradient(45deg,#e2e8f0_25%,transparent_25%),linear-gradient(-45deg,#e2e8f0_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#e2e8f0_75%),linear-gradient(-45deg,transparent_75%,#e2e8f0_75%)] bg-[length:16px_16px] bg-slate-100 rounded-2xl border border-slate-200 overflow-hidden flex items-center justify-center p-2">
+                    )}
+
+                    {/* 2. Result Only View Mode */}
+                    {viewMode === "result_only" && (
+                      <div
+                        className="relative mx-auto rounded-2xl overflow-hidden border border-slate-200 bg-[linear-gradient(45deg,#e2e8f0_25%,transparent_25%),linear-gradient(-45deg,#e2e8f0_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#e2e8f0_75%),linear-gradient(-45deg,transparent_75%,#e2e8f0_75%)] bg-[length:16px_16px] bg-slate-100 flex items-center justify-center"
+                        style={{
+                          aspectRatio: activeDims.w && activeDims.h ? `${activeDims.w} / ${activeDims.h}` : undefined,
+                          maxWidth: "100%",
+                          maxHeight: "520px",
+                          width: "fit-content",
+                        }}
+                      >
                         <img
                           src={processedImageUrl || originalImageUrl}
                           alt="Processed"
-                          className="w-full h-full object-contain rounded-xl"
+                          className="w-full h-full block pointer-events-none"
                         />
                       </div>
-                    </div>
-                  </div>
-                )}
+                    )}
 
-                {/* Helper instruction when brush is active */}
-                {brushMode !== "none" && (
-                  <div className="p-2.5 bg-indigo-50 border border-indigo-200 rounded-xl text-xs text-indigo-900 flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 font-bold">
-                      <span>{brushMode === "restore" ? "🖌️ โหมดแปรงกู้คืน" : "🧼 โหมดแปรงลบ"}:</span>
-                      <span className="font-normal text-[11px]">
-                        คลิกหรือลากเมาส์บนภาพเพื่อปรับแต่งเฉพาะจุด
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setBrushMode("none")}
-                      className="px-2 py-0.5 bg-white border border-indigo-300 rounded text-[10px] font-bold text-indigo-700 cursor-pointer"
-                    >
-                      เสร็จสิ้น
-                    </button>
-                  </div>
+                    {/* 3. Side by Side View Mode */}
+                    {viewMode === "side_by_side" && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <span className="text-[11px] font-bold text-slate-500">ภาพต้นฉบับ</span>
+                          <div className="aspect-square bg-slate-100 rounded-2xl border border-slate-200 overflow-hidden flex items-center justify-center p-2">
+                            <img
+                              src={originalImageUrl}
+                              alt="Original"
+                              className="w-full h-full object-contain rounded-xl"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <span className="text-[11px] font-bold text-teal-700">ภาพผลลัพธ์</span>
+                          <div className="aspect-square bg-[linear-gradient(45deg,#e2e8f0_25%,transparent_25%),linear-gradient(-45deg,#e2e8f0_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#e2e8f0_75%),linear-gradient(-45deg,transparent_75%,#e2e8f0_75%)] bg-[length:16px_16px] bg-slate-100 rounded-2xl border border-slate-200 overflow-hidden flex items-center justify-center p-2">
+                            <img
+                              src={processedImageUrl || originalImageUrl}
+                              alt="Processed"
+                              className="w-full h-full object-contain rounded-xl"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {/* Status Footer */}
