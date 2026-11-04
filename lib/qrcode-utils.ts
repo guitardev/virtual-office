@@ -154,3 +154,4 @@ export function generateMailtoPayload(email: string, subject?: string, body?: st
   }
   return uri;
 }
+
