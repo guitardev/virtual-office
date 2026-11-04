@@ -2,7 +2,13 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import { MeetingItem, Member, MeetingCategory, MeetingType, MeetingRoomMaster } from "@/lib/types";
-import { saveMeeting, deleteMeeting, recordAuditLog } from "@/lib/supabase";
+import {
+  saveMeeting,
+  deleteMeeting,
+  recordAuditLog,
+  fetchMeetingRooms,
+  subscribeToMeetingRooms,
+} from "@/lib/supabase";
 import {
   createGoogleCalendarUrl,
   createOutlookCalendarUrl,
@@ -46,6 +52,21 @@ export function MeetingsPage({
   const [rooms, setRooms] = useState<MeetingRoomMaster[]>(() => loadStoredRooms());
 
   useEffect(() => {
+    // 1. Fetch live rooms from Supabase
+    fetchMeetingRooms().then((liveRooms) => {
+      if (liveRooms && liveRooms.length > 0) {
+        setRooms(liveRooms);
+      }
+    });
+
+    // 2. Realtime subscribe to Supabase meeting_rooms changes
+    const unsubscribe = subscribeToMeetingRooms((liveRooms) => {
+      if (liveRooms && liveRooms.length > 0) {
+        setRooms(liveRooms);
+      }
+    });
+
+    // 3. Local custom event & storage listeners
     const handleRoomsUpdated = (e: Event) => {
       const customEvent = e as CustomEvent<MeetingRoomMaster[]>;
       if (customEvent.detail) {
@@ -56,7 +77,9 @@ export function MeetingsPage({
     };
     window.addEventListener("smartmso_rooms_updated", handleRoomsUpdated);
     window.addEventListener("storage", handleRoomsUpdated);
+
     return () => {
+      unsubscribe();
       window.removeEventListener("smartmso_rooms_updated", handleRoomsUpdated);
       window.removeEventListener("storage", handleRoomsUpdated);
     };

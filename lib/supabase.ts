@@ -16,6 +16,7 @@ import {
   TaskVisibility,
   TaskSubtask,
   MeetingItem,
+  MeetingRoomMaster,
   CircularDocument,
   CircularUrgency,
   CircularSecretLevel,
@@ -41,6 +42,7 @@ import {
 } from "./carbooking-data";
 import { DEFAULT_CHAT_GROUPS, INITIAL_CHAT_MESSAGES } from "./chat-data";
 import { loadStoredCircularDocs, saveStoredCircularDocs } from "./circular-data";
+import { loadStoredRooms, saveStoredRooms } from "./meeting-data";
 
 // Environment variables from Vercel Marketplace Supabase Integration
 const supabaseUrl =
@@ -1981,6 +1983,109 @@ const meetingsMultiplexer = createTableSubscriptionMultiplexer("meetings", fetch
 
 export function subscribeToMeetings(callback: (meetings: MeetingItem[]) => void) {
   return meetingsMultiplexer(callback);
+}
+
+// ==========================================
+// MEETING ROOMS MASTER (ศูนย์สารบบห้องประชุม & สถานที่ราชการ)
+// ==========================================
+
+export function mapRowToMeetingRoom(row: any): MeetingRoomMaster {
+  let equipment: string[] = [];
+  if (Array.isArray(row.equipment)) {
+    equipment = row.equipment;
+  } else if (typeof row.equipment === "string") {
+    try {
+      equipment = JSON.parse(row.equipment);
+    } catch {
+      equipment = [row.equipment];
+    }
+  }
+
+  return {
+    id: String(row.id),
+    name: row.name || "ห้องประชุมสำนักงาน",
+    building: row.building || "สำนักงาน พมจ.กำแพงเพชร",
+    capacity: Number(row.capacity) || 10,
+    equipment: equipment.length > 0 ? equipment : ["แอร์", "จอแสดงผล"],
+    status: (row.status === "maintenance" ? "maintenance" : "available") as "available" | "maintenance",
+    notes: row.notes || undefined,
+  };
+}
+
+export function mapMeetingRoomToRow(room: MeetingRoomMaster): any {
+  return {
+    id: room.id,
+    name: room.name,
+    building: room.building,
+    capacity: room.capacity,
+    equipment: room.equipment,
+    status: room.status,
+    notes: room.notes || null,
+  };
+}
+
+export async function fetchMeetingRooms(): Promise<MeetingRoomMaster[]> {
+  const localRooms = loadStoredRooms();
+  if (!supabase) return localRooms;
+  try {
+    const { data, error } = await supabase
+      .from("meeting_rooms")
+      .select("*")
+      .order("id", { ascending: true });
+    if (error || !data || data.length === 0) return localRooms;
+    const liveRooms = data.map(mapRowToMeetingRoom);
+    saveStoredRooms(liveRooms);
+    return liveRooms;
+  } catch {
+    return localRooms;
+  }
+}
+
+export async function saveMeetingRoom(room: MeetingRoomMaster): Promise<boolean> {
+  try {
+    const current = loadStoredRooms();
+    const exists = current.some((r) => r.id === room.id);
+    const updated = exists ? current.map((r) => (r.id === room.id ? room : r)) : [...current, room];
+    saveStoredRooms(updated);
+  } catch (err) {
+    console.warn("Could not save meeting room to local cache:", err);
+  }
+
+  if (!supabase) return true;
+  try {
+    const row = mapMeetingRoomToRow(room);
+    const { error } = await supabase.from("meeting_rooms").upsert(row);
+    if (error) {
+      console.warn("Supabase upsert meeting_rooms error:", error.message);
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteMeetingRoom(id: string): Promise<boolean> {
+  try {
+    const current = loadStoredRooms();
+    saveStoredRooms(current.filter((r) => r.id !== id));
+  } catch (err) {
+    console.warn("Could not remove meeting room from local cache:", err);
+  }
+
+  if (!supabase) return true;
+  try {
+    const { error } = await supabase.from("meeting_rooms").delete().eq("id", id);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+const meetingRoomsMultiplexer = createTableSubscriptionMultiplexer("meeting_rooms", fetchMeetingRooms, 300);
+
+export function subscribeToMeetingRooms(callback: (rooms: MeetingRoomMaster[]) => void) {
+  return meetingRoomsMultiplexer(callback);
 }
 
 

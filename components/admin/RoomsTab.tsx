@@ -3,7 +3,14 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { MeetingItem, Member, MeetingRoomMaster } from "@/lib/types";
 import { DEFAULT_ROOMS, loadStoredRooms, saveStoredRooms } from "@/lib/meeting-data";
-import { recordAuditLog, saveMeeting } from "@/lib/supabase";
+import {
+  recordAuditLog,
+  saveMeeting,
+  fetchMeetingRooms,
+  saveMeetingRoom,
+  deleteMeetingRoom,
+  subscribeToMeetingRooms,
+} from "@/lib/supabase";
 
 interface RoomsTabProps {
   currentUser: Member | null;
@@ -16,6 +23,21 @@ export function RoomsTab({ currentUser, meetings, setMeetings, showToast }: Room
   const [rooms, setRooms] = useState<MeetingRoomMaster[]>(() => loadStoredRooms());
 
   useEffect(() => {
+    // 1. Fetch live rooms from Supabase
+    fetchMeetingRooms().then((liveRooms) => {
+      if (liveRooms && liveRooms.length > 0) {
+        setRooms(liveRooms);
+      }
+    });
+
+    // 2. Realtime subscribe to Supabase meeting_rooms changes
+    const unsubscribe = subscribeToMeetingRooms((liveRooms) => {
+      if (liveRooms && liveRooms.length > 0) {
+        setRooms(liveRooms);
+      }
+    });
+
+    // 3. Local custom event & storage listeners
     const handleRoomsUpdated = (e: Event) => {
       const customEvent = e as CustomEvent<MeetingRoomMaster[]>;
       if (customEvent.detail) {
@@ -26,7 +48,9 @@ export function RoomsTab({ currentUser, meetings, setMeetings, showToast }: Room
     };
     window.addEventListener("smartmso_rooms_updated", handleRoomsUpdated);
     window.addEventListener("storage", handleRoomsUpdated);
+
     return () => {
+      unsubscribe();
       window.removeEventListener("smartmso_rooms_updated", handleRoomsUpdated);
       window.removeEventListener("storage", handleRoomsUpdated);
     };
@@ -99,6 +123,7 @@ export function RoomsTab({ currentUser, meetings, setMeetings, showToast }: Room
       : [...rooms, roomObj];
 
     saveRoomsToStorage(updated);
+    saveMeetingRoom(roomObj).catch(console.warn);
     await recordAuditLog(
       currentUser?.name || "Admin",
       editingRoom ? `แก้ไขข้อมูลห้องประชุม: ${roomObj.name}` : `เพิ่มห้องประชุมราชการใหม่: ${roomObj.name}`,
@@ -106,7 +131,7 @@ export function RoomsTab({ currentUser, meetings, setMeetings, showToast }: Room
       "success"
     );
 
-    showToast(editingRoom ? "✏️ บันทึกการแก้ไขข้อมูลห้องประชุมเรียบร้อย" : "🎉 เพิ่มห้องประชุมใหม่เรียบร้อยแล้ว");
+    showToast(editingRoom ? "✏️ บันทึกการแก้ไขข้อมูลห้องประชุมเรียบร้อย (ซิงก์ Cloud)" : "🎉 เพิ่มห้องประชุมใหม่เรียบร้อยแล้ว (ซิงก์ Cloud)");
     setShowModal(false);
   };
 
@@ -114,6 +139,10 @@ export function RoomsTab({ currentUser, meetings, setMeetings, showToast }: Room
     const nextStatus: "available" | "maintenance" = r.status === "available" ? "maintenance" : "available";
     const updated = rooms.map((item) => (item.id === r.id ? { ...item, status: nextStatus } : item));
     saveRoomsToStorage(updated);
+    const updatedRoom = updated.find((item) => item.id === r.id);
+    if (updatedRoom) {
+      saveMeetingRoom(updatedRoom).catch(console.warn);
+    }
     await recordAuditLog(
       currentUser?.name || "Admin",
       `${nextStatus === "available" ? "เปิดใช้งาน" : "ปิดปรับปรุง"} ห้องประชุม: ${r.name}`,
@@ -127,6 +156,7 @@ export function RoomsTab({ currentUser, meetings, setMeetings, showToast }: Room
     if (!window.confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบห้อง "${r.name}" ออกจากสารบบ?`)) return;
     const updated = rooms.filter((item) => item.id !== r.id);
     saveRoomsToStorage(updated);
+    deleteMeetingRoom(r.id).catch(console.warn);
     await recordAuditLog(
       currentUser?.name || "Admin",
       `ลบห้องประชุม: ${r.name}`,
