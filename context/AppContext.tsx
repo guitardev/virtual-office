@@ -30,7 +30,6 @@ import {
   GOVERNMENT_DIVISIONS,
 } from "@/lib/rbac";
 import { AdminTabId } from "@/components/admin/AdminPage";
-import { loadStoredCircularDocs } from "@/lib/circular-data";
 import {
   buildUnifiedNotifications,
   markNotificationAsRead,
@@ -910,7 +909,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         authSub?.unsubscribe?.();
       };
     } else {
-      setCircularDocs(loadStoredCircularDocs());
+      setCircularDocs([]);
     }
   }, [isLiveConnected, currentUser?.id, currentUser?.name]);
 

@@ -10,6 +10,7 @@ drop table if exists messages cascade;
 drop table if exists chat_channels cascade;
 drop table if exists meetings cascade;
 drop table if exists meeting_rooms cascade;
+drop table if exists circular_documents cascade;
 drop table if exists organization_members cascade;
 drop table if exists car_bookings cascade;
 drop table if exists vehicles cascade;
@@ -162,6 +163,41 @@ create table meeting_rooms (
 alter table meeting_rooms enable row level security;
 create policy "Allow all read meeting_rooms" on meeting_rooms for select using (true);
 create policy "Allow all write meeting_rooms" on meeting_rooms for all using (true);
+
+-- ===============================
+-- 7.2 Circular Documents (สารบรรณและหนังสือเวียนราชการ)
+-- ===============================
+create table circular_documents (
+  id text primary key,
+  doc_number text not null,
+  title text not null,
+  issued_date text not null,
+  sender_org text not null,
+  doc_type text default 'memo',
+  reference_doc text,
+  attachment_list text,
+  urgency text default 'normal',
+  secret_level text default 'normal',
+  summary text,
+  file_url text,
+  file_name text,
+  file_size bigint default 0,
+  total_pages integer,
+  scanned_pages jsonb default '[]'::jsonb,
+  created_by text,
+  created_by_name text,
+  created_at timestamptz default now(),
+  deadline text,
+  target_criteria jsonb default '{"scope":"all"}'::jsonb,
+  recipients jsonb default '[]'::jsonb,
+  total_count integer default 0,
+  acknowledged_count integer default 0,
+  status text default 'active'
+);
+
+alter table circular_documents enable row level security;
+create policy "Allow all read circular_documents" on circular_documents for select using (true);
+create policy "Allow all write circular_documents" on circular_documents for all using (true);
 
 -- ===============================
 -- 8. Files (คลังเอกสารและไฟล์แนบ)
@@ -371,6 +407,7 @@ begin
     alter publication supabase_realtime add table messages;
     alter publication supabase_realtime add table meetings;
     alter publication supabase_realtime add table meeting_rooms;
+    alter publication supabase_realtime add table circular_documents;
   end if;
 exception
   when others then null;

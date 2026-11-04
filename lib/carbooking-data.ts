@@ -225,86 +225,57 @@ const OBSOLETE_MOCK_DRIVERS = [
   "นายสมชาย ใจดี",
 ];
 
+/**
+ * Return default in-memory bookings.
+ * Proactively purges legacy localStorage keys to avoid stale cache or quota exhaustion.
+ */
 export function loadStoredBookings(): CarBookingRequest[] {
-  if (typeof window === "undefined") return [];
-  try {
-    // Purge legacy storage keys to avoid resurrecting obsolete mock data
+  if (typeof window !== "undefined") {
     try {
+      localStorage.removeItem(CAR_STORAGE_KEY);
       localStorage.removeItem(LEGACY_CAR_STORAGE_KEY);
     } catch {}
+  }
+  return [];
+}
 
-    const raw = localStorage.getItem(CAR_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-
-    // Sanitize any mock drivers in legacy stored bookings and clear incorrect admin head data
-    return parsed.map((b) => {
-      let updated = { ...b };
-      if (updated.assignedDriver && OBSOLETE_MOCK_DRIVERS.includes(updated.assignedDriver.trim())) {
-        updated.assignedDriver = updated.requireDriver === false ? (updated.requesterName || "ขับขี่เองโดยผู้ขอใช้รถ") : "รอฝ่ายบริหารจัดสรร";
-      }
-      // If booking has not completed Stage 3, adminHead data must not be populated with Stage 1 reviewer
-      if (updated.status === "pending_division_head" || updated.status === "pending_fleet_assignment" || updated.status === "pending_admin_head") {
-        if (!updated.adminHeadActionAt || (updated.adminHeadName && !updated.adminHeadName.includes("เสกพล"))) {
-          updated.adminHeadId = undefined;
-          updated.adminHeadName = undefined;
-          updated.adminHeadNotes = undefined;
-          updated.adminHeadActionAt = undefined;
-        }
-      }
-      return updated;
-    });
-  } catch (e) {
-    console.error("Failed to load car bookings:", e);
-    return [];
+/**
+ * Deprecated: Car bookings are centrally managed in Supabase Cloud.
+ * Purges localStorage to prevent stale data.
+ */
+export function saveStoredBookings(_bookings: CarBookingRequest[]) {
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.removeItem(CAR_STORAGE_KEY);
+      localStorage.removeItem(LEGACY_CAR_STORAGE_KEY);
+    } catch {}
   }
 }
 
-export function saveStoredBookings(bookings: CarBookingRequest[]) {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(CAR_STORAGE_KEY, JSON.stringify(bookings));
-    try {
-      localStorage.removeItem(LEGACY_CAR_STORAGE_KEY);
-    } catch {}
-  } catch (e) {
-    console.error("Failed to save car bookings:", e);
-  }
-}
-
+/**
+ * Return default vehicles template in memory.
+ * Proactively purges legacy localStorage keys.
+ */
 export function loadStoredVehicles(): Vehicle[] {
-  if (typeof window === "undefined") return INITIAL_VEHICLES;
-  try {
-    const raw =
-      localStorage.getItem(VEHICLES_STORAGE_KEY) ||
-      localStorage.getItem(LEGACY_VEHICLES_STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(VEHICLES_STORAGE_KEY, JSON.stringify(INITIAL_VEHICLES));
-      return INITIAL_VEHICLES;
-    }
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) return INITIAL_VEHICLES;
-
-    // Sanitize any mock drivers in vehicles
-    return parsed.map((v) => {
-      if (v.driverName && OBSOLETE_MOCK_DRIVERS.includes(v.driverName.trim())) {
-        return { ...v, driverName: "พนักงานขับรถเวรส่วนกลาง" };
-      }
-      return v;
-    });
-  } catch (e) {
-    console.error("Failed to load vehicles:", e);
-    return INITIAL_VEHICLES;
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.removeItem(VEHICLES_STORAGE_KEY);
+      localStorage.removeItem(LEGACY_VEHICLES_STORAGE_KEY);
+    } catch {}
   }
+  return INITIAL_VEHICLES;
 }
 
-export function saveStoredVehicles(vehicles: Vehicle[]) {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(VEHICLES_STORAGE_KEY, JSON.stringify(vehicles));
-  } catch (e) {
-    console.error("Failed to save vehicles:", e);
+/**
+ * Deprecated: Vehicles are centrally managed in Supabase Cloud.
+ * Purges localStorage to prevent stale data.
+ */
+export function saveStoredVehicles(_vehicles: Vehicle[]) {
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.removeItem(VEHICLES_STORAGE_KEY);
+      localStorage.removeItem(LEGACY_VEHICLES_STORAGE_KEY);
+    } catch {}
   }
 }
 

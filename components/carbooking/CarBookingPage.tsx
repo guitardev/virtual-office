@@ -13,10 +13,7 @@ import {
   Role,
 } from "@/lib/types";
 import {
-  loadStoredBookings,
-  saveStoredBookings,
-  loadStoredVehicles,
-  saveStoredVehicles,
+  INITIAL_VEHICLES,
   getConflictingBookings,
   findAvailableVehiclesForPeriod,
   cleanPersonName,
@@ -91,7 +88,7 @@ export function CarBookingPage({
   members = [],
 }: CarBookingPageProps) {
   const [activeTab, setActiveTab] = useState<"requests" | "timeline" | "new_request">("requests");
-  const [vehicles, setVehicles] = useState<Vehicle[]>(() => loadStoredVehicles());
+  const [vehicles, setVehicles] = useState<Vehicle[]>(() => INITIAL_VEHICLES);
   const [bookings, setBookings] = useState<CarBookingRequest[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -337,41 +334,31 @@ export function CarBookingPage({
     );
   }, [conflictDetails.hasConflict, formVehicleId, formDepartureTime, formReturnTime, vehicles, bookings]);
 
-  // Load data from storage & sync with Supabase on mount
+  // Sync data with Supabase on mount
   useEffect(() => {
-    const loadedBookings = loadStoredBookings();
-    setBookings(loadedBookings);
-
-    const loadedVehicles = loadStoredVehicles();
-    setVehicles(loadedVehicles);
-
     let isMounted = true;
     fetchCarBookings().then((remoteBookings) => {
       if (!isMounted) return;
       if (Array.isArray(remoteBookings)) {
         setBookings(remoteBookings);
-        saveStoredBookings(remoteBookings);
       }
     });
 
     fetchVehicles().then((remoteVehicles) => {
       if (isMounted && remoteVehicles && remoteVehicles.length > 0) {
         setVehicles(remoteVehicles);
-        saveStoredVehicles(remoteVehicles);
       }
     });
 
     const unsubVehicles = subscribeToVehicles((updatedVehicles) => {
       if (isMounted && updatedVehicles && updatedVehicles.length > 0) {
         setVehicles(updatedVehicles);
-        saveStoredVehicles(updatedVehicles);
       }
     });
 
     const unsubBookings = subscribeToCarBookings((updatedBookings) => {
       if (isMounted && Array.isArray(updatedBookings)) {
         setBookings(updatedBookings);
-        saveStoredBookings(updatedBookings);
       }
     });
 
@@ -440,7 +427,6 @@ export function CarBookingPage({
 
       if (hasUpdates) {
         setBookings(updated);
-        saveStoredBookings(updated);
       }
     };
 
@@ -451,7 +437,6 @@ export function CarBookingPage({
 
   const updateAndSaveBookings = (newBookings: CarBookingRequest[], targetBooking?: CarBookingRequest) => {
     setBookings(newBookings);
-    saveStoredBookings(newBookings);
     if (targetBooking) {
       saveCarBooking(targetBooking).catch(console.error);
     }
@@ -459,7 +444,6 @@ export function CarBookingPage({
 
   const updateAndSaveVehicles = (newVehicles: Vehicle[]) => {
     setVehicles(newVehicles);
-    saveStoredVehicles(newVehicles);
     newVehicles.forEach((v) => {
       saveVehicle(v).catch(() => { });
     });
@@ -1303,7 +1287,6 @@ export function CarBookingPage({
     if (!confirm(`คุณต้องการ${actionLabel} หรือไม่?`)) return;
     const updated = bookings.filter((b) => b.id !== booking.id);
     setBookings(updated);
-    saveStoredBookings(updated);
     await deleteCarBooking(booking.id);
     recordAuditLog(
       currentUser?.name || "ผู้ใช้งาน",

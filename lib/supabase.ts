@@ -35,13 +35,8 @@ import {
 import {
   INITIAL_VEHICLES,
   INITIAL_BOOKING_REQUESTS,
-  loadStoredBookings,
-  saveStoredBookings,
-  loadStoredVehicles,
-  saveStoredVehicles,
 } from "./carbooking-data";
 import { DEFAULT_CHAT_GROUPS, INITIAL_CHAT_MESSAGES } from "./chat-data";
-import { loadStoredCircularDocs, saveStoredCircularDocs } from "./circular-data";
 import { DEFAULT_ROOMS } from "./meeting-data";
 
 // Environment variables from Vercel Marketplace Supabase Integration
@@ -1049,31 +1044,33 @@ export function mapCarBookingToRow(b: CarBookingRequest): any {
   };
 }
 
+// In-memory cache for fleet and bookings (Single Source of Truth is Supabase; avoid localStorage desync)
+let inMemoryVehicles: Vehicle[] | null = null;
+let inMemoryCarBookings: CarBookingRequest[] | null = null;
+
 export async function fetchVehicles(): Promise<Vehicle[]> {
-  const localVehicles = loadStoredVehicles();
-  if (!supabase) return localVehicles;
+  if (!supabase) return inMemoryVehicles || INITIAL_VEHICLES;
   try {
     const { data, error } = await supabase
       .from("vehicles")
       .select("*")
       .order("id", { ascending: true });
-    if (error || !data || data.length === 0) return localVehicles;
+    if (error || !data || data.length === 0) return inMemoryVehicles || INITIAL_VEHICLES;
     const liveVehicles = data.map(mapRowToVehicle);
-    saveStoredVehicles(liveVehicles);
+    inMemoryVehicles = liveVehicles;
     return liveVehicles;
   } catch {
-    return localVehicles;
+    return inMemoryVehicles || INITIAL_VEHICLES;
   }
 }
 
 export async function saveVehicle(vehicle: Vehicle): Promise<boolean> {
-  try {
-    const current = loadStoredVehicles();
-    const exists = current.some((v) => v.id === vehicle.id);
-    const updated = exists ? current.map((v) => (v.id === vehicle.id ? vehicle : v)) : [vehicle, ...current];
-    saveStoredVehicles(updated);
-  } catch (err) {
-    console.warn("Could not save vehicle to local cache:", err);
+  // Optimistically update in-memory cache
+  if (inMemoryVehicles) {
+    const exists = inMemoryVehicles.some((v) => v.id === vehicle.id);
+    inMemoryVehicles = exists
+      ? inMemoryVehicles.map((v) => (v.id === vehicle.id ? vehicle : v))
+      : [vehicle, ...inMemoryVehicles];
   }
 
   if (!supabase) return true;
@@ -1087,8 +1084,7 @@ export async function saveVehicle(vehicle: Vehicle): Promise<boolean> {
 }
 
 export async function fetchCarBookings(): Promise<CarBookingRequest[]> {
-  const localBookings = loadStoredBookings();
-  if (!supabase) return localBookings;
+  if (!supabase) return inMemoryCarBookings || [];
   try {
     const { data, error } = await supabase
       .from("car_bookings")
@@ -1096,33 +1092,29 @@ export async function fetchCarBookings(): Promise<CarBookingRequest[]> {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.warn("Could not fetch car bookings from Supabase, using local cache:", error.message);
-      return localBookings;
+      console.warn("Could not fetch car bookings from Supabase:", error.message);
+      return inMemoryCarBookings || [];
     }
-    if (!data) {
-      saveStoredBookings([]);
-      return [];
+    if (!data || data.length === 0) {
+      return inMemoryCarBookings || [];
     }
 
     const liveBookings = data.map(mapRowToCarBooking);
-    // Remote database is single source of truth: synchronize local storage cache
-    saveStoredBookings(liveBookings);
+    inMemoryCarBookings = liveBookings;
     return liveBookings;
   } catch (err) {
-    console.warn("Exception fetching car bookings from Supabase, using local cache:", err);
-    return localBookings;
+    console.warn("Exception fetching car bookings from Supabase:", err);
+    return inMemoryCarBookings || [];
   }
 }
 
 export async function saveCarBooking(booking: CarBookingRequest): Promise<boolean> {
-  // Always update local cache first
-  try {
-    const current = loadStoredBookings();
-    const exists = current.some((b) => b.id === booking.id);
-    const updated = exists ? current.map((b) => (b.id === booking.id ? booking : b)) : [booking, ...current];
-    saveStoredBookings(updated);
-  } catch (err) {
-    console.warn("Could not update local car bookings cache:", err);
+  // Optimistically update in-memory cache
+  if (inMemoryCarBookings) {
+    const exists = inMemoryCarBookings.some((b) => b.id === booking.id);
+    inMemoryCarBookings = exists
+      ? inMemoryCarBookings.map((b) => (b.id === booking.id ? booking : b))
+      : [booking, ...inMemoryCarBookings];
   }
 
   if (!supabase) return true;
@@ -1131,7 +1123,7 @@ export async function saveCarBooking(booking: CarBookingRequest): Promise<boolea
     const { error } = await supabase.from("car_bookings").upsert(row);
     if (error) {
       console.warn("saveCarBooking initial upsert error:", error.code, error.message);
-      // Fallback: If foreign key error code 23503 occurs (e.g. requester_id not in users or vehicle_id not in vehicles)
+      // Fallback: If foreign key error code 23503 occurs
       if (error.code === "23503") {
         console.warn("FK constraint violation (23503) on car_bookings, retrying with sanitized foreign keys...");
         const retryRow = { ...row };
@@ -1174,11 +1166,8 @@ export function subscribeToCarBookings(callback: (bookings: CarBookingRequest[])
 }
 
 export async function deleteVehicle(id: string): Promise<boolean> {
-  try {
-    const current = loadStoredVehicles();
-    saveStoredVehicles(current.filter((v) => v.id !== id));
-  } catch (err) {
-    console.warn("Could not remove vehicle from local cache:", err);
+  if (inMemoryVehicles) {
+    inMemoryVehicles = inMemoryVehicles.filter((v) => v.id !== id);
   }
 
   if (!supabase) return true;
@@ -1191,13 +1180,8 @@ export async function deleteVehicle(id: string): Promise<boolean> {
 }
 
 export async function deleteCarBooking(id: string): Promise<boolean> {
-  // 1. Immediately remove from local cache so all pages and effects see it gone
-  try {
-    const current = loadStoredBookings();
-    const updated = current.filter((b) => b.id !== id);
-    saveStoredBookings(updated);
-  } catch (err) {
-    console.warn("Could not delete car booking from local cache:", err);
+  if (inMemoryCarBookings) {
+    inMemoryCarBookings = inMemoryCarBookings.filter((b) => b.id !== id);
   }
 
   if (!supabase) return true;
@@ -2493,13 +2477,15 @@ export function mapCircularDocToRow(doc: CircularDocument): any {
   };
 }
 
+// In-memory cache for circular documents (Single Source of Truth is Supabase; avoid localStorage quota/desync)
+let memoryCircularDocs: CircularDocument[] | null = null;
+
 /**
- * Fetch circular documents from Supabase with fallback to local cache
+ * Fetch circular documents from Supabase with fallback to in-memory cache
  * Note: Excludes heavy 'scanned_pages' column to minimize bandwidth/egress
  */
 export async function fetchCircularDocs(): Promise<CircularDocument[]> {
-  const local = loadStoredCircularDocs();
-  if (!supabase) return local;
+  if (!supabase) return memoryCircularDocs || [];
 
   try {
     const { data, error } = await supabase
@@ -2511,13 +2497,11 @@ export async function fetchCircularDocs(): Promise<CircularDocument[]> {
 
     if (error) {
       console.warn("Could not fetch circular documents from Supabase:", error);
-      return local;
+      return memoryCircularDocs || [];
     }
 
     if (!data || data.length === 0) {
-      // Remote table is clean/empty - do NOT resurrect mock documents
-      saveStoredCircularDocs([]);
-      return [];
+      return memoryCircularDocs || [];
     }
 
     const hasMockDocs = data.some((r: any) => r.id === "circ_2569_001" || r.id === "circ_2569_002");
@@ -2534,12 +2518,11 @@ export async function fetchCircularDocs(): Promise<CircularDocument[]> {
       .map(mapRowToCircularDoc)
       .filter((d) => d.id !== "circ_2569_001" && d.id !== "circ_2569_002");
 
-    // Keep local cache fresh
-    saveStoredCircularDocs(liveDocs);
+    memoryCircularDocs = liveDocs;
     return liveDocs;
   } catch (err) {
     console.warn("Exception fetching circular documents from Supabase:", err);
-    return local;
+    return memoryCircularDocs || [];
   }
 }
 
@@ -2564,7 +2547,7 @@ export async function fetchCircularDocScannedPages(id: string): Promise<string[]
 }
 
 /**
- * Save or update circular document in Supabase and local cache
+ * Save or update circular document in Supabase
  */
 export async function saveCircularDoc(doc: CircularDocument): Promise<boolean> {
   // Guard: Reject obsolete mock documents to prevent any accidental reseeding
@@ -2572,26 +2555,14 @@ export async function saveCircularDoc(doc: CircularDocument): Promise<boolean> {
     return false;
   }
 
-  if (typeof window !== "undefined") {
-    try {
-      localStorage.removeItem("smartmso_circular_cleared");
-    } catch {}
-  }
-
-  // Always update local cache first for responsiveness
-  try {
-    const current = loadStoredCircularDocs();
-    const idx = current.findIndex((d) => d.id === doc.id);
-    let updated: CircularDocument[];
+  // Update in-memory cache
+  if (memoryCircularDocs) {
+    const idx = memoryCircularDocs.findIndex((d) => d.id === doc.id);
     if (idx >= 0) {
-      updated = [...current];
-      updated[idx] = doc;
+      memoryCircularDocs[idx] = doc;
     } else {
-      updated = [doc, ...current];
+      memoryCircularDocs = [doc, ...memoryCircularDocs];
     }
-    saveStoredCircularDocs(updated);
-  } catch (err) {
-    console.warn("Could not update local circular cache:", err);
   }
 
   if (!supabase) return true;
@@ -2614,18 +2585,11 @@ export async function saveCircularDoc(doc: CircularDocument): Promise<boolean> {
 }
 
 /**
- * Delete a circular document from Supabase and local cache
+ * Delete a circular document from Supabase
  */
 export async function deleteCircularDoc(id: string): Promise<boolean> {
-  try {
-    const current = loadStoredCircularDocs();
-    const updated = current.filter((d) => d.id !== id);
-    saveStoredCircularDocs(updated);
-    if (typeof window !== "undefined" && updated.length === 0) {
-      localStorage.setItem("smartmso_circular_cleared", "true");
-    }
-  } catch (err) {
-    console.warn("Could not remove circular doc from local cache:", err);
+  if (memoryCircularDocs) {
+    memoryCircularDocs = memoryCircularDocs.filter((d) => d.id !== id);
   }
 
   if (!supabase) return true;

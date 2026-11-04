@@ -21,7 +21,6 @@ import {
   subscribeToCarBookings,
   recordAuditLog,
 } from "@/lib/supabase";
-import { saveStoredBookings, saveStoredVehicles } from "@/lib/carbooking-data";
 import { RealisticFuelGauge } from "@/components/carbooking/RealisticFuelGauge";
 import { VehicleDetailModal } from "@/components/carbooking/VehicleDetailModal";
 import { VehicleFormModal } from "@/components/carbooking/VehicleFormModal";
@@ -196,7 +195,6 @@ export function VehiclesTab({ currentUser, showToast, members }: VehiclesTabProp
       showToast(`➕ เพิ่มรถยนต์ราชการ ${savedVehicle.licensePlate} เข้าสู่ระบบสำเร็จ`);
     }
     setVehicles(updated);
-    saveStoredVehicles(updated);
     await saveVehicle(savedVehicle);
     await recordAuditLog(
       currentUser?.name || "ผู้ดูแลระบบ",
@@ -215,7 +213,6 @@ export function VehiclesTab({ currentUser, showToast, members }: VehiclesTabProp
 
     const updated = vehicles.filter((v) => v.id !== vehicleId);
     setVehicles(updated);
-    saveStoredVehicles(updated);
     await deleteVehicle(vehicleId);
     await recordAuditLog(
       currentUser?.name || "ผู้ดูแลระบบ",
@@ -232,7 +229,6 @@ export function VehiclesTab({ currentUser, showToast, members }: VehiclesTabProp
       return { ...v, status: newStatus };
     });
     setVehicles(updated);
-    saveStoredVehicles(updated);
 
     const target = updated.find((v) => v.id === vehicleId);
     if (target) {
@@ -263,7 +259,6 @@ export function VehiclesTab({ currentUser, showToast, members }: VehiclesTabProp
       showToast(`➕ บันทึกรายการใช้รถ [${savedBooking.requestNo}] เข้าสู่ระบบสำเร็จ`);
     }
     setBookings(updated);
-    saveStoredBookings(updated);
     await saveCarBooking(savedBooking);
     await recordAuditLog(
       currentUser?.name || "ผู้ดูแลระบบ",
@@ -282,7 +277,6 @@ export function VehiclesTab({ currentUser, showToast, members }: VehiclesTabProp
 
     const updated = bookings.filter((b) => b.id !== bookingId);
     setBookings(updated);
-    saveStoredBookings(updated);
     await deleteCarBooking(bookingId);
     await recordAuditLog(
       currentUser?.name || "ผู้ดูแลระบบ",

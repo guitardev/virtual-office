@@ -12,7 +12,8 @@ import {
   Vehicle,
 } from "@/lib/types";
 import { ROLE_CONFIG, MODULE_NAMES } from "@/lib/rbac";
-import { loadStoredVehicles } from "@/lib/carbooking-data";
+import { INITIAL_VEHICLES } from "@/lib/carbooking-data";
+import { fetchVehicles, subscribeToVehicles } from "@/lib/supabase";
 
 function getTimeGreeting(): { text: string; icon: string } {
   const hour = new Date().getHours();
@@ -61,16 +62,24 @@ export function DashboardPage({
   onOpenCircularDoc,
 }: DashboardPageProps) {
   const [greeting, setGreeting] = useState<{ text: string; icon: string }>(() => getTimeGreeting());
-  const [vehicles, setVehicles] = useState<Vehicle[]>(() => loadStoredVehicles());
+  const [vehicles, setVehicles] = useState<Vehicle[]>(() => INITIAL_VEHICLES);
   const [taskFilter, setTaskFilter] = useState<"urgent" | "my" | "all">("urgent");
 
   useEffect(() => {
     setGreeting(getTimeGreeting());
-    setVehicles(loadStoredVehicles());
+    fetchVehicles().then((liveVehicles) => {
+      if (liveVehicles && liveVehicles.length > 0) setVehicles(liveVehicles);
+    });
+    const unsubVehicles = subscribeToVehicles((liveVehicles) => {
+      if (liveVehicles && liveVehicles.length > 0) setVehicles(liveVehicles);
+    });
     const interval = setInterval(() => {
       setGreeting(getTimeGreeting());
     }, 60000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      unsubVehicles();
+    };
   }, []);
 
   // ─── Real Dynamic Calculations ───

@@ -213,98 +213,38 @@ export const CIRCULAR_OFFICIAL_PRESETS: CircularPreset[] = [
 ];
 
 /**
- * Load circular documents from local cache or initial
+ * Return default in-memory circular docs list.
+ * Proactively purges legacy localStorage keys to avoid QuotaExceededError and stale cache.
  */
 export function loadStoredCircularDocs(): CircularDocument[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const cleared = localStorage.getItem("smartmso_circular_cleared");
-    if (cleared === "true") return [];
-
-    const raw = localStorage.getItem(CIRCULAR_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      // Purge obsolete mock IDs if any
-      const cleaned = parsed.filter(
-        (d) =>
-          d &&
-          d.id !== "circ_2569_001" &&
-          d.id !== "circ_2569_002" &&
-          d.id !== "circ_1792470539133" &&
-          d.id !== "circ_1792470817460"
-      );
-      if (cleaned.length !== parsed.length) {
-        saveStoredCircularDocs(cleaned);
-      }
-      return cleaned;
-    }
-    return [];
-  } catch {
-    return [];
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.removeItem("smartmso_circular_cleared");
+      localStorage.removeItem(CIRCULAR_STORAGE_KEY);
+    } catch {}
   }
+  return [];
 }
 
 /**
- * Sanitize circular documents to ensure they fit safely into browser localStorage
- * without triggering QuotaExceededError while preserving all critical metadata.
+ * Sanitize circular documents (helper function).
  */
 export function sanitizeCircularDocsForStorage(
   docs: CircularDocument[],
-  aggressive = false
+  _aggressive = false
 ): CircularDocument[] {
-  const maxBase64Len = aggressive ? 10000 : 80000;
-  const maxDocs = aggressive ? 15 : 30;
-
-  return docs.slice(0, maxDocs).map((d) => {
-    const isDataUrl = typeof d.fileUrl === "string" && d.fileUrl.startsWith("data:");
-    const isOverLengthUrl = isDataUrl && d.fileUrl.length > maxBase64Len;
-
-    const sanitizedScannedPages = Array.isArray(d.scannedPages)
-      ? d.scannedPages
-          .map((p) => {
-            if (typeof p === "string" && p.length > maxBase64Len) {
-              return aggressive ? "" : p.slice(0, 1000);
-            }
-            return p;
-          })
-          .filter(Boolean)
-      : d.scannedPages;
-
-    return {
-      ...d,
-      fileUrl: isOverLengthUrl ? "/virtual-office/circular_docs/sample.pdf" : d.fileUrl,
-      scannedPages: sanitizedScannedPages,
-    };
-  });
+  return docs;
 }
 
 /**
- * Save circular documents to local cache safely without exceeding localStorage quota
+ * Deprecated: Circular documents are centrally managed in Supabase Cloud.
+ * Purges localStorage to free up browser storage quota.
  */
-export function saveStoredCircularDocs(docs: CircularDocument[]) {
-  if (typeof window === "undefined") return;
-  try {
-    // Tier 1: Sanitize oversized base64 data (> 80KB) while keeping up to 30 documents
-    const sanitized = sanitizeCircularDocsForStorage(docs, false);
-    localStorage.setItem(CIRCULAR_STORAGE_KEY, JSON.stringify(sanitized));
-  } catch {
+export function saveStoredCircularDocs(_docs: CircularDocument[]) {
+  if (typeof window !== "undefined") {
     try {
-      // Tier 2: Aggressive sanitization (keep 15 documents, strip heavy payloads > 10KB)
-      const aggressive = sanitizeCircularDocsForStorage(docs, true);
-      localStorage.setItem(CIRCULAR_STORAGE_KEY, JSON.stringify(aggressive));
-    } catch {
-      try {
-        // Tier 3: Metadata only fallback (strip fileUrl and scannedPages completely)
-        const metaOnly = docs.slice(0, 10).map((d) => ({
-          ...d,
-          fileUrl: "/virtual-office/circular_docs/sample.pdf",
-          scannedPages: undefined,
-        }));
-        localStorage.setItem(CIRCULAR_STORAGE_KEY, JSON.stringify(metaOnly));
-      } catch {
-        // Safe non-fatal fallback if origin localStorage is totally exhausted
-      }
-    }
+      localStorage.removeItem("smartmso_circular_cleared");
+      localStorage.removeItem(CIRCULAR_STORAGE_KEY);
+    } catch {}
   }
 }

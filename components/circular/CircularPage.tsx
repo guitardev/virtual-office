@@ -8,7 +8,6 @@ import {
   CircularRecipientStatus,
 } from "@/lib/types";
 import {
-  loadStoredCircularDocs,
   getNonAdminRecipients,
 } from "@/lib/circular-data";
 import {
@@ -69,7 +68,7 @@ export const CircularPage: React.FC<CircularPageProps> = ({
       setDocuments(data);
       setIsLiveConnected(isSupabaseConfigured());
     } catch {
-      setDocuments(loadStoredCircularDocs());
+      setDocuments([]);
     } finally {
       setIsLoading(false);
     }
