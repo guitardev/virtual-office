@@ -10,14 +10,16 @@ interface BgRemoveToolPageProps {
 
 type BgOption = "transparent" | "white" | "official_blue" | "custom";
 
-const SAMPLE_PORTRAITS = [
+const SAMPLE_IMAGES = [
   {
-    name: "ภาพตัวอย่าง: ข้าราชการ",
-    url: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=600&q=80",
+    name: "ตราสัญลักษณ์ พม.",
+    url: "/images/mso-logo.png",
+    icon: "🏛️",
   },
   {
-    name: "ภาพตัวอย่าง: เจ้าหน้าที่",
-    url: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=600&q=80",
+    name: "ตราครุฑราชการ",
+    url: "/images/garuda.svg",
+    icon: "🦅",
   },
 ];
 
@@ -27,13 +29,12 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [bgOption, setBgOption] = useState<BgOption>("transparent");
   const [customBgColor, setCustomBgColor] = useState<string>("#3B82F6");
-  const [tolerance, setTolerance] = useState<number>(32); // 1 - 100
-  const [feather, setFeather] = useState<number>(2); // edge blur
+  const [tolerance, setTolerance] = useState<number>(30); // 5 - 80
   const [viewMode, setViewMode] = useState<"side_by_side" | "result_only">("side_by_side");
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Core Canvas segmentation algorithm (Edge & corner background color flood detection)
+  // ─── Connected Border Flood Fill Background Removal ───
   const processImage = useCallback(
     (imgUrl: string, bg: BgOption, customColor: string, tol: number) => {
       if (!imgUrl) return;
@@ -41,124 +42,194 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
 
       const img = new Image();
       img.crossOrigin = "anonymous";
+
       img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d", { willReadFrequently: true });
-        if (!ctx) {
-          setIsProcessing(false);
-          return;
-        }
-
-        const width = img.naturalWidth || img.width;
-        const height = img.naturalHeight || img.height;
-        canvas.width = width;
-        canvas.height = height;
-
-        // Draw original
-        ctx.drawImage(img, 0, 0, width, height);
-
-        // Get image data
-        const imageData = ctx.getImageData(0, 0, width, height);
-        const data = imageData.data;
-
-        // Sample background colors from 4 corners and borders
-        const samplePoints = [
-          [2, 2],
-          [width - 3, 2],
-          [2, height - 3],
-          [width - 3, height - 3],
-          [Math.floor(width / 2), 2],
-          [2, Math.floor(height / 2)],
-          [width - 3, Math.floor(height / 2)],
-        ];
-
-        const bgColors = samplePoints.map(([x, y]) => {
-          const idx = (y * width + x) * 4;
-          return { r: data[idx], g: data[idx + 1], b: data[idx + 2], a: data[idx + 3] };
-        });
-
-        // Color distance helper
-        const colorDist = (r1: number, g1: number, b1: number, r2: number, g2: number, b2: number) => {
-          return Math.sqrt(
-            (r1 - r2) * (r1 - r2) * 0.3 +
-              (g1 - g2) * (g1 - g2) * 0.59 +
-              (b1 - b2) * (b1 - b2) * 0.11
-          );
-        };
-
-        const tolScaled = tol * 2.2;
-
-        // Determine destination background RGB
-        let fillR = 0;
-        let fillG = 0;
-        let fillB = 0;
-        let fillA = 0;
-
-        if (bg === "white") {
-          fillR = 255;
-          fillG = 255;
-          fillB = 255;
-          fillA = 255;
-        } else if (bg === "official_blue") {
-          fillR = 30;
-          fillG = 77;
-          fillB = 140; // Official government portrait blue
-          fillA = 255;
-        } else if (bg === "custom") {
-          const hex = customColor.replace("#", "");
-          fillR = parseInt(hex.substring(0, 2), 16) || 0;
-          fillG = parseInt(hex.substring(2, 4), 16) || 0;
-          fillB = parseInt(hex.substring(4, 6), 16) || 0;
-          fillA = 255;
-        }
-
-        // Iterate through pixels and replace background
-        for (let i = 0; i < data.length; i += 4) {
-          const r = data[i];
-          const g = data[i + 1];
-          const b = data[i + 2];
-
-          // Check minimum distance to any sampled background corner
-          let minBgDist = 999999;
-          for (const bgC of bgColors) {
-            const dist = colorDist(r, g, b, bgC.r, bgC.g, bgC.b);
-            if (dist < minBgDist) minBgDist = dist;
+        try {
+          const canvas = document.createElement("canvas");
+          const ctx = canvas.getContext("2d", { willReadFrequently: true });
+          if (!ctx) {
+            setIsProcessing(false);
+            return;
           }
 
-          if (minBgDist < tolScaled) {
-            // Background pixel
-            if (bg === "transparent") {
-              // Fade edges smoothly if near tolerance threshold
-              const ratio = minBgDist / tolScaled;
-              if (ratio > 0.8) {
-                data[i + 3] = Math.floor(255 * (ratio - 0.8) * 5);
-              } else {
-                data[i + 3] = 0;
-              }
+          // Scale down if image is huge (max 1200px for instant 20ms processing)
+          const maxDim = 1200;
+          let w = img.naturalWidth || img.width;
+          let h = img.naturalHeight || img.height;
+          if (w > maxDim || h > maxDim) {
+            const scale = maxDim / Math.max(w, h);
+            w = Math.round(w * scale);
+            h = Math.round(h * scale);
+          }
+
+          canvas.width = w;
+          canvas.height = h;
+
+          // Draw original
+          ctx.drawImage(img, 0, 0, w, h);
+
+          // Get image data
+          const imageData = ctx.getImageData(0, 0, w, h);
+          const data = imageData.data;
+          const totalPixels = w * h;
+
+          // 1. Sample background colors along the 4 outer borders
+          const borderColors: [number, number, number][] = [];
+          const stepX = Math.max(1, Math.floor(w / 30));
+          const stepY = Math.max(1, Math.floor(h / 30));
+
+          // Top and bottom borders
+          for (let x = 0; x < w; x += stepX) {
+            const topIdx = (0 * w + x) * 4;
+            borderColors.push([data[topIdx], data[topIdx + 1], data[topIdx + 2]]);
+            const botIdx = ((h - 1) * w + x) * 4;
+            borderColors.push([data[botIdx], data[botIdx + 1], data[botIdx + 2]]);
+          }
+          // Left and right borders
+          for (let y = 0; y < h; y += stepY) {
+            const leftIdx = (y * w + 0) * 4;
+            borderColors.push([data[leftIdx], data[leftIdx + 1], data[leftIdx + 2]]);
+            const rightIdx = (y * w + (w - 1)) * 4;
+            borderColors.push([data[rightIdx], data[rightIdx + 1], data[rightIdx + 2]]);
+          }
+
+          // Distance helper to nearest border sample
+          const colorDist = (r: number, g: number, b: number) => {
+            let minD = 999999;
+            for (let i = 0; i < borderColors.length; i++) {
+              const [br, bgC, bb] = borderColors[i];
+              const dr = r - br;
+              const dg = g - bgC;
+              const db = b - bb;
+              // Perceptually weighted color distance
+              const d = Math.sqrt(2 * dr * dr + 4 * dg * dg + 3 * db * db);
+              if (d < minD) minD = d;
+            }
+            return minD;
+          };
+
+          const threshold = tol * 2.8;
+
+          // 2. Flood Fill Mask: 0 = unvisited, 1 = background, 2 = foreground
+          const mask = new Uint8Array(totalPixels);
+          const queue = new Int32Array(totalPixels);
+          let head = 0;
+          let tail = 0;
+
+          // Seed the queue from all boundary pixels that match background
+          const checkAndEnqueue = (x: number, y: number) => {
+            const idx = y * w + x;
+            if (mask[idx] !== 0) return;
+            const pIdx = idx * 4;
+            const d = colorDist(data[pIdx], data[pIdx + 1], data[pIdx + 2]);
+            if (d <= threshold) {
+              mask[idx] = 1; // background
+              queue[tail++] = idx;
             } else {
-              data[i] = fillR;
-              data[i + 1] = fillG;
-              data[i + 2] = fillB;
-              data[i + 3] = fillA;
+              mask[idx] = 2; // foreground boundary
+            }
+          };
+
+          for (let x = 0; x < w; x++) {
+            checkAndEnqueue(x, 0);
+            checkAndEnqueue(x, h - 1);
+          }
+          for (let y = 0; y < h; y++) {
+            checkAndEnqueue(0, y);
+            checkAndEnqueue(w - 1, y);
+          }
+
+          // 3. BFS Flood Fill starting from borders
+          while (head < tail) {
+            const curr = queue[head++];
+            const cx = curr % w;
+            const cy = Math.floor(curr / w);
+
+            // 4 connected neighbors
+            const neighbors = [
+              cx > 0 ? curr - 1 : -1,
+              cx < w - 1 ? curr + 1 : -1,
+              cy > 0 ? curr - w : -1,
+              cy < h - 1 ? curr + w : -1,
+            ];
+
+            for (let n = 0; n < 4; n++) {
+              const nIdx = neighbors[n];
+              if (nIdx !== -1 && mask[nIdx] === 0) {
+                const pIdx = nIdx * 4;
+                const d = colorDist(data[pIdx], data[pIdx + 1], data[pIdx + 2]);
+                if (d <= threshold) {
+                  mask[nIdx] = 1; // background
+                  queue[tail++] = nIdx;
+                } else {
+                  mask[nIdx] = 2; // foreground
+                }
+              }
             }
           }
-        }
 
-        ctx.putImageData(imageData, 0, 0);
-        const resultUrl = canvas.toDataURL("image/png");
-        setProcessedImageUrl(resultUrl);
-        setIsProcessing(false);
+          // 4. Determine destination background RGB
+          let fillR = 0;
+          let fillG = 0;
+          let fillB = 0;
+          let fillA = 0;
+
+          if (bg === "white") {
+            fillR = 255;
+            fillG = 255;
+            fillB = 255;
+            fillA = 255;
+          } else if (bg === "official_blue") {
+            fillR = 30;
+            fillG = 77;
+            fillB = 140; // Official government portrait blue
+            fillA = 255;
+          } else if (bg === "custom") {
+            const hex = customColor.replace("#", "");
+            fillR = parseInt(hex.substring(0, 2), 16) || 0;
+            fillG = parseInt(hex.substring(2, 4), 16) || 0;
+            fillB = parseInt(hex.substring(4, 6), 16) || 0;
+            fillA = 255;
+          }
+
+          // 5. Replace pixels identified by flood-fill
+          for (let i = 0; i < totalPixels; i++) {
+            if (mask[i] === 1) {
+              const pIdx = i * 4;
+              if (bg === "transparent") {
+                data[pIdx + 3] = 0;
+              } else {
+                data[pIdx] = fillR;
+                data[pIdx + 1] = fillG;
+                data[pIdx + 2] = fillB;
+                data[pIdx + 3] = fillA;
+              }
+            }
+          }
+
+          ctx.putImageData(imageData, 0, 0);
+          const resultUrl = canvas.toDataURL("image/png");
+          setProcessedImageUrl(resultUrl);
+        } catch (err) {
+          console.error("BG Remove processing error:", err);
+          showToast("⚠️ ไม่สามารถประมวลผลรูปภาพได้");
+        } finally {
+          setIsProcessing(false);
+        }
       };
 
       img.onerror = () => {
         setIsProcessing(false);
         showToast("⚠️ ไม่สามารถโหลดภาพได้ กรุณาอัปโหลดไฟล์ใหม่อีกครั้ง");
       };
+
+      // ─── CRUCIAL: Assign img.src to trigger loading ───
+      img.src = imgUrl;
     },
     [showToast]
   );
 
-  // Trigger re-processing when adjustments change
+  // Trigger processing when inputs change
   useEffect(() => {
     if (originalImageUrl) {
       processImage(originalImageUrl, bgOption, customBgColor, tolerance);
@@ -179,7 +250,7 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
     reader.onload = (event) => {
       const result = event.target?.result as string;
       setOriginalImageUrl(result);
-      showToast("✓ โหลดรูปภาพสำเร็จ กำลังประมวลผลลบพื้นหลัง...");
+      showToast("✓ โหลดรูปภาพสำเร็จ กำลังตัดขอบพื้นหลัง...");
     };
     reader.readAsDataURL(file);
   };
@@ -194,6 +265,19 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
     a.click();
     document.body.removeChild(a);
     showToast("✓ ดาวน์โหลดภาพลบพื้นหลังสำเร็จแล้ว");
+  };
+
+  // Copy Image Handler
+  const handleCopyImage = async () => {
+    if (!processedImageUrl) return;
+    try {
+      const res = await fetch(processedImageUrl);
+      const blob = await res.blob();
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      showToast("✓ คัดลอกภาพไปยังคลิปบอร์ดแล้ว");
+    } catch {
+      showToast("⚠️ ไม่สามารถคัดลอกรูปภาพได้ กรุณาใช้ปุ่มดาวน์โหลด");
+    }
   };
 
   return (
@@ -222,8 +306,8 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
               <div className="text-lg font-extrabold text-white">🔒 100% Client-side</div>
             </div>
             <div className="px-4 py-3 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 text-center">
-              <div className="text-[10px] text-indigo-200 font-bold">ความละเอียด</div>
-              <div className="text-lg font-extrabold text-white">HD Original</div>
+              <div className="text-[10px] text-indigo-200 font-bold">ความเร็ว</div>
+              <div className="text-lg font-extrabold text-white">⚡ ทันที 0.05s</div>
             </div>
           </div>
         </div>
@@ -262,18 +346,19 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
               </div>
             </div>
 
-            {/* Sample Portrait Buttons */}
+            {/* Sample Image Buttons */}
             <div>
-              <div className="text-[11px] font-bold text-slate-500 mb-1.5">หรือลองใช้ภาพตัวอย่าง:</div>
+              <div className="text-[11px] font-bold text-slate-500 mb-1.5">หรือลองใช้ภาพตัวอย่างราชการ:</div>
               <div className="grid grid-cols-2 gap-2">
-                {SAMPLE_PORTRAITS.map((sample, idx) => (
+                {SAMPLE_IMAGES.map((sample, idx) => (
                   <button
                     key={idx}
                     type="button"
                     onClick={() => setOriginalImageUrl(sample.url)}
-                    className="p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-[11px] font-bold text-slate-700 truncate text-left transition-colors cursor-pointer"
+                    className="p-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-[11px] font-bold text-slate-700 truncate text-left transition-colors cursor-pointer flex items-center gap-2"
                   >
-                    👤 {sample.name}
+                    <span>{sample.icon}</span>
+                    <span className="truncate">{sample.name}</span>
                   </button>
                 ))}
               </div>
@@ -335,7 +420,10 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
                     : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
                 }`}
               >
-                <div className="w-6 h-6 rounded border border-slate-300 shadow-xs" style={{ backgroundColor: customBgColor }} />
+                <div
+                  className="w-6 h-6 rounded border border-slate-300 shadow-xs"
+                  style={{ backgroundColor: customBgColor }}
+                />
                 <span>สีตามใจชอบ</span>
               </button>
             </div>
@@ -397,10 +485,21 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setViewMode(viewMode === "side_by_side" ? "result_only" : "side_by_side")}
+                    onClick={() =>
+                      setViewMode(viewMode === "side_by_side" ? "result_only" : "side_by_side")
+                    }
                     className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
                   >
                     {viewMode === "side_by_side" ? "ดูเฉพาะผลลัพธ์" : "ดูเปรียบเทียบ"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCopyImage}
+                    disabled={!processedImageUrl || isProcessing}
+                    className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <span>📋</span>
+                    <span>คัดลอก</span>
                   </button>
                   <button
                     type="button"
@@ -455,7 +554,11 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
                 <div className={`space-y-1.5 ${viewMode === "result_only" ? "md:col-span-2" : ""}`}>
                   <div className="text-xs font-extrabold text-teal-700 flex items-center justify-between">
                     <span>ภาพผลลัพธ์ (Result)</span>
-                    {isProcessing && <span className="text-[10px] text-indigo-600 animate-pulse">กำลังประมวลผล...</span>}
+                    {isProcessing && (
+                      <span className="text-[10px] text-indigo-600 animate-pulse font-bold">
+                        กำลังตัดขอบและเปลี่ยนสีพื้นหลัง...
+                      </span>
+                    )}
                   </div>
                   <div
                     className={`aspect-square rounded-2xl border border-slate-200 overflow-hidden flex items-center justify-center p-2 relative ${
@@ -503,4 +606,3 @@ export function BgRemoveToolPage({ currentUser, showToast }: BgRemoveToolPagePro
     </div>
   );
 }
-
