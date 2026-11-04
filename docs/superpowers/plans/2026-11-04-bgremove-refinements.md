@@ -34,3 +34,4 @@
 - All processing done 100% client-side via HTML5 Canvas (zero server data transmission, PDPA-compliant).
 - Mask representation: `Uint8ClampedArray` mask (0 = bg, 255 = fg, in-between = feather/semi-transparent).
 - Brushes paint directly onto the mask, preserving original pixel data underneath.
+
