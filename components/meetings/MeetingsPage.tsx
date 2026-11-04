@@ -187,8 +187,28 @@ export function MeetingsPage({
     setFormDate(dateIso);
   };
 
+  // Helper to verify if current user can edit or cancel a meeting
+  // Rule: Only the meeting creator/organizer can edit/cancel; Admins have full access
+  const canManageMeeting = (meeting?: MeetingItem | null): boolean => {
+    if (!meeting || !currentUser) return false;
+    // Admins have full permissions
+    if (currentUser.role === "admin") return true;
+
+    // Check organizer match by id, email, or name
+    const org = meeting.organizer;
+    if (org?.id && String(org.id) === String(currentUser.id)) return true;
+    if (org?.email && currentUser.email && org.email.toLowerCase() === currentUser.email.toLowerCase()) return true;
+    if (org?.name && org.name.trim() === currentUser.name.trim()) return true;
+
+    return false;
+  };
+
   // Helper to open Edit Modal with existing meeting data
   const handleOpenEditModal = (meeting: MeetingItem) => {
+    if (!canManageMeeting(meeting)) {
+      showToast("⛔ เฉพาะผู้จองการประชุมหรือผู้ดูแลระบบ (Admin) เท่านั้นที่สามารถแก้ไขได้");
+      return;
+    }
     setEditingMeetingId(String(meeting.id));
     setFormTitle(meeting.title);
     setFormCategory(meeting.category || "general");
@@ -300,11 +320,33 @@ export function MeetingsPage({
       };
     });
 
+    if (editingMeetingId) {
+      const existing = meetings.find((m) => String(m.id) === String(editingMeetingId));
+      if (existing && !canManageMeeting(existing)) {
+        showToast("⛔ เฉพาะผู้จองหรือผู้ดูแลระบบ (Admin) เท่านั้นที่สามารถแก้ไขการประชุมนี้ได้");
+        return;
+      }
+    }
+
+    const existingMeeting = editingMeetingId
+      ? meetings.find((m) => String(m.id) === String(editingMeetingId))
+      : null;
+
     const meetingId =
       editingMeetingId ||
       (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
         ? crypto.randomUUID()
         : `${Date.now()}-0000-4000-8000-${Math.random().toString(16).slice(2, 14).padEnd(12, "0")}`);
+
+    const organizerPayload = existingMeeting?.organizer || (currentUser
+      ? {
+          id: currentUser.id,
+          name: currentUser.name,
+          email: currentUser.email,
+          division: currentUser.division,
+          phone: currentUser.phone,
+        }
+      : undefined);
 
     const meetingPayload: MeetingItem = {
       id: meetingId,
@@ -323,16 +365,8 @@ export function MeetingsPage({
       timeStr,
       status: "confirmed",
       attendees: resolvedAttendees.length > 0 ? resolvedAttendees : ["ข้าราชการและเจ้าหน้าที่ พมจ."],
-      organizer: currentUser
-        ? {
-            id: currentUser.id,
-            name: currentUser.name,
-            email: currentUser.email,
-            division: currentUser.division,
-            phone: currentUser.phone,
-          }
-        : undefined,
-      createdAt: new Date().toISOString(),
+      organizer: organizerPayload,
+      createdAt: existingMeeting?.createdAt || new Date().toISOString(),
     };
 
     if (setMeetings) {
@@ -367,9 +401,12 @@ export function MeetingsPage({
   // Delete meeting
   const handleDeleteMeeting = async (id: string | number, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    const target = meetings.find((m) => String(m.id) === String(id));
+    if (target && !canManageMeeting(target)) {
+      showToast("⛔ เฉพาะผู้จองการประชุมหรือผู้ดูแลระบบ (Admin) เท่านั้นที่สามารถยกเลิกได้");
+      return;
+    }
     if (!confirm("คุณต้องการยกเลิกและลบนัดหมายการประชุมนี้ใช่หรือไม่?")) return;
-
-    const target = meetings.find((m) => m.id === id);
     if (setMeetings) {
       setMeetings((prev) => prev.filter((m) => m.id !== id));
     }
@@ -857,14 +894,16 @@ export function MeetingsPage({
                     </div>
 
                     <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={(e) => handleDeleteMeeting(m.id, e)}
-                        className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-500 text-xs p-1 rounded-lg hover:bg-rose-50 transition-all cursor-pointer"
-                        title="ยกเลิกนัดหมายนี้"
-                      >
-                        🗑️
-                      </button>
+                      {canManageMeeting(m) && (
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteMeeting(m.id, e)}
+                          className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-500 text-xs p-1 rounded-lg hover:bg-rose-50 transition-all cursor-pointer"
+                          title="ยกเลิกนัดหมายนี้"
+                        >
+                          🗑️
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -921,6 +960,25 @@ export function MeetingsPage({
                       {(m.attendees?.length || 0) > 2 ? "..." : ""}
                     </span>
                   </div>
+
+                  {/* Organizer Preview */}
+                  {m.organizer && (
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1.5 border-t border-slate-50">
+                      <span className="flex items-center gap-1 text-slate-600 truncate">
+                        <span>👤</span>
+                        <span className="truncate">ผู้จอง: <strong className="text-slate-800">{m.organizer.name}</strong></span>
+                      </span>
+                      {canManageMeeting(m) && m.organizer.id === currentUser?.id ? (
+                        <span className="shrink-0 text-[9px] px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-200 font-bold">
+                          คุณจอง
+                        </span>
+                      ) : currentUser?.role === "admin" ? (
+                        <span className="shrink-0 text-[9px] px-1.5 py-0.5 bg-indigo-50 text-indigo-700 rounded-full border border-indigo-200 font-bold">
+                          Admin
+                        </span>
+                      ) : null}
+                    </div>
+                  )}
                 </div>
 
                 {/* ─── ACTION BUTTONS ─── */}
@@ -957,15 +1015,17 @@ export function MeetingsPage({
                       รายละเอียด
                     </button>
 
-                    {/* Edit Button */}
-                    <button
-                      type="button"
-                      onClick={() => handleOpenEditModal(m)}
-                      className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                      title="แก้ไขการประชุม"
-                    >
-                      ✏️
-                    </button>
+                    {/* Edit Button (Only organizer or admin) */}
+                    {canManageMeeting(m) && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditModal(m)}
+                        className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                        title="แก้ไขการประชุม"
+                      >
+                        ✏️
+                      </button>
+                    )}
                   </div>
 
                   {/* Standard Calendar Actions */}
@@ -1226,14 +1286,28 @@ export function MeetingsPage({
                   <div className="flex items-center gap-2">
                     <span className="text-base">👤</span>
                     <div>
-                      <div className="text-[10px] text-indigo-600 font-bold">ผู้ประสานงาน / ผู้จัดการประชุม:</div>
+                      <div className="text-[10px] text-indigo-600 font-bold flex items-center gap-1.5">
+                        <span>ผู้จองห้องประชุม / ผู้ประสานงาน:</span>
+                        {canManageMeeting(selectedMeeting) && selectedMeeting.organizer.id === currentUser?.id ? (
+                          <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded-full text-[9px] font-bold">
+                            คุณเป็นผู้จอง
+                          </span>
+                        ) : currentUser?.role === "admin" ? (
+                          <span className="px-1.5 py-0.2 bg-indigo-200/80 text-indigo-900 rounded-full text-[9px] font-bold">
+                            สิทธิ์ Admin
+                          </span>
+                        ) : null}
+                      </div>
                       <div className="font-bold text-slate-800">
                         {selectedMeeting.organizer.name}
                       </div>
                     </div>
                   </div>
                   <div className="text-[11px] text-slate-500 text-right">
-                    {selectedMeeting.organizer.division}
+                    <div>{selectedMeeting.organizer.division}</div>
+                    {selectedMeeting.organizer.phone && (
+                      <div className="text-[10px] text-slate-400">โทร {selectedMeeting.organizer.phone}</div>
+                    )}
                   </div>
                 </div>
               )}
@@ -1289,24 +1363,33 @@ export function MeetingsPage({
               </button>
 
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleOpenEditModal(selectedMeeting);
-                    setSelectedMeeting(null);
-                  }}
-                  className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5"
-                >
-                  <span>✏️</span>
-                  <span>แก้ไขข้อมูล</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDeleteMeeting(selectedMeeting.id)}
-                  className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                >
-                  ยกเลิกการประชุม
-                </button>
+                {canManageMeeting(selectedMeeting) ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleOpenEditModal(selectedMeeting);
+                        setSelectedMeeting(null);
+                      }}
+                      className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      <span>✏️</span>
+                      <span>แก้ไขข้อมูล</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteMeeting(selectedMeeting.id)}
+                      className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      ยกเลิกการประชุม
+                    </button>
+                  </>
+                ) : (
+                  <div className="text-[11px] text-slate-500 bg-slate-100/90 px-2.5 py-1.5 rounded-xl border border-slate-200 flex items-center gap-1.5">
+                    <span>🔒</span>
+                    <span>เฉพาะผู้จอง ({selectedMeeting.organizer?.name || "ผู้สร้าง"}) หรือ Admin ที่แก้ไข/ยกเลิกได้</span>
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={() => setSelectedMeeting(null)}
