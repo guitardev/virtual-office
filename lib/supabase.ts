@@ -38,6 +38,7 @@ import {
 } from "./carbooking-data";
 import { DEFAULT_CHAT_GROUPS, INITIAL_CHAT_MESSAGES } from "./chat-data";
 import { DEFAULT_ROOMS } from "./meeting-data";
+import { formatIsoDateOnly, THAI_SHORT_MONTH_NAMES } from "./calendar";
 
 // Environment variables from Vercel Marketplace Supabase Integration
 const supabaseUrl =
@@ -1833,15 +1834,45 @@ export function mapRowToMeeting(row: any): MeetingItem {
   const start = row.start_time ? new Date(row.start_time) : new Date();
   const end = row.end_time ? new Date(row.end_time) : new Date(start.getTime() + 7200000);
 
-  const dateStr = start.toLocaleDateString("th-TH", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-  const timeStr = `${start.toLocaleTimeString("th-TH", {
-    hour: "2-digit",
-    minute: "2-digit",
-  })} - ${end.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.`;
+  const startIsoDate = formatIsoDateOnly(start);
+  const endIsoDate = formatIsoDateOnly(end);
+  const isMultiDay = startIsoDate !== endIsoDate;
+
+  let dateStr = "";
+  let timeStr = "";
+
+  if (isMultiDay) {
+    const diffTime = new Date(endIsoDate).getTime() - new Date(startIsoDate).getTime();
+    const totalDays = Math.max(1, Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1);
+
+    const startD = start.getDate();
+    const endD = end.getDate();
+    const startM = THAI_SHORT_MONTH_NAMES[start.getMonth()];
+    const endM = THAI_SHORT_MONTH_NAMES[end.getMonth()];
+    const endY = end.getFullYear() + 543;
+
+    if (start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear()) {
+      dateStr = `${startD} - ${endD} ${endM} ${endY} (${totalDays} วัน)`;
+    } else {
+      dateStr = `${startD} ${startM} - ${endD} ${endM} ${endY} (${totalDays} วัน)`;
+    }
+
+    const startH = String(start.getHours()).padStart(2, "0");
+    const startMin = String(start.getMinutes()).padStart(2, "0");
+    const endH = String(end.getHours()).padStart(2, "0");
+    const endMin = String(end.getMinutes()).padStart(2, "0");
+    timeStr = `${startH}:${startMin} น. (${startD} ${startM}) - ${endH}:${endMin} น. (${endD} ${endM})`;
+  } else {
+    dateStr = start.toLocaleDateString("th-TH", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+    timeStr = `${start.toLocaleTimeString("th-TH", {
+      hour: "2-digit",
+      minute: "2-digit",
+    })} - ${end.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.`;
+  }
 
   let attendees: any[] = [];
   if (Array.isArray(row.attendees) && row.attendees.length > 0) {
@@ -1870,6 +1901,8 @@ export function mapRowToMeeting(row: any): MeetingItem {
     description: row.description || undefined,
     dateStr,
     timeStr,
+    isMultiDay: isMultiDay ? true : undefined,
+    endDateStr: isMultiDay ? endIsoDate : undefined,
     startTime: start.toISOString(),
     endTime: end.toISOString(),
     location: row.location || (row.meeting_link ? "ห้องประชุมออนไลน์ Google Meet" : "ห้องประชุมสำนักงาน พมจ."),
