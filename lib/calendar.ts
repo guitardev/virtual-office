@@ -10,6 +10,8 @@ export function getMeetingDateRange(meeting: MeetingItem): { startDate: Date; en
     let end: Date;
     if (meeting.endTime) {
       end = new Date(meeting.endTime);
+    } else if (meeting.endDateStr) {
+      end = new Date(`${meeting.endDateStr}T17:00:00`);
     } else {
       end = new Date(start.getTime() + 2 * 3600 * 1000); // default 2 hours
     }
@@ -332,14 +334,116 @@ export const THAI_SHORT_DAY_NAMES = [
 ];
 
 /**
+ * Format Date to YYYY-MM-DD
+ */
+export function formatIsoDateOnly(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/**
  * Get ISO date string YYYY-MM-DD for a meeting safely
  */
 export function getMeetingIsoDate(meeting: MeetingItem): string {
   const { startDate } = getMeetingDateRange(meeting);
-  const y = startDate.getFullYear();
-  const m = String(startDate.getMonth() + 1).padStart(2, "0");
-  const d = String(startDate.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  return formatIsoDateOnly(startDate);
+}
+
+/**
+ * Get End ISO date string YYYY-MM-DD for a meeting safely
+ */
+export function getMeetingEndIsoDate(meeting: MeetingItem): string {
+  const { endDate } = getMeetingDateRange(meeting);
+  return formatIsoDateOnly(endDate);
+}
+
+/**
+ * Checks whether a meeting is active on a given target ISO date (supports multi-day span)
+ */
+export function isMeetingActiveOnDate(meeting: MeetingItem, targetIsoDate: string): boolean {
+  const { startDate, endDate } = getMeetingDateRange(meeting);
+  const startIso = formatIsoDateOnly(startDate);
+  const endIso = formatIsoDateOnly(endDate);
+  return targetIsoDate >= startIso && targetIsoDate <= endIso;
+}
+
+/**
+ * Returns multi-day span information for a meeting on a target date
+ */
+export function getMeetingSpanInfo(
+  meeting: MeetingItem,
+  targetIsoDate: string
+): {
+  isMultiDay: boolean;
+  position: "first_day" | "middle_day" | "last_day" | "single_day";
+  dayIndex: number;
+  totalDays: number;
+} {
+  const { startDate, endDate } = getMeetingDateRange(meeting);
+  const startIso = formatIsoDateOnly(startDate);
+  const endIso = formatIsoDateOnly(endDate);
+
+  if (startIso === endIso) {
+    return {
+      isMultiDay: false,
+      position: "single_day",
+      dayIndex: 1,
+      totalDays: 1,
+    };
+  }
+
+  const s = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+  const e = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+  const totalDays = Math.max(1, Math.round((e.getTime() - s.getTime()) / (24 * 3600 * 1000)) + 1);
+
+  const [ty, tm, td] = targetIsoDate.split("-").map(Number);
+  const t = new Date(ty, tm - 1, td);
+  const dayIndex = Math.max(1, Math.min(totalDays, Math.round((t.getTime() - s.getTime()) / (24 * 3600 * 1000)) + 1));
+
+  let position: "first_day" | "middle_day" | "last_day" | "single_day" = "middle_day";
+  if (targetIsoDate === startIso) {
+    position = "first_day";
+  } else if (targetIsoDate === endIso) {
+    position = "last_day";
+  }
+
+  return {
+    isMultiDay: true,
+    position,
+    dayIndex,
+    totalDays,
+  };
+}
+
+/**
+ * Formats a friendly Thai multi-day span text (e.g. 4 - 6 พ.ย. 2569 (3 วัน))
+ */
+export function formatMeetingSpanText(meeting: MeetingItem): string {
+  const { startDate, endDate } = getMeetingDateRange(meeting);
+  const startIso = formatIsoDateOnly(startDate);
+  const endIso = formatIsoDateOnly(endDate);
+
+  if (startIso === endIso) {
+    return formatThaiDateHeader(startDate);
+  }
+
+  const sD = startDate.getDate();
+  const sM = THAI_SHORT_MONTH_NAMES[startDate.getMonth()];
+  const sY = startDate.getFullYear() + 543;
+  const eD = endDate.getDate();
+  const eM = THAI_SHORT_MONTH_NAMES[endDate.getMonth()];
+  const eY = endDate.getFullYear() + 543;
+
+  const s = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+  const e = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+  const totalDays = Math.max(1, Math.round((e.getTime() - s.getTime()) / (24 * 3600 * 1000)) + 1);
+
+  if (startDate.getMonth() === endDate.getMonth() && sY === eY) {
+    return `${sD} - ${eD} ${sM} ${sY} (${totalDays} วัน)`;
+  }
+  return `${sD} ${sM} ${sY} - ${eD} ${eM} ${eY} (${totalDays} วัน)`;
 }
 
 /**

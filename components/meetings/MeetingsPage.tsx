@@ -17,6 +17,9 @@ import {
   getMeetingDateRange,
   getAttendeeName,
   getAttendeeEmail,
+  formatIsoDateOnly,
+  formatMeetingSpanText,
+  THAI_SHORT_MONTH_NAMES,
 } from "@/lib/calendar";
 import {
   MEETING_CATEGORY_CONFIG,
@@ -119,6 +122,12 @@ export function MeetingsPage({
     const today = new Date();
     return today.toISOString().slice(0, 10);
   });
+  const [formIsMultiDay, setFormIsMultiDay] = useState(false);
+  const [formEndDate, setFormEndDate] = useState(() => {
+    const next = new Date();
+    next.setDate(next.getDate() + 2);
+    return next.toISOString().slice(0, 10);
+  });
   const [formStartTime, setFormStartTime] = useState("09:30");
   const [formEndTime, setFormEndTime] = useState("11:30");
   const [formDescription, setFormDescription] = useState("");
@@ -145,10 +154,11 @@ export function MeetingsPage({
     if (formType === "online" || !formLocation.trim() || !formDate || !formStartTime || !formEndTime) {
       return { hasConflict: false, conflictingMeetings: [] };
     }
+    const resolvedEndDate = formIsMultiDay && formEndDate ? formEndDate : formDate;
     const start = new Date(`${formDate}T${formStartTime}:00`);
-    const end = new Date(`${formDate}T${formEndTime}:00`);
+    const end = new Date(`${resolvedEndDate}T${formEndTime}:00`);
     return checkMeetingRoomConflict(formLocation, start, end, meetings, editingMeetingId || undefined);
-  }, [formType, formLocation, formDate, formStartTime, formEndTime, meetings, editingMeetingId]);
+  }, [formType, formLocation, formDate, formEndDate, formIsMultiDay, formStartTime, formEndTime, meetings, editingMeetingId]);
 
   // Helper to open Add Modal with fresh defaults
   const handleOpenAddModal = () => {
@@ -159,7 +169,12 @@ export function MeetingsPage({
     setFormLocation("ห้องประชุม 1 (ศาลากลางจังหวัด ชั้น 2)");
     setFormMeetingLink("https://meet.google.com/kpp-msoc");
     const today = new Date();
-    setFormDate(today.toISOString().slice(0, 10));
+    const todayIso = today.toISOString().slice(0, 10);
+    setFormDate(todayIso);
+    setFormIsMultiDay(false);
+    const next = new Date(today);
+    next.setDate(next.getDate() + 2);
+    setFormEndDate(next.toISOString().slice(0, 10));
     setFormStartTime("09:30");
     setFormEndTime("11:30");
     setFormDescription("");
@@ -218,6 +233,8 @@ export function MeetingsPage({
 
     // Extract date & times
     let dateVal = new Date().toISOString().slice(0, 10);
+    let endDateVal = dateVal;
+    let isMulti = Boolean(meeting.isMultiDay);
     let startVal = "09:30";
     let endVal = "11:30";
     if (meeting.startTime) {
@@ -230,10 +247,20 @@ export function MeetingsPage({
     if (meeting.endTime) {
       const e = new Date(meeting.endTime);
       if (!isNaN(e.getTime())) {
+        endDateVal = e.toISOString().slice(0, 10);
         endVal = e.toTimeString().slice(0, 5);
+        if (endDateVal !== dateVal) {
+          isMulti = true;
+        }
       }
+    } else if (meeting.endDateStr) {
+      endDateVal = meeting.endDateStr;
+      isMulti = true;
     }
+
+    setFormIsMultiDay(isMulti);
     setFormDate(dateVal);
+    setFormEndDate(endDateVal || dateVal);
     setFormStartTime(startVal);
     setFormEndTime(endVal);
     setFormDescription(meeting.description || "");
@@ -273,11 +300,18 @@ export function MeetingsPage({
       return;
     }
 
+    const isMulti = Boolean(formIsMultiDay && formEndDate && formEndDate !== formDate);
+    const resolvedEndDate = isMulti ? formEndDate : formDate;
     const startDateTime = new Date(`${formDate}T${formStartTime}:00`);
-    const endDateTime = new Date(`${formDate}T${formEndTime}:00`);
+    const endDateTime = new Date(`${resolvedEndDate}T${formEndTime}:00`);
 
     if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
       showToast("⚠️ รูปแบบวันที่หรือเวลาไม่ถูกต้อง");
+      return;
+    }
+
+    if (endDateTime.getTime() <= startDateTime.getTime()) {
+      showToast("⚠️ วันและเวลาสิ้นสุดต้องอยู่หลังวันและเวลาเริ่มต้น");
       return;
     }
 
@@ -300,12 +334,32 @@ export function MeetingsPage({
       if (!confirmSave) return;
     }
 
-    const dateStr = startDateTime.toLocaleDateString("th-TH", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-    const timeStr = `${formStartTime} - ${formEndTime} น.`;
+    let dateStr = "";
+    let timeStr = "";
+
+    if (isMulti) {
+      const sD = startDateTime.getDate();
+      const sM = THAI_SHORT_MONTH_NAMES[startDateTime.getMonth()];
+      const sY = startDateTime.getFullYear() + 543;
+      const eD = endDateTime.getDate();
+      const eM = THAI_SHORT_MONTH_NAMES[endDateTime.getMonth()];
+      const eY = endDateTime.getFullYear() + 543;
+      const diffDays = Math.max(1, Math.round((endDateTime.getTime() - startDateTime.getTime()) / (24 * 3600 * 1000)) + 1);
+
+      if (startDateTime.getMonth() === endDateTime.getMonth() && sY === eY) {
+        dateStr = `${sD} - ${eD} ${sM} ${sY} (${diffDays} วัน)`;
+      } else {
+        dateStr = `${sD} ${sM} ${sY} - ${eD} ${eM} ${eY} (${diffDays} วัน)`;
+      }
+      timeStr = `${formStartTime} น. (${sD} ${sM}) - ${formEndTime} น. (${eD} ${eM})`;
+    } else {
+      dateStr = startDateTime.toLocaleDateString("th-TH", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+      timeStr = `${formStartTime} - ${formEndTime} น.`;
+    }
 
     // Map selected attendee IDs to attendee objects
     const resolvedAttendees = selectedAttendeeIds.map((id) => {
@@ -363,6 +417,8 @@ export function MeetingsPage({
       endTime: endDateTime.toISOString(),
       dateStr,
       timeStr,
+      isMultiDay: isMulti,
+      endDateStr: isMulti ? resolvedEndDate : undefined,
       status: "confirmed",
       attendees: resolvedAttendees.length > 0 ? resolvedAttendees : ["ข้าราชการและเจ้าหน้าที่ พมจ."],
       organizer: organizerPayload,
@@ -916,11 +972,16 @@ export function MeetingsPage({
                   </h3>
 
                   {/* Date & Time with icon */}
-                  <div className="flex items-center gap-1.5 text-xs text-indigo-700 bg-indigo-50/70 px-3 py-1.5 rounded-xl font-bold mb-3 border border-indigo-100">
+                  <div className="flex items-center gap-1.5 text-xs text-indigo-700 bg-indigo-50/70 px-3 py-1.5 rounded-xl font-bold mb-3 border border-indigo-100 flex-wrap">
                     <span>🕒</span>
                     <span>{m.dateStr}</span>
                     <span>·</span>
                     <span className="font-mono">{m.timeStr}</span>
+                    {m.isMultiDay && (
+                      <span className="px-2 py-0.5 rounded-md bg-purple-100 text-purple-800 text-[10px] font-extrabold border border-purple-200">
+                        ประชุมหลายวัน
+                      </span>
+                    )}
                   </div>
 
                   {/* Location */}
@@ -1181,8 +1242,13 @@ export function MeetingsPage({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200/80 text-xs">
                 <div>
                   <span className="text-slate-400 font-semibold block mb-1">📅 วันและเวลา:</span>
-                  <div className="text-slate-800 font-bold text-sm">
-                    {selectedMeeting.dateStr}
+                  <div className="text-slate-800 font-bold text-sm flex items-center gap-2 flex-wrap">
+                    <span>{selectedMeeting.dateStr}</span>
+                    {selectedMeeting.isMultiDay && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-100 text-purple-800 border border-purple-200">
+                        ประชุมต่อเนื่องหลายวัน
+                      </span>
+                    )}
                   </div>
                   <div className="text-indigo-700 font-mono font-bold mt-0.5">
                     {selectedMeeting.timeStr}
@@ -1547,47 +1613,146 @@ export function MeetingsPage({
                 </div>
               </div>
 
-              {/* Date, Start Time, End Time */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    วันที่จัดประชุม <span className="text-rose-500">*</span>
-                  </label>
+              {/* Multi-day Meeting Toggle */}
+              <div className="p-3 bg-indigo-50/70 border border-indigo-100 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <label className="flex items-center gap-2.5 cursor-pointer">
                   <input
-                    type="date"
-                    required
-                    value={formDate}
-                    onChange={(e) => setFormDate(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:border-indigo-500 transition-colors"
+                    type="checkbox"
+                    checked={formIsMultiDay}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setFormIsMultiDay(checked);
+                      if (checked && (!formEndDate || formEndDate <= formDate)) {
+                        const d = new Date(formDate);
+                        d.setDate(d.getDate() + 1);
+                        setFormEndDate(d.toISOString().slice(0, 10));
+                      }
+                    }}
+                    className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 cursor-pointer"
                   />
-                </div>
+                  <div>
+                    <span className="text-xs font-extrabold text-indigo-950 block">
+                      📅 การประชุมต่อเนื่องหลายวัน (Multi-day Continuous Meeting)
+                    </span>
+                    <span className="text-[10px] text-indigo-600">
+                      สำหรับการจัดสัมมนา, เวิร์กช็อป, หรือฝึกอบรมที่จัดต่อเนื่องข้ามวัน
+                    </span>
+                  </div>
+                </label>
 
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    เวลาเริ่มต้น <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="time"
-                    required
-                    value={formStartTime}
-                    onChange={(e) => setFormStartTime(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:border-indigo-500 transition-colors font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    เวลาสิ้นสุด <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="time"
-                    required
-                    value={formEndTime}
-                    onChange={(e) => setFormEndTime(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:border-indigo-500 transition-colors font-mono"
-                  />
-                </div>
+                {formIsMultiDay && formEndDate && formEndDate > formDate && (
+                  <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-indigo-200/90 text-indigo-950 shrink-0 self-start sm:self-center border border-indigo-300">
+                    รวม {Math.max(1, Math.round((new Date(formEndDate).getTime() - new Date(formDate).getTime()) / (24 * 3600 * 1000)) + 1)} วัน
+                  </span>
+                )}
               </div>
+
+              {/* Date & Time Fields: Single Day vs Multi-day */}
+              {!formIsMultiDay ? (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      วันที่จัดประชุม <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={formDate}
+                      onChange={(e) => setFormDate(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:border-indigo-500 transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      เวลาเริ่มต้น <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="time"
+                      required
+                      value={formStartTime}
+                      onChange={(e) => setFormStartTime(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:border-indigo-500 transition-colors font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      เวลาสิ้นสุด <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="time"
+                      required
+                      value={formEndTime}
+                      onChange={(e) => setFormEndTime(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:border-indigo-500 transition-colors font-mono"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1.5 p-2.5 bg-white rounded-xl border border-slate-200">
+                      <div className="text-[11px] font-extrabold text-teal-800 flex items-center gap-1">
+                        <span>▶</span>
+                        <span>จุดเริ่มต้นการประชุม</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] text-slate-500 font-bold mb-0.5">วันเริ่มต้น</label>
+                          <input
+                            type="date"
+                            required
+                            value={formDate}
+                            onChange={(e) => setFormDate(e.target.value)}
+                            className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-slate-500 font-bold mb-0.5">เวลาเริ่ม</label>
+                          <input
+                            type="time"
+                            required
+                            value={formStartTime}
+                            onChange={(e) => setFormStartTime(e.target.value)}
+                            className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:bg-white font-mono"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5 p-2.5 bg-white rounded-xl border border-slate-200">
+                      <div className="text-[11px] font-extrabold text-indigo-800 flex items-center gap-1">
+                        <span>⏹</span>
+                        <span>จุดสิ้นสุดการประชุม</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] text-slate-500 font-bold mb-0.5">วันสิ้นสุด</label>
+                          <input
+                            type="date"
+                            required
+                            min={formDate}
+                            value={formEndDate}
+                            onChange={(e) => setFormEndDate(e.target.value)}
+                            className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-slate-500 font-bold mb-0.5">เวลาสิ้นสุด</label>
+                          <input
+                            type="time"
+                            required
+                            value={formEndTime}
+                            onChange={(e) => setFormEndTime(e.target.value)}
+                            className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:bg-white font-mono"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Location & Room Master Preset */}
               {formType !== "online" && (

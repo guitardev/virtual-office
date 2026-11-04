@@ -2,7 +2,13 @@
 
 import React, { useState, useMemo } from "react";
 import { MeetingItem, MeetingRoomMaster, Member } from "@/lib/types";
-import { formatThaiDateHeader, getMeetingIsoDate, getMeetingDateRange } from "@/lib/calendar";
+import {
+  formatThaiDateHeader,
+  getMeetingIsoDate,
+  getMeetingDateRange,
+  isMeetingActiveOnDate,
+  getMeetingSpanInfo,
+} from "@/lib/calendar";
 
 interface RoomBookingViewProps {
   rooms: MeetingRoomMaster[];
@@ -58,8 +64,7 @@ export function RoomBookingView({
     return meetings.filter((m) => {
       if (m.status === "cancelled") return false;
       if (m.type === "online") return false;
-      const iso = getMeetingIsoDate(m);
-      return iso === selectedDate;
+      return isMeetingActiveOnDate(m, selectedDate);
     });
   }, [meetings, selectedDate]);
 
@@ -365,28 +370,38 @@ export function RoomBookingView({
                   </div>
                 ) : (
                   <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-1">
-                    {schedule.map((m) => (
-                      <div
-                        key={m.id}
-                        onClick={() => onSelectMeeting(m)}
-                        className="p-2 bg-slate-50 hover:bg-indigo-50/50 rounded-xl border border-slate-200 text-xs transition-colors cursor-pointer group"
-                      >
-                        <div className="flex items-center justify-between text-[10px] font-mono font-bold text-indigo-700">
-                          <span>⏰ {m.timeStr}</span>
-                          <span className="text-slate-400 group-hover:text-indigo-600 font-sans font-medium text-[9px]">
-                            ดูรายละเอียด ›
-                          </span>
-                        </div>
-                        <div className="font-semibold text-slate-800 text-[11px] truncate mt-0.5">
-                          {m.title}
-                        </div>
-                        {m.organizer && (
-                          <div className="text-[10px] text-slate-400 truncate mt-0.5">
-                            👤 {m.organizer.name}
+                    {schedule.map((m) => {
+                      const span = getMeetingSpanInfo(m, selectedDate);
+                      return (
+                        <div
+                          key={m.id}
+                          onClick={() => onSelectMeeting(m)}
+                          className="p-2 bg-slate-50 hover:bg-indigo-50/50 rounded-xl border border-slate-200 text-xs transition-colors cursor-pointer group"
+                        >
+                          <div className="flex items-center justify-between text-[10px] font-mono font-bold text-indigo-700 flex-wrap gap-1">
+                            <div className="flex items-center gap-1.5">
+                              <span>⏰ {m.timeStr}</span>
+                              {span.isMultiDay && (
+                                <span className="font-sans text-[9px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-semibold">
+                                  วันที่ {span.dayIndex}/{span.totalDays}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-slate-400 group-hover:text-indigo-600 font-sans font-medium text-[9px]">
+                              ดูรายละเอียด ›
+                            </span>
                           </div>
-                        )}
-                      </div>
-                    ))}
+                          <div className="font-semibold text-slate-800 text-[11px] truncate mt-0.5">
+                            {m.title}
+                          </div>
+                          {m.organizer && (
+                            <div className="text-[10px] text-slate-400 truncate mt-0.5">
+                              👤 {m.organizer.name}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

@@ -9,6 +9,9 @@ import {
   getMeetingIsoDate,
   formatThaiDateHeader,
   getAttendeeName,
+  formatIsoDateOnly,
+  getMeetingSpanInfo,
+  formatMeetingSpanText,
 } from "@/lib/calendar";
 import { MEETING_CATEGORY_CONFIG, MEETING_TYPE_CONFIG } from "@/lib/meeting-data";
 
@@ -65,15 +68,22 @@ export function MeetingCalendarView({
     setSelectedIsoDate(`${y}-${m}-${d}`);
   };
 
-  // Map meetings by ISO date for O(1) lookup
+  // Map meetings by ISO date for O(1) lookup, supporting multi-day span
   const meetingsByDate = useMemo(() => {
     const map = new Map<string, MeetingItem[]>();
     meetings.forEach((m) => {
       if (m.status === "cancelled") return;
-      const iso = getMeetingIsoDate(m);
-      const list = map.get(iso) || [];
-      list.push(m);
-      map.set(iso, list);
+      const { startDate, endDate } = getMeetingDateRange(m);
+      const cur = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+      const end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+
+      while (cur.getTime() <= end.getTime()) {
+        const iso = formatIsoDateOnly(cur);
+        const list = map.get(iso) || [];
+        list.push(m);
+        map.set(iso, list);
+        cur.setDate(cur.getDate() + 1);
+      }
     });
     return map;
   }, [meetings]);
@@ -299,6 +309,7 @@ export function MeetingCalendarView({
                     {cell.meetings.slice(0, 2).map((m) => {
                       const isOnline = m.type === "online";
                       const isHybrid = m.type === "hybrid";
+                      const span = getMeetingSpanInfo(m, cell.isoDate);
                       return (
                         <div
                           key={m.id}
@@ -307,20 +318,38 @@ export function MeetingCalendarView({
                             onSelectMeeting(m);
                           }}
                           className={`px-1.5 py-0.5 rounded-md text-[10px] font-medium truncate flex items-center gap-1 border shadow-2xs transition-transform hover:scale-[1.02] cursor-pointer ${
-                            isOnline
+                            span.isMultiDay
+                              ? "bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100"
+                              : isOnline
                               ? "bg-teal-50 text-teal-800 border-teal-200/80 hover:bg-teal-100"
                               : isHybrid
                               ? "bg-purple-50 text-purple-800 border-purple-200/80 hover:bg-purple-100"
                               : "bg-indigo-50 text-indigo-800 border-indigo-200/80 hover:bg-indigo-100"
                           }`}
-                          title={`${m.title} (${m.timeStr})`}
+                          title={`${m.title} (${m.timeStr})${span.isMultiDay ? ` [วันที่ ${span.dayIndex}/${span.totalDays}]` : ""}`}
                         >
                           <span className="shrink-0 text-[8px]">
-                            {isOnline ? "🌐" : isHybrid ? "🔄" : "🏛️"}
+                            {span.isMultiDay
+                              ? span.position === "first_day"
+                                ? "▶"
+                                : span.position === "last_day"
+                                ? "⏹"
+                                : "🔄"
+                              : isOnline
+                              ? "🌐"
+                              : isHybrid
+                              ? "🔄"
+                              : "🏛️"}
                           </span>
-                          <span className="font-mono text-[9px] font-bold shrink-0">
-                            {m.timeStr?.split("-")[0]?.trim() || ""}
-                          </span>
+                          {span.isMultiDay ? (
+                            <span className="font-mono text-[9px] font-bold shrink-0 bg-amber-200/70 text-amber-900 px-1 rounded">
+                              {span.dayIndex}/{span.totalDays}
+                            </span>
+                          ) : (
+                            <span className="font-mono text-[9px] font-bold shrink-0">
+                              {m.timeStr?.split("-")[0]?.trim() || ""}
+                            </span>
+                          )}
                           <span className="truncate">{m.title}</span>
                         </div>
                       );
@@ -354,7 +383,7 @@ export function MeetingCalendarView({
 
           {/* Month Footer Legend & Summary */}
           <div className="p-3 sm:p-4 bg-slate-50/70 border-t border-slate-200/80 flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-3 text-slate-600 font-medium">
+            <div className="flex items-center gap-3 text-slate-600 font-medium flex-wrap">
               <span className="text-[11px] font-bold text-slate-400">สัญลักษณ์:</span>
               <span className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
@@ -367,6 +396,10 @@ export function MeetingCalendarView({
               <span className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-purple-500"></span>
                 <span>ไฮบริด</span>
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                <span>หลายวันต่อเนื่อง</span>
               </span>
             </div>
 
@@ -434,16 +467,24 @@ export function MeetingCalendarView({
                 {selectedDateMeetings.map((m) => {
                   const catCfg = MEETING_CATEGORY_CONFIG[m.category || "general"];
                   const typeCfg = MEETING_TYPE_CONFIG[m.type || "hybrid"];
+                  const span = getMeetingSpanInfo(m, selectedIsoDate);
                   return (
                     <div
                       key={m.id}
                       onClick={() => onSelectMeeting(m)}
                       className="p-3 rounded-2xl border border-slate-200/80 hover:border-indigo-300 hover:bg-indigo-50/20 transition-all cursor-pointer space-y-2 group shadow-2xs"
                     >
-                      <div className="flex items-center justify-between text-[10px] font-bold">
-                        <span className={`px-2 py-0.5 rounded-full border ${catCfg.bg} ${catCfg.text} ${catCfg.border}`}>
-                          {catCfg.label}
-                        </span>
+                      <div className="flex items-center justify-between text-[10px] font-bold flex-wrap gap-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={`px-2 py-0.5 rounded-full border ${catCfg.bg} ${catCfg.text} ${catCfg.border}`}>
+                            {catCfg.label}
+                          </span>
+                          {span.isMultiDay && (
+                            <span className="px-2 py-0.5 rounded-full border bg-amber-50 text-amber-800 border-amber-200 font-medium">
+                              🗓️ วันที่ {span.dayIndex}/{span.totalDays} ({span.position === "first_day" ? "วันแรก" : span.position === "last_day" ? "วันสุดท้าย" : "ต่อเนื่อง"})
+                            </span>
+                          )}
+                        </div>
                         <span className="text-indigo-700 font-mono bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
                           ⏰ {m.timeStr}
                         </span>

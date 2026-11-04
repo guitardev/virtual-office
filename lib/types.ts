@@ -230,6 +230,8 @@ export interface MeetingItem {
   timeStr: string;
   startTime?: string;
   endTime?: string;
+  isMultiDay?: boolean;
+  endDateStr?: string;
   location: string;
   type: MeetingType;
   category?: MeetingCategory;
