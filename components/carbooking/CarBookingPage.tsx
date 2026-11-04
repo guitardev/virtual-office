@@ -38,7 +38,7 @@ import { ReturnVehicleModal } from "./ReturnVehicleModal";
 import { VehicleReturnDocumentModal } from "./VehicleReturnDocumentModal";
 import { NotificationLogsModal } from "./NotificationLogsModal";
 import { RealisticFuelGauge } from "./RealisticFuelGauge";
-import { FleetGanttView } from "./FleetGanttView";
+import { CarBookingCalendarView } from "./CarBookingCalendarView";
 import { PaperlessDispatchQRCode } from "./PaperlessDispatchQRCode";
 import { sendBrowserNotification } from "@/lib/notifications";
 
@@ -1829,7 +1829,7 @@ export function CarBookingPage({
             }`}
         >
           <span>📅</span>
-          <span>ตารางไทม์ไลน์ภารกิจ (Gantt View)</span>
+          <span>ปฏิทินการใช้รถยนต์ (Calendar View)</span>
         </button>
 
         <button
@@ -1845,9 +1845,9 @@ export function CarBookingPage({
         </button>
       </div>
 
-      {/* ─── TAB: FLEET GANTT TIMELINE ─── */}
+      {/* ─── TAB: CAR BOOKING CALENDAR VIEW (DAY / WEEK / MONTH) ─── */}
       {activeTab === "timeline" && (
-        <FleetGanttView
+        <CarBookingCalendarView
           vehicles={vehicles}
           bookings={bookings}
           onSelectBooking={(b) => setSelectedDocBooking(b)}
