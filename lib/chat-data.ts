@@ -98,7 +98,81 @@ export const DEFAULT_CHAT_GROUPS: ChatGroup[] = [
   },
 ];
 
-export const INITIAL_CHAT_MESSAGES: ChatMessage[] = [];
+export const INITIAL_CHAT_MESSAGES: ChatMessage[] = [
+  {
+    id: "msg_init_1",
+    groupId: "ch_all_staff",
+    senderId: "usr_1",
+    senderName: "นางสาวมะลิวัน สิทธิโยธี",
+    senderRole: "admin",
+    senderPosition: "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
+    senderDivision: "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร (ผู้บริหาร)",
+    senderAvatar: "https://kamphaengphet.m-society.go.th/wp-content/uploads/2024/11/%E0%B8%99%E0%B8%B2%E0%B8%87%E0%B8%AA%E0%B8%B2%E0%B8%A7%E0%B8%A1%E0%B8%B0%E0%B8%A5%E0%B8%B4%E0%B8%A7%E0%B8%B1%E0%B8%99-%E0%B8%AA%E0%B8%B4%E0%B8%97%E0%B8%98%E0%B8%B4%E0%B9%82%E0%B8%A2%E0%B8%98%E0%B8%B5.png",
+    text: "เรียนข้าราชการและเจ้าหน้าที่ทุกท่าน ขอให้ทุกกลุ่มงานเตรียมข้อมูลสรุปผลการดำเนินงานและการช่วยเหลือกลุ่มเปราะบาง ๑๑ อำเภอ เพื่อเสนอที่ประชุม กบจ. ในสัปดาห์หน้าค่ะ",
+    timestamp: "08:30 น.",
+    isPinned: true,
+  },
+  {
+    id: "msg_init_2",
+    groupId: "ch_all_staff",
+    senderId: "usr_2",
+    senderName: "นายเสกพล ดิษฐโชติ",
+    senderRole: "manager",
+    senderPosition: "นักพัฒนาสังคมชำนาญการ (หัวหน้าฝ่ายบริหารทั่วไป)",
+    senderDivision: "ฝ่ายบริหารทั่วไป",
+    senderAvatar: "https://kamphaengphet.m-society.go.th/wp-content/uploads/2024/12/2b6d8e58-bfd5-44a7-a18d-4fb8e685452f-e1734057934925.png",
+    text: "รับทราบครับท่าน พมจ. ฝ่ายบริหารทั่วไปได้จัดเตรียมห้องประชุมใหญ่และระบบถ่ายทอดสดพร้อมแล้วครับ",
+    timestamp: "08:45 น.",
+  },
+  {
+    id: "msg_init_3",
+    groupId: "ch_policy_planning",
+    senderId: "usr_4",
+    senderName: "นายพนมศักย์ บริภัทรจิรากร",
+    senderRole: "manager",
+    senderPosition: "นักพัฒนาสังคมชำนาญการ (รักษาการหัวหน้ากลุ่มนโยบายและวิชาการ)",
+    senderDivision: "กลุ่มนโยบายและวิชาการ",
+    senderAvatar: "https://kamphaengphet.m-society.go.th/wp-content/uploads/2024/11/%E0%B8%9E%E0%B8%B5%E0%B9%88%E0%B8%94%E0%B8%B2%E0%B8%A7-1-1-e1734061864108.png",
+    text: "กลุ่มนโยบายฯ กำลังรวบรวมตัวชี้วัด TPMAP และข้อมูลครัวเรือนเปราะบางทั้ง 11 อำเภอ ผ่าน Data Hub เพื่อเตรียมจัดทำรายงาน กบจ. ครับ",
+    timestamp: "09:00 น.",
+  },
+  {
+    id: "msg_init_4",
+    groupId: "ch_policy_planning",
+    senderId: "usr_5",
+    senderName: "นางสาวขวัญนภา ศิริสมบัติ",
+    senderRole: "member",
+    senderPosition: "เจ้าหน้าที่ระบบงานคอมพิวเตอร์",
+    senderDivision: "กลุ่มนโยบายและวิชาการ",
+    senderAvatar: "https://kamphaengphet.m-society.go.th/wp-content/uploads/2024/11/a864cd1c-9230-490f-b838-5f62aa24bfca-e1732079225217.png",
+    text: "อัปโหลดไฟล์สรุปสถิติขึ้นคลังเอกสาร Synology NAS DMS เรียบร้อยแล้วค่ะ",
+    timestamp: "09:15 น.",
+  },
+  {
+    id: "msg_init_5",
+    groupId: "ch_social_dev",
+    senderId: "usr_3",
+    senderName: "นายวรวุฒิ พึ่งพัก",
+    senderRole: "manager",
+    senderPosition: "นักพัฒนาสังคมชำนาญการพิเศษ (หัวหน้ากลุ่มการพัฒนาสังคมและสวัสดิการ)",
+    senderDivision: "กลุ่มการพัฒนาสังคมและสวัสดิการ",
+    senderAvatar: "https://kamphaengphet.m-society.go.th/wp-content/uploads/2024/11/e735d8a3-9afc-4271-803e-0438ae7cb5371-1-1-e1731912123637.png",
+    text: "วันนี้ทีม ศรส. 1300 และนักสังคมสงเคราะห์ลงพื้นที่อำเภอพรานกระต่าย เพื่อช่วยเหลือกรณีเคสฉุกเฉินครับ",
+    timestamp: "09:30 น.",
+  },
+  {
+    id: "msg_init_6",
+    groupId: "ch_disability_center",
+    senderId: "usr_6",
+    senderName: "นางสาวสุมาลี แสงแก้ว",
+    senderRole: "member",
+    senderPosition: "นักสังคมสงเคราะห์ (เจ้าหน้าที่กองทุนส่งเสริมและพัฒนาคุณภาพชีวิตคนพิการ)",
+    senderDivision: "ศูนย์บริการคนพิการจังหวัดกำแพงเพชร",
+    senderAvatar: "https://kamphaengphet.m-society.go.th/wp-content/uploads/2024/11/e69828cb-560e-4c87-a197-91e98179257a-e1732768762731.png",
+    text: "รายงานยอดการพิจารณาคำขอกู้ยืมเงินกองทุนคนพิการ ประจำเดือนนี้ สรุปส่งกลุ่มนโยบายฯ เรียบร้อยค่ะ",
+    timestamp: "09:40 น.",
+  },
+];
 
 const CHAT_GROUPS_STORAGE_KEY = "smartmso_chat_groups_v3";
 const LEGACY_CHAT_GROUPS_STORAGE_KEYS = [
@@ -109,11 +183,11 @@ const CHAT_MESSAGES_STORAGE_KEY = "smartmso_chat_messages_v2";
 const LEGACY_CHAT_MESSAGES_STORAGE_KEY = "omnioffice_chat_messages_v2";
 
 /**
- * Filter out mock usr_ IDs (only usr_1 and usr_mock are legacy mock IDs)
+ * Filter out mock usr_ IDs (only usr_mock is legacy mock ID)
  */
 function isNotMockUserId(id: string): boolean {
   if (!id) return false;
-  return id !== "usr_1" && id !== "usr_mock";
+  return id !== "usr_mock";
 }
 
 /**
@@ -226,18 +300,18 @@ export function saveStoredChatGroups(groups: ChatGroup[]) {
  * Load stored messages from localStorage
  */
 export function loadStoredChatMessages(): ChatMessage[] {
-  if (typeof window === "undefined") return [];
+  if (typeof window === "undefined") return INITIAL_CHAT_MESSAGES;
 
   try {
     const raw =
       localStorage.getItem(CHAT_MESSAGES_STORAGE_KEY) ||
       localStorage.getItem(LEGACY_CHAT_MESSAGES_STORAGE_KEY);
-    if (!raw) return [];
+    if (!raw) return INITIAL_CHAT_MESSAGES;
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_CHAT_MESSAGES;
   } catch (err) {
     console.error("Failed to load chat messages:", err);
-    return [];
+    return INITIAL_CHAT_MESSAGES;
   }
 }
 

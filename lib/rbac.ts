@@ -1,4 +1,5 @@
 import { Role, ModuleId, RoleInfo, Member, AuditLog, SystemModule, PersonnelType, AccessRequest, TaskItem, TaskVisibility } from "./types";
+import { OFFICIAL_OFFICE_PERSONNEL } from "./office-personnel";
 
 export const ROLE_CONFIG: Record<Role, RoleInfo> = {
   admin: {
@@ -298,7 +299,7 @@ export const GOVERNMENT_DIVISIONS = [
   "คณะทำงานที่ปรึกษาและภาคีเครือข่ายภายนอก",
 ] as const;
 
-export const INITIAL_MEMBERS: Member[] = [];
+export const INITIAL_MEMBERS: Member[] = OFFICIAL_OFFICE_PERSONNEL;
 
 export const INITIAL_AUDIT_LOGS: AuditLog[] = [];
 

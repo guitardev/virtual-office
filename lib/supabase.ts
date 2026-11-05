@@ -308,12 +308,12 @@ const LEGACY_MEMBERS_STORAGE_KEYS = [
 ];
 
 /**
- * Filter out legacy mock user IDs (usr_1 or usr_mock only)
+ * Filter out legacy mock user IDs (usr_mock only)
  */
 export function isRealMember(m: Member): boolean {
   if (!m || !m.id) return false;
-  // Filter out only legacy mock user 'usr_1' or 'usr_mock', keeping real seeded personnel (usr_2 through usr_99), syno_*, line_*, etc.
-  if (m.id === "usr_1" || m.id === "usr_mock") return false;
+  // Filter out only legacy mock user 'usr_mock', keeping real seeded personnel (usr_1 through usr_99), syno_*, line_*, etc.
+  if (m.id === "usr_mock") return false;
   return true;
 }
 
