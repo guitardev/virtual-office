@@ -107,7 +107,12 @@ export function TasksPage({
       // 2. Mission Group Dropdown Filter
       if (selectedMissionFilter !== "all") {
         const tMission = t.missionGroup || "";
-        if (tMission !== selectedMissionFilter) {
+        if (tMission) {
+          if (tMission !== selectedMissionFilter) {
+            return false;
+          }
+        } else {
+          // Fallback only if missionGroup is not explicitly set on the legacy task
           const mg = MSO_MISSION_GROUPS.find((g) => g.id === selectedMissionFilter);
           if (!mg || (t.dept !== mg.division && t.targetDivision !== mg.division)) {
             return false;

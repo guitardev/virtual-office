@@ -1073,13 +1073,13 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
                         type="button"
                         onClick={() =>
                           setNewFolderName((prev) =>
-                            prev ? `${prev} - ${mg.name}` : mg.name
+                            prev ? `${prev} - ${mg.shortName}` : mg.shortName
                           )
                         }
                         className="px-2 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold border border-indigo-200/80 transition-colors truncate max-w-full cursor-pointer"
-                        title={mg.division}
+                        title={mg.name}
                       >
-                        {mg.icon} {mg.name}
+                        {mg.icon} {mg.shortName}
                       </button>
                     ))}
                   </div>
