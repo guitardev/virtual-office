@@ -9,6 +9,12 @@ import {
   calculateProvinceTotals,
   exportSocialStatsToCsv,
 } from "@/lib/social-statistics";
+import {
+  OFFICIAL_OFFICE_PERSONNEL,
+  PROVINCIAL_DIRECTOR,
+  getPersonnelByDivision,
+  OfficialStaffMember,
+} from "@/lib/office-personnel";
 import { SocialStatisticsReportModal } from "./SocialStatisticsReportModal";
 
 interface DataHubPageProps {
@@ -43,7 +49,7 @@ export const MISSION_GROUPS: MissionGroup[] = [
     bgColor: "bg-amber-50",
     borderColor: "border-amber-200",
     headName: "นายเสกพล ดิษฐโชติ",
-    headPosition: "หัวหน้าฝ่ายบริหารทั่วไป",
+    headPosition: "นักพัฒนาสังคมชำนาญการ (หัวหน้าฝ่ายบริหารทั่วไป)",
     description: "รับผิดชอบงานสารบรรณ งานยานพาหนะ งานอาคารสถานที่ งานการเงิน บัญชี พัสดุ และงานประชาสัมพันธ์องค์กร",
     metrics: [
       { label: "หนังสือรับ-ส่งประจำปี", value: "3,420 ฉบับ", change: "+12% จากปีก่อน", icon: "📜" },
@@ -71,8 +77,8 @@ export const MISSION_GROUPS: MissionGroup[] = [
     color: "text-indigo-700",
     bgColor: "bg-indigo-50",
     borderColor: "border-indigo-200",
-    headName: "นางสาวอังคณา ศรีเจริญ",
-    headPosition: "หัวหน้ากลุ่มนโยบายและวิชาการ",
+    headName: "นายพนมศักย์ บริภัทรจิรากร",
+    headPosition: "นักพัฒนาสังคมชำนาญการ (รักษาการหัวหน้ากลุ่มนโยบายและวิชาการ)",
     description: "จัดทำแผนปฏิบัติราชการ แผนพัฒนาสังคม ติดตามประเมินผลตัวชี้วัด และรวบรวมข้อมูลสถานการณ์ทางสังคมระดับจังหวัด",
     metrics: [
       { label: "ความสำเร็จตัวชี้วัด (KPI)", value: "94.2%", change: "ระดับดีเยี่ยม", icon: "🎯" },
@@ -100,8 +106,8 @@ export const MISSION_GROUPS: MissionGroup[] = [
     color: "text-emerald-700",
     bgColor: "bg-emerald-50",
     borderColor: "border-emerald-200",
-    headName: "นางจินตนา บุญเรือง",
-    headPosition: "หัวหน้ากลุ่มการพัฒนาสังคมและสวัสดิการ",
+    headName: "นายวรวุฒิ พึ่งพัก",
+    headPosition: "นักพัฒนาสังคมชำนาญการพิเศษ (หัวหน้ากลุ่มการพัฒนาสังคมและสวัสดิการ)",
     description: "ขับเคลื่อนงานสวัสดิการสังคม กองทุนสวัสดิการชุมชน คุ้มครองเด็ก เยาวชน สตรี ผู้สูงอายุ และครอบครัวเปราะบาง",
     metrics: [
       { label: "กองทุนสวัสดิการชุมชน", value: "84 ตำบล", change: "ครอบคลุม 94.3%", icon: "🏘️" },
@@ -129,8 +135,8 @@ export const MISSION_GROUPS: MissionGroup[] = [
     color: "text-teal-700",
     bgColor: "bg-teal-50",
     borderColor: "border-teal-200",
-    headName: "นายณัฐพล ชัยสิทธิ์",
-    headPosition: "หัวหน้าศูนย์บริการคนพิการจังหวัดกำแพงเพชร",
+    headName: "นางสาวสุมาลี แสงแก้ว",
+    headPosition: "นักสังคมสงเคราะห์ (เจ้าหน้าที่กองทุนส่งเสริมและพัฒนาคุณภาพชีวิตคนพิการ)",
     description: "ออกบัตรประจำตัวคนพิการ จัดสรรกายอุปกรณ์ บริหารกองทุนส่งเสริมและพัฒนาคุณภาพชีวิตคนพิการ และสนับสนุนศูนย์บริการทั่วไป",
     metrics: [
       { label: "คนพิการที่จดทะเบียน", value: "24,850 คน", change: "มีบัตรครบ 100%", icon: "🪪" },
@@ -152,9 +158,9 @@ export const MISSION_GROUPS: MissionGroup[] = [
   },
 ];
 
-export function DataHubPage({ currentUser, showToast }: DataHubPageProps) {
-  // Main Tab Navigation
-  const [activeMainTab, setActiveMainTab] = useState<"stats" | "divisions" | "documents">("stats");
+export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPageProps) {
+  // Main Tab Navigation: stats, divisions, personnel, documents
+  const [activeMainTab, setActiveMainTab] = useState<"stats" | "divisions" | "personnel" | "documents">("stats");
 
   // Social Statistics Filters & Export State
   const [fiscalYear, setFiscalYear] = useState<string>("2569");
@@ -164,6 +170,10 @@ export function DataHubPage({ currentUser, showToast }: DataHubPageProps) {
   // Division Groups State
   const [selectedGroup, setSelectedGroup] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
+
+  // Personnel Directory State
+  const [personnelSearch, setPersonnelSearch] = useState<string>("");
+  const [personnelDivisionFilter, setPersonnelDivisionFilter] = useState<string>("all");
 
   // Social Stats Calculation
   const statsList = useMemo(() => {
@@ -184,6 +194,34 @@ export function DataHubPage({ currentUser, showToast }: DataHubPageProps) {
   const activeGroup = useMemo(() => {
     return MISSION_GROUPS.find((g) => g.id === selectedGroup);
   }, [selectedGroup]);
+
+  // Active Division Staff
+  const activeDivisionStaff = useMemo(() => {
+    if (!activeGroup) return [];
+    return getPersonnelByDivision(activeGroup.name);
+  }, [activeGroup]);
+
+  // Filtered Personnel List for Personnel Tab
+  const filteredPersonnel = useMemo(() => {
+    return OFFICIAL_OFFICE_PERSONNEL.filter((staff) => {
+      // Division filter
+      if (personnelDivisionFilter !== "all" && !staff.division.includes(personnelDivisionFilter)) {
+        return false;
+      }
+      // Search filter
+      if (personnelSearch.trim()) {
+        const q = personnelSearch.toLowerCase().trim();
+        const nameMatch = staff.name.toLowerCase().includes(q);
+        const nicknameMatch = (staff.nickname || "").toLowerCase().includes(q);
+        const posMatch = staff.position.toLowerCase().includes(q);
+        const divMatch = staff.division.toLowerCase().includes(q);
+        const phoneMatch = staff.phone.includes(q);
+        const emailMatch = staff.email.toLowerCase().includes(q);
+        return nameMatch || nicknameMatch || posMatch || divMatch || phoneMatch || emailMatch;
+      }
+      return true;
+    });
+  }, [personnelSearch, personnelDivisionFilter]);
 
   // Combined documents for search
   const filteredDocuments = useMemo(() => {
@@ -209,6 +247,13 @@ export function DataHubPage({ currentUser, showToast }: DataHubPageProps) {
     return KAMPHAENG_PHET_DISTRICTS.find((d) => d.districtId === districtFilter);
   }, [districtFilter]);
 
+  const copyToClipboard = (text: string, label: string) => {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      showToast(`📋 คัดลอก${label}เรียบร้อยแล้ว: ${text}`);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* ─── 1. HEADER SECTION ─── */}
@@ -225,7 +270,7 @@ export function DataHubPage({ currentUser, showToast }: DataHubPageProps) {
             </h1>
             <p className="text-sm text-slate-300 leading-relaxed">
               แดชบอร์ดสถานการณ์กลุ่มเปราะบางระดับจังหวัด (TPMAP &amp; ศรส. 1300) คลังตัวชี้วัด ๔ กลุ่มงาน
-              สารบบแบบฟอร์มคำขอสวัสดิการ และการส่งออกรายงานทางการสำหรับการประชุม กบจ.
+              ทำเนียบบุคลากรและข้าราชการ สารบบแบบฟอร์มคำขอสวัสดิการ และการส่งออกรายงานทางการสำหรับการประชุม กบจ.
             </p>
           </div>
 
@@ -236,9 +281,9 @@ export function DataHubPage({ currentUser, showToast }: DataHubPageProps) {
               <div className="text-xl font-extrabold text-white">11 อำเภอ</div>
             </div>
             <div className="p-3 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 text-center">
-              <div className="text-[10px] text-indigo-200 font-bold">ครัวเรือนเปราะบางเป้าหมาย</div>
+              <div className="text-[10px] text-indigo-200 font-bold">บุคลากรทางการ</div>
               <div className="text-xl font-extrabold text-amber-300">
-                {provinceTotals.vulnerableHouseholds.toLocaleString()}
+                {OFFICIAL_OFFICE_PERSONNEL.length} ท่าน
               </div>
             </div>
           </div>
@@ -271,6 +316,19 @@ export function DataHubPage({ currentUser, showToast }: DataHubPageProps) {
             >
               <span>🏛️</span>
               <span>ระบบงาน ๔ กลุ่มภารกิจ พมจ.</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveMainTab("personnel")}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                activeMainTab === "personnel"
+                  ? "bg-indigo-600 text-white shadow-md border border-indigo-400/40"
+                  : "bg-white/10 hover:bg-white/20 text-slate-200"
+              }`}
+            >
+              <span>👥</span>
+              <span>ทำเนียบข้าราชการและเจ้าหน้าที่</span>
             </button>
 
             <button
@@ -705,7 +763,10 @@ export function DataHubPage({ currentUser, showToast }: DataHubPageProps) {
                           {group.name}
                         </h3>
                         <div className="text-xs text-slate-500">
-                          {group.headName} ({group.headPosition})
+                          ผู้กำกับดูแล: <strong className="text-slate-800">{group.headName}</strong>
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-0.5 truncate max-w-xs">
+                          {group.headPosition}
                         </div>
                       </div>
                     </div>
@@ -795,6 +856,93 @@ export function DataHubPage({ currentUser, showToast }: DataHubPageProps) {
                 ))}
               </div>
 
+              {/* Official Staff in this Division */}
+              <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-xs space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-2">
+                    <span>👥</span>
+                    <span>ทำเนียบข้าราชการและเจ้าหน้าที่ประจำ {activeGroup.name}</span>
+                  </h3>
+                  <span className="text-xs font-bold text-slate-400">
+                    {activeDivisionStaff.length} ท่าน
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {activeDivisionStaff.map((staff) => (
+                    <div
+                      key={staff.id}
+                      className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50/60 hover:bg-white hover:border-indigo-300 hover:shadow-xs transition-all flex items-start gap-3"
+                    >
+                      <div className="relative shrink-0">
+                        {staff.avatarUrl ? (
+                          <img
+                            src={staff.avatarUrl}
+                            alt={staff.name}
+                            className="w-12 h-12 rounded-2xl object-cover border border-slate-200 shadow-2xs"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-2xl bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-sm shadow-2xs">
+                            {staff.avatarText || staff.name.slice(0, 2)}
+                          </div>
+                        )}
+                        {staff.nickname && (
+                          <span className="absolute -bottom-1 -right-1 px-1.5 py-0.2 rounded-md bg-indigo-600 text-white text-[9px] font-bold">
+                            {staff.nickname}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex items-center justify-between gap-1">
+                          <div className="font-extrabold text-xs text-slate-900 truncate">
+                            {staff.name}
+                          </div>
+                          <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-white text-slate-600 border border-slate-200 shrink-0">
+                            {staff.personnelType}
+                          </span>
+                        </div>
+
+                        <div className="text-[11px] text-slate-600 leading-tight">
+                          {staff.position}
+                        </div>
+
+                        {staff.duty && (
+                          <p className="text-[10px] text-slate-500 line-clamp-2">
+                            {staff.duty}
+                          </p>
+                        )}
+
+                        <div className="pt-1.5 border-t border-slate-100 flex items-center gap-3 text-[10px] text-slate-500 flex-wrap">
+                          {staff.phone && (
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(staff.phone, "เบอร์โทรศัพท์")}
+                              className="flex items-center gap-1 text-slate-600 hover:text-indigo-600 cursor-pointer"
+                              title="คลิกเพื่อคัดลอกเบอร์โทร"
+                            >
+                              <span>📞</span>
+                              <span>{staff.phone}</span>
+                            </button>
+                          )}
+                          {staff.email && (
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(staff.email, "อีเมล")}
+                              className="flex items-center gap-1 text-slate-600 hover:text-indigo-600 cursor-pointer truncate max-w-[170px]"
+                              title="คลิกเพื่อคัดลอกอีเมล"
+                            >
+                              <span>📧</span>
+                              <span className="truncate">{staff.email}</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {/* Connected External Systems */}
               <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-xs space-y-3">
                 <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-2">
@@ -837,7 +985,189 @@ export function DataHubPage({ currentUser, showToast }: DataHubPageProps) {
         </div>
       )}
 
-      {/* ─── 4. TAB 3: DOCUMENTS & FORMS SECTION ─── */}
+      {/* ─── 4. TAB 3: COMPLETE OFFICIAL PERSONNEL DIRECTORY ─── */}
+      {activeMainTab === "personnel" && (
+        <div className="space-y-6">
+          {/* Executive Highlight Banner */}
+          <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 rounded-3xl p-6 shadow-md text-white border border-purple-800/40 flex flex-col sm:flex-row items-center gap-5">
+            <div className="relative shrink-0">
+              <img
+                src={PROVINCIAL_DIRECTOR.avatarUrl}
+                alt={PROVINCIAL_DIRECTOR.name}
+                className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl object-cover border-2 border-white/20 shadow-xl"
+              />
+              <span className="absolute -bottom-2 -right-1 px-2.5 py-0.5 rounded-full bg-amber-400 text-amber-950 text-[10px] font-extrabold shadow-sm">
+                ผู้บริหาร พมจ.
+              </span>
+            </div>
+
+            <div className="space-y-1.5 text-center sm:text-left flex-1">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/10 text-purple-200 text-[11px] font-bold border border-white/10">
+                <span>👑</span>
+                <span>ผู้บริหารสูงสุด สำนักงาน พมจ.กำแพงเพชร</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-extrabold text-white font-heading">
+                {PROVINCIAL_DIRECTOR.name}
+              </h2>
+              <div className="text-xs sm:text-sm text-purple-200 font-medium">
+                {PROVINCIAL_DIRECTOR.position}
+              </div>
+              <p className="text-xs text-slate-300 max-w-2xl leading-relaxed pt-1">
+                {PROVINCIAL_DIRECTOR.duty}
+              </p>
+              <div className="pt-2 flex items-center justify-center sm:justify-start gap-3 text-xs text-purple-200 flex-wrap">
+                <span className="flex items-center gap-1">
+                  <span>📞</span>
+                  <span>{PROVINCIAL_DIRECTOR.phone}</span>
+                </span>
+                <span>•</span>
+                <span className="flex items-center gap-1">
+                  <span>📧</span>
+                  <span>{PROVINCIAL_DIRECTOR.email}</span>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Controls Bar: Search & Division Filter */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none flex-wrap">
+              <span className="text-xs font-bold text-slate-500 shrink-0">กลุ่มงาน:</span>
+              {[
+                { id: "all", label: "ทั้งหมด" },
+                { id: "ฝ่ายบริหารทั่วไป", label: "บริหารทั่วไป" },
+                { id: "กลุ่มนโยบายและวิชาการ", label: "นโยบายและวิชาการ" },
+                { id: "กลุ่มการพัฒนาสังคมและสวัสดิการ", label: "สังคมและสวัสดิการ" },
+                { id: "ศูนย์บริการคนพิการ", label: "ศูนย์คนพิการ" },
+              ].map((div) => (
+                <button
+                  key={div.id}
+                  type="button"
+                  onClick={() => setPersonnelDivisionFilter(div.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    personnelDivisionFilter === div.id
+                      ? "bg-indigo-600 text-white shadow-xs"
+                      : "bg-slate-100 hover:bg-slate-200 text-slate-600"
+                  }`}
+                >
+                  {div.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="relative w-full sm:w-64">
+              <input
+                type="text"
+                placeholder="ค้นหาชื่อ, ตำแหน่ง, เบอร์ต่อ..."
+                value={personnelSearch}
+                onChange={(e) => setPersonnelSearch(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+              />
+              <span className="absolute left-2.5 top-2 text-xs text-slate-400">🔍</span>
+            </div>
+          </div>
+
+          {/* Personnel Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" data-testid="personnel-grid">
+            {filteredPersonnel.map((staff) => (
+              <div
+                key={staff.id}
+                data-testid="personnel-card"
+                className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-xs hover:border-indigo-300 hover:shadow-md transition-all flex flex-col justify-between group space-y-3"
+              >
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3.5">
+                    <div className="relative shrink-0">
+                      {staff.avatarUrl ? (
+                        <img
+                          src={staff.avatarUrl}
+                          alt={staff.name}
+                          className="w-14 h-14 rounded-2xl object-cover border border-slate-200 shadow-2xs group-hover:scale-105 transition-transform"
+                        />
+                      ) : (
+                        <div className="w-14 h-14 rounded-2xl bg-indigo-100 text-indigo-700 font-extrabold flex items-center justify-center text-base shadow-2xs">
+                          {staff.avatarText || staff.name.slice(0, 2)}
+                        </div>
+                      )}
+                      {staff.nickname && (
+                        <span className="absolute -bottom-1 -right-1 px-1.5 py-0.2 rounded-md bg-indigo-600 text-white text-[9px] font-bold">
+                          {staff.nickname}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-extrabold text-sm text-slate-900 group-hover:text-indigo-700 transition-colors">
+                          {staff.name}
+                        </span>
+                      </div>
+                      <div className="text-[11px] font-semibold text-indigo-700 mt-0.5">
+                        {staff.position}
+                      </div>
+                      <div className="text-[10px] text-slate-500 mt-0.5 truncate">
+                        {staff.division}
+                      </div>
+                    </div>
+                  </div>
+
+                  {staff.duty && (
+                    <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed bg-slate-50/70 p-2.5 rounded-xl border border-slate-100">
+                      {staff.duty}
+                    </p>
+                  )}
+                </div>
+
+                <div className="pt-2 border-t border-slate-100 space-y-1.5 text-xs text-slate-600">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-400">ประเภทบุคลากร:</span>
+                    <span className="font-bold text-slate-700">{staff.personnelType}</span>
+                  </div>
+
+                  {staff.phone && (
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-400">เบอร์โทรศัพท์:</span>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(staff.phone, "เบอร์โทร")}
+                        className="font-bold text-indigo-600 hover:underline cursor-pointer flex items-center gap-1"
+                        title="คลิกเพื่อคัดลอก"
+                      >
+                        <span>📞 {staff.phone}</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {staff.email && (
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-400">อีเมลทางการ:</span>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(staff.email, "อีเมล")}
+                        className="font-mono text-[10px] text-slate-700 hover:text-indigo-600 hover:underline cursor-pointer truncate max-w-[150px]"
+                        title="คลิกเพื่อคัดลอก"
+                      >
+                        {staff.email}
+                      </button>
+                    </div>
+                  )}
+
+                  {staff.lineId && (
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-400">LINE ID:</span>
+                      <span className="font-mono text-emerald-700 font-bold">
+                        @{staff.lineId}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ─── 5. TAB 4: DOCUMENTS & FORMS SECTION ─── */}
       {activeMainTab === "documents" && (
         <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
@@ -920,7 +1250,7 @@ export function DataHubPage({ currentUser, showToast }: DataHubPageProps) {
         </div>
       )}
 
-      {/* ─── 5. OFFICIAL PRINTABLE REPORT MODAL ─── */}
+      {/* ─── 6. OFFICIAL PRINTABLE REPORT MODAL ─── */}
       <SocialStatisticsReportModal
         isOpen={showReportModal}
         onClose={() => setShowReportModal(false)}

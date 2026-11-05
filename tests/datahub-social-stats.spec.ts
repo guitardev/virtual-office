@@ -73,6 +73,7 @@ test.describe("ศูนย์ข้อมูลและสถิติสั�
 
     // ตรวจสอบว่ามีบล็อกรับรองรายงานของผู้บริหาร พมจ.
     await expect(page.locator("text=พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร").first()).toBeVisible();
+    await expect(page.locator("text=นางสาวมะลิวัน สิทธิโยธี").first()).toBeVisible();
 
     // ตรวจสอบปุ่มพิมพ์และส่งออก Excel
     await expect(page.locator("button:has-text('พิมพ์ / บันทึก PDF')").first()).toBeVisible();
@@ -101,5 +102,46 @@ test.describe("ศูนย์ข้อมูลและสถิติสั�
     const docSearch = page.locator("input[placeholder*='ค้นหาเอกสาร']").first();
     await docSearch.fill("รถยนต์");
     await expect(page.locator("text=แบบฟอร์มขอใช้รถยนต์ราชการ (กพพ. 01)").first()).toBeVisible();
+  });
+
+  test("5. ทำเนียบข้าราชการและเจ้าหน้าที่ พมจ.กำแพงเพชร: แสดงข้อมูลบุคคลจริง ผู้บริหาร หัวหน้ากลุ่มงาน และการค้นหา", async ({
+    page,
+  }) => {
+    // 1. ตรวจสอบในแท็บ ๔ กลุ่มภารกิจ ว่าแสดงชื่อหัวหน้ากลุ่มงานที่เป็นข้อมูลจริง
+    await page.locator("button:has-text('ระบบงาน ๔ กลุ่มภารกิจ พมจ.')").first().click();
+    await expect(page.locator("text=นายเสกพล ดิษฐโชติ").first()).toBeVisible();
+    await expect(page.locator("text=นายพนมศักย์ บริภัทรจิรากร").first()).toBeVisible();
+    await expect(page.locator("text=นายวรวุฒิ พึ่งพัก").first()).toBeVisible();
+    await expect(page.locator("text=นางสาวสุมาลี แสงแก้ว").first()).toBeVisible();
+
+    // 2. สลับไปแท็บ 'ทำเนียบข้าราชการและเจ้าหน้าที่'
+    await page.locator("button:has-text('ทำเนียบข้าราชการและเจ้าหน้าที่')").first().click();
+
+    // ตรวจสอบส่วนผู้บริหาร (Executive Director Banner)
+    await expect(page.locator("text=นางสาวมะลิวัน สิทธิโยธี").first()).toBeVisible();
+    await expect(page.locator("text=พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร").first()).toBeVisible();
+    await expect(page.locator("text=055-705031 ต่อ 101").first()).toBeVisible();
+    await expect(page.locator("text=maliwan.s@m-society.go.th").first()).toBeVisible();
+
+    const personnelCards = page.locator("[data-testid='personnel-card']");
+
+    // ตรวจสอบรายชื่อเจ้าหน้าที่ในการ์ดทำเนียบ
+    await expect(personnelCards.filter({ hasText: "นายเสกพล ดิษฐโชติ" }).first()).toBeVisible();
+    await expect(personnelCards.filter({ hasText: "นายวรวุฒิ พึ่งพัก" }).first()).toBeVisible();
+    await expect(personnelCards.filter({ hasText: "นางสาวอารีวรรณ ประเสริฐอุดมศักดิ์" }).first()).toBeVisible();
+
+    // 3. ทดสอบการค้นหาด้วยชื่อเล่น (เช่น 'เจมส์')
+    const searchInput = page.locator("input[placeholder*='ค้นหาชื่อ, ตำแหน่ง']").first();
+    await searchInput.fill("เจมส์");
+    await expect(personnelCards.filter({ hasText: "นายวรวุฒิ พึ่งพัก" }).first()).toBeVisible();
+    await expect(personnelCards.filter({ hasText: "นายเสกพล ดิษฐโชติ" })).toBeHidden();
+
+    // ล้างคำค้น
+    await searchInput.fill("");
+
+    // 4. ทดสอบการกรองตามกลุ่มงาน (Filter Pill)
+    await page.locator("button:has-text('ศูนย์คนพิการ')").first().click();
+    await expect(personnelCards.filter({ hasText: "นางสาวสุมาลี แสงแก้ว" }).first()).toBeVisible();
+    await expect(personnelCards.filter({ hasText: "นายเสกพล ดิษฐโชติ" })).toBeHidden();
   });
 });
