@@ -3,7 +3,8 @@
 ระบบสื่อสาร ทำงานร่วมกัน และบริหารจัดการทรัพยากรภายในองค์กรและหน่วยงานราชการ พัฒนาด้วย **Next.js 16 (App Router)**, **React 19**, **TypeScript** และ **Tailwind CSS v4** เชื่อมต่อฐานข้อมูลคลาวด์สด **Supabase PostgreSQL & Supabase Auth** พร้อมระบบยืนยันตัวตนผ่าน **Google OAuth** และ **LINE Login SSO**, สถาปัตยกรรมการจัดการสิทธิ์ขั้นสูง (**Granular Role-Based Access Control - RBAC**), ระบบบริหารคำขอสิทธิ์เข้าใช้งานใหม่ (Access Requests E-Workflow) และโครงสร้างข้อมูลบุคลากรตามระเบียบงานสารบรรณภาครัฐ
 
 > 🌐 **Production URL:** [https://www.smso.site](https://www.smso.site)  
-> 📖 **คู่มือระบบฉบับสมบูรณ์:** [docs/README.md](file:///c:/Users/GuitarDev/virtual-office/docs/README.md)
+> 📘 **คู่มือการพัฒนาและสถาปัตยกรรมระบบ (Developer Handbook):** [docs/DEVELOPMENT_HANDBOOK.md](file:///c:/Users/GuitarDev/virtual-office/docs/DEVELOPMENT_HANDBOOK.md)  
+> 🏛️ **บันทึกการพัฒนาฉบับรวมสมบูรณ์ (Master Work Log):** [docs/work-log-master.md](file:///c:/Users/GuitarDev/virtual-office/docs/work-log-master.md)
 
 ---
 
@@ -68,66 +69,48 @@ graph TD
 | **Phase 5** | Government Schema & Directory | คำนำหน้า, ชื่อ, นามสกุล, ชื่อเล่น (`nickname`), ฝ่าย, ข้อมูลจริง พมจ.กำแพงเพชร | ✅ สมบูรณ์ |
 | **Phase 6** | Admin Personnel CRUD Suite | ดูแฟ้มประวัติ, แก้ไขข้อมูล, ลบสมาชิก, ป้องกันการลบ Root Admin & บัญชีตนเอง | ✅ สมบูรณ์ |
 | **Phase 7** | System Module Controls | สลับเปิด/ปิดโมดูลเรียลไทม์, Maintenance Screen, Admin Bypass Override | ✅ สมบูรณ์ |
-| **Phase 8** | **Supabase Live Backend & Auth** | เชื่อมต่อ Live Supabase (`xkeiuyhkokmecefzzynb`), GoTrue Auth, Realtime WebSocket | ✅ สมบูรณ์ |
-| **Phase 9** | **Access Requests E-Workflow** | ระบบยื่นคำขอสิทธิ์ใช้งานใหม่, แผงพิจารณาอนุมัติ/ปฏิเสธ, Notification Badges | ✅ สมบูรณ์ |
-| **Phase 10** | **LINE & Google OAuth 2.0 SSO** | เข้าสู่ระบบด้วย LINE Account (`#06C755`), API Token Exchange, Auto-sync Profile | ✅ สมบูรณ์ |
-| **Phase 11** | **Live DB Migration & Zero Demo** | ลบข้อมูล Demo ออกทั้งหมด, เชื่อมต่อ Supabase ครบทุกโมดูล (Fleet, Chat, Audit, Tasks) | ✅ สมบูรณ์ |
-| **Phase 12** | **Fleet Smart Scheduling & Conflict Guard** | ป้องกันการจองรถเวลาซ้อนทับอัตโนมัติ, มุมมองปฏิทินไทม์ไลน์ (Gantt View), QR Code ตรวจรับรถ | 🔜 **ระยะถัดไป (Next Sprint)** |
-| **Phase 13** | **Live Staff Presence & Telepresence** | แถบสถานะบุคลากรเรียลไทม์ (🟢 ในสำนักงาน, 🚗 ลงพื้นที่, 📹 ติดประชุม, ⚪ นอกเวลา), Room Monitor | 🔜 **ระยะถัดไป (Next Sprint)** |
-| **Phase 14** | **Executive Analytics & Audit Export Suite** | ส่งออกประวัติการใช้รถและงบค่าน้ำมันเป็น Excel/CSV ตามเกณฑ์ สตง., แดชบอร์ดสรุปภารกิจรายกลุ่มงาน | 📅 แผนระยะกลาง |
-| **Phase 15** | **LINE Official Account & Webhook Bot** | ส่งแจ้งเตือนคำขออนุมัติรถราชการ, นัดหมายด่วน และผลอนุมัติผ่าน LINE Messaging API Push | 📅 แผนระยะกลาง |
-| **Phase 16** | **E-Document Management (EDMS)** | จัดเก็บหนังสือเวียนและคำสั่งจังหวัดผ่าน Supabase Storage Bucket ที่เข้ารหัส | 📅 แผนระยะยาว |
-| **Phase 17** | **PWA & Mobile App Companion** | Service Worker รองรับออฟไลน์, ติดตั้งลงหน้าจอมือถือ (A2HS), รองรับ Web Push Notifications | 📅 แผนระยะยาว |
+| **Phase 8** | **Synology NAS Sovereign Storage** | คลังเอกสาร DMS (`/files`) & Synology Photos (`/gallery`), Direct Client Upload, Cloudflare Tunnel | ✅ สมบูรณ์ |
+| **Phase 9** | **Government Fleet & Word .docx** | ขอใช้รถราชการ, เกจวัดน้ำมันแอนะล็อก, แจ้งเตือนคืนรถ, สร้างเอกสาร Word A4 หน้าเดียว (คข-69_009) | ✅ สมบูรณ์ |
+| **Phase 10** | **Meetings & Room Booking Suite** | ผังเวลาห้องประชุม 6 ห้อง, จองห้อง 1 คลิก, ปฏิทินรายเดือน พ.ศ., ตาราง Supabase `meeting_rooms` | ✅ สมบูรณ์ |
+| **Phase 11** | **E-Circular Multi-Attachment** | หนังสือเวียนตราครุฑมาตรฐาน, แนบหลายไฟล์พร้อมพรีวิวแยกอิสระ, ลงนามดิจิทัล, Circulation Slip | ✅ สมบูรณ์ |
+| **Phase 12** | **Tasks & Kanban 8 Missions & LINE** | กระดาน 8 กลุ่มภารกิจ พมจ.กำแพงเพชร, Deadline Intelligence วันที่ พ.ศ., ฟอร์แมตส่งเข้ากลุ่ม LINE | ✅ สมบูรณ์ |
+| **Phase 13** | **Kamphaeng Phet Social Data Hub** | สถิติจริง 11 อำเภอ, 5 มิติ TPMAP, ส่งออก Excel ภาษาไทย, พิมพ์รายงานทางการ กบจ. พร้อมตราครุฑ/พมจ. | ✅ สมบูรณ์ |
+| **Phase 14** | **Authentic Office Directory & Chat** | ทำเนียบบุคลากรจริง 11 ท่าน พมจ.กำแพงเพชร, ซิงก์ห้องแชทประจำฝ่าย, ข้อความเริ่มต้นราชการ | ✅ สมบูรณ์ |
+| **Phase 15** | **Smart Civil-Service Tools** | เครื่องมือตัดขอบและเปลี่ยนสีพื้นหลังรูปติดบัตรข้าราชการ (`/tools/bgremove`), ตัวสร้าง QR Code ถาวร | ✅ สมบูรณ์ |
 
 ---
 
-## 🎯 แผนงานในอนาคตจากการวิเคราะห์โครงการสากล (Future Roadmap & GitHub Benchmark)
+## 🏛️ 13 โมดูลและเส้นทางระบบ (All 13 System Routes)
 
-จากการวิเคราะห์สถาปัตยกรรมโครงการชั้นนำบน GitHub (อาทิ *Plane, Cal.com, Effective-Office, WorkAdventure, TinyFloor*) ได้กำหนดทิศทางการยกระดับโครงการ Smart MSO ดังนี้:
-
-### 1. ระบบตรวจจับเวลาจองซ้อนทับและปฏิทินตารางการใช้รถ (Fleet Smart Scheduling & Conflict Guard)
-- **Automatic Overlap Conflict Guard:** ตรวจสอบช่วงเวลา (`departureTime` ถึง `returnTime`) ของรถยนต์แต่ละคัน หากมีคำขอที่ได้รับอนุมัติหรืออยู่ระหว่างตรวจสอบทับซ้อนกัน ระบบจะบล็อกหรือแจ้งเตือนทันทีก่อนส่งคำขอ
-- **Fleet Timeline & Gantt Schedule View:** มุมมองปฏิทิน/ไทม์ไลน์รายสัปดาห์และรายเดือน แสดงแถบสีสถานะภารกิจของรถทั้ง 5 คัน ให้เจ้าหน้าที่และหัวหน้าฝ่ายเห็นความพร้อมแบบองค์รวม
-- **Paperless Dispatch QR Code:** สร้าง QR Code ประจำคำขอบนแบบขอใช้รถที่อนุมัติแล้ว เพื่อให้พลขับหรือเจ้าหน้าที่พัสดุใช้โทรศัพท์สแกนตรวจรับกุญแจและลงเวลาออก/กลับเสมือนจริง
-
-### 2. ระบบสถานะการปฏิบัติงานของบุคลากรเสมือนจริง (Live Staff Presence & Telepresence)
-- **Live Presence Status Bar:** แถบสถานะการปฏิบัติงานของข้าราชการและเจ้าหน้าที่ 11 ท่านแบบเรียลไทม์ (🟢 ปฏิบัติงานในสำนักงาน, 🚗 ลงพื้นที่ตรวจเยี่ยม/ปฏิบัติภารกิจภายนอก, 📹 กำลังประชุม, ⚪ นอกเวลาทำการ/ลา)
-- **Room & Resource Occupancy Indicator:** หน้าปัดแสดงสถานะห้องประชุมและยานพาหนะแบบเรียลไทม์ พร้อมลิงก์ด่วนสำหรับกดเข้าร่วมประชุมออนไลน์หรือขอประสานงานเร่งด่วน
-
-### 3. ระบบส่งออกรายงานสถิติสำหรับหน่วยงานตรวจสอบ (Executive Analytics & Audit Export Suite)
-- **Audit & Compliance Data Export:** ปุ่มส่งออกประวัติการใช้รถยนต์ราชการ เลขไมล์สะสม และงบประมาณค่าน้ำมันเชื้อเพลิงเป็นไฟล์ Excel (`.xlsx`) และ CSV เพื่อจัดทำรายงานส่งสำนักงานการตรวจเงินแผ่นดิน (สตง.) และผู้บริหารจังหวัด
-- **KPI & Workload Heatmap:** แดชบอร์ดสรุปสถิติภารกิจแยกตามกลุ่มงาน (กลุ่มนโยบายฯ, กลุ่มพัฒนาสังคมฯ, ฝ่ายบริหารทั่วไป, ศูนย์บริการคนพิการฯ)
-
-### 4. ระบบแจ้งเตือนอัตโนมัติผ่าน LINE Official Account (LINE Messaging Webhook)
-- ส่งข้อความ Push Message แจ้งเตือนตรงเข้าแอปพลิเคชัน LINE ส่วนบุคคลของข้าราชการทันทีเมื่อมีคำขอใหม่ การเห็นชอบ หรือการอนุมัติขั้นสุดท้าย
+| เส้นทาง (Route) | ชื่อโมดูล | รายละเอียดและความสามารถหลัก |
+|:---|:---|:---|
+| `/` & `/dashboard` | **หน้าแรก (Dashboard)** | ภาพรวมสำนักงาน, ตัวชี้วัด TPMAP, หนังสือเวียนด่วน, แจ้งเตือนฉุกเฉิน |
+| `/circular` | **หนังสือเวียน (Circular)** | เวียนหนังสือราชการตราครุฑ, แนบหลายไฟล์, พรีวิวอิสระ, ลงนามและพิมพ์ใบสรุป |
+| `/tasks` | **ภารกิจงาน (Tasks)** | กระดาน Kanban 8 กลุ่มภารกิจ พมจ.กำแพงเพชร, แจ้งเตือนส่งงาน, แชร์เข้า LINE |
+| `/meetings` | **การประชุม (Meetings)** | ปฏิทินนัดหมายรายเดือน พ.ศ., จองห้องประชุม 6 ห้อง, ตรวจสอบผังเวลาว่าง |
+| `/chat` | **แชททีม (Chat)** | แชทกลุ่มทางการแยกฝ่าย, ซิงก์ทำเนียบบุคลากรจริง, แนบเอกสารและเก็บลง NAS |
+| `/carbooking` | **รถราชการ (Car Booking)** | ขอใช้รถ, เกจวัดน้ำมัน, คนขับ, เตือนส่งคืนรถ, ส่งออกไฟล์ Word .docx หน้าเดียว |
+| `/data-hub` | **ศูนย์รวมข้อมูล (Data Hub)** | สถิติ 11 อำเภอ, 5 มิติ TPMAP, รายงาน กบจ., ทำเนียบบุคลากร พมจ.กำแพงเพชร |
+| `/files` | **เอกสาร NAS (File Station)** | คลังเอกสาร DMS บน Synology NAS, กรองประเภทไฟล์, กรองปีงบประมาณ พ.ศ. |
+| `/gallery` | **ภาพ & สื่อ (Synology Photos)** | คลังภาพกิจกรรมโครงการ, อัลบั้ม, ไทม์ไลน์, Lightbox EXIF, ซิงก์ NAS |
+| `/reports` | **รายงาน (Reports)** | รายงานสถิติการใช้งานระบบ, การใช้รถราชการ และดาวน์โหลดสรุป |
+| `/tools/bgremove` | **BG Remove** | เครื่องมือตัดขอบและเปลี่ยนสีพื้นหลังภาพถ่ายติดบัตรข้าราชการด้วย Canvas |
+| `/tools/qrcode` | **QR Code** | เครื่องมือสร้าง QR Code คุณภาพสูงสำหรับติดเอกสารและประกาศราชการ |
+| `/admin` | **จัดการระบบ (Admin Panel)** | แฟ้มประวัติบุคลากร, เมทริกซ์กำหนดสิทธิ์ RBAC, คำขอสิทธิ์ใหม่, สวิตช์เปิด/ปิดระบบ |
+| `/user` | **ข้อมูลส่วนตัว (Profile)** | โปรไฟล์ผู้ใช้, ข้อมูลสังกัด, ช่องทางติดต่อ และการตั้งค่าความปลอดภัย |
 
 ---
 
-## 🚀 การติดตั้งและเริ่มใช้งาน
+## 🧪 การตรวจสอบคุณภาพโค้ดและการทดสอบอัตโนมัติ (Verification & Playwright)
 
 ```bash
-# 1. ติดตั้ง dependencies
-npm install
-
-# 2. ตั้งค่าสภาพแวดล้อม (.env.local)
-cp .env.example .env.local
-
-# 3. รันระบบในโหมดพัฒนา
-npm run dev
-
-# 4. เข้าใช้งานผ่านเบราว์เซอร์
-# http://localhost:3000
-```
-
----
-
-## 🧪 การตรวจสอบคุณภาพโค้ด (Quality Assurance)
-
-```bash
-# ตรวจสอบ TypeScript Type Checking แบบ Strict
+# ตรวจสอบ TypeScript Type Checking แบบ Strict (0 Errors)
 npx tsc --noEmit
 
-# ทดสอบคอมไพล์ Production Bundle
+# รันชุดทดสอบ Playwright หลักทั้งหมด (24 การทดสอบ ผ่าน 100%)
+npx playwright test tests/division-chat.spec.ts tests/datahub-social-stats.spec.ts tests/circular-multi-attachment.spec.ts tests/tasks-mission-line.spec.ts tests/nas-dms-gallery.spec.ts
+
+# ทดสอบคอมไพล์ Production Bundle สมบูรณ์ทุก Route
 npm run build
 ```
 
