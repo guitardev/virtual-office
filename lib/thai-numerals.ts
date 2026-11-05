@@ -98,12 +98,21 @@ export function thaiDateToIso(thaiDateStr: string | undefined | null): string {
     return idx !== -1 ? String(idx) : ch;
   });
 
-  // ค้นหาเดือนภาษาไทย
+  // ค้นหาเดือนภาษาไทย (ทั้งชื่อเต็มและชื่อย่อ)
   let foundMonthIndex = -1;
   for (let i = 0; i < THAI_MONTHS_FULL.length; i++) {
     if (arabicStr.includes(THAI_MONTHS_FULL[i])) {
       foundMonthIndex = i;
       break;
+    }
+  }
+
+  if (foundMonthIndex === -1) {
+    for (let i = 0; i < THAI_MONTHS_SHORT.length; i++) {
+      if (arabicStr.includes(THAI_MONTHS_SHORT[i])) {
+        foundMonthIndex = i;
+        break;
+      }
     }
   }
 

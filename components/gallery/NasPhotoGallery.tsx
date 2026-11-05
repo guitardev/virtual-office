@@ -41,6 +41,8 @@ import {
   deleteSynologyPhotoFolder,
 } from "@/lib/synology-photos";
 import { recordAuditLog } from "@/lib/supabase";
+import { NasUploadProgressModal, UploadBatchItem } from "@/components/dms/NasUploadProgressModal";
+import { MSO_MISSION_GROUPS } from "@/lib/task-missions";
 
 interface NasPhotoGalleryProps {
   currentUser: Member;
@@ -319,6 +321,19 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
   const [isDragging, setIsDragging] = useState(false);
   const dragCounter = React.useRef(0);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  // Batch upload progress modal state
+  const [showUploadProgressModal, setShowUploadProgressModal] = useState(false);
+  const [uploadBatchItems, setUploadBatchItems] = useState<UploadBatchItem[]>([]);
+  const [currentUploadIndex, setCurrentUploadIndex] = useState(0);
+  const [currentUploadPercent, setCurrentUploadPercent] = useState(0);
+  const [currentUploadingFileName, setCurrentUploadingFileName] = useState("");
+  const [uploadComplete, setUploadComplete] = useState(false);
+  const [uploadSuccessCount, setUploadSuccessCount] = useState(0);
+  const [uploadErrorCount, setUploadErrorCount] = useState(0);
+
+  // Fiscal Year filter state (พ.ศ.)
+  const [fiscalYearFilter, setFiscalYearFilter] = useState<string>("all");
 
   // Folder & Album-by-Folder state
   const [folders, setFolders] = useState<SynologyPhotoFolder[]>([]);
@@ -606,6 +621,15 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
       if (activeTab === "photos" && item.type !== "photo") return false;
       if (activeTab === "videos" && item.type !== "video") return false;
 
+      // Fiscal Year filter (Thai Buddhist Era)
+      if (fiscalYearFilter !== "all") {
+        const itemYear = new Date((item.time || 0) * 1000).getFullYear() + 543;
+        const yearStr = String(itemYear);
+        const nameMatch = (item.filename || "").includes(fiscalYearFilter);
+        const yearMatch = yearStr === fiscalYearFilter;
+        if (!nameMatch && !yearMatch) return false;
+      }
+
       // Search filter across filename, EXIF camera, tags, description
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
@@ -628,7 +652,40 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
     });
 
     return result;
-  }, [items, activeTab, searchQuery, sortOrder]);
+  }, [items, activeTab, searchQuery, sortOrder, fiscalYearFilter]);
+
+  // Displayed folders with search and fiscal year filtering
+  const displayedFolders = useMemo(() => {
+    if (!folders) return [];
+    return folders.filter((f) => {
+      const name = (f.name || "").toLowerCase();
+      const path = (f.path || "").toLowerCase();
+      if (fiscalYearFilter !== "all" && !name.includes(fiscalYearFilter) && !path.includes(fiscalYearFilter)) {
+        return false;
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        return name.includes(q) || path.includes(q);
+      }
+      return true;
+    });
+  }, [folders, fiscalYearFilter, searchQuery]);
+
+  // Displayed albums with search and fiscal year filtering
+  const displayedAlbums = useMemo(() => {
+    if (!albums) return [];
+    return albums.filter((a) => {
+      const name = (a.name || "").toLowerCase();
+      if (fiscalYearFilter !== "all" && !name.includes(fiscalYearFilter)) {
+        return false;
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        return name.includes(q);
+      }
+      return true;
+    });
+  }, [albums, fiscalYearFilter, searchQuery]);
 
   // Timeline groups (grouped by Year & Month)
   const timelineGroups = useMemo(() => {
@@ -978,9 +1035,25 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
     }
 
     setIsUploading(true);
-    showToast(`⏳ กำลังอัปโหลด ${validMedia.length} ไฟล์เข้าสู่ Synology Photos...`);
-
     const destFolderPath = resolvePhotoFolderPath(selectedFolder, currentSpace);
+
+    // Initialize batch upload items for modal
+    const initialBatch: UploadBatchItem[] = validMedia.map((f, i) => ({
+      id: `${f.name}-${i}-${Date.now()}`,
+      name: f.name,
+      size: f.size,
+      progress: 0,
+      status: "pending",
+    }));
+
+    setUploadBatchItems(initialBatch);
+    setCurrentUploadIndex(0);
+    setCurrentUploadPercent(0);
+    setCurrentUploadingFileName(validMedia[0]?.name || "");
+    setUploadComplete(false);
+    setUploadSuccessCount(0);
+    setUploadErrorCount(0);
+    setShowUploadProgressModal(true);
 
     try {
       let successCount = 0;
@@ -990,10 +1063,16 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
       for (let i = 0; i < validMedia.length; i++) {
         const rawFile = validMedia[i];
 
+        setCurrentUploadIndex(i);
+        setCurrentUploadingFileName(rawFile.name);
+        setCurrentUploadPercent(0);
+        setUploadBatchItems((prev) =>
+          prev.map((it, idx) => (idx === i ? { ...it, status: "uploading", progress: 0 } : it))
+        );
+
         // Compress ultra-large camera images (> 25MB) client-side to optimize upload time
         let file = rawFile;
         if (rawFile.type.startsWith("image/") && rawFile.size > 25 * 1024 * 1024) {
-          showToast(`⚙️ กำลังปรับขนาดภาพ "${rawFile.name}" เพื่อเพิ่มความเร็วในการอัปโหลด...`);
           file = await compressImageForUpload(rawFile, 15 * 1024 * 1024);
         }
 
@@ -1001,6 +1080,12 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
         if (file.size > MAX_DIRECT_UPLOAD_SIZE) {
           const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
           lastErrorMessage = `ไฟล์ "${file.name}" มีขนาดใหญ่เกินไป (${sizeMb} MB > สูงสุด 100 MB) กรุณาอัปโหลดผ่าน Synology Photos App หรือเปิดเว็บ DSM โดยตรง`;
+          setUploadErrorCount((prev) => prev + 1);
+          setUploadBatchItems((prev) =>
+            prev.map((it, idx) =>
+              idx === i ? { ...it, status: "error", errorMessage: lastErrorMessage } : it
+            )
+          );
           continue;
         }
 
@@ -1011,14 +1096,29 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
           activeSid,
           config.nasUrl,
           (percent) => {
-            showToast(`⏳ กำลังอัปโหลดตรงสู่ NAS (${i + 1}/${validMedia.length}): ${file.name} (${percent}%)`);
+            setCurrentUploadPercent(percent);
+            setUploadBatchItems((prev) =>
+              prev.map((it, idx) => (idx === i ? { ...it, progress: percent } : it))
+            );
           }
         );
 
         if (data.success) {
           successCount++;
+          setUploadSuccessCount(successCount);
+          setUploadBatchItems((prev) =>
+            prev.map((it, idx) =>
+              idx === i ? { ...it, status: "success", progress: 100 } : it
+            )
+          );
         } else {
           lastErrorMessage = data.error || "Synology NAS ปฏิเสธการอัปโหลดไฟล์";
+          setUploadErrorCount((prev) => prev + 1);
+          setUploadBatchItems((prev) =>
+            prev.map((it, idx) =>
+              idx === i ? { ...it, status: "error", errorMessage: lastErrorMessage } : it
+            )
+          );
           if (data.code === 119 || data.requireAuth) {
             requiresReauth = true;
           }
@@ -1051,6 +1151,7 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
       showToast(`❌ การอัปโหลดล้มเหลว: ${err?.message}`);
     } finally {
       setIsUploading(false);
+      setUploadComplete(true);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
@@ -1654,6 +1755,34 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
             </div>
           </div>
 
+          {/* ─── FISCAL YEAR QUICK FILTER CHIPS (พ.ศ.) ─── */}
+          <div className="flex items-center gap-1.5 flex-wrap px-1 py-1.5 border-t border-slate-100 text-xs">
+            <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1">
+              <span>📅</span>
+              <span>ปีงบประมาณ พ.ศ.:</span>
+            </span>
+            {[
+              { id: "all", label: "ทุกปีงบ" },
+              { id: "2570", label: "ปี ๒๕๗๐" },
+              { id: "2569", label: "ปี ๒๕๖๙" },
+              { id: "2568", label: "ปี ๒๕๖๘" },
+              { id: "2567", label: "ปี ๒๕๖๗" },
+            ].map((yr) => (
+              <button
+                key={yr.id}
+                type="button"
+                onClick={() => setFiscalYearFilter(yr.id)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                  fiscalYearFilter === yr.id
+                    ? "bg-amber-500 text-white shadow-xs font-semibold"
+                    : "bg-slate-100 hover:bg-slate-200 text-slate-600"
+                }`}
+              >
+                {yr.label}
+              </button>
+            ))}
+          </div>
+
           {/* ─── ERROR BANNER ─── */}
           {permissionError && (
             <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-900 space-y-3 shadow-xs">
@@ -1882,7 +2011,7 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                   <div className="flex items-center justify-between">
                     <div className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
                       <span>📁</span>
-                      <span>โฟลเดอร์กิจกรรม ({folders.length})</span>
+                      <span>โฟลเดอร์กิจกรรม ({displayedFolders.length}{displayedFolders.length !== folders.length ? ` / ทั้งหมด ${folders.length}` : ""})</span>
                     </div>
                     <button
                       type="button"
@@ -1893,18 +2022,24 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {folders.map((folder) => (
-                      <FolderCardItem
-                        key={folder.id}
-                        folder={folder}
-                        currentSpace={currentSpace}
-                        userSid={userSid}
-                        onSelect={handleSelectFolder}
-                        onDelete={(f) => setDeleteConfirmFolder(f)}
-                      />
-                    ))}
-                  </div>
+                  {displayedFolders.length === 0 ? (
+                    <div className="py-8 text-center bg-white rounded-2xl border border-slate-200 text-xs text-slate-500">
+                      🔍 ไม่พบโฟลเดอร์ที่ตรงกับคำค้นหาหรือปีงบประมาณที่เลือก
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {displayedFolders.map((folder) => (
+                        <FolderCardItem
+                          key={folder.id}
+                          folder={folder}
+                          currentSpace={currentSpace}
+                          userSid={userSid}
+                          onSelect={handleSelectFolder}
+                          onDelete={(f) => setDeleteConfirmFolder(f)}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -2011,7 +2146,7 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
               <div className="flex items-center justify-between">
                 <div className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
                   <span>🏷️</span>
-                  <span>อัลบั้มภาพกิจกรรม ({albums.length})</span>
+                  <span>อัลบั้มภาพกิจกรรม ({displayedAlbums.length}{displayedAlbums.length !== albums.length ? ` / ทั้งหมด ${albums.length}` : ""})</span>
                 </div>
                 <button
                   type="button"
@@ -2039,9 +2174,13 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                     <span>สร้างอัลบั้มแรก</span>
                   </button>
                 </div>
+              ) : displayedAlbums.length === 0 ? (
+                <div className="py-12 text-center bg-white rounded-2xl border border-slate-200 text-xs text-slate-500">
+                  🔍 ไม่พบอัลบั้มภาพที่ตรงกับคำค้นหาหรือปีงบประมาณที่เลือก
+                </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {albums.map((album) => (
+                  {displayedAlbums.map((album) => (
                     <div
                       key={album.id}
                       onClick={() => {
@@ -2840,6 +2979,52 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                 </p>
               </div>
 
+              {/* Quick Presets: Fiscal Year & 8 MSO Mission Groups */}
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
+                <div>
+                  <span className="text-[10px] font-bold text-amber-800 flex items-center gap-1">
+                    <span>⚡</span>
+                    <span>ทางลัดปีงบประมาณ พ.ศ.:</span>
+                  </span>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {["2570", "2569", "2568", "2567"].map((yr) => (
+                      <button
+                        key={yr}
+                        type="button"
+                        onClick={() =>
+                          setNewFolderName((prev) => (prev ? `${prev} ปี ${yr}` : `กิจกรรมปีงบ ${yr}`))
+                        }
+                        className="px-2 py-0.5 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-800 text-[10px] font-bold border border-amber-200/80 transition-colors cursor-pointer"
+                      >
+                        + ปี {yr}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-[10px] font-bold text-cyan-800 flex items-center gap-1">
+                    <span>🏛️</span>
+                    <span>ทางลัด 8 กลุ่มภารกิจ พมจ.กำแพงเพชร:</span>
+                  </span>
+                  <div className="flex flex-wrap gap-1 mt-1 max-h-24 overflow-y-auto pr-1">
+                    {MSO_MISSION_GROUPS.map((mg) => (
+                      <button
+                        key={mg.id}
+                        type="button"
+                        onClick={() =>
+                          setNewFolderName((prev) => (prev ? `${prev} - ${mg.name}` : mg.name))
+                        }
+                        className="px-2 py-0.5 rounded-md bg-cyan-50 hover:bg-cyan-100 text-cyan-800 text-[10px] font-bold border border-cyan-200/80 transition-colors truncate max-w-full cursor-pointer"
+                        title={mg.division}
+                      >
+                        {mg.icon} {mg.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               <div className="pt-2 flex items-center justify-end gap-2.5">
                 <button
                   type="button"
@@ -2914,6 +3099,52 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
                   placeholder="เช่น ภาพเด่นกิจกรรม พมจ. 2569 หรือ สื่อประชาสัมพันธ์"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                 />
+              </div>
+
+              {/* Quick Presets: Fiscal Year & 8 MSO Mission Groups */}
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
+                <div>
+                  <span className="text-[10px] font-bold text-amber-800 flex items-center gap-1">
+                    <span>⚡</span>
+                    <span>ทางลัดปีงบประมาณ พ.ศ.:</span>
+                  </span>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {["2570", "2569", "2568", "2567"].map((yr) => (
+                      <button
+                        key={yr}
+                        type="button"
+                        onClick={() =>
+                          setNewAlbumName((prev) => (prev ? `${prev} ปี ${yr}` : `อัลบั้มปีงบ ${yr}`))
+                        }
+                        className="px-2 py-0.5 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-800 text-[10px] font-bold border border-amber-200/80 transition-colors cursor-pointer"
+                      >
+                        + ปี {yr}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-[10px] font-bold text-indigo-800 flex items-center gap-1">
+                    <span>🏛️</span>
+                    <span>ทางลัด 8 กลุ่มภารกิจ พมจ.กำแพงเพชร:</span>
+                  </span>
+                  <div className="flex flex-wrap gap-1 mt-1 max-h-24 overflow-y-auto pr-1">
+                    {MSO_MISSION_GROUPS.map((mg) => (
+                      <button
+                        key={mg.id}
+                        type="button"
+                        onClick={() =>
+                          setNewAlbumName((prev) => (prev ? `${prev} - ${mg.name}` : mg.name))
+                        }
+                        className="px-2 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold border border-indigo-200/80 transition-colors truncate max-w-full cursor-pointer"
+                        title={mg.division}
+                      >
+                        {mg.icon} {mg.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               <div className="pt-2 flex items-center justify-end gap-2.5">
@@ -3137,6 +3368,31 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
           </div>
         </div>
       )}
+
+      {/* ─── MODAL: BATCH UPLOAD PROGRESS MODAL ─── */}
+      <NasUploadProgressModal
+        isOpen={showUploadProgressModal}
+        title="อัปโหลดภาพกิจกรรมสู่ Synology Photos"
+        batchItems={uploadBatchItems}
+        totalCount={uploadBatchItems.length}
+        currentIndex={currentUploadIndex}
+        currentPercent={currentUploadPercent}
+        currentFileName={currentUploadingFileName}
+        isComplete={uploadComplete}
+        successCount={uploadSuccessCount}
+        errorCount={uploadErrorCount}
+        destinationPath={
+          selectedFolder
+            ? resolvePhotoFolderPath(selectedFolder, currentSpace)
+            : currentSpace === "shared"
+            ? "/photo"
+            : "/home/Photos"
+        }
+        onClose={() => {
+          setShowUploadProgressModal(false);
+          setUploadBatchItems([]);
+        }}
+      />
     </div>
   );
 }

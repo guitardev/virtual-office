@@ -1670,6 +1670,7 @@ export function mapRowToTask(row: any): TaskItem {
   const subtasks: TaskSubtask[] = Array.isArray(richMeta?.subtasks) ? richMeta.subtasks : [];
   const tags: string[] = Array.isArray(richMeta?.tags) ? richMeta.tags : [];
   const reviewNotes = richMeta?.reviewNotes || undefined;
+  const missionGroup = richMeta?.missionGroup || undefined;
 
   let dueStr = "วันนี้";
   if (row.due_date) {
@@ -1701,6 +1702,7 @@ export function mapRowToTask(row: any): TaskItem {
     subtasks,
     tags,
     reviewNotes,
+    missionGroup,
     createdAt: row.created_at,
   };
 }
@@ -1722,6 +1724,7 @@ export function mapTaskToRow(task: TaskItem): any {
     subtasks: task.subtasks || [],
     tags: task.tags || [],
     reviewNotes: task.reviewNotes || null,
+    missionGroup: task.missionGroup || null,
   };
 
   // Note: tasks.assignee_id in Supabase references users(id).

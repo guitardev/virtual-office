@@ -10,6 +10,14 @@ import {
   GOVERNMENT_DIVISIONS,
   isOperationalMember,
 } from "@/lib/rbac";
+import {
+  MSO_MISSION_GROUPS,
+  getMissionGroupInfo,
+  getDeadlineStatus,
+  formatLineTaskMessage,
+  INITIAL_MSO_TASKS,
+} from "@/lib/task-missions";
+import { toThaiDate, toThaiShortDate } from "@/lib/thai-numerals";
 
 interface TasksPageProps {
   tasks: TaskItem[];
@@ -36,15 +44,19 @@ export function TasksPage({
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDeptFilter, setSelectedDeptFilter] = useState("all");
   const [selectedPriorityFilter, setSelectedPriorityFilter] = useState("all");
+  const [selectedMissionFilter, setSelectedMissionFilter] = useState("all");
 
   // Modal States
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskItem | null>(null);
   const [isEditingTask, setIsEditingTask] = useState(false);
+  const [lineShareTask, setLineShareTask] = useState<TaskItem | null>(null);
+  const [isCopiedLine, setIsCopiedLine] = useState(false);
 
   // Form States for New Task
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDesc, setTaskDesc] = useState("");
+  const [taskMissionGroup, setTaskMissionGroup] = useState<string>(MSO_MISSION_GROUPS[0].id);
   const [taskDept, setTaskDept] = useState(currentUser?.division || "ฝ่ายบริหารทั่วไป");
   const [taskPriority, setTaskPriority] = useState<"high" | "medium" | "low">("medium");
   const [taskDue, setTaskDue] = useState("");
@@ -61,6 +73,7 @@ export function TasksPage({
   // Edit Form States
   const [editTitle, setEditTitle] = useState("");
   const [editDesc, setEditDesc] = useState("");
+  const [editMissionGroup, setEditMissionGroup] = useState("");
   const [editDept, setEditDept] = useState("");
   const [editPriority, setEditPriority] = useState<"high" | "medium" | "low">("medium");
   const [editDue, setEditDue] = useState("");
@@ -73,7 +86,7 @@ export function TasksPage({
     return tasks.filter((t) => canUserViewTask(t, currentUser));
   }, [tasks, currentUser]);
 
-  // Apply Secondary Filters (Scope, Search, Dept, Priority)
+  // Apply Secondary Filters (Scope, Mission Group, Dept, Priority, Search)
   const filteredTasks = useMemo(() => {
     return permittedTasks.filter((t) => {
       // 1. Scope Filter
@@ -91,17 +104,28 @@ export function TasksPage({
         if (t.visibility !== "public") return false;
       }
 
-      // 2. Department Dropdown Filter
+      // 2. Mission Group Dropdown Filter
+      if (selectedMissionFilter !== "all") {
+        const tMission = t.missionGroup || "";
+        if (tMission !== selectedMissionFilter) {
+          const mg = MSO_MISSION_GROUPS.find((g) => g.id === selectedMissionFilter);
+          if (!mg || (t.dept !== mg.division && t.targetDivision !== mg.division)) {
+            return false;
+          }
+        }
+      }
+
+      // 3. Department Dropdown Filter
       if (selectedDeptFilter !== "all") {
         if (t.dept !== selectedDeptFilter && t.targetDivision !== selectedDeptFilter) return false;
       }
 
-      // 3. Priority Dropdown Filter
+      // 4. Priority Dropdown Filter
       if (selectedPriorityFilter !== "all") {
         if (t.priority !== selectedPriorityFilter) return false;
       }
 
-      // 4. Keyword Search
+      // 5. Keyword Search
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const titleMatch = t.title.toLowerCase().includes(q);
@@ -114,7 +138,7 @@ export function TasksPage({
 
       return true;
     });
-  }, [permittedTasks, scopeFilter, selectedDeptFilter, selectedPriorityFilter, searchQuery, currentUser]);
+  }, [permittedTasks, scopeFilter, selectedMissionFilter, selectedDeptFilter, selectedPriorityFilter, searchQuery, currentUser]);
 
   // Metrics for Top Summary Bar
   const stats = useMemo(() => {
@@ -126,6 +150,15 @@ export function TasksPage({
     const percentDone = total > 0 ? Math.round((done / total) * 100) : 0;
     return { total, todo, inProg, review, done, percentDone };
   }, [permittedTasks]);
+
+  // ─── SEED STANDARD MSO TASKS ───
+  const handleSeedMsoTasks = async () => {
+    setTasks(INITIAL_MSO_TASKS);
+    showToast("⚡ นำเข้าชุดภารกิจมาตรฐาน พมจ.กำแพงเพชร (8 กลุ่มภารกิจ) สำเร็จ");
+    for (const t of INITIAL_MSO_TASKS) {
+      saveTask(t).catch(console.error);
+    }
+  };
 
   // ─── ADD SUBTASK IN CREATE MODAL ───
   const handleAddSubtask = () => {
@@ -155,9 +188,10 @@ export function TasksPage({
     const newTask: TaskItem = {
       id: `task_${Date.now()}`,
       title: taskTitle.trim(),
+      missionGroup: taskMissionGroup,
       dept: taskDept,
       targetDivision: taskDept,
-      due: taskDue || new Date().toLocaleDateString("th-TH"),
+      due: taskDue || new Date().toISOString().split("T")[0],
       priority: taskPriority,
       status: "todo",
       assignee: assignedMember?.name || currentUser?.name || "เจ้าหน้าที่ พมจ.",
@@ -191,6 +225,7 @@ export function TasksPage({
   const resetAddForm = () => {
     setTaskTitle("");
     setTaskDesc("");
+    setTaskMissionGroup(MSO_MISSION_GROUPS[0].id);
     setTaskDept(currentUser?.division || "ฝ่ายบริหารทั่วไป");
     setTaskPriority("medium");
     setTaskDue("");
@@ -211,6 +246,7 @@ export function TasksPage({
     setIsEditingTask(false);
     setEditTitle(task.title);
     setEditDesc(task.description || "");
+    setEditMissionGroup(task.missionGroup || MSO_MISSION_GROUPS[0].id);
     setEditDept(task.dept || task.targetDivision || "ฝ่ายบริหารทั่วไป");
     setEditPriority(task.priority);
     setEditDue(task.due || "");
@@ -279,6 +315,7 @@ export function TasksPage({
       ...selectedTask,
       title: editTitle.trim(),
       description: editDesc.trim(),
+      missionGroup: editMissionGroup,
       dept: editDept,
       targetDivision: editDept,
       priority: editPriority,
@@ -393,23 +430,24 @@ export function TasksPage({
     const totalSubtasks = (task.subtasks || []).length;
     const hasSubtasks = totalSubtasks > 0;
     const subtaskPercent = hasSubtasks ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0;
-    const overdue = isOverdue(task.due, task.status);
+    const deadlineInfo = getDeadlineStatus(task.due);
+    const overdue = task.status !== "done" && deadlineInfo.urgency === "overdue";
+    const missionInfo = getMissionGroupInfo(task.missionGroup || task.dept);
 
     return (
       <div
         key={task.id}
         onClick={() => handleOpenTaskDetails(task)}
-        className={`bg-white p-4 rounded-2xl border transition-all cursor-pointer group shadow-2xs hover:shadow-md relative ${
-          overdue
+        className={`bg-white p-4 rounded-2xl border transition-all cursor-pointer group shadow-2xs hover:shadow-md relative ${overdue
             ? "border-rose-300 ring-1 ring-rose-200"
             : task.status === "done"
-            ? "border-emerald-100 opacity-90"
-            : task.status === "review"
-            ? "border-amber-200"
-            : task.status === "in_progress"
-            ? "border-indigo-100"
-            : "border-slate-200"
-        }`}
+              ? "border-emerald-100 opacity-90"
+              : task.status === "review"
+                ? "border-amber-200"
+                : task.status === "in_progress"
+                  ? "border-indigo-100"
+                  : "border-slate-200"
+          }`}
       >
         {/* Header: Visibility & Priority */}
         <div className="flex items-center justify-between gap-1.5 mb-2">
@@ -431,11 +469,33 @@ export function TasksPage({
           </div>
         </div>
 
+        {/* Mission Group & Deadline Status Badges */}
+        <div className="flex flex-wrap items-center gap-1 mb-2">
+          <span
+            className={`text-[10px] px-2 py-0.5 rounded-full font-bold border flex items-center gap-1 ${missionInfo.bgLight} ${missionInfo.color} ${missionInfo.borderLight}`}
+            title={missionInfo.name}
+          >
+            <span>{missionInfo.icon}</span>
+            <span className="truncate max-w-[130px]">{missionInfo.shortName}</span>
+          </span>
+
+          {task.status !== "done" && deadlineInfo.urgency !== "no_due" && (
+            <span
+              className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold border flex items-center gap-1 ${deadlineInfo.badgeBg} ${deadlineInfo.badgeText} ${deadlineInfo.badgeBorder} ${deadlineInfo.urgency === "overdue" || deadlineInfo.urgency === "due_today"
+                  ? "animate-pulse"
+                  : ""
+                }`}
+            >
+              <span>{deadlineInfo.icon}</span>
+              <span>{deadlineInfo.label}</span>
+            </span>
+          )}
+        </div>
+
         {/* Title */}
         <h4
-          className={`font-semibold text-sm leading-snug tracking-tight mb-1 group-hover:text-indigo-600 transition-colors ${
-            task.status === "done" ? "line-through text-slate-400" : "text-slate-800"
-          }`}
+          className={`font-semibold text-sm leading-snug tracking-tight mb-1 group-hover:text-indigo-600 transition-colors ${task.status === "done" ? "line-through text-slate-400" : "text-slate-800"
+            }`}
         >
           {task.title}
         </h4>
@@ -472,9 +532,8 @@ export function TasksPage({
             </div>
             <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
               <div
-                className={`h-full transition-all duration-300 ${
-                  subtaskPercent === 100 ? "bg-emerald-500" : "bg-indigo-600"
-                }`}
+                className={`h-full transition-all duration-300 ${subtaskPercent === 100 ? "bg-emerald-500" : "bg-indigo-600"
+                  }`}
                 style={{ width: `${subtaskPercent}%` }}
               ></div>
             </div>
@@ -487,23 +546,38 @@ export function TasksPage({
           <span className="truncate">{task.dept}</span>
         </div>
 
-        {/* Card Footer: Assignee & Due Date */}
-        <div className="text-xs text-slate-500 flex items-center justify-between pt-2 border-t border-slate-100">
+        {/* Card Footer: Assignee, Due Date & LINE Share Button */}
+        <div className="text-xs text-slate-500 flex items-center justify-between pt-2 border-t border-slate-100 gap-1">
           <span className="truncate font-medium flex items-center gap-1" title={task.assignee}>
             <span>👤</span>
-            <span className="truncate">{task.assignee}</span>
+            <span className="truncate max-w-[80px]">{task.assignee}</span>
           </span>
 
-          <span
-            className={`shrink-0 font-mono text-[10px] px-1.5 py-0.5 rounded-md ${
-              overdue
-                ? "bg-rose-100 text-rose-700 font-bold"
-                : "bg-slate-100 text-slate-600"
-            }`}
-          >
-            {overdue ? "🚨 " : "📅 "}
-            {task.due}
-          </span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setLineShareTask(task);
+                setIsCopiedLine(false);
+              }}
+              className="px-1.5 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[10px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+              title="แชร์และส่งต่อภารกิจไปยัง LINE"
+            >
+              <span>📲</span>
+              <span>LINE</span>
+            </button>
+
+            <span
+              className={`shrink-0 font-mono text-[10px] px-1.5 py-0.5 rounded-md ${overdue
+                  ? "bg-rose-100 text-rose-700 font-bold"
+                  : "bg-slate-100 text-slate-600"
+                }`}
+            >
+              {overdue ? "🚨 " : "📅 "}
+              {task.due}
+            </span>
+          </div>
         </div>
 
         {/* Quick Step Buttons (Left / Right Column Shifter) */}
@@ -569,15 +643,26 @@ export function TasksPage({
 
         {/* View Mode & Add Task Button */}
         <div className="flex items-center gap-3">
+          {tasks.length === 0 && (
+            <button
+              type="button"
+              onClick={handleSeedMsoTasks}
+              className="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+              title="นำเข้าชุดภารกิจตัวอย่าง 8 กลุ่มภารกิจ พมจ.กำแพงเพชร"
+            >
+              <span>⚡</span>
+              <span>นำเข้าภารกิจ พมจ.</span>
+            </button>
+          )}
+
           <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200">
             <button
               type="button"
               onClick={() => setViewMode("kanban")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                viewMode === "kanban"
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${viewMode === "kanban"
                   ? "bg-white text-indigo-700 shadow-xs"
                   : "text-slate-600 hover:text-slate-900"
-              }`}
+                }`}
             >
               <span>📊</span>
               <span>กระดาน Kanban</span>
@@ -585,11 +670,10 @@ export function TasksPage({
             <button
               type="button"
               onClick={() => setViewMode("list")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                viewMode === "list"
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${viewMode === "list"
                   ? "bg-white text-indigo-700 shadow-xs"
                   : "text-slate-600 hover:text-slate-900"
-              }`}
+                }`}
             >
               <span>📋</span>
               <span>ตารางรายการ</span>
@@ -675,11 +759,10 @@ export function TasksPage({
             <button
               type="button"
               onClick={() => setScopeFilter("all")}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                scopeFilter === "all"
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${scopeFilter === "all"
                   ? "bg-[#4F46E5] text-white shadow-xs"
                   : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
+                }`}
             >
               <span>🌐</span>
               <span>ทั้งหมดที่ฉันมีสิทธิ์เข้าถึง ({permittedTasks.length})</span>
@@ -688,11 +771,10 @@ export function TasksPage({
             <button
               type="button"
               onClick={() => setScopeFilter("my_tasks")}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                scopeFilter === "my_tasks"
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${scopeFilter === "my_tasks"
                   ? "bg-slate-800 text-white shadow-xs"
                   : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
+                }`}
             >
               <span>👤</span>
               <span>งานของฉัน (เฉพาะบุคคล)</span>
@@ -701,11 +783,10 @@ export function TasksPage({
             <button
               type="button"
               onClick={() => setScopeFilter("my_dept")}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                scopeFilter === "my_dept"
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${scopeFilter === "my_dept"
                   ? "bg-teal-700 text-white shadow-xs"
                   : "bg-teal-50 text-teal-800 hover:bg-teal-100 border border-teal-200"
-              }`}
+                }`}
             >
               <span>👥</span>
               <span>กลุ่มงานของฉัน ({currentUser?.division || "ฝ่าย"})</span>
@@ -714,11 +795,10 @@ export function TasksPage({
             <button
               type="button"
               onClick={() => setScopeFilter("public")}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                scopeFilter === "public"
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${scopeFilter === "public"
                   ? "bg-sky-600 text-white shadow-xs"
                   : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
+                }`}
             >
               <span>🏢</span>
               <span>งานส่วนกลางทั้ง สนง.</span>
@@ -733,15 +813,15 @@ export function TasksPage({
               {currentUser?.role === "admin"
                 ? "👑 Admin (สิทธิ์สูงสุด)"
                 : currentUser?.role === "manager"
-                ? "👔 Manager (หัวหน้ากลุ่มงาน)"
-                : "👤 Member"}
+                  ? "👔 Manager (หัวหน้ากลุ่มงาน)"
+                  : "👤 Member"}
             </span>
           </div>
         </div>
 
         {/* Search & Granular Dropdowns */}
         <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
-          <div className="sm:col-span-6 relative">
+          <div className="sm:col-span-4 relative">
             <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
               🔍
             </span>
@@ -765,9 +845,24 @@ export function TasksPage({
 
           <div className="sm:col-span-3">
             <select
+              value={selectedMissionFilter}
+              onChange={(e) => setSelectedMissionFilter(e.target.value)}
+              className="w-full px-3 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-medium focus:bg-white focus:border-indigo-500 transition-colors cursor-pointer"
+            >
+              <option value="all">🎯 ทุกกลุ่มภารกิจ พมจ.</option>
+              {MSO_MISSION_GROUPS.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.icon} {g.shortName}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="sm:col-span-3">
+            <select
               value={selectedDeptFilter}
               onChange={(e) => setSelectedDeptFilter(e.target.value)}
-              className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl text-slate-700 focus:bg-white focus:border-indigo-500 transition-colors cursor-pointer"
+              className="w-full px-3 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-700 focus:bg-white focus:border-indigo-500 transition-colors cursor-pointer"
             >
               <option value="all">🏢 ทุกกลุ่มงาน / ฝ่าย</option>
               {GOVERNMENT_DIVISIONS.map((d) => (
@@ -778,13 +873,13 @@ export function TasksPage({
             </select>
           </div>
 
-          <div className="sm:col-span-3">
+          <div className="sm:col-span-2">
             <select
               value={selectedPriorityFilter}
               onChange={(e) => setSelectedPriorityFilter(e.target.value)}
-              className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl text-slate-700 focus:bg-white focus:border-indigo-500 transition-colors cursor-pointer"
+              className="w-full px-3 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-700 focus:bg-white focus:border-indigo-500 transition-colors cursor-pointer"
             >
-              <option value="all">⚡ ทุกระดับความเร่งด่วน</option>
+              <option value="all">⚡ ทุกระดับ</option>
               <option value="high">🔥 สูงมาก (ด่วน)</option>
               <option value="medium">🟡 ปานกลาง (ปกติ)</option>
               <option value="low">🟢 ทั่วไป</option>
@@ -901,6 +996,7 @@ export function TasksPage({
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold">
                   <th className="py-3 px-4">สถานะ</th>
                   <th className="py-3 px-4">ชื่องานและรายละเอียด</th>
+                  <th className="py-3 px-4">กลุ่มภารกิจ พมจ.</th>
                   <th className="py-3 px-4">สิทธิ์ / ขอบเขต</th>
                   <th className="py-3 px-4">กลุ่มงาน / ฝ่าย</th>
                   <th className="py-3 px-4">ผู้รับผิดชอบ</th>
@@ -912,75 +1008,121 @@ export function TasksPage({
               <tbody className="divide-y divide-slate-100 text-slate-700">
                 {filteredTasks.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-slate-400">
-                      ไม่พบภารกิจที่ตรงกับเงื่อนไขการค้นหา
+                    <td colSpan={9} className="py-12 text-center text-slate-400 space-y-2">
+                      <div>ไม่พบภารกิจที่ตรงกับเงื่อนไขการค้นหา</div>
+                      {tasks.length === 0 && (
+                        <div className="pt-2">
+                          <button
+                            type="button"
+                            onClick={handleSeedMsoTasks}
+                            className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer"
+                          >
+                            ⚡ นำเข้าภารกิจมาตรฐาน พมจ.กำแพงเพชร (8 กลุ่มภารกิจ)
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ) : (
-                  filteredTasks.map((task) => (
-                    <tr
-                      key={task.id}
-                      onClick={() => handleOpenTaskDetails(task)}
-                      className="hover:bg-slate-50/80 transition-colors cursor-pointer group"
-                    >
-                      <td className="py-3 px-4">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold ${
-                            task.status === "done"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : task.status === "review"
-                              ? "bg-amber-100 text-amber-800"
-                              : task.status === "in_progress"
-                              ? "bg-indigo-100 text-indigo-800"
-                              : "bg-slate-200 text-slate-700"
-                          }`}
-                        >
-                          {task.status === "done"
-                            ? "✅ เสร็จสิ้น"
-                            : task.status === "review"
-                            ? "🔍 รอตรวจทาน"
-                            : task.status === "in_progress"
-                            ? "🔄 กำลังทำ"
-                            : "📝 รอดำเนินการ"}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 max-w-xs">
-                        <div className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
-                          {task.title}
-                        </div>
-                        {task.description && (
-                          <div className="text-[11px] text-slate-400 truncate mt-0.5">
-                            {task.description}
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-3 px-4">{getVisibilityBadge(task.visibility)}</td>
-                      <td className="py-3 px-4 font-medium text-slate-600">{task.dept}</td>
-                      <td className="py-3 px-4 font-medium text-slate-800">👤 {task.assignee}</td>
-                      <td className="py-3 px-4 font-mono text-slate-600">{task.due}</td>
-                      <td className="py-3 px-4 text-center">{getPriorityBadge(task.priority)}</td>
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenTaskDetails(task)}
-                            className="px-2 py-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg text-xs"
+                  filteredTasks.map((task) => {
+                    const missionInfo = getMissionGroupInfo(task.missionGroup || task.dept);
+                    const deadlineInfo = getDeadlineStatus(task.due);
+
+                    return (
+                      <tr
+                        key={task.id}
+                        onClick={() => handleOpenTaskDetails(task)}
+                        className="hover:bg-slate-50/80 transition-colors cursor-pointer group"
+                      >
+                        <td className="py-3 px-4">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold ${task.status === "done"
+                                ? "bg-emerald-100 text-emerald-800"
+                                : task.status === "review"
+                                  ? "bg-amber-100 text-amber-800"
+                                  : task.status === "in_progress"
+                                    ? "bg-indigo-100 text-indigo-800"
+                                    : "bg-slate-200 text-slate-700"
+                              }`}
                           >
-                            ✏️ ดู / แก้ไข
-                          </button>
-                          {canUserDeleteTask(task, currentUser) && (
+                            {task.status === "done"
+                              ? "✅ เสร็จสิ้น"
+                              : task.status === "review"
+                                ? "🔍 รอตรวจทาน"
+                                : task.status === "in_progress"
+                                  ? "🔄 กำลังทำ"
+                                  : "📝 รอดำเนินการ"}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 max-w-xs">
+                          <div className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
+                            {task.title}
+                          </div>
+                          {task.description && (
+                            <div className="text-[11px] text-slate-400 truncate mt-0.5">
+                              {task.description}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${missionInfo.bgLight} ${missionInfo.color} ${missionInfo.borderLight}`}
+                            title={missionInfo.name}
+                          >
+                            <span>{missionInfo.icon}</span>
+                            <span className="truncate max-w-[110px]">{missionInfo.shortName}</span>
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">{getVisibilityBadge(task.visibility)}</td>
+                        <td className="py-3 px-4 font-medium text-slate-600">{task.dept}</td>
+                        <td className="py-3 px-4 font-medium text-slate-800">👤 {task.assignee}</td>
+                        <td className="py-3 px-4">
+                          <div className="font-mono text-slate-700">{task.due}</div>
+                          {task.status !== "done" && deadlineInfo.urgency !== "no_due" && (
+                            <div
+                              className={`inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-md font-bold border mt-0.5 ${deadlineInfo.badgeBg} ${deadlineInfo.badgeText} ${deadlineInfo.badgeBorder}`}
+                            >
+                              <span>{deadlineInfo.icon}</span>
+                              <span>{deadlineInfo.label}</span>
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-center">{getPriorityBadge(task.priority)}</td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
                             <button
                               type="button"
-                              onClick={(e) => handleDeleteTask(e, task.id)}
-                              className="px-2 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg text-xs"
+                              onClick={() => {
+                                setLineShareTask(task);
+                                setIsCopiedLine(false);
+                              }}
+                              className="px-2 py-1 text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
+                              title="แชร์ภารกิจไปยัง LINE"
                             >
-                              🗑️
+                              <span>📲</span>
+                              <span>LINE</span>
                             </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                            <button
+                              type="button"
+                              onClick={() => handleOpenTaskDetails(task)}
+                              className="px-2 py-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg text-xs cursor-pointer"
+                            >
+                              ✏️ ดู / แก้ไข
+                            </button>
+                            {canUserDeleteTask(task, currentUser) && (
+                              <button
+                                type="button"
+                                onClick={(e) => handleDeleteTask(e, task.id)}
+                                className="px-2 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg text-xs cursor-pointer"
+                              >
+                                🗑️
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -1044,11 +1186,10 @@ export function TasksPage({
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
                   <label
-                    className={`flex items-start gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${
-                      taskVisibility === "department"
+                    className={`flex items-start gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${taskVisibility === "department"
                         ? "bg-indigo-50 border-indigo-300 ring-1 ring-indigo-200"
                         : "bg-white border-slate-200 hover:bg-slate-50"
-                    }`}
+                      }`}
                   >
                     <input
                       type="radio"
@@ -1064,11 +1205,10 @@ export function TasksPage({
                   </label>
 
                   <label
-                    className={`flex items-start gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${
-                      taskVisibility === "individual"
+                    className={`flex items-start gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${taskVisibility === "individual"
                         ? "bg-slate-100 border-slate-400 ring-1 ring-slate-300"
                         : "bg-white border-slate-200 hover:bg-slate-50"
-                    }`}
+                      }`}
                   >
                     <input
                       type="radio"
@@ -1084,11 +1224,10 @@ export function TasksPage({
                   </label>
 
                   <label
-                    className={`flex items-start gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${
-                      taskVisibility === "public"
+                    className={`flex items-start gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${taskVisibility === "public"
                         ? "bg-sky-50 border-sky-300 ring-1 ring-sky-200"
                         : "bg-white border-slate-200 hover:bg-slate-50"
-                    }`}
+                      }`}
                   >
                     <input
                       type="radio"
@@ -1103,6 +1242,34 @@ export function TasksPage({
                     </div>
                   </label>
                 </div>
+              </div>
+
+              {/* Mission Group Selector */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  กลุ่มภารกิจ พมจ.กำแพงเพชร (Mission Group) <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={taskMissionGroup}
+                  onChange={(e) => {
+                    const nextMg = e.target.value;
+                    setTaskMissionGroup(nextMg);
+                    const mg = MSO_MISSION_GROUPS.find((g) => g.id === nextMg);
+                    if (mg && mg.division) {
+                      setTaskDept(mg.division);
+                    }
+                  }}
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium focus:bg-white focus:border-indigo-500 transition-colors"
+                >
+                  {MSO_MISSION_GROUPS.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.icon} {g.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  {MSO_MISSION_GROUPS.find((g) => g.id === taskMissionGroup)?.description}
+                </p>
               </div>
 
               {/* Department & Assignee */}
@@ -1169,6 +1336,11 @@ export function TasksPage({
                     onChange={(e) => setTaskDue(e.target.value)}
                     className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:border-indigo-500 transition-colors"
                   />
+                  {taskDue && (
+                    <div className="text-[10px] text-indigo-600 font-medium mt-1">
+                      📅 วันที่กำหนด: {toThaiDate(taskDue)}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1270,10 +1442,10 @@ export function TasksPage({
                   {selectedTask.status === "done"
                     ? "✅"
                     : selectedTask.status === "review"
-                    ? "🔍"
-                    : selectedTask.status === "in_progress"
-                    ? "🔄"
-                    : "📝"}
+                      ? "🔍"
+                      : selectedTask.status === "in_progress"
+                        ? "🔄"
+                        : "📝"}
                 </span>
                 <div>
                   <h3 className="font-bold font-heading text-slate-900 text-base">
@@ -1323,11 +1495,10 @@ export function TasksPage({
                           saveTask(updated).catch(console.error);
                           showToast("📝 ย้ายไปสถานะ รอดำเนินการ");
                         }}
-                        className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                          selectedTask.status === "todo"
+                        className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${selectedTask.status === "todo"
                             ? "bg-slate-800 text-white shadow-xs"
                             : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-100"
-                        }`}
+                          }`}
                       >
                         📝 รอดำเนินการ
                       </button>
@@ -1341,11 +1512,10 @@ export function TasksPage({
                           saveTask(updated).catch(console.error);
                           showToast("🔄 ย้ายไปสถานะ กำลังดำเนินการ");
                         }}
-                        className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                          selectedTask.status === "in_progress"
+                        className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${selectedTask.status === "in_progress"
                             ? "bg-indigo-600 text-white shadow-xs"
                             : "bg-white text-indigo-700 border border-indigo-200 hover:bg-indigo-50"
-                        }`}
+                          }`}
                       >
                         🔄 กำลังดำเนินการ
                       </button>
@@ -1359,11 +1529,10 @@ export function TasksPage({
                           saveTask(updated).catch(console.error);
                           showToast("🔍 ย้ายไปสถานะ รอตรวจทาน (ส่งหัวหน้าฝ่าย)");
                         }}
-                        className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                          selectedTask.status === "review"
+                        className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${selectedTask.status === "review"
                             ? "bg-amber-600 text-white shadow-xs"
                             : "bg-white text-amber-800 border border-amber-200 hover:bg-amber-50"
-                        }`}
+                          }`}
                       >
                         🔍 รอตรวจทาน
                       </button>
@@ -1377,11 +1546,10 @@ export function TasksPage({
                           saveTask(updated).catch(console.error);
                           showToast("✅ ย้ายไปสถานะ เสร็จสิ้นแล้ว");
                         }}
-                        className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                          selectedTask.status === "done"
+                        className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${selectedTask.status === "done"
                             ? "bg-emerald-600 text-white shadow-xs"
                             : "bg-white text-emerald-800 border border-emerald-200 hover:bg-emerald-50"
-                        }`}
+                          }`}
                       >
                         ✅ เสร็จสิ้นแล้ว
                       </button>
@@ -1391,6 +1559,29 @@ export function TasksPage({
                   {/* Task Header & Meta Badges */}
                   <div>
                     <div className="flex flex-wrap items-center gap-2 mb-2">
+                      {(() => {
+                        const selMission = getMissionGroupInfo(selectedTask.missionGroup || selectedTask.dept);
+                        const selDeadline = getDeadlineStatus(selectedTask.due);
+                        return (
+                          <>
+                            <span
+                              className={`text-xs px-2.5 py-0.5 rounded-full font-bold border flex items-center gap-1.5 ${selMission.bgLight} ${selMission.color} ${selMission.borderLight}`}
+                              title={selMission.name}
+                            >
+                              <span>{selMission.icon}</span>
+                              <span>{selMission.name}</span>
+                            </span>
+                            {selectedTask.due && selDeadline.urgency !== "no_due" && (
+                              <span
+                                className={`text-xs px-2.5 py-0.5 rounded-full font-bold border flex items-center gap-1 ${selDeadline.badgeBg} ${selDeadline.badgeText} ${selDeadline.badgeBorder}`}
+                              >
+                                <span>{selDeadline.icon}</span>
+                                <span>{selDeadline.label}</span>
+                              </span>
+                            )}
+                          </>
+                        );
+                      })()}
                       {getVisibilityBadge(selectedTask.visibility)}
                       {getPriorityBadge(selectedTask.priority)}
                       <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-medium">
@@ -1432,15 +1623,14 @@ export function TasksPage({
                             <input
                               type="checkbox"
                               checked={st.done}
-                              onChange={() => {}}
+                              onChange={() => { }}
                               className="w-4 h-4 text-indigo-600 rounded cursor-pointer"
                             />
                             <span
-                              className={`text-xs ${
-                                st.done
+                              className={`text-xs ${st.done
                                   ? "line-through text-slate-400 font-normal"
                                   : "text-slate-800 font-medium"
-                              }`}
+                                }`}
                             >
                               {st.text}
                             </span>
@@ -1492,6 +1682,21 @@ export function TasksPage({
                       </div>
                     )}
                   </div>
+
+                  {/* LINE Share Action Button */}
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLineShareTask(selectedTask);
+                        setIsCopiedLine(false);
+                      }}
+                      className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      <span>📲</span>
+                      <span>แชร์และส่งต่อภารกิจนี้เข้ากลุ่ม LINE</span>
+                    </button>
+                  </div>
                 </>
               ) : (
                 /* EDIT FORM */
@@ -1517,6 +1722,31 @@ export function TasksPage({
                       onChange={(e) => setEditDesc(e.target.value)}
                       className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:border-indigo-500"
                     ></textarea>
+                  </div>
+
+                  {/* Mission Group Selector */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      กลุ่มภารกิจ พมจ.กำแพงเพชร (Mission Group)
+                    </label>
+                    <select
+                      value={editMissionGroup}
+                      onChange={(e) => {
+                        const nextMg = e.target.value;
+                        setEditMissionGroup(nextMg);
+                        const mg = MSO_MISSION_GROUPS.find((g) => g.id === nextMg);
+                        if (mg && mg.division) {
+                          setEditDept(mg.division);
+                        }
+                      }}
+                      className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium focus:bg-white focus:border-indigo-500"
+                    >
+                      {MSO_MISSION_GROUPS.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.icon} {g.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1629,6 +1859,78 @@ export function TasksPage({
                   </div>
                 </form>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL 3: LINE SHARE MODAL ─── */}
+      {lineShareTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+          <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-fade-in my-8">
+            <div className="px-6 py-4 bg-gradient-to-r from-emerald-500 to-teal-600 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">📲</span>
+                <div>
+                  <h3 className="font-bold font-heading text-white text-base">
+                    ส่งต่อภารกิจราชการเข้ากลุ่ม LINE
+                  </h3>
+                  <p className="text-[11px] text-emerald-100">
+                    ฟอร์แมตข้อความมาตรฐานสำหรับสื่อสารภายใน สนง.พมจ.กำแพงเพชร
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLineShareTask(null)}
+                className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center text-xs transition-colors cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="text-xs text-slate-600">
+                คุณสามารถคัดลอกข้อความด้านล่าง หรือกดปุ่มเปิดแอปพลิเคชัน LINE เพื่อส่งต่อไปยังกลุ่มงานได้ทันที:
+              </div>
+
+              <div className="relative">
+                <pre className="p-4 bg-slate-900 text-emerald-400 font-mono text-xs rounded-2xl whitespace-pre-wrap leading-relaxed border border-slate-800 max-h-[300px] overflow-y-auto select-all">
+                  {formatLineTaskMessage(lineShareTask)}
+                </pre>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const text = formatLineTaskMessage(lineShareTask);
+                    await navigator.clipboard.writeText(text);
+                    setIsCopiedLine(true);
+                    showToast("📋 คัดลอกข้อความสำหรับ LINE เรียบร้อยแล้ว");
+                    setTimeout(() => setIsCopiedLine(false), 3000);
+                  }}
+                  className={`w-full sm:w-1/2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${isCopiedLine
+                      ? "bg-emerald-600 text-white"
+                      : "bg-slate-800 hover:bg-slate-900 text-white shadow-xs"
+                    }`}
+                >
+                  <span>{isCopiedLine ? "✅" : "📋"}</span>
+                  <span>{isCopiedLine ? "คัดลอกเรียบร้อย!" : "คัดลอกข้อความ"}</span>
+                </button>
+
+                <a
+                  href={`https://line.me/R/msg/text/?${encodeURIComponent(
+                    formatLineTaskMessage(lineShareTask)
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full sm:w-1/2 py-2.5 px-4 rounded-xl text-xs font-bold bg-[#06C755] hover:bg-[#05b34c] text-white shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer text-center"
+                >
+                  <span>💬</span>
+                  <span>เปิดแอป LINE เพื่อส่ง ↗</span>
+                </a>
+              </div>
             </div>
           </div>
         </div>

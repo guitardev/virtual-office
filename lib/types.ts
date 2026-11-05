@@ -191,6 +191,7 @@ export interface TaskItem {
   subtasks?: TaskSubtask[];
   tags?: string[];
   reviewNotes?: string;
+  missionGroup?: string;
   createdAt?: string;
 }
 

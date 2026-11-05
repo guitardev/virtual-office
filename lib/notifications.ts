@@ -12,6 +12,7 @@ import {
 } from "./types";
 import { getGroupMembers } from "./chat-data";
 import { getAttendeeName, getMeetingIsoDate } from "./calendar";
+import { getDeadlineStatus, getMissionGroupInfo } from "./task-missions";
 
 export const NOTIFICATION_READ_IDS_KEY = "smartmso_read_notif_ids";
 export const BROWSER_NOTIF_ENABLED_KEY = "smartmso_browser_notifs_enabled";
@@ -554,7 +555,7 @@ export function buildUnifiedNotifications({
     }
   });
 
-  // ─── 5. ASSIGNED TASK NOTIFICATIONS ───
+  // ─── 5. ASSIGNED TASK NOTIFICATIONS (DEADLINE & MISSION AWARE) ───
   tasks?.forEach((task) => {
     if (task.status === "done") return;
     const isAssigned =
@@ -565,21 +566,41 @@ export function buildUnifiedNotifications({
     if (!isAssigned) return;
 
     const notifId = `task_${task.id}`;
+    const deadline = getDeadlineStatus(task.due);
+    const mission = getMissionGroupInfo(task.missionGroup || task.dept);
+
     let priority: "normal" | "urgent" | "emergency" = "normal";
-    if (task.priority === "high") {
+    let title = `งานมอบหมาย: ${task.title}`;
+    let message = `กลุ่มภารกิจ: ${mission.shortName} · กำหนดส่ง: ${task.due || "เร็วๆ นี้"}`;
+
+    if (deadline.urgency === "overdue") {
+      priority = "emergency";
+      title = `⛔ เลยกำหนดส่ง: ${task.title}`;
+      message = `ภารกิจ${mission.shortName} เลยกำหนดส่งมาแล้ว (${deadline.label}) กรุณาเร่งรัดและอัปเดตผลการดำเนินงาน`;
+    } else if (deadline.urgency === "due_today") {
       priority = "urgent";
+      title = `⏰ ครบกำหนดส่งวันนี้: ${task.title}`;
+      message = `ภารกิจ${mission.shortName} ครบกำหนดส่งในวันนี้ กรุณาส่งมอบงานหรือรายงานผลในระบบ`;
+    } else if (deadline.urgency === "due_soon") {
+      priority = task.priority === "high" ? "urgent" : "normal";
+      title = `⚠️ ใกล้ครบกำหนด (${deadline.label}): ${task.title}`;
+      message = `กลุ่มภารกิจ: ${mission.shortName} · ความสำคัญ: ${task.priority === "high" ? "เร่งด่วนสูง" : "ปกติ"}`;
+    } else if (task.priority === "high") {
+      priority = "urgent";
+      title = `⚡ ภารกิจเร่งด่วน: ${task.title}`;
+      message = `กลุ่มภารกิจ: ${mission.shortName} · กำหนดส่ง: ${task.due || "เร็วๆ นี้"}`;
     }
 
     notifs.push({
       id: notifId,
       type: "task",
-      title: `งานมอบหมาย: ${task.title}`,
-      message: `ฝ่าย${task.dept || currentUser.division || "งาน"} · กำหนดส่ง: ${task.due || "เร็วๆ นี้"} (${task.status === "in_progress" ? "กำลังทำ" : task.status === "review" ? "รอตรวจ" : "รอดำเนินการ"})`,
+      title,
+      message,
       timestamp: task.due || "เร็วๆ นี้",
       createdAt: task.createdAt || new Date().toISOString(),
       isRead: readIds.has(notifId),
       priority,
-      senderName: task.createdByName || "ผู้มอบหมาย",
+      senderName: task.createdByName || "ผู้มอบหมายงาน",
       link: {
         page: "task",
         targetId: String(task.id),

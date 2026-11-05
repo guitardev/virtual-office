@@ -22,6 +22,8 @@ import {
   uploadNasFileDirect,
 } from "@/lib/synology";
 import { Member } from "@/lib/types";
+import { NasUploadProgressModal, UploadBatchItem } from "./NasUploadProgressModal";
+import { MSO_MISSION_GROUPS } from "@/lib/task-missions";
 
 interface NasFileManagerProps {
   currentUser: Member;
@@ -49,6 +51,10 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
   const [searchQuery, setSearchQuery] = useState("");
   const [permissionError, setPermissionError] = useState<string | null>(null);
 
+  // Quick filters for DMS
+  const [fileTypeFilter, setFileTypeFilter] = useState<"all" | "doc" | "sheet" | "image" | "archive">("all");
+  const [fiscalYearFilter, setFiscalYearFilter] = useState<string>("all");
+
   // Modal states
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
@@ -59,6 +65,16 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
   const [isUploading, setIsUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const dragCounter = useRef(0);
+
+  // Batch Upload Progress states
+  const [showUploadProgressModal, setShowUploadProgressModal] = useState(false);
+  const [uploadBatchItems, setUploadBatchItems] = useState<UploadBatchItem[]>([]);
+  const [currentUploadIndex, setCurrentUploadIndex] = useState(0);
+  const [currentUploadPercent, setCurrentUploadPercent] = useState(0);
+  const [currentUploadingFileName, setCurrentUploadingFileName] = useState("");
+  const [uploadComplete, setUploadComplete] = useState(false);
+  const [uploadSuccessCount, setUploadSuccessCount] = useState(0);
+  const [uploadErrorCount, setUploadErrorCount] = useState(0);
 
   // Preview state
   const [previewFile, setPreviewFile] = useState<SynologyFileItem | null>(null);
@@ -214,28 +230,53 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
     }
 
     const filesToUpload = Array.from(fileList);
+    const initialBatch: UploadBatchItem[] = filesToUpload.map((f, i) => ({
+      id: `up_${Date.now()}_${i}`,
+      name: f.name,
+      size: f.size,
+      progress: 0,
+      status: "pending",
+    }));
+
+    setUploadBatchItems(initialBatch);
+    setShowUploadProgressModal(true);
+    setUploadComplete(false);
+    setUploadSuccessCount(0);
+    setUploadErrorCount(0);
     setIsUploading(true);
-    showToast(`⏳ กำลังอัปโหลด ${filesToUpload.length} ไฟล์ไปยัง Synology NAS...`);
 
     let successCount = 0;
+    let errorCount = 0;
     let lastError = "";
     let requiresReauth = false;
 
     try {
       for (let i = 0; i < filesToUpload.length; i++) {
         const rawFile = filesToUpload[i];
+        setCurrentUploadIndex(i + 1);
+        setCurrentUploadingFileName(rawFile.name);
+        setCurrentUploadPercent(0);
+        setUploadBatchItems((prev) =>
+          prev.map((it, idx) => (idx === i ? { ...it, status: "uploading" } : it))
+        );
 
         // Optimize/compress ultra-large images (> 25MB) client-side
         let file = rawFile;
         if (rawFile.type.startsWith("image/") && rawFile.size > 25 * 1024 * 1024) {
-          showToast(`⚙️ กำลังปรับขนาดภาพ "${rawFile.name}" เพื่อเพิ่มความเร็วในการอัปโหลด...`);
           file = await compressImageForUpload(rawFile, 15 * 1024 * 1024);
         }
 
         // Direct Client-to-NAS Upload supports up to MAX_DIRECT_UPLOAD_SIZE (100 MB via Cloudflare Tunnel)
         if (file.size > MAX_DIRECT_UPLOAD_SIZE) {
           const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
-          lastError = `ไฟล์ "${file.name}" มีขนาดใหญ่เกินไป (${sizeMb} MB > สูงสุด 100 MB) กรุณาอัปโหลดผ่านเว็บ DSM โดยตรง หรือใช้งานผ่านวง LAN`;
+          lastError = `ไฟล์ "${file.name}" มีขนาดใหญ่เกินไป (${sizeMb} MB > สูงสุด 100 MB)`;
+          errorCount++;
+          setUploadErrorCount(errorCount);
+          setUploadBatchItems((prev) =>
+            prev.map((it, idx) =>
+              idx === i ? { ...it, status: "error", errorMessage: lastError } : it
+            )
+          );
           continue;
         }
 
@@ -246,14 +287,30 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
           activeSid,
           config.nasUrl,
           (percent) => {
-            showToast(`📤 กำลังอัปโหลดตรงสู่ NAS (${i + 1}/${filesToUpload.length}): ${file.name} (${percent}%)`);
+            setCurrentUploadPercent(percent);
+            setUploadBatchItems((prev) =>
+              prev.map((it, idx) => (idx === i ? { ...it, progress: percent } : it))
+            );
           }
         );
 
         if (data.success) {
           successCount++;
+          setUploadSuccessCount(successCount);
+          setUploadBatchItems((prev) =>
+            prev.map((it, idx) =>
+              idx === i ? { ...it, status: "success", progress: 100 } : it
+            )
+          );
         } else {
           lastError = data.error || "Synology NAS ปฏิเสธการอัปโหลด";
+          errorCount++;
+          setUploadErrorCount(errorCount);
+          setUploadBatchItems((prev) =>
+            prev.map((it, idx) =>
+              idx === i ? { ...it, status: "error", errorMessage: lastError } : it
+            )
+          );
           if (data.code === 119 || data.requireAuth) {
             requiresReauth = true;
           }
@@ -280,6 +337,7 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
       showToast(`❌ เกิดข้อผิดพลาดในการอัปโหลด: ${err?.message}`);
     } finally {
       setIsUploading(false);
+      setUploadComplete(true);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -395,14 +453,26 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
     setPreviewFile(file);
   };
 
-  // Filter items
+  // Filter items (Search, Fiscal Year, File Types)
   const isRoot = !currentPath || currentPath === "root" || currentPath === "/";
-  const displayedShares = shares.filter((s) =>
-    s.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-  const displayedFiles = files.filter((f) =>
-    f.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const displayedShares = shares.filter((s) => {
+    if (searchQuery && !s.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (fiscalYearFilter !== "all" && !s.name.includes(fiscalYearFilter)) return false;
+    return true;
+  });
+
+  const displayedFiles = files.filter((f) => {
+    if (searchQuery && !f.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (fiscalYearFilter !== "all" && !f.name.includes(fiscalYearFilter)) return false;
+    if (!f.isdir && fileTypeFilter !== "all") {
+      const name = f.name.toLowerCase();
+      if (fileTypeFilter === "doc" && !/\.(pdf|docx?|odt|txt|rtf)$/i.test(name)) return false;
+      if (fileTypeFilter === "sheet" && !/\.(xlsx?|csv|ods)$/i.test(name)) return false;
+      if (fileTypeFilter === "image" && !/\.(jpe?g|png|gif|webp|svg|bmp)$/i.test(name)) return false;
+      if (fileTypeFilter === "archive" && !/\.(zip|rar|7z|tar|gz)$/i.test(name)) return false;
+    }
+    return true;
+  });
 
   return (
     <div className="space-y-6">
@@ -617,6 +687,60 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
               >
                 🔄
               </button>
+            </div>
+          </div>
+
+          {/* Quick Filters Bar (File Types & Fiscal Years) */}
+          <div className="flex flex-wrap items-center justify-between gap-2.5 pt-1 pb-2 border-b border-slate-100/90 text-xs">
+            {/* File Type Filter */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[11px] font-bold text-slate-400">ประเภท:</span>
+              {[
+                { id: "all", label: "ทั้งหมด", icon: "📑" },
+                { id: "doc", label: "PDF / เอกสาร", icon: "📄" },
+                { id: "sheet", label: "Excel / สเปรดชีต", icon: "📊" },
+                { id: "image", label: "รูปภาพ / วิดีโอ", icon: "🖼️" },
+                { id: "archive", label: "ZIP / บีบอัด", icon: "📦" },
+              ].map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setFileTypeFilter(f.id as any)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                    fileTypeFilter === f.id
+                      ? "bg-indigo-600 text-white shadow-xs"
+                      : "bg-slate-100 hover:bg-slate-200 text-slate-600"
+                  }`}
+                >
+                  <span>{f.icon}</span>
+                  <span>{f.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Fiscal Year Filter */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[11px] font-bold text-slate-400">ปีงบประมาณ:</span>
+              {[
+                { id: "all", label: "ทุกปีงบ" },
+                { id: "2570", label: "ปี ๒๕๗๐" },
+                { id: "2569", label: "ปี ๒๕๖๙" },
+                { id: "2568", label: "ปี ๒๕๖๘" },
+                { id: "2567", label: "ปี ๒๕๖๗" },
+              ].map((yr) => (
+                <button
+                  key={yr.id}
+                  type="button"
+                  onClick={() => setFiscalYearFilter(yr.id)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                    fiscalYearFilter === yr.id
+                      ? "bg-amber-500 text-white shadow-xs font-semibold"
+                      : "bg-slate-100 hover:bg-slate-200 text-slate-600"
+                  }`}
+                >
+                  {yr.label}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -879,7 +1003,7 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
       {/* ─── MODAL: CREATE NEW FOLDER ─── */}
       {showNewFolderModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 space-y-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
               <h3 className="font-bold text-slate-800 text-sm font-heading flex items-center gap-2">
                 <span>📁</span>
@@ -904,12 +1028,62 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
                   required
                   value={newFolderName}
                   onChange={(e) => setNewFolderName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-medium"
                   placeholder="เช่น รายงานประจำปี 2569"
                 />
                 <p className="text-[10px] text-slate-400 mt-1 font-mono">
                   เส้นทางปลายทาง: {currentPath}
                 </p>
+              </div>
+
+              {/* Quick Presets: Fiscal Years & 8 MSO Mission Groups */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-2">
+                <div>
+                  <span className="text-[10px] font-bold text-amber-800 flex items-center gap-1">
+                    <span>⚡</span>
+                    <span>ทางลัดปีงบประมาณ พ.ศ.:</span>
+                  </span>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {["2570", "2569", "2568", "2567"].map((yr) => (
+                      <button
+                        key={yr}
+                        type="button"
+                        onClick={() =>
+                          setNewFolderName((prev) =>
+                            prev ? `${prev} ปีงบ ${yr}` : `ปีงบประมาณ ${yr}`
+                          )
+                        }
+                        className="px-2 py-0.5 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-800 text-[10px] font-bold border border-amber-200/80 transition-colors cursor-pointer"
+                      >
+                        + ปี {yr}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-[10px] font-bold text-indigo-800 flex items-center gap-1">
+                    <span>🏛️</span>
+                    <span>ทางลัด 8 กลุ่มภารกิจ พมจ.กำแพงเพชร:</span>
+                  </span>
+                  <div className="flex flex-wrap gap-1 mt-1 max-h-28 overflow-y-auto pr-1">
+                    {MSO_MISSION_GROUPS.map((mg) => (
+                      <button
+                        key={mg.id}
+                        type="button"
+                        onClick={() =>
+                          setNewFolderName((prev) =>
+                            prev ? `${prev} - ${mg.name}` : mg.name
+                          )
+                        }
+                        className="px-2 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold border border-indigo-200/80 transition-colors truncate max-w-full cursor-pointer"
+                        title={mg.division}
+                      >
+                        {mg.icon} {mg.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               <div className="pt-2 flex items-center justify-end gap-2">
@@ -1075,6 +1249,24 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
           </div>
         </div>
       )}
+
+      {/* ─── MODAL: BATCH UPLOAD PROGRESS MODAL ─── */}
+      <NasUploadProgressModal
+        isOpen={showUploadProgressModal}
+        batchItems={uploadBatchItems}
+        totalCount={uploadBatchItems.length}
+        currentIndex={currentUploadIndex}
+        currentPercent={currentUploadPercent}
+        currentFileName={currentUploadingFileName}
+        isComplete={uploadComplete}
+        successCount={uploadSuccessCount}
+        errorCount={uploadErrorCount}
+        destinationPath={currentPath}
+        onClose={() => {
+          setShowUploadProgressModal(false);
+          setUploadBatchItems([]);
+        }}
+      />
     </div>
   );
 }
