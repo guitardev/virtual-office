@@ -325,3 +325,4 @@ npm run build
 npm start
 ```
 ระบบผ่านการทดสอบและรองรับการ Deploy บน Vercel, Node.js Container หรือเซิร์ฟเวอร์ On-Premise ของหน่วยงานได้อย่างสมบูรณ์ 100%
+
