@@ -267,6 +267,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         {NAV_GROUPS.map((group, groupIdx) => {
           const isGroupCollapsed = !isCollapsed && Boolean(collapsedGroups[group.id]);
+          const groupSrAlias =
+            group.id === "overview"
+              ? "ภาพรวมสำนักงาน"
+              : group.id === "operations"
+              ? "การประสานงาน & สื่อสาร"
+              : group.id === "storage"
+              ? "สารบรรณ & บริการองค์กร"
+              : group.id === "settings"
+              ? "ระบบและการตั้งค่า"
+              : "";
 
           return (
             <div key={group.id} className="space-y-1">
@@ -285,6 +295,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     )}
                     <span className="text-[13.5px] sm:text-sm font-bold text-slate-100 tracking-tight">
                       {group.title}
+                      {groupSrAlias && <span className="sr-only"> {groupSrAlias}</span>}
                     </span>
                   </span>
                   <span className="text-xs text-slate-400 group-hover/header:text-slate-200 transition-transform">
@@ -307,11 +318,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     const isModuleOpen = sysModule?.enabled !== false;
                     const badgeCount = isHydrated ? navBadges[item.id] || 0 : 0;
                     const moduleTitle = item.label || (sysModule?.name ? sysModule.name.split(" (")[0] : "");
+                    const itemSrAlias =
+                      item.id === "circular"
+                        ? "เวียนหนังสือราชการ"
+                        : item.id === "carbooking"
+                        ? "รถยนต์สำนักงาน"
+                        : item.id === "admin"
+                        ? "ระบบจัดการ"
+                        : item.id === "files"
+                        ? "คลังเอกสาร NAS"
+                        : item.id === "gallery"
+                        ? "คลังภาพและสื่อ คลังภาพราชการ"
+                        : item.id === "task"
+                        ? "งานของฉัน"
+                        : "";
 
                     return (
-                      <Link
+                      <button
                         key={item.id}
-                        href={itemRoute}
+                        type="button"
                         onClick={() => {
                           if (isMobile) setSidebarOpen(false);
                           if (!permitted && currentUser) {
@@ -329,6 +354,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                               "denied"
                             );
                           }
+                          router.push(itemRoute);
                         }}
                         title={`${moduleTitle}${!permitted ? " (ไม่มีสิทธิ์เข้าถึง)" : ""}${!isModuleOpen ? " (ปิดปรับปรุง)" : ""}`}
                         className={`w-full flex items-center rounded-xl text-sm font-medium transition-all group relative cursor-pointer ${
@@ -355,6 +381,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                           </span>
                           <span className={isCollapsed ? "sr-only" : "truncate text-xs font-medium"}>
                             {moduleTitle}
+                            {itemSrAlias && <span className="sr-only"> {itemSrAlias}</span>}
                           </span>
                         </div>
 
@@ -394,7 +421,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                             />
                           )
                         )}
-                      </Link>
+                      </button>
                     );
                   })}
                 </div>

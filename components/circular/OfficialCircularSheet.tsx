@@ -380,7 +380,7 @@ export function OfficialCircularSheet({
                 }`}
                 title="ขนาด 75%"
               >
-                ๗๕%
+                75%
               </button>
               <button
                 type="button"
@@ -395,7 +395,7 @@ export function OfficialCircularSheet({
                 }`}
                 title="ขนาดจริง 100% (A4 210mm)"
               >
-                ๑๐๐%
+                100%
               </button>
             </div>
 
@@ -408,7 +408,7 @@ export function OfficialCircularSheet({
                   ? "bg-indigo-600 border-indigo-600 text-white shadow-xs"
                   : "bg-slate-50 border-slate-300 text-slate-700 hover:bg-slate-100"
               }`}
-              title="แสดง/ซ่อนไม้บรรทัดมาตราวัด ๒๑ ซม. (สไตล์ Microsoft Word)"
+              title="แสดง/ซ่อนไม้บรรทัดมาตราวัด 21 ซม. (สไตล์ Microsoft Word)"
             >
               <span>📏</span>
               <span className="hidden sm:inline">{showRuler ? "ซ่อนไม้บรรทัด" : "ไม้บรรทัด"}</span>
@@ -447,13 +447,13 @@ export function OfficialCircularSheet({
             <span className="text-sm">⚖️</span>
             <span className="font-bold text-slate-700">มาตรฐานงานสารบรรณ (A4):</span>
             <span className="text-slate-500">
-              ขอบบน ๒.๕ ซม. • ขอบซ้าย ๓.๐ ซม. • ขอบขวา ๒.๐ ซม. • ขอบล่าง ๒.๐ ซม.
+              ขอบบน 2.5 ซม. • ขอบซ้าย 3.0 ซม. • ขอบขวา 2.0 ซม. • ขอบล่าง 2.0 ซม.
             </span>
           </div>
           <div className="flex items-center gap-2 text-slate-500">
-            <span>ขนาดมาตรฐาน 16px (พิมพ์ ๑๖pt)</span>
+            <span>ขนาดมาตรฐาน 16px (พิมพ์ 16pt)</span>
             <span>•</span>
-            <span>ย่อหน้า ๒.๕ ซม.</span>
+            <span>ย่อหน้า 2.5 ซม.</span>
           </div>
         </div>
       </div>

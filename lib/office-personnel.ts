@@ -216,7 +216,7 @@ export const OFFICIAL_OFFICE_PERSONNEL: OfficialStaffMember[] = [
     avatarUrl: "",
     avatarText: "สม",
     joinedDate: "1 ม.ค. 2555",
-    duty: "งานยานพาหนะส่วนกลาง ขับรถยนต์ราชการนำคณะเจ้าหน้าที่ลงพื้นที่ตรวจราชการ ๑๑ อำเภอ",
+    duty: "งานยานพาหนะส่วนกลาง ขับรถยนต์ราชการนำคณะเจ้าหน้าที่ลงพื้นที่ตรวจราชการ 11 อำเภอ",
   },
   {
     id: "usr_10",

@@ -89,7 +89,7 @@ export function MeetingsPage({
   const [timeframe, setTimeframe] = useState<"upcoming" | "all" | "past">("all");
 
   // View Mode: Calendar | Room Booking | List
-  const [activeView, setActiveView] = useState<"calendar" | "rooms" | "list">("calendar");
+  const [activeView, setActiveView] = useState<"calendar" | "rooms" | "list">("list");
 
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
@@ -613,7 +613,7 @@ export function MeetingsPage({
             className="px-4 py-2.5 bg-[#4F46E5] hover:bg-indigo-700 text-white rounded-2xl text-xs sm:text-sm font-bold shadow-md shadow-indigo-600/25 transition-all cursor-pointer flex items-center justify-center gap-1.5"
           >
             <span>➕</span>
-            <span>จองห้อง / สร้างการประชุม</span>
+            <span>จองห้อง / สร้างการประชุมใหม่</span>
           </button>
         </div>
       </div>
@@ -1545,7 +1545,7 @@ export function MeetingsPage({
                 <input
                   type="text"
                   required
-                  placeholder="เช่น ประชุมชี้แจงแนวทางการเบิกจ่ายงบประมาณ ประจำปี ๒๕๖๙"
+                  placeholder="เช่น ประชุมชี้แจงแนวทางการเบิกจ่ายงบประมาณ ประจำปี 2569"
                   value={formTitle}
                   onChange={(e) => setFormTitle(e.target.value)}
                   className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-indigo-500 transition-colors font-semibold"
@@ -1923,7 +1923,7 @@ export function MeetingsPage({
                   rows={4}
                   value={formDescription}
                   onChange={(e) => setFormDescription(e.target.value)}
-                  placeholder={`ระบุวาระการประชุม เช่น:\nวาระที่ ๑: เรื่องที่ประธานแจ้งให้ที่ประชุมทราบ\nวาระที่ ๒: รับรองรายงานการประชุมครั้งที่แล้ว\nวาระที่ ๓: เรื่องเพื่อพิจารณา...`}
+                  placeholder={`ระบุวาระการประชุม เช่น:\nวาระที่ 1: เรื่องที่ประธานแจ้งให้ที่ประชุมทราบ\nวาระที่ 2: รับรองรายงานการประชุมครั้งที่แล้ว\nวาระที่ 3: เรื่องเพื่อพิจารณา...`}
                   className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-indigo-500 transition-colors font-sans leading-relaxed resize-none"
                 />
               </div>

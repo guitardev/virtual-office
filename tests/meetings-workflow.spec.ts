@@ -65,7 +65,7 @@ test.describe("ระบบการประชุมและนัดหม�
     // Verify Agenda textarea has content
     const agendaTextarea = page.locator("textarea[placeholder*='ระบุวาระการประชุม']");
     const agendaContent = await agendaTextarea.inputValue();
-    expect(agendaContent).toContain("วาระที่ ๑");
+    expect(agendaContent).toContain("วาระที่ 1");
 
     // Click "เลือกทุกคน" for attendees
     const selectAllAttendeesBtn = page.locator("button:has-text('เลือกทุกคน')");

@@ -3,6 +3,7 @@
 import React from "react";
 import { CarBookingRequest } from "@/lib/types";
 import { GarudaEmblem } from "@/components/circular/GarudaEmblem";
+import { toThaiDigits } from "@/lib/thai-numerals";
 
 interface VehicleReturnDocumentModalProps {
   booking: CarBookingRequest;
@@ -68,8 +69,8 @@ export function VehicleReturnDocumentModal({
               สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร
             </p>
             <div className="flex justify-between items-center text-xs text-slate-500 pt-3 border-b border-slate-200 pb-3">
-              <span>เลขที่คำขอ: <strong className="text-slate-800 font-mono">{booking.requestNo}</strong></span>
-              <span>วันที่ตรวจรับคืน: <strong>{report.returnedAt}</strong></span>
+              <span>เลขที่คำขอ: <strong className="text-slate-800 font-mono">{toThaiDigits(booking.requestNo)}</strong></span>
+              <span>วันที่ตรวจรับคืน: <strong>{toThaiDigits(report.returnedAt)}</strong></span>
             </div>
           </div>
 
@@ -82,7 +83,7 @@ export function VehicleReturnDocumentModal({
               </div>
               <div>
                 <span className="text-slate-500">หมายเลขทะเบียน:</span>{" "}
-                <strong className="text-slate-900 font-mono">{booking.licensePlate}</strong>
+                <strong className="text-slate-900 font-mono">{toThaiDigits(booking.licensePlate)}</strong>
               </div>
               <div>
                 <span className="text-slate-500">ผู้ขอใช้รถ:</span>{" "}
@@ -120,10 +121,10 @@ export function VehicleReturnDocumentModal({
                   </thead>
                   <tbody className="divide-y divide-slate-200">
                     <tr className="bg-white">
-                      <td className="p-2.5 font-mono">{report.startMileage.toLocaleString()} กม.</td>
-                      <td className="p-2.5 font-mono">{report.endMileage.toLocaleString()} กม.</td>
-                      <td className="p-2.5 font-mono font-bold text-teal-700">{report.totalDistance.toLocaleString()} กม.</td>
-                      <td className="p-2.5 font-semibold text-slate-800">{report.endFuelLevel}</td>
+                      <td className="p-2.5 font-mono">{toThaiDigits(report.startMileage.toLocaleString())} กม.</td>
+                      <td className="p-2.5 font-mono">{toThaiDigits(report.endMileage.toLocaleString())} กม.</td>
+                      <td className="p-2.5 font-mono font-bold text-teal-700">{toThaiDigits(report.totalDistance.toLocaleString())} กม.</td>
+                      <td className="p-2.5 font-semibold text-slate-800">{toThaiDigits(report.endFuelLevel)}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -133,11 +134,11 @@ export function VehicleReturnDocumentModal({
               {report.fuelRefilledCost && (
                 <div className="mt-2 p-2.5 bg-amber-50 rounded-xl border border-amber-200 text-xs flex flex-wrap items-center justify-between gap-2">
                   <span>
-                    <strong>การเติมน้ำมันระหว่างทาง:</strong> {report.fuelRefilledLiters ? `${report.fuelRefilledLiters} ลิตร · ` : ""}จำนวนเงิน <strong>{report.fuelRefilledCost.toLocaleString()} บาท</strong>
+                    <strong>การเติมน้ำมันระหว่างทาง:</strong> {report.fuelRefilledLiters ? `${toThaiDigits(report.fuelRefilledLiters)} ลิตร · ` : ""}จำนวนเงิน <strong>{toThaiDigits(report.fuelRefilledCost.toLocaleString())} บาท</strong>
                   </span>
                   {report.fuelReceiptNo && (
                     <span className="text-slate-600 font-mono">
-                      เลขที่ใบเสร็จ: {report.fuelReceiptNo}
+                      เลขที่ใบเสร็จ: {toThaiDigits(report.fuelReceiptNo)}
                     </span>
                   )}
                 </div>
@@ -152,19 +153,19 @@ export function VehicleReturnDocumentModal({
               </h3>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                 <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200">
-                  <span className="text-slate-500 block text-[10px]">1. ความสะอาด</span>
+                  <span className="text-slate-500 block text-[10px]">๑. ความสะอาด</span>
                   <span className="font-bold text-slate-800">{report.vehicleCleanliness}</span>
                 </div>
                 <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200">
-                  <span className="text-slate-500 block text-[10px]">2. สภาพตัวถัง</span>
+                  <span className="text-slate-500 block text-[10px]">๒. สภาพตัวถัง</span>
                   <span className="font-bold text-slate-800">{report.bodyCondition}</span>
                 </div>
                 <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200">
-                  <span className="text-slate-500 block text-[10px]">3. เครื่องยนต์/ขับขี่</span>
+                  <span className="text-slate-500 block text-[10px]">๓. เครื่องยนต์/ขับขี่</span>
                   <span className="font-bold text-slate-800">{report.engineCondition}</span>
                 </div>
                 <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200">
-                  <span className="text-slate-500 block text-[10px]">4. แอร์/ภายใน</span>
+                  <span className="text-slate-500 block text-[10px]">๔. แอร์/ภายใน</span>
                   <span className="font-bold text-slate-800">{report.airConditioner}</span>
                 </div>
               </div>
@@ -193,7 +194,7 @@ export function VehicleReturnDocumentModal({
                   ({report.returneeName})
                 </div>
                 <div className="text-[10px] text-slate-500">{booking.requesterPosition}</div>
-                <div className="text-[9px] text-teal-600 font-mono mt-1">ส่งคืนเมื่อ: {report.returnedAt}</div>
+                <div className="text-[9px] text-teal-600 font-mono mt-1">ส่งคืนเมื่อ: {toThaiDigits(report.returnedAt)}</div>
               </div>
             </div>
 

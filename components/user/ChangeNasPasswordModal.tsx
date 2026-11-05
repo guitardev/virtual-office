@@ -79,7 +79,7 @@ export function ChangeNasPasswordModal({
     }
 
     if (newPassword.length < 6) {
-      setErrorMessage("รหัสผ่านใหม่ต้องมีความยาวอย่างน้อย ๖ ตัวอักษร");
+      setErrorMessage("รหัสผ่านใหม่ต้องมีความยาวอย่างน้อย 6 ตัวอักษร");
       return;
     }
 
@@ -270,7 +270,7 @@ export function ChangeNasPasswordModal({
                 data-testid="nas-new-password-input"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="ระบุรหัสผ่านใหม่ (อย่างน้อย ๖ ตัวอักษร)"
+                placeholder="ระบุรหัสผ่านใหม่ (อย่างน้อย 6 ตัวอักษร)"
                 className="w-full pl-3.5 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:border-indigo-600 transition-colors"
               />
               <button
@@ -323,7 +323,7 @@ export function ChangeNasPasswordModal({
                 }`}
               >
                 <span>{hasMinLength ? "✓" : "○"}</span>
-                <span>ยาวอย่างน้อย ๖ ตัวอักษร</span>
+                <span>ยาวอย่างน้อย 6 ตัวอักษร</span>
               </div>
               <div
                 className={`flex items-center gap-1.5 ${

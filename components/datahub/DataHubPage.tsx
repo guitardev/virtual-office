@@ -269,7 +269,7 @@ export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPag
               ศูนย์ข้อมูลและสถิติสังคม (Data Hub)
             </h1>
             <p className="text-sm text-slate-300 leading-relaxed">
-              แดชบอร์ดสถานการณ์กลุ่มเปราะบางระดับจังหวัด (TPMAP &amp; ศรส. 1300) คลังตัวชี้วัด ๔ กลุ่มงาน
+              แดชบอร์ดสถานการณ์กลุ่มเปราะบางระดับจังหวัด (TPMAP &amp; ศรส. 1300) คลังตัวชี้วัด 4 กลุ่มงาน
               ทำเนียบบุคลากรและข้าราชการ สารบบแบบฟอร์มคำขอสวัสดิการ และการส่งออกรายงานทางการสำหรับการประชุม กบจ.
             </p>
           </div>
@@ -302,7 +302,7 @@ export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPag
               }`}
             >
               <span>📊</span>
-              <span>สถานการณ์กลุ่มเปราะบาง ๑๑ อำเภอ</span>
+              <span>สถานการณ์กลุ่มเปราะบาง 11 อำเภอ</span>
             </button>
 
             <button
@@ -315,7 +315,7 @@ export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPag
               }`}
             >
               <span>🏛️</span>
-              <span>ระบบงาน ๔ กลุ่มภารกิจ พมจ.</span>
+              <span>ระบบงาน 4 กลุ่มภารกิจ พมจ.</span>
             </button>
 
             <button
@@ -387,7 +387,7 @@ export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPag
                   onChange={(e) => setDistrictFilter(e.target.value)}
                   className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs text-slate-700 font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
                 >
-                  <option value="all">📍 ทุกอำเภอในกำแพงเพชร (๑๑ อำเภอ)</option>
+                  <option value="all">📍 ทุกอำเภอในกำแพงเพชร (11 อำเภอ)</option>
                   {KAMPHAENG_PHET_DISTRICTS.map((d) => (
                     <option key={d.districtId} value={d.districtId}>
                       {d.districtName} ({d.subdistrictCount} ตำบล)
@@ -470,7 +470,7 @@ export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPag
               <div className="text-2xl font-extrabold text-amber-700 font-heading">
                 {provinceTotals.childSupportBeneficiaries.toLocaleString()}
               </div>
-              <div className="text-[10px] text-amber-700 font-medium">ได้รับ ๖๐๐ บาท/เดือน ต่อเนื่อง</div>
+              <div className="text-[10px] text-amber-700 font-medium">ได้รับ 600 บาท/เดือน ต่อเนื่อง</div>
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs space-y-1">
@@ -491,7 +491,7 @@ export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPag
               <div>
                 <h3 className="font-extrabold text-sm sm:text-base text-slate-900 flex items-center gap-2">
                   <span>🎯</span>
-                  <span>การจำแนกสภาพปัญหา ๕ มิติความยากจน (TPMAP Poverty Dimensions)</span>
+                  <span>การจำแนกสภาพปัญหา 5 มิติความยากจน (TPMAP Poverty Dimensions)</span>
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
                   ข้อมูลการตกเกณฑ์ความจำเป็นพื้นฐาน (จปฐ.) ในพื้นที่จังหวัดกำแพงเพชร
@@ -537,7 +537,7 @@ export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPag
                 {
                   label: "มิติรายได้",
                   value: provinceTotals.povertyDimensions.income,
-                  desc: "รายได้ต่ำกว่า ๔๐,๐๐๐ บ./ปี",
+                  desc: "รายได้ต่ำกว่า 40,000 บ./ปี",
                   color: "bg-emerald-500",
                   text: "text-emerald-700",
                   bg: "bg-emerald-50",
@@ -719,7 +719,7 @@ export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPag
               }`}
             >
               <span>🌐</span>
-              <span>ภาพรวมทั้ง ๔ กลุ่มงาน</span>
+              <span>ภาพรวมทั้ง 4 กลุ่มงาน</span>
             </button>
 
             {MISSION_GROUPS.map((g) => {

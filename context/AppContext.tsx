@@ -82,6 +82,9 @@ import {
 } from "@/lib/session";
 import { clearUserNasSid } from "@/lib/synology";
 import { MODULE_TO_ROUTE } from "@/lib/navigation";
+import { UIProvider, useUIContext } from "./UIContext";
+
+export { UIProvider, useUIContext };
 
 interface AppContextType {
   // Auth & Session
@@ -241,6 +244,14 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  return (
+    <UIProvider>
+      <AppProviderInner>{children}</AppProviderInner>
+    </UIProvider>
+  );
+}
+
+function AppProviderInner({ children }: { children: React.ReactNode }) {
   // ─── AUTH & SESSION STATE ───
   const [currentUser, setCurrentUser] = useState<Member | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
@@ -248,13 +259,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [loginTime, setLoginTime] = useState<string>("09:00 น.");
 
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
-
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isDarkMode, setIsDarkMode] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const {
+    sidebarOpen,
+    setSidebarOpen,
+    isSidebarCollapsed,
+    toggleSidebarCollapse,
+    collapsedGroups,
+    toggleGroupCollapse,
+    searchQuery,
+    setSearchQuery,
+    isDarkMode,
+    setIsDarkMode,
+    handleToggleTheme,
+    toastMessage,
+    showToast,
+    setToastMessage,
+  } = useUIContext();
 
   // ─── RBAC STATE ───
   const [currentUserRole, setCurrentUserRole] = useState<Role>("admin");
@@ -376,44 +396,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const isLiveConnected = isSupabaseConfigured();
 
-  // Toast helper
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
-  };
-
-  // Sync theme preference with localStorage and html.dark class
-  useEffect(() => {
-    try {
-      const savedTheme = localStorage.getItem("smart_mso_theme");
-      if (savedTheme) {
-        setIsDarkMode(savedTheme === "dark");
-      } else if (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
-        setIsDarkMode(true);
-      }
-    } catch {}
-  }, []);
-
-  const handleToggleTheme = () => {
-    setIsDarkMode((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem("smart_mso_theme", next ? "dark" : "light");
-      } catch {}
-      return next;
-    });
-  };
-
-  useEffect(() => {
-    if (typeof document !== "undefined") {
-      if (isDarkMode) {
-        document.documentElement.classList.add("dark");
-      } else {
-        document.documentElement.classList.remove("dark");
-      }
-    }
-  }, [isDarkMode]);
-
   // Load session from localStorage on client mount & handle LINE OAuth callback
   useEffect(() => {
     setIsHydrated(true);
@@ -447,15 +429,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       const cachedRequests = getLocalAccessRequests();
       setAccessRequests(cachedRequests);
-
-      const storedSidebar = localStorage.getItem("smartmso_sidebar_collapsed");
-      if (storedSidebar === "true") setIsSidebarCollapsed(true);
-      const storedGroups = localStorage.getItem("smartmso_collapsed_groups");
-      if (storedGroups) {
-        try {
-          setCollapsedGroups(JSON.parse(storedGroups));
-        } catch {}
-      }
     } catch (e) {
       console.error("Failed to load saved session:", e);
     }
@@ -1907,26 +1880,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setLineModalNotice(null);
     handleLogin(memberToLogin, true);
     showToast(`🎉 เข้าสู่ระบบด้วย LINE: ${memberToLogin.name} สำเร็จ!`);
-  };
-
-  const toggleSidebarCollapse = () => {
-    setIsSidebarCollapsed((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem("smartmso_sidebar_collapsed", String(next));
-      } catch {}
-      return next;
-    });
-  };
-
-  const toggleGroupCollapse = (groupId: string) => {
-    setCollapsedGroups((prev) => {
-      const next = { ...prev, [groupId]: !prev[groupId] };
-      try {
-        localStorage.setItem("smartmso_collapsed_groups", JSON.stringify(next));
-      } catch {}
-      return next;
-    });
   };
 
   const value = {

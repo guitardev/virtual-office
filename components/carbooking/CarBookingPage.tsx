@@ -39,6 +39,8 @@ import { VehicleReturnDocumentModal } from "./VehicleReturnDocumentModal";
 import { NotificationLogsModal } from "./NotificationLogsModal";
 import { RealisticFuelGauge } from "./RealisticFuelGauge";
 import { CarBookingCalendarView } from "./CarBookingCalendarView";
+import { FleetGanttView } from "./FleetGanttView";
+import { VehiclesTab } from "@/components/admin/VehiclesTab";
 import { PaperlessDispatchQRCode } from "./PaperlessDispatchQRCode";
 import { sendBrowserNotification } from "@/lib/notifications";
 
@@ -87,7 +89,7 @@ export function CarBookingPage({
   showToast,
   members = [],
 }: CarBookingPageProps) {
-  const [activeTab, setActiveTab] = useState<"requests" | "timeline" | "new_request">("requests");
+  const [activeTab, setActiveTab] = useState<"requests" | "timeline" | "gantt" | "fleet" | "new_request">("requests");
   const [vehicles, setVehicles] = useState<Vehicle[]>(() => INITIAL_VEHICLES);
   const [bookings, setBookings] = useState<CarBookingRequest[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -1834,6 +1836,30 @@ export function CarBookingPage({
 
         <button
           type="button"
+          onClick={() => setActiveTab("gantt")}
+          className={`pb-3.5 px-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors cursor-pointer ${activeTab === "gantt"
+              ? "border-teal-600 text-teal-700"
+              : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+        >
+          <span>📊</span>
+          <span>ตารางไทม์ไลน์ภารกิจ (Gantt View)</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("fleet")}
+          className={`pb-3.5 px-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors cursor-pointer ${activeTab === "fleet"
+              ? "border-teal-600 text-teal-700"
+              : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+        >
+          <span>🚗</span>
+          <span>ยานพาหนะราชการ & จัดการข้อมูล ({vehicles.length})</span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab("new_request")}
           className={`pb-3.5 px-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors cursor-pointer ${activeTab === "new_request"
               ? "border-teal-600 text-teal-700"
@@ -1844,6 +1870,32 @@ export function CarBookingPage({
           <span>ยื่นคำขอใหม่ (พร้อมค่าน้ำมัน)</span>
         </button>
       </div>
+
+      {/* ─── TAB: FLEET GANTT VIEW ─── */}
+      {activeTab === "gantt" && (
+        <FleetGanttView
+          vehicles={vehicles}
+          bookings={bookings}
+          onSelectBooking={(b) => setSelectedDocBooking(b)}
+          onRequestVehicle={(vehId, initialDate) => {
+            setFormVehicleId(vehId);
+            if (initialDate) {
+              const dt = initialDate.includes("T") ? initialDate : `${initialDate}T08:30`;
+              setFormDepartureTime(dt);
+            }
+            setActiveTab("new_request");
+          }}
+        />
+      )}
+
+      {/* ─── TAB: FLEET VEHICLES & GAUGES ─── */}
+      {activeTab === "fleet" && (
+        <VehiclesTab
+          currentUser={currentUser}
+          showToast={showToast}
+          members={members}
+        />
+      )}
 
       {/* ─── TAB: CAR BOOKING CALENDAR VIEW (DAY / WEEK / MONTH) ─── */}
       {activeTab === "timeline" && (

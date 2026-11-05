@@ -48,7 +48,7 @@ test.describe("ระบบเปลี่ยนรหัสผ่าน Synolog
 
     // ทดสอบกรอกรหัสผ่านใหม่แบบสั้น (3 ตัวอักษร)
     await newPassInput.fill("abc");
-    await expect(page.locator("text=ยาวอย่างน้อย ๖ ตัวอักษร").first()).toBeVisible();
+    await expect(page.locator("text=ยาวอย่างน้อย 6 ตัวอักษร").first()).toBeVisible();
 
     // ตรวจสอบว่าปุ่ม Submit ยังคงถูก disable อยู่
     await expect(submitBtn).toBeDisabled();

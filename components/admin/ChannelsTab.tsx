@@ -471,7 +471,7 @@ export function ChannelsTab({
                   required
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
-                  placeholder="เช่น คณะทำงานจัดงานวันคนพิการสากล ๒๕๖๙"
+                  placeholder="เช่น คณะทำงานจัดงานวันคนพิการสากล 2569"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-500 text-slate-800 font-medium"
                 />
               </div>

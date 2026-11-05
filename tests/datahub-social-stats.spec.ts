@@ -87,8 +87,8 @@ test.describe("ศูนย์ข้อมูลและสถิติสั�
   test("4. การสลับแท็บ ๔ กลุ่มภารกิจงาน และคลังแบบฟอร์มเอกสารราชการ", async ({
     page,
   }) => {
-    // 1. สลับไปแท็บ ๔ กลุ่มภารกิจ
-    await page.locator("button:has-text('ระบบงาน ๔ กลุ่มภารกิจ พมจ.')").first().click();
+    // 1. สลับไปแท็บ 4 กลุ่มภารกิจ
+    await page.locator("button:has-text('ระบบงาน 4 กลุ่มภารกิจ พมจ.')").first().click();
     await expect(page.locator("h3:has-text('ฝ่ายบริหารทั่วไป')").first()).toBeVisible();
     await expect(page.locator("h3:has-text('กลุ่มนโยบายและวิชาการ')").first()).toBeVisible();
     await expect(page.locator("h3:has-text('กลุ่มการพัฒนาสังคมและสวัสดิการ')").first()).toBeVisible();
@@ -107,8 +107,8 @@ test.describe("ศูนย์ข้อมูลและสถิติสั�
   test("5. ทำเนียบข้าราชการและเจ้าหน้าที่ พมจ.กำแพงเพชร: แสดงข้อมูลบุคคลจริง ผู้บริหาร หัวหน้ากลุ่มงาน และการค้นหา", async ({
     page,
   }) => {
-    // 1. ตรวจสอบในแท็บ ๔ กลุ่มภารกิจ ว่าแสดงชื่อหัวหน้ากลุ่มงานที่เป็นข้อมูลจริง
-    await page.locator("button:has-text('ระบบงาน ๔ กลุ่มภารกิจ พมจ.')").first().click();
+    // 1. ตรวจสอบในแท็บ 4 กลุ่มภารกิจ ว่าแสดงชื่อหัวหน้ากลุ่มงานที่เป็นข้อมูลจริง
+    await page.locator("button:has-text('ระบบงาน 4 กลุ่มภารกิจ พมจ.')").first().click();
     await expect(page.locator("text=นายเสกพล ดิษฐโชติ").first()).toBeVisible();
     await expect(page.locator("text=นายพนมศักย์ บริภัทรจิรากร").first()).toBeVisible();
     await expect(page.locator("text=นายวรวุฒิ พึ่งพัก").first()).toBeVisible();

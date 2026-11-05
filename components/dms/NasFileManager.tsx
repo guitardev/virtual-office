@@ -723,10 +723,10 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
               <span className="text-[11px] font-bold text-slate-400">ปีงบประมาณ:</span>
               {[
                 { id: "all", label: "ทุกปีงบ" },
-                { id: "2570", label: "ปี ๒๕๗๐" },
-                { id: "2569", label: "ปี ๒๕๖๙" },
-                { id: "2568", label: "ปี ๒๕๖๘" },
-                { id: "2567", label: "ปี ๒๕๖๗" },
+                { id: "2570", label: "ปี 2570" },
+                { id: "2569", label: "ปี 2569" },
+                { id: "2568", label: "ปี 2568" },
+                { id: "2567", label: "ปี 2567" },
               ].map((yr) => (
                 <button
                   key={yr.id}
@@ -746,15 +746,33 @@ export function NasFileManager({ currentUser, showToast }: NasFileManagerProps) 
 
           {/* ─── PERMISSION / CONNECTION ALERT BANNER ─── */}
           {permissionError && (
-            <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 flex items-start gap-2.5 animate-fadeIn">
-              <span className="text-base shrink-0">⛔</span>
-              <div>
-                <strong className="font-bold">การแจ้งเตือนสิทธิ์ Synology DSM:</strong>
-                <p className="mt-0.5 text-rose-700">{permissionError}</p>
-                <p className="text-[11px] text-rose-500 mt-1">
-                  (การเข้าถึงถูกจำกัดตามสิทธิ์ที่ผู้ดูแลระบบกำหนดไว้ใน Synology DSM Control Panel &gt; Shared Folder)
-                </p>
+            <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fadeIn">
+              <div className="flex items-start gap-2.5">
+                <span className="text-base shrink-0">⛔</span>
+                <div>
+                  <strong className="font-bold">การแจ้งเตือนสิทธิ์และการเชื่อมต่อ Synology DSM:</strong>
+                  <p className="mt-0.5 text-rose-700">{permissionError}</p>
+                  <p className="text-[11px] text-rose-500 mt-1">
+                    (ตรวจสอบสถานะ Cloudflare Tunnel / เครือข่ายสำนักงาน หรือสิทธิ์ Shared Folder ใน Synology DSM Control Panel)
+                  </p>
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={() => {
+                  checkNasHealth(config.nasUrl).then(setHealth).catch(() => {});
+                  if (userSid) {
+                    if (currentPath) {
+                      loadFolderContents(userSid, currentPath);
+                    } else {
+                      loadShares(userSid);
+                    }
+                  }
+                }}
+                className="px-3 py-1.5 rounded-lg bg-white hover:bg-rose-100 text-rose-700 border border-rose-300 font-bold text-xs shrink-0 transition-colors cursor-pointer self-end sm:self-center"
+              >
+                🔄 ลองเชื่อมต่อใหม่
+              </button>
             </div>
           )}
 

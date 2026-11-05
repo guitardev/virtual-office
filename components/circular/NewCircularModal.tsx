@@ -17,8 +17,9 @@ import { DocumentScannerModal } from "./DocumentScannerModal";
 import { ThaiCalendarDatePicker } from "./ThaiCalendarDatePicker";
 import { getTodayThaiDate, formatIsoToThaiDate, toThaiDigits } from "@/lib/thai-numerals";
 
-export function getFileCategoryInfo(name: string, mime?: string) {
-  const ext = name.split(".").pop()?.toLowerCase() || "";
+export function getFileCategoryInfo(name?: string, mime?: string) {
+  const safeName = name || "";
+  const ext = safeName.includes(".") ? safeName.split(".").pop()?.toLowerCase() || "" : "";
   const m = (mime || "").toLowerCase();
 
   if (ext === "pdf" || m.includes("pdf")) {
@@ -395,7 +396,7 @@ export function NewCircularModal({
       return;
     }
     if (resolvedRecipients.length === 0) {
-      alert("กรุณาระบุกลุ่มเป้าหมายผู้รับหนังสือเวียนอย่างน้อย ๑ ท่าน");
+      alert("กรุณาระบุกลุ่มเป้าหมายผู้รับหนังสือเวียนอย่างน้อย 1 ท่าน");
       return;
     }
 
@@ -495,7 +496,7 @@ export function NewCircularModal({
           <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-3">
             <div className="text-xs font-bold text-slate-900 flex items-center justify-between border-b border-slate-100 pb-2">
               <div className="flex items-center gap-2">
-                <span>๑. ข้อมูลหนังสือเวียนที่นำมาเวียน</span>
+                <span>1. ข้อมูลหนังสือเวียนที่นำมาเวียน</span>
                 <span className="text-[10px] text-indigo-600 font-mono">รับ - ส่ง หนังสือเวียน</span>
               </div>
               <span className="text-[10px] text-slate-500 font-medium">
@@ -689,7 +690,7 @@ export function NewCircularModal({
           <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
               <div className="text-xs font-bold text-slate-900 flex items-center gap-2">
-                <span>๒. กำหนดกลุ่มเป้าหมายผู้รับหนังสือเวียน</span>
+                <span>2. กำหนดกลุ่มเป้าหมายผู้รับหนังสือเวียน</span>
                 <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-bold">
                   ผู้รับสุทธิ: {resolvedRecipients.length} คน
                 </span>
@@ -870,7 +871,7 @@ export function NewCircularModal({
             <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-3 gap-2">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-slate-900">๓. ไฟล์หนังสือราชการต้นฉบับและเอกสารแนบท้าย</span>
+                  <span className="text-xs font-bold text-slate-900">3. ไฟล์หนังสือราชการต้นฉบับและเอกสารแนบท้าย</span>
                   <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
                     attachments.length > 0
                       ? "bg-emerald-100 text-emerald-800"
@@ -880,7 +881,7 @@ export function NewCircularModal({
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500 mt-0.5">
-                  รองรับหลายไฟล์ หลายประเภท (PDF, Word, Excel, PowerPoint, รูปภาพ, ZIP) ผ่าน ๓ ช่องทาง
+                  รองรับหลายไฟล์ หลายประเภท (PDF, Word, Excel, PowerPoint, รูปภาพ, ZIP) ผ่าน 3 ช่องทาง
                 </p>
               </div>
 
@@ -937,7 +938,7 @@ export function NewCircularModal({
                   className="p-5 rounded-2xl border-2 border-dashed border-indigo-300 hover:border-indigo-500 bg-indigo-50/40 hover:bg-indigo-50 text-indigo-700 text-xs font-bold flex flex-col items-center justify-center gap-2 cursor-pointer transition-all group shadow-2xs"
                 >
                   <span className="text-3xl group-hover:scale-110 transition-transform">📷</span>
-                  <span className="text-xs font-bold">ช่องทางที่ ๑: สแกนสด</span>
+                  <span className="text-xs font-bold">ช่องทางที่ 1: สแกนสด</span>
                   <span className="text-[10px] text-indigo-500 font-normal text-center">
                     ถ่ายภาพเอกสาร A4 ผ่านกล้อง/เว็บแคม ปรับคมชัดอัตโนมัติ
                   </span>
@@ -956,7 +957,7 @@ export function NewCircularModal({
                   }`}
                 >
                   <span className="text-3xl group-hover:scale-110 transition-transform">📁</span>
-                  <span className="text-xs font-bold text-slate-800">ช่องทางที่ ๒: อัปโหลดจากเครื่อง</span>
+                  <span className="text-xs font-bold text-slate-800">ช่องทางที่ 2: อัปโหลดจากเครื่อง</span>
                   <span className="text-[10px] text-slate-500 font-normal text-center">
                     รองรับหลายไฟล์พร้อมกัน (PDF, Word, Excel, รูปภาพ, ZIP) ลากวางได้
                   </span>
@@ -969,7 +970,7 @@ export function NewCircularModal({
                   className="p-5 rounded-2xl border-2 border-dashed border-sky-300 hover:border-sky-500 bg-sky-50/40 hover:bg-sky-50 text-sky-800 text-xs font-bold flex flex-col items-center justify-center gap-2 cursor-pointer transition-all group shadow-2xs"
                 >
                   <span className="text-3xl group-hover:scale-110 transition-transform">☁️</span>
-                  <span className="text-xs font-bold">ช่องทางที่ ๓: คลังเอกสาร NAS</span>
+                  <span className="text-xs font-bold">ช่องทางที่ 3: คลังเอกสาร NAS</span>
                   <span className="text-[10px] text-sky-600 font-normal text-center">
                     ดึงไฟล์เอกสารราชการจาก Synology File Station
                   </span>

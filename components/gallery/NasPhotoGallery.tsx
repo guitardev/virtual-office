@@ -1763,10 +1763,10 @@ export function NasPhotoGallery({ currentUser, showToast }: NasPhotoGalleryProps
             </span>
             {[
               { id: "all", label: "ทุกปีงบ" },
-              { id: "2570", label: "ปี ๒๕๗๐" },
-              { id: "2569", label: "ปี ๒๕๖๙" },
-              { id: "2568", label: "ปี ๒๕๖๘" },
-              { id: "2567", label: "ปี ๒๕๖๗" },
+              { id: "2570", label: "ปี 2570" },
+              { id: "2569", label: "ปี 2569" },
+              { id: "2568", label: "ปี 2568" },
+              { id: "2567", label: "ปี 2567" },
             ].map((yr) => (
               <button
                 key={yr.id}

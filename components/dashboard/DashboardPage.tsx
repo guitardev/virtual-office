@@ -493,7 +493,7 @@ export function DashboardPage({
           <div className="flex items-center justify-between">
             <span className="text-2xl">📋</span>
             <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">
-              ค้าง {pendingTasksCount}
+              ค้างส่ง {pendingTasksCount}
             </span>
           </div>
           <div className="mt-3">
@@ -522,10 +522,15 @@ export function DashboardPage({
               <span>{circularDocs.length} ฉบับ</span>
             </div>
             <div className="text-xs text-slate-500 dark:text-slate-400 font-medium truncate mt-0.5">
-              {pendingSignDocs.length > 0 ? (
-                <span className="text-rose-600 dark:text-rose-400 font-bold">รอลงนาม {pendingSignDocs.length} ฉบับ</span>
+              {currentUserRole === "admin" ? (
+                <span>
+                  หนังสือเวียน (ไม่คิดสถิติ Admin)
+                  <span className="sr-only"> หนังสือเวียนราชการ</span>
+                </span>
+              ) : pendingSignDocs.length > 0 ? (
+                <span className="text-rose-600 dark:text-rose-400 font-bold">รอคุณลงนาม {pendingSignDocs.length} ฉบับ</span>
               ) : (
-                "สารบรรณเวียน"
+                "หนังสือเวียนราชการ"
               )}
             </div>
           </div>
@@ -547,7 +552,7 @@ export function DashboardPage({
               {meetings.length} นัดหมาย
             </div>
             <div className="text-xs text-slate-500 dark:text-slate-400 font-medium truncate mt-0.5">
-              ปฏิทินประชุม พมจ.
+              การประชุมวันนี้ ({todaysMeetings.length})
             </div>
           </div>
         </div>
@@ -568,7 +573,7 @@ export function DashboardPage({
               {availableVehicles.length} / {vehicles.length} คัน
             </div>
             <div className="text-xs text-slate-500 dark:text-slate-400 font-medium truncate mt-0.5">
-              เดินทางวันนี้ {todaysBookings.length} เที่ยว
+              รถยนต์พร้อมใช้งาน (เดินทาง {todaysBookings.length})
             </div>
           </div>
         </div>
@@ -610,7 +615,7 @@ export function DashboardPage({
               {members.length} บุคลากร
             </div>
             <div className="text-xs text-slate-500 dark:text-slate-400 font-medium truncate mt-0.5">
-              สารบบและทำเนียบ
+              สมาชิกในองค์กร
             </div>
           </div>
         </div>
@@ -758,7 +763,7 @@ export function DashboardPage({
                 <div className="flex items-center gap-2">
                   <span className="text-xl">🚗</span>
                   <h2 className="text-base font-bold font-heading text-slate-900 dark:text-slate-100">
-                    ภารกิจการใช้ยานพาหนะราชการวันนี้
+                    ภารกิจการใช้ยานพาหนะส่วนกลางวันนี้
                   </h2>
                   <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300">
                     เดินทาง {todaysBookings.length} คัน
@@ -852,7 +857,7 @@ export function DashboardPage({
                 <div className="flex items-center gap-2">
                   <span className="text-xl">📜</span>
                   <h2 className="text-base font-bold font-heading text-slate-900 dark:text-slate-100">
-                    หนังสือเวียนราชการล่าสุด & สถานะลงนามรับทราบ
+                    หนังสือเวียนราชการล่าสุด & สถานะการรับทราบ
                   </h2>
                   {pendingSignDocs.length > 0 && (
                     <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300">

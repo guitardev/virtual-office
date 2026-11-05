@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { CarBookingRequest } from "@/lib/types";
+import { toThaiDigits } from "@/lib/thai-numerals";
 
 interface CarBookingDocumentModalProps {
   booking: CarBookingRequest;
@@ -365,7 +366,7 @@ export function CarBookingDocumentModal({
               <div className="inline-flex items-baseline whitespace-nowrap">
                 <span>วันที่ </span>
                 <span className="min-w-[40px] text-center border-b border-dotted border-black px-1 font-normal">
-                  {createdDate.day || "\u00A0\u00A0\u00A0\u00A0"}
+                  {createdDate.day ? toThaiDigits(createdDate.day) : "\u00A0\u00A0\u00A0\u00A0"}
                 </span>
                 <span> เดือน </span>
                 <span className="min-w-[100px] text-center border-b border-dotted border-black px-2 font-normal">
@@ -373,7 +374,7 @@ export function CarBookingDocumentModal({
                 </span>
                 <span> พ.ศ. </span>
                 <span className="min-w-[60px] text-center border-b border-dotted border-black px-1 font-normal">
-                  {createdDate.year || "\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0"}
+                  {createdDate.year ? toThaiDigits(createdDate.year) : "\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0"}
                 </span>
               </div>
             </div>
@@ -406,7 +407,7 @@ export function CarBookingDocumentModal({
                 </span>
                 <span className="shrink-0">หมายเลขทะเบียน </span>
                 <span className="min-w-[130px] mx-1 border-b border-dotted border-black px-2 text-center font-normal font-mono">
-                  {booking.licensePlate && booking.licensePlate !== "-" ? booking.licensePlate : "\u00A0"}
+                  {booking.licensePlate && booking.licensePlate !== "-" ? toThaiDigits(booking.licensePlate) : "\u00A0"}
                 </span>
                 <span className="shrink-0">โดยมี </span>
                 <span className="flex-1 ml-1 border-b border-dotted border-black px-2 text-center font-normal">
@@ -442,12 +443,14 @@ export function CarBookingDocumentModal({
               <div className="flex items-baseline">
                 <span className="shrink-0">มีคนนั่งทั้งสิ้น </span>
                 <span className="min-w-[40px] border-b border-dotted border-black text-center font-normal">
-                  {booking.totalPassengerCountWithDriver ||
-                    ((booking.passengerCount ?? 1) + (booking.requireDriver !== false ? 1 : 0))}
+                  {toThaiDigits(
+                    booking.totalPassengerCountWithDriver ||
+                      ((booking.passengerCount ?? 1) + (booking.requireDriver !== false ? 1 : 0))
+                  )}
                 </span>
                 <span className="shrink-0"> คน   ระยะทางโดยประมาณ </span>
                 <span className="min-w-[50px] border-b border-dotted border-black text-center font-normal">
-                  {booking.estimatedDistance || 150}
+                  {toThaiDigits(booking.estimatedDistance || 150)}
                 </span>
                 <span className="shrink-0"> กิโลเมตร</span>
               </div>
@@ -456,11 +459,11 @@ export function CarBookingDocumentModal({
               <div className="flex items-baseline">
                 <span className="shrink-0">ในวันที่ </span>
                 <span className="min-w-[160px] border-b border-dotted border-black text-center font-normal">
-                  {depDate.fullDate || "\u00A0"}
+                  {depDate.fullDate ? toThaiDigits(depDate.fullDate) : "\u00A0"}
                 </span>
                 <span className="shrink-0"> เวลา </span>
                 <span className="min-w-[70px] border-b border-dotted border-black text-center font-normal">
-                  {depDate.time || "\u00A0"}
+                  {depDate.time ? toThaiDigits(depDate.time) : "\u00A0"}
                 </span>
                 <span className="shrink-0"> น.</span>
               </div>
@@ -469,11 +472,11 @@ export function CarBookingDocumentModal({
               <div className="flex items-baseline">
                 <span className="shrink-0">ถึงวันที่ </span>
                 <span className="min-w-[160px] border-b border-dotted border-black text-center font-normal">
-                  {retDate.fullDate || "\u00A0"}
+                  {retDate.fullDate ? toThaiDigits(retDate.fullDate) : "\u00A0"}
                 </span>
                 <span className="shrink-0"> เวลา </span>
                 <span className="min-w-[70px] border-b border-dotted border-black text-center font-normal">
-                  {retDate.time || "\u00A0"}
+                  {retDate.time ? toThaiDigits(retDate.time) : "\u00A0"}
                 </span>
                 <span className="shrink-0"> น.</span>
               </div>
@@ -483,13 +486,15 @@ export function CarBookingDocumentModal({
                 <span className="shrink-0">ขอเบิกน้ำมันเชื้อเพลิงและหล่อลื่น  จำนวน </span>
                 <span className="min-w-[120px] border-b border-dotted border-black text-center font-normal">
                   {booking.fuelBudgetRequested && booking.fuelBudgetAmount
-                    ? `${booking.fuelBudgetAmount.toLocaleString()} บาท${
-                        booking.fuelProjectName
-                          ? ` (โครงการ: ${booking.fuelProjectName})`
-                          : booking.fuelBudgetSource
-                          ? ` (${booking.fuelBudgetSource})`
-                          : ""
-                      }`
+                    ? toThaiDigits(
+                        `${booking.fuelBudgetAmount.toLocaleString()} บาท${
+                          booking.fuelProjectName
+                            ? ` (โครงการ: ${booking.fuelProjectName})`
+                            : booking.fuelBudgetSource
+                            ? ` (${booking.fuelBudgetSource})`
+                            : ""
+                        }`
+                      )
                     : "- บาท"}
                 </span>
               </div>
@@ -522,7 +527,7 @@ export function CarBookingDocumentModal({
                 <div className="text-center tracking-widest text-black pt-0.5 text-sm">
                   {createdDate.day ? (
                     <span>
-                      {createdDate.day} / {createdDate.month} / {createdDate.year}
+                      {toThaiDigits(createdDate.day)} / {createdDate.month} / {toThaiDigits(createdDate.year)}
                     </span>
                   ) : (
                     <span>................/.............................../.................</span>
@@ -557,7 +562,7 @@ export function CarBookingDocumentModal({
                 </div>
                 <div className="text-center tracking-widest text-black pt-0.5 text-sm">
                   {booking.divisionReviewerActionAt && divReviewerDate.d ? (
-                    <span>{divReviewerDate.d} / {divReviewerDate.m} / {divReviewerDate.y}</span>
+                    <span>{toThaiDigits(divReviewerDate.d)} / {divReviewerDate.m} / {toThaiDigits(divReviewerDate.y)}</span>
                   ) : (
                     <span>................/.............................../.................</span>
                   )}
@@ -570,12 +575,14 @@ export function CarBookingDocumentModal({
               <div className="flex items-baseline">
                 <span className="shrink-0">ความเห็น </span>
                 <span className="flex-1 border-b border-dotted border-black px-2 font-normal">
-                  {booking.adminHeadNotes ||
-                    (booking.adminHeadActionAt
-                      ? "เห็นควรอนุญาตให้ใช้รถยนต์ราชการ"
-                      : booking.licensePlate && booking.licensePlate !== "-"
-                      ? `ตรวจสอบความพร้อมแล้ว จัดสรรรถยนต์ ${cleanVehicleName(booking.vehicleName, booking.licensePlate)} ทะเบียน [${booking.licensePlate}] พนักงานขับรถ: ${resolvedDriver || ""} เห็นควรอนุญาต`
-                      : "..................................................................................................................................................................................")}
+                  {toThaiDigits(
+                    booking.adminHeadNotes ||
+                      (booking.adminHeadActionAt
+                        ? "เห็นควรอนุญาตให้ใช้รถยนต์ราชการ"
+                        : booking.licensePlate && booking.licensePlate !== "-"
+                        ? `ตรวจสอบความพร้อมแล้ว จัดสรรรถยนต์ ${cleanVehicleName(booking.vehicleName, booking.licensePlate)} ทะเบียน [${booking.licensePlate}] พนักงานขับรถ: ${resolvedDriver || ""} เห็นควรอนุญาต`
+                        : "..................................................................................................................................................................................")
+                  )}
                 </span>
               </div>
             </div>
@@ -603,7 +610,7 @@ export function CarBookingDocumentModal({
                 </div>
                 <div className="text-center tracking-widest text-black pt-0.5 text-sm">
                   {booking.adminHeadActionAt && adminHeadDate.d ? (
-                    <span>{adminHeadDate.d} / {adminHeadDate.m} / {adminHeadDate.y}</span>
+                    <span>{toThaiDigits(adminHeadDate.d)} / {adminHeadDate.m} / {toThaiDigits(adminHeadDate.y)}</span>
                   ) : (
                     <span>................/.............................../.................</span>
                   )}
@@ -652,7 +659,7 @@ export function CarBookingDocumentModal({
                 </div>
                 <div className="text-center tracking-widest text-black pt-0.5 text-sm">
                   {booking.status === "approved" && (booking.approverActionAt || approverDate.d) ? (
-                    <span>{approverDate.d || "....."} / {approverDate.m || "................"} / {approverDate.y || "........"}</span>
+                    <span>{approverDate.d ? toThaiDigits(approverDate.d) : "....."} / {approverDate.m || "................"} / {approverDate.y ? toThaiDigits(approverDate.y) : "........"}</span>
                   ) : (
                     <span>................/.............................../.................</span>
                   )}

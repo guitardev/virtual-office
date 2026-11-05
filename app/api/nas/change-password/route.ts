@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "รหัสผ่านใหม่ต้องมีความยาวอย่างน้อย ๖ ตัวอักษรตามนโยบายความปลอดภัย",
+          error: "รหัสผ่านใหม่ต้องมีความยาวอย่างน้อย 6 ตัวอักษรตามนโยบายความปลอดภัย",
         },
         { status: 400 }
       );

@@ -1,0 +1,28 @@
+{
+  "name": "Smart MSO — ระบบสำนักงานดิจิทัล พมจ.กำแพงเพชร",
+  "short_name": "Smart MSO",
+  "description": "ระบบสำนักงานเสมือนจริงและบริหารราชการดิจิทัล สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0F172A",
+  "theme_color": "#4F46E5",
+  "orientation": "any",
+  "lang": "th-TH",
+  "categories": ["government", "productivity", "business"],
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
+

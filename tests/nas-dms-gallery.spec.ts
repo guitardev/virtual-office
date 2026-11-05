@@ -43,12 +43,12 @@ test.describe("ระบบคลังเอกสาร DMS และแกล
     await expect(page.locator("button:has-text('ZIP / บีบอัด')").first()).toBeVisible();
 
     // 2. ตรวจสอบปุ่มตัวกรองปีงบประมาณ พ.ศ.
-    await expect(page.locator("button:has-text('ปี ๒๕๗๐')").first()).toBeVisible();
-    await expect(page.locator("button:has-text('ปี ๒๕๖๙')").first()).toBeVisible();
-    await expect(page.locator("button:has-text('ปี ๒๕๖๘')").first()).toBeVisible();
+    await expect(page.locator("button:has-text('ปี 2570')").first()).toBeVisible();
+    await expect(page.locator("button:has-text('ปี 2569')").first()).toBeVisible();
+    await expect(page.locator("button:has-text('ปี 2568')").first()).toBeVisible();
 
-    // 3. ทดสอบการกรองปี ๒๕๖๙: ควรแสดง documents_2569 และซ่อน reports_2568
-    await page.locator("button:has-text('ปี ๒๕๖๙')").first().click();
+    // 3. ทดสอบการกรองปี 2569: ควรแสดง documents_2569 และซ่อน reports_2568
+    await page.locator("button:has-text('ปี 2569')").first().click();
     await expect(page.locator("text=documents_2569").first()).toBeVisible();
     await expect(page.locator("text=reports_2568")).toBeHidden();
 
@@ -163,12 +163,12 @@ test.describe("ระบบคลังเอกสาร DMS และแกล
     await page.waitForLoadState("networkidle");
 
     // 1. ตรวจสอบชิปกรองปีงบประมาณ พ.ศ. ในหน้าแกลเลอรี
-    await expect(page.locator("button:has-text('ปี ๒๕๗๐')").first()).toBeVisible({ timeout: 10000 });
-    await expect(page.locator("button:has-text('ปี ๒๕๖๙')").first()).toBeVisible();
-    await expect(page.locator("button:has-text('ปี ๒๕๖๘')").first()).toBeVisible();
+    await expect(page.locator("button:has-text('ปี 2570')").first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator("button:has-text('ปี 2569')").first()).toBeVisible();
+    await expect(page.locator("button:has-text('ปี 2568')").first()).toBeVisible();
 
-    // 2. ทดสอบกรองปี ๒๕๖๙: ต้องแสดงโฟลเดอร์ 2569 และซ่อน 2568
-    await page.locator("button:has-text('ปี ๒๕๖๙')").first().click();
+    // 2. ทดสอบกรองปี 2569: ต้องแสดงโฟลเดอร์ 2569 และซ่อน 2568
+    await page.locator("button:has-text('ปี 2569')").first().click();
     await expect(page.locator("text=2569-กิจกรรมวันเด็ก").first()).toBeVisible();
     await expect(page.locator("text=2568-มอบบ้านพอเพียง")).toBeHidden();
 
