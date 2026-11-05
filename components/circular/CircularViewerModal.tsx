@@ -6,10 +6,10 @@ import { DigitalSignaturePad } from "./DigitalSignaturePad";
 import { CirculationPrintSlip } from "./CirculationPrintSlip";
 import { toThaiShortDate, toThaiDate } from "@/lib/thai-numerals";
 import { getFileCategoryInfo } from "./NewCircularModal";
-import { fetchCircularDocScannedPages } from "@/lib/supabase";
+import { fetchCircularDocScannedPages, fetchCircularDocDetails } from "@/lib/supabase";
 
 export function getCircularFileDisplayUrl(fileUrl?: string): string {
-  if (!fileUrl) return "/virtual-office/circular_docs/sample.pdf";
+  if (!fileUrl) return "";
   if (
     fileUrl.startsWith("data:") ||
     fileUrl.startsWith("blob:") ||
@@ -55,43 +55,63 @@ export function CircularViewerModal({
   const [showSignaturePad, setShowSignaturePad] = useState<boolean>(false);
   const [showPrintSlip, setShowPrintSlip] = useState<boolean>(false);
   const [blobPdfUrl, setBlobPdfUrl] = useState<string | null>(null);
-  const [selectedAttId, setSelectedAttId] = useState<string>(() => {
-    return doc.attachments?.[0]?.id || "";
-  });
 
-  useEffect(() => {
-    if (doc.attachments && doc.attachments.length > 0) {
-      if (!doc.attachments.some((a) => a.id === selectedAttId)) {
-        setSelectedAttId(doc.attachments[0].id);
-      }
-    }
-  }, [doc.id, doc.attachments, selectedAttId]);
-
-  // On-demand fetch of heavy scanned pages (to keep general list queries light)
+  // On-demand fetch of heavy scanned pages and multi-file attachments if not preloaded
   const [onDemandScannedPages, setOnDemandScannedPages] = useState<string[] | null>(null);
+  const [onDemandAttachments, setOnDemandAttachments] = useState<CircularAttachment[] | null>(null);
 
   useEffect(() => {
     setOnDemandScannedPages(null);
-    const existing = doc.attachments?.[0]?.scannedPages || doc.scannedPages;
-    if ((!existing || existing.length === 0) && (doc.totalPages || 0) > 0) {
-      fetchCircularDocScannedPages(doc.id).then((pages) => {
-        if (pages && pages.length > 0) {
-          setOnDemandScannedPages(pages);
+    setOnDemandAttachments(null);
+
+    const hasLoadedAttachments = doc.attachments && doc.attachments.length > 0;
+    const hasLoadedScannedPages =
+      (doc.attachments?.[0]?.scannedPages && doc.attachments[0].scannedPages.length > 0) ||
+      (doc.scannedPages && doc.scannedPages.length > 0);
+
+    if (!hasLoadedAttachments || !hasLoadedScannedPages) {
+      fetchCircularDocDetails(doc.id).then((details) => {
+        if (details?.scannedPages && details.scannedPages.length > 0) {
+          setOnDemandScannedPages(details.scannedPages);
+        }
+        if (details?.attachments && details.attachments.length > 0) {
+          setOnDemandAttachments(details.attachments);
         }
       });
     }
   }, [doc.id, doc.attachments, doc.scannedPages, doc.totalPages]);
 
+  const effectiveAttachments: CircularAttachment[] =
+    doc.attachments && doc.attachments.length > 0
+      ? doc.attachments
+      : onDemandAttachments && onDemandAttachments.length > 0
+      ? onDemandAttachments
+      : [];
+
+  const [selectedAttId, setSelectedAttId] = useState<string>(() => {
+    return effectiveAttachments[0]?.id || "";
+  });
+
+  useEffect(() => {
+    if (effectiveAttachments.length > 0) {
+      if (!effectiveAttachments.some((a) => a.id === selectedAttId)) {
+        setSelectedAttId(effectiveAttachments[0].id);
+        setCurrentPageIndex(0);
+      }
+    }
+  }, [effectiveAttachments, selectedAttId]);
+
   const activeAttachment: CircularAttachment | null =
-    (doc.attachments && doc.attachments.find((a) => a.id === selectedAttId)) ||
-    doc.attachments?.[0] ||
+    (effectiveAttachments.length > 0 && effectiveAttachments.find((a) => a.id === selectedAttId)) ||
+    effectiveAttachments[0] ||
     null;
 
   const activeFileName = activeAttachment?.name || doc.fileName;
   const activeFileSize = activeAttachment?.size ?? doc.fileSize;
-  const activeFileUrl = activeAttachment?.url || doc.fileUrl;
-  const activeScannedPages =
-    activeAttachment?.scannedPages || doc.scannedPages || onDemandScannedPages || undefined;
+  const activeFileUrl = activeAttachment ? activeAttachment.url : doc.fileUrl;
+  const activeScannedPages = activeAttachment
+    ? activeAttachment.scannedPages
+    : (doc.scannedPages || onDemandScannedPages || undefined);
   const activeCategory = getFileCategoryInfo(activeFileName, activeAttachment?.type);
 
   // Admin IDs set for statistics exclusion
@@ -206,17 +226,17 @@ export function CircularViewerModal({
           {activeTab === "doc" ? (
             <div className="space-y-4">
               {/* Multi-Attachment Switcher Bar if more than 1 attachment */}
-              {doc.attachments && doc.attachments.length > 1 && (
+              {effectiveAttachments && effectiveAttachments.length > 1 && (
                 <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs print:hidden space-y-2.5">
                   <div className="flex items-center justify-between">
                     <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
                       <span>📎</span>
-                      <span>ไฟล์เอกสารและสิ่งที่ส่งมาด้วยทั้งหมด ({doc.attachments.length} รายการ)</span>
+                      <span>ไฟล์เอกสารและสิ่งที่ส่งมาด้วยทั้งหมด ({effectiveAttachments.length} รายการ)</span>
                     </div>
                     <span className="text-[11px] text-slate-400">คลิกเพื่อสลับดูแต่ละไฟล์</span>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {doc.attachments.map((att, idx) => {
+                    {effectiveAttachments.map((att, idx) => {
                       const isSelected = activeAttachment ? activeAttachment.id === att.id : idx === 0;
                       const cat = getFileCategoryInfo(att.name, att.type);
                       return (
@@ -247,7 +267,7 @@ export function CircularViewerModal({
                             </span>
                           )}
                           <span className={`text-[10px] ${isSelected ? "text-indigo-200" : "text-slate-400"}`}>
-                            {att.size ? `${(att.size / 1024).toFixed(0)} KB` : ""}
+                            {att.size ? `${(att.size / 1024).toFixed(0)} KB` : !att.url ? "ฉบับจริง" : ""}
                           </span>
                         </button>
                       );
@@ -309,7 +329,7 @@ export function CircularViewerModal({
               {/* View Content: The Attached Document */}
               <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs flex flex-col items-center animate-fade-in">
                   {activeScannedPages && activeScannedPages.length > 0 ? (
-                    <div className="w-full space-y-3">
+                    <div key={`scanned_wrap_${activeAttachment?.id || 'main'}`} className="w-full space-y-3">
                       {/* Multi-page controls */}
                       <div className="flex items-center justify-between text-xs px-2">
                         <span className="font-bold text-slate-700">
@@ -343,12 +363,14 @@ export function CircularViewerModal({
                         {activeScannedPages[currentPageIndex].startsWith("data:application/pdf") ||
                         activeScannedPages[currentPageIndex].toLowerCase().endsWith(".pdf") ? (
                           <iframe
+                            key={`scanned_pdf_${activeAttachment?.id || 'main'}_${currentPageIndex}`}
                             src={activeScannedPages[currentPageIndex]}
                             title={`Document page ${currentPageIndex + 1}`}
                             className="w-full h-[500px] rounded-lg border-none bg-white"
                           />
                         ) : (
                           <img
+                            key={`scanned_img_${activeAttachment?.id || 'main'}_${currentPageIndex}`}
                             src={activeScannedPages[currentPageIndex]}
                             alt={`Document page ${currentPageIndex + 1}`}
                             className="max-h-[480px] w-auto object-contain shadow-md rounded"
@@ -361,14 +383,16 @@ export function CircularViewerModal({
                       activeFileName.toLowerCase().endsWith(".pdf") ||
                       activePdfUrl.startsWith("data:application/pdf") ||
                       activePdfUrl.startsWith("blob:")) ? (
-                    <div className="w-full space-y-3">
+                    <div key={`pdf_wrap_${activeAttachment?.id || activeFileName}`} className="w-full space-y-3">
                       <div className="w-full h-[540px] rounded-xl overflow-hidden border border-slate-200 bg-slate-100 relative">
                         <object
+                          key={`pdf_obj_${activeAttachment?.id || activeFileName}_${activePdfUrl.slice(0, 32)}`}
                           data={activePdfUrl}
                           type="application/pdf"
                           className="w-full h-full"
                         >
                           <iframe
+                            key={`pdf_frame_${activeAttachment?.id || activeFileName}_${activePdfUrl.slice(0, 32)}`}
                             src={activePdfUrl}
                             title={doc.title}
                             className="w-full h-full border-none bg-white"
@@ -400,9 +424,10 @@ export function CircularViewerModal({
                     (activeCategory.type === "image" ||
                       activePdfUrl.startsWith("data:image/") ||
                       /\.(png|jpe?g|webp|gif|bmp)$/i.test(activeFileName)) ? (
-                    <div className="w-full space-y-3 flex flex-col items-center">
+                    <div key={`img_wrap_${activeAttachment?.id || activeFileName}`} className="w-full space-y-3 flex flex-col items-center">
                       <div className="w-full max-h-[520px] overflow-auto bg-slate-900/5 rounded-xl border border-slate-200 flex items-center justify-center p-2">
                         <img
+                          key={`img_${activeAttachment?.id || activeFileName}_${activePdfUrl.slice(0, 32)}`}
                           src={activePdfUrl}
                           alt={activeFileName}
                           className="max-h-[480px] w-auto object-contain shadow-md rounded"
@@ -421,7 +446,7 @@ export function CircularViewerModal({
                       </div>
                     </div>
                   ) : (
-                    <div className="w-full py-12 flex flex-col items-center justify-center text-center space-y-3">
+                    <div key={`card_wrap_${activeAttachment?.id || activeFileName}`} className="w-full py-12 flex flex-col items-center justify-center text-center space-y-3">
                       <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-3xl border shadow-2xs ${activeCategory.bg}`}>
                         {activeCategory.icon}
                       </div>
@@ -432,9 +457,11 @@ export function CircularViewerModal({
                         {activeFileSize ? <span>• {(activeFileSize / 1024).toFixed(0)} KB</span> : null}
                       </div>
                       <p className="text-xs text-slate-500 max-w-sm">
-                        ไฟล์เอกสารประเภท {activeCategory.label} รองรับการดาวน์โหลดไปเปิดหรือแก้ไขด้วยโปรแกรมบนอุปกรณ์ของท่าน
+                        {activePdfUrl
+                          ? `ไฟล์เอกสารประเภท ${activeCategory.label} รองรับการดาวน์โหลดไปเปิดหรือแก้ไขด้วยโปรแกรมบนอุปกรณ์ของท่าน`
+                          : "เอกสารแนบรายการนี้ถูกบันทึกไว้ในสารบรรณสิ่งที่ส่งมาด้วย (ฉบับเอกสารจริง) ท่านสามารถประสานงานขอสำเนาได้จากกลุ่มงานเจ้าของเรื่อง"}
                       </p>
-                      {activePdfUrl && (
+                      {activePdfUrl ? (
                         <a
                           href={activePdfUrl}
                           download={activeFileName}
@@ -445,6 +472,11 @@ export function CircularViewerModal({
                           <span>⬇️</span>
                           <span>ดาวน์โหลดไฟล์ {activeFileName}</span>
                         </a>
+                      ) : (
+                        <div className="px-3.5 py-1.5 rounded-xl bg-amber-50 text-amber-800 text-xs font-semibold border border-amber-200 flex items-center gap-1.5">
+                          <span>📋</span>
+                          <span>เอกสารฉบับรูปเล่ม/เอกสารจริง</span>
+                        </div>
                       )}
                     </div>
                   )}

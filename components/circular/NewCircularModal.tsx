@@ -976,22 +976,52 @@ export function NewCircularModal({
                 </button>
               </div>
             ) : (
-              /* Drag & Drop banner for adding more files when files already exist */
-              <div
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className={`py-3 px-4 rounded-xl border-2 border-dashed flex items-center justify-center gap-2 cursor-pointer transition-all ${
-                  isDragOver
-                    ? "border-emerald-500 bg-emerald-100/70 text-emerald-800"
-                    : "border-slate-200 hover:border-slate-300 bg-slate-50/80 text-slate-600"
-                }`}
-              >
-                <span className="text-base">📥</span>
-                <span className="text-xs font-medium">
-                  ลากไฟล์เอกสารมาวางที่นี่ หรือคลิกเพื่ออัปโหลดไฟล์เพิ่ม (รองรับ PDF, Word, Excel, PPT, รูปภาพ, ZIP)
-                </span>
+              <div className="space-y-2">
+                {/* Drag & Drop banner for adding more files when files already exist */}
+                <div
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`py-3 px-4 rounded-xl border-2 border-dashed flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                    isDragOver
+                      ? "border-emerald-500 bg-emerald-100/70 text-emerald-800"
+                      : "border-slate-200 hover:border-slate-300 bg-slate-50/80 text-slate-600"
+                  }`}
+                >
+                  <span className="text-base">📥</span>
+                  <span className="text-xs font-medium">
+                    ลากไฟล์เอกสารมาวางที่นี่ หรือคลิกเพื่ออัปโหลดไฟล์เพิ่ม (รองรับ PDF, Word, Excel, PPT, รูปภาพ, ZIP)
+                  </span>
+                </div>
+
+                {/* Additional Capture & NAS quick-add shortcuts */}
+                <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <span>📁</span>
+                    <span>+ เพิ่มไฟล์จากเครื่อง</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowScannerModal(true)}
+                    className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold border border-indigo-200 flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <span>📷</span>
+                    <span>+ สแกน/ถ่ายภาพเพิ่ม</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleFetchNasFiles}
+                    className="px-3 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold border border-sky-200 flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <span>☁️</span>
+                    <span>+ ดึงไฟล์จาก NAS</span>
+                  </button>
+                </div>
               </div>
             )}
 
@@ -1160,11 +1190,13 @@ export function NewCircularModal({
                     <div className="w-full max-h-[500px] overflow-auto bg-white rounded-xl border border-slate-200 flex items-center justify-center p-2 relative shadow-inner">
                       {isPdfDocument ? (
                         <object
+                          key={`new_pdf_obj_${currentAttachment?.id || fileName}_${activePdfUrl.slice(0, 32)}`}
                           data={activePdfUrl}
                           type="application/pdf"
                           className="w-full h-[460px] rounded-lg"
                         >
                           <iframe
+                            key={`new_pdf_frame_${currentAttachment?.id || fileName}_${activePdfUrl.slice(0, 32)}`}
                             src={activePdfUrl}
                             title="ตัวอย่างเอกสาร PDF"
                             className="w-full h-[460px] rounded-lg border-none"
@@ -1172,13 +1204,14 @@ export function NewCircularModal({
                         </object>
                       ) : isImageDocument ? (
                         <img
+                          key={`new_img_${currentAttachment?.id || fileName}_${activePreviewPageIndex}_${(scannedPages[activePreviewPageIndex] || fileUrl).slice(0, 32)}`}
                           src={scannedPages[activePreviewPageIndex] || fileUrl}
                           alt="ตัวอย่างเอกสาร"
                           className="max-h-[460px] w-auto object-contain rounded-lg shadow-sm"
                         />
                       ) : (
                         /* Rich Non-image/Non-PDF preview card (Word, Excel, PPT, ZIP, etc.) */
-                        <div className="w-full py-12 flex flex-col items-center justify-center text-center space-y-3">
+                        <div key={`new_card_${currentAttachment?.id || fileName}`} className="w-full py-12 flex flex-col items-center justify-center text-center space-y-3">
                           <div className="text-5xl">{getFileCategoryInfo(fileName, fileType).icon}</div>
                           <div className="space-y-1 max-w-md">
                             <span className="text-sm font-bold text-slate-800 block truncate">{fileName}</span>

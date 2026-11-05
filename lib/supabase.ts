@@ -18,6 +18,7 @@ import {
   MeetingItem,
   MeetingRoomMaster,
   CircularDocument,
+  CircularAttachment,
   CircularUrgency,
   CircularSecretLevel,
   OfficialDocumentType,
@@ -2448,6 +2449,74 @@ export async function updateSupabaseUserMetadata(metadata: Record<string, any>):
  * Map Supabase circular_documents row to CircularDocument object
  */
 export function mapRowToCircularDoc(row: any): CircularDocument {
+  let scannedPages: string[] | undefined = undefined;
+  let attachments: CircularAttachment[] | undefined = undefined;
+
+  // 1. Resolve attachments from row.attachments if column exists or present in payload
+  if (Array.isArray(row.attachments) && row.attachments.length > 0) {
+    attachments = row.attachments;
+  }
+
+  // 2. Parse scanned_pages (may be object with { pages, attachments } or array of strings)
+  if (row.scanned_pages) {
+    if (Array.isArray(row.scanned_pages)) {
+      scannedPages = row.scanned_pages;
+    } else if (typeof row.scanned_pages === "object") {
+      if (Array.isArray(row.scanned_pages.pages)) {
+        scannedPages = row.scanned_pages.pages;
+      }
+      if (!attachments && Array.isArray(row.scanned_pages.attachments) && row.scanned_pages.attachments.length > 0) {
+        attachments = row.scanned_pages.attachments;
+      }
+    }
+  }
+
+  // 3. Fallback synthesis if attachments array is still missing
+  if (!attachments || attachments.length === 0) {
+    const list: CircularAttachment[] = [];
+    if (row.file_url) {
+      const isPdf =
+        row.file_name?.toLowerCase().endsWith(".pdf") ||
+        (typeof row.file_url === "string" && row.file_url.includes("application/pdf"));
+      list.push({
+        id: `att_${row.id}_main`,
+        name: row.file_name || "เอกสารฉบับหลัก",
+        size: Number(row.file_size) || 0,
+        type: isPdf ? "application/pdf" : "image/jpeg",
+        url: row.file_url,
+        scannedPages: scannedPages,
+        source: "upload",
+      });
+    }
+
+    // If attachment_list lists multiple items (e.g. "1. DocA.pdf, 2. DocB.pdf")
+    if (row.attachment_list && typeof row.attachment_list === "string") {
+      // Split on comma followed by numbering pattern like "2. "
+      const parts = row.attachment_list
+        .split(/,\s*(?=[0-9]+[.)]\s*)/)
+        .map((s) => s.replace(/^[0-9]+[.)]\s*/, "").trim())
+        .filter(Boolean);
+
+      parts.forEach((pName, idx) => {
+        if (pName && !list.some((existing) => existing.name.toLowerCase() === pName.toLowerCase())) {
+          const isPdf = pName.toLowerCase().endsWith(".pdf");
+          list.push({
+            id: `att_${row.id}_part_${idx + 1}`,
+            name: pName,
+            size: 0,
+            type: isPdf ? "application/pdf" : "application/octet-stream",
+            url: "", // Legacy row without secondary file URL stored
+            source: "upload",
+          });
+        }
+      });
+    }
+
+    if (list.length > 0) {
+      attachments = list;
+    }
+  }
+
   return {
     id: row.id,
     docNumber: row.doc_number,
@@ -2461,7 +2530,8 @@ export function mapRowToCircularDoc(row: any): CircularDocument {
     fileName: row.file_name,
     fileSize: Number(row.file_size) || 0,
     totalPages: row.total_pages ? Number(row.total_pages) : undefined,
-    scannedPages: Array.isArray(row.scanned_pages) ? row.scanned_pages : undefined,
+    scannedPages: scannedPages,
+    attachments: attachments,
     createdBy: row.created_by,
     createdByName: row.created_by_name,
     createdAt: row.created_at,
@@ -2481,6 +2551,20 @@ export function mapRowToCircularDoc(row: any): CircularDocument {
  * Map CircularDocument object to Supabase circular_documents row
  */
 export function mapCircularDocToRow(doc: CircularDocument): any {
+  // Package scanned pages and full attachments metadata inside scanned_pages jsonb
+  const scannedPagesPayload = {
+    pages: doc.scannedPages || [],
+    attachments: doc.attachments && doc.attachments.length > 0 ? doc.attachments : (doc.fileUrl ? [{
+      id: `att_${doc.id || Date.now()}`,
+      name: doc.fileName || "เอกสารแนบ",
+      size: doc.fileSize || 0,
+      type: doc.fileName?.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg",
+      url: doc.fileUrl,
+      scannedPages: doc.scannedPages,
+      source: "upload",
+    }] : []),
+  };
+
   return {
     id: doc.id,
     doc_number: doc.docNumber,
@@ -2497,7 +2581,7 @@ export function mapCircularDocToRow(doc: CircularDocument): any {
     file_name: doc.fileName,
     file_size: doc.fileSize,
     total_pages: doc.totalPages || null,
-    scanned_pages: doc.scannedPages || null,
+    scanned_pages: scannedPagesPayload,
     created_by: doc.createdBy,
     created_by_name: doc.createdByName,
     created_at: doc.createdAt,
@@ -2515,7 +2599,6 @@ let memoryCircularDocs: CircularDocument[] | null = null;
 
 /**
  * Fetch circular documents from Supabase with fallback to in-memory cache
- * Note: Excludes heavy 'scanned_pages' column to minimize bandwidth/egress
  */
 export async function fetchCircularDocs(): Promise<CircularDocument[]> {
   if (!supabase) return memoryCircularDocs || [];
@@ -2523,9 +2606,7 @@ export async function fetchCircularDocs(): Promise<CircularDocument[]> {
   try {
     const { data, error } = await supabase
       .from("circular_documents")
-      .select(
-        "id, doc_number, title, issued_date, sender_org, doc_type, reference_doc, attachment_list, urgency, secret_level, summary, file_url, file_name, file_size, total_pages, created_by, created_by_name, created_at, deadline, target_criteria, recipients, total_count, acknowledged_count, status"
-      )
+      .select("*")
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -2560,23 +2641,51 @@ export async function fetchCircularDocs(): Promise<CircularDocument[]> {
 }
 
 /**
- * Fetch heavy scanned pages for a single circular document on-demand
+ * Fetch scanned pages and attachments for a single circular document on-demand
  */
-export async function fetchCircularDocScannedPages(id: string): Promise<string[]> {
-  if (!supabase || !id) return [];
+export async function fetchCircularDocDetails(id: string): Promise<{
+  scannedPages?: string[];
+  attachments?: CircularAttachment[];
+} | null> {
+  if (!supabase || !id) return null;
   try {
     const { data, error } = await supabase
       .from("circular_documents")
-      .select("scanned_pages")
+      .select("scanned_pages, file_url, file_name, file_size, attachment_list")
       .eq("id", id)
       .single();
 
-    if (error || !data) return [];
-    return Array.isArray(data.scanned_pages) ? data.scanned_pages : [];
+    if (error || !data) return null;
+
+    let scannedPages: string[] | undefined = undefined;
+    let attachments: CircularAttachment[] | undefined = undefined;
+
+    if (data.scanned_pages) {
+      if (Array.isArray(data.scanned_pages)) {
+        scannedPages = data.scanned_pages;
+      } else if (typeof data.scanned_pages === "object") {
+        if (Array.isArray(data.scanned_pages.pages)) {
+          scannedPages = data.scanned_pages.pages;
+        }
+        if (Array.isArray(data.scanned_pages.attachments)) {
+          attachments = data.scanned_pages.attachments;
+        }
+      }
+    }
+
+    return { scannedPages, attachments };
   } catch (err) {
-    console.warn("Could not fetch circular doc scanned pages:", err);
-    return [];
+    console.warn("Could not fetch circular doc details:", err);
+    return null;
   }
+}
+
+/**
+ * Fetch heavy scanned pages for a single circular document on-demand
+ */
+export async function fetchCircularDocScannedPages(id: string): Promise<string[]> {
+  const details = await fetchCircularDocDetails(id);
+  return details?.scannedPages || [];
 }
 
 /**

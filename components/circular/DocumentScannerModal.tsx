@@ -302,10 +302,16 @@ export function DocumentScannerModal({
 
   // Upload file fallback
   const handleFilesList = (files: FileList | File[]) => {
-    Array.from(files).forEach((file) => {
-      if (file.name) {
-        setDocTitle(file.name);
-      }
+    const fileArray = Array.from(files);
+    if (fileArray.length > 0 && !docTitle.trim()) {
+      setDocTitle(
+        fileArray.length > 1
+          ? `${fileArray[0].name} (และอีก ${fileArray.length - 1} ไฟล์)`
+          : fileArray[0].name
+      );
+    }
+
+    fileArray.forEach((file) => {
       const reader = new FileReader();
       reader.onload = (loadEvent) => {
         if (loadEvent.target?.result) {
@@ -497,11 +503,13 @@ export function DocumentScannerModal({
                 {isCurrentPagePdf ? (
                   activePdfBlobUrl ? (
                     <object
+                      key={`scanner_pdf_obj_${selectedPageIndex}_${activePdfBlobUrl.slice(0, 32)}`}
                       data={activePdfBlobUrl}
                       type="application/pdf"
                       className="w-full h-full min-h-[380px] rounded-2xl"
                     >
                       <iframe
+                        key={`scanner_pdf_frame_${selectedPageIndex}_${activePdfBlobUrl.slice(0, 32)}`}
                         src={activePdfBlobUrl}
                         title="PDF Document Preview"
                         className="w-full h-full min-h-[380px] border-0 rounded-2xl bg-white"
@@ -520,6 +528,7 @@ export function DocumentScannerModal({
                   )
                 ) : (
                   <img
+                    key={`scanner_img_${selectedPageIndex}_${activePage.slice(0, 32)}`}
                     src={activePage}
                     alt={`Scanned preview page ${selectedPageIndex + 1}`}
                     className="max-w-full max-h-full object-contain p-2"
