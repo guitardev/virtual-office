@@ -18,6 +18,7 @@ export type ModuleId =
   | "task"
   | "meetings"
   | "carbooking"
+  | "attendance"
   | "user"
   | "admin"
   | "reports"

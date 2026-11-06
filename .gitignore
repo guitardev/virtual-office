@@ -24,6 +24,7 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
+.env*
 
 # TypeScript build cache
 *.tsbuildinfo
@@ -48,5 +49,6 @@ nul
 .vscode/
 .idea/
 
-.vercel
-.env*
+# Local runtime data & cache stores (Sensitive credentials & staff attendance logs)
+/data/
+scratch/

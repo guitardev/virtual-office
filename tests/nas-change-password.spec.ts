@@ -53,9 +53,9 @@ test.describe("ระบบเปลี่ยนรหัสผ่าน Synolog
     // ตรวจสอบว่าปุ่ม Submit ยังคงถูก disable อยู่
     await expect(submitBtn).toBeDisabled();
 
-    // ทดสอบกรอกรหัสผ่านใหม่ที่ตรงเกณฑ์: มีตัวพิมพ์ใหญ่-เล็ก และตัวเลข (เช่น SmartMso2026)
-    await newPassInput.fill("SmartMso2026");
-    await confirmPassInput.fill("SmartMso2026");
+    // ทดสอบกรอกรหัสผ่านใหม่ที่ตรงเกณฑ์: มีตัวพิมพ์ใหญ่-เล็ก และตัวเลข (เช่น GovOfficeTest#2026)
+    await newPassInput.fill("GovOfficeTest#2026");
+    await confirmPassInput.fill("GovOfficeTest#2026");
 
     // รหัสผ่านตรงกัน ปุ่ม Submit ต้องเปิดใช้งาน (enabled)
     await expect(submitBtn).toBeEnabled();

@@ -933,6 +933,22 @@ function AppProviderInner({ children }: { children: React.ReactNode }) {
   }, [currentUser?.id, loginTime]);
 
   const canAccess = (moduleId: ModuleId, role: Role = currentUserRole): boolean => {
+    // กรณีโมดูล attendance (ลงเวลาราชการ): ผู้ใช้ต้องเป็น admin หรือมีสิทธิ์ในตารางผู้แก้ไขเวลา
+    if (moduleId === "attendance") {
+      if (role === "admin" || currentUserRole === "admin") return true;
+      if (typeof window !== "undefined" && currentUser) {
+        try {
+          const raw = localStorage.getItem("smartmso_attendance_editors");
+          if (raw) {
+            const editors = JSON.parse(raw);
+            if (Array.isArray(editors) && editors.some((ed: any) => ed.memberId === currentUser.id || ed.memberName?.trim() === currentUser.name?.trim())) {
+              return true;
+            }
+          }
+        } catch {}
+      }
+      return !!rolePermissions[role]?.attendance;
+    }
     return !!rolePermissions[role]?.[moduleId];
   };
 
@@ -1787,6 +1803,7 @@ function AppProviderInner({ children }: { children: React.ReactNode }) {
       task: taskCount,
       meetings: meetingCount,
       carbooking: unreadCarBookingCount > 0 ? unreadCarBookingCount : carCount,
+      attendance: 0,
       circular: unreadCircularCount,
       files: 0,
       gallery: 0,

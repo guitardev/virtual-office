@@ -39,6 +39,7 @@ export const MODULE_NAMES: Record<ModuleId, { name: string; icon: string; desc: 
   task: { name: "ภารกิจงาน (Tasks)", icon: "📋", desc: "กระดานติดตามงานแบบ Kanban" },
   meetings: { name: "การประชุม (Meetings)", icon: "📹", desc: "ตารางประชุมและห้องสนทนาออนไลน์" },
   carbooking: { name: "รถราชการ (Car Booking)", icon: "🚗", desc: "ระบบจองยานพาหนะส่วนกลาง" },
+  attendance: { name: "ลงเวลาราชการ (Attendance)", icon: "⏱️", desc: "ระบบซิงก์เครื่องสแกนลายนิ้วมือ HIP CMi681S และจัดการเวลาปฏิบัติราชการ" },
   user: { name: "ข้อมูลส่วนตัว (Profile)", icon: "👤", desc: "ข้อมูลผู้ใช้และการตั้งค่าส่วนบุคคล" },
   admin: { name: "จัดการระบบ (Admin Panel)", icon: "⚙️", desc: "การจัดการสมาชิกและกำหนดสิทธิ์ RBAC" },
   reports: { name: "รายงาน (Reports)", icon: "📈", desc: "รายงานสถิติการใช้งานและดาวน์โหลดสรุป" },
@@ -97,6 +98,14 @@ export const INITIAL_SYSTEM_MODULES: Record<ModuleId, SystemModule> = {
     desc: "ระบบจองยานพาหนะส่วนกลาง",
     enabled: true,
     maintenanceNotice: "ระบบจองยานพาหนะส่วนกลางเปิดให้บริการปกติ",
+  },
+  attendance: {
+    id: "attendance",
+    name: "ลงเวลาราชการ (Attendance)",
+    icon: "⏱️",
+    desc: "ระบบซิงก์เครื่องสแกนลายนิ้วมือ HIP CMi681S และจัดการเวลาปฏิบัติราชการ",
+    enabled: true,
+    maintenanceNotice: "ระบบลงเวลาปฏิบัติราชการเปิดให้บริการปกติ",
   },
   reports: {
     id: "reports",
@@ -173,6 +182,7 @@ export const INITIAL_ROLE_PERMISSIONS: Record<Role, Record<ModuleId, boolean>> =
     task: true,
     meetings: true,
     carbooking: true,
+    attendance: true,
     user: true,
     admin: true,
     reports: true,
@@ -189,6 +199,7 @@ export const INITIAL_ROLE_PERMISSIONS: Record<Role, Record<ModuleId, boolean>> =
     task: true,
     meetings: true,
     carbooking: true,
+    attendance: false, // เฉพาะ Admin หรือผู้ได้รับสิทธิ์ในหน้าจัดการลงเวลา
     user: true,
     admin: false, // Managers cannot access RBAC Admin Panel
     reports: true,
@@ -205,6 +216,7 @@ export const INITIAL_ROLE_PERMISSIONS: Record<Role, Record<ModuleId, boolean>> =
     task: true,
     meetings: true,
     carbooking: true,
+    attendance: false, // เฉพาะ Admin หรือผู้ได้รับสิทธิ์ในหน้าจัดการลงเวลา
     user: true,
     admin: false, // Regular members cannot access Admin
     reports: false, // Regular members cannot view company reports
@@ -221,6 +233,7 @@ export const INITIAL_ROLE_PERMISSIONS: Record<Role, Record<ModuleId, boolean>> =
     task: false, // Cannot access internal tasks
     meetings: true, // Can join invited meetings
     carbooking: false, // Cannot book company cars
+    attendance: false,
     user: true, // Can view own profile
     admin: false,
     reports: false,
