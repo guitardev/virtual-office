@@ -1,0 +1,1273 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart MSO Virtual Office — Interactive Presentation Deck (พมจ.กำแพงเพชร)</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    :root {
+      --background: #f8fafc;
+      --foreground: #0f172a;
+      --card: #ffffff;
+      --border: #e2e8f0;
+      --muted-foreground: #475569;
+    }
+    @media print {
+      .no-print { display: none !important; }
+      .print-all-slides .slide-section {
+        display: block !important;
+        page-break-after: always;
+        margin-bottom: 24px;
+      }
+    }
+    .slide-fade {
+      animation: slideFadeIn 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes slideFadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body class="bg-[var(--background)] text-[var(--foreground)] antialiased min-h-screen flex flex-col selection:bg-indigo-500 selection:text-white">
+
+  <!-- TOP NAVIGATION & PRESENTATION CONTROLLER -->
+  <header class="no-print sticky top-0 z-40 bg-[var(--card)]/95 backdrop-blur border-b border-[var(--border)] px-4 py-3">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+      <!-- Brand & Title -->
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-sm">
+          🏛️
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="font-bold text-base tracking-tight text-[var(--foreground)]">Smart MSO Virtual Office</span>
+            <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-indigo-500/15 text-indigo-600 border border-indigo-500/30">
+              พมจ.กำแพงเพชร
+            </span>
+          </div>
+          <p class="text-xs text-[var(--muted-foreground)]">
+            สไลด์แนะนำระบบสำนักงานเสมือนจริงอัจฉริยะ (Interactive Executive &amp; Officer Deck)
+          </p>
+        </div>
+      </div>
+
+      <!-- Audience Perspective Switcher -->
+      <div class="flex items-center gap-1.5 bg-[var(--background)] p-1 rounded-xl border border-[var(--border)]">
+        <button
+          type="button"
+          id="btn-mode-exec"
+          onclick="setAudienceMode('executive')"
+          class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer bg-indigo-600 text-white shadow-xs"
+        >
+          👔 มุมมองผู้บริหาร
+        </button>
+        <button
+          type="button"
+          id="btn-mode-officer"
+          onclick="setAudienceMode('officer')"
+          class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+        >
+          💻 มุมมองเจ้าหน้าที่ปฏิบัติงาน
+        </button>
+      </div>
+
+      <!-- Slide Controls & Actions -->
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          onclick="toggleDrawer()"
+          class="px-3 py-1.5 rounded-xl border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--card)] text-xs font-semibold cursor-pointer flex items-center gap-1.5"
+          title="เปิดสารบัญสไลด์ทั้งหมด"
+        >
+          <span>📑</span>
+          <span>สารบัญ (<span id="slide-counter-badge">1/10</span>)</span>
+        </button>
+
+        <div class="flex items-center rounded-xl border border-[var(--border)] bg-[var(--background)] p-0.5">
+          <button
+            type="button"
+            onclick="prevSlide()"
+            class="px-2.5 py-1 rounded-lg hover:bg-[var(--card)] text-xs font-bold cursor-pointer"
+            title="สไลด์ก่อนหน้า (ลูกศรซ้าย)"
+          >
+            ◀ ก่อนหน้า
+          </button>
+          <span id="slide-indicator" class="px-3 text-xs font-bold font-mono">1 / 10</span>
+          <button
+            type="button"
+            onclick="nextSlide()"
+            class="px-2.5 py-1 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 text-xs font-bold cursor-pointer"
+            title="สไลด์ถัดไป (ลูกศรขวา / Spacebar)"
+          >
+            ถัดไป ▶
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onclick="printAllSlides()"
+          class="px-3 py-1.5 rounded-xl border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--card)] text-xs font-semibold cursor-pointer hidden sm:flex items-center gap-1"
+          title="พิมพ์สไลด์ทั้งหมดเป็นเอกสารประกอบการประชุม PDF"
+        >
+          <span>🖨️</span>
+          <span>พิมพ์เอกสาร</span>
+        </button>
+
+        <button
+          type="button"
+          onclick="toggleFullscreen()"
+          class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold cursor-pointer flex items-center gap-1 shadow-xs"
+          title="ขยายเต็มจอสำหรับนำเสนอในห้องประชุม"
+        >
+          <span>⛶</span>
+          <span class="hidden md:inline">นำเสนอเต็มจอ</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Progress Bar -->
+    <div class="max-w-7xl mx-auto mt-2.5 h-1.5 w-full bg-[var(--border)] rounded-full overflow-hidden">
+      <div id="slide-progress-bar" class="h-full bg-indigo-600 transition-all duration-300" style="width: 10%;"></div>
+    </div>
+  </header>
+
+  <!-- SLIDE TABLE OF CONTENTS DRAWER -->
+  <div id="toc-drawer" class="no-print hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex justify-end">
+    <div class="w-full max-w-md bg-[var(--card)] text-[var(--foreground)] h-full p-5 overflow-y-auto border-l border-[var(--border)] shadow-2xl flex flex-col justify-between">
+      <div>
+        <div class="flex items-center justify-between pb-3 border-b border-[var(--border)]">
+          <h3 class="font-bold text-base">📑 สารบัญสไลด์นำเสนอ (10 หัวข้อหลัก)</h3>
+          <button type="button" onclick="toggleDrawer()" class="px-2.5 py-1 rounded-lg border border-[var(--border)] text-xs font-bold cursor-pointer">
+            ✕ ปิด
+          </button>
+        </div>
+        <div id="toc-list" class="mt-3 space-y-1.5"></div>
+      </div>
+      <div class="pt-4 border-t border-[var(--border)] text-xs text-[var(--muted-foreground)]">
+        💡 คำแนะนำ: ใช้ปุ่มลูกศร <kbd class="px-1.5 py-0.5 rounded border border-[var(--border)] font-mono">←</kbd> <kbd class="px-1.5 py-0.5 rounded border border-[var(--border)] font-mono">→</kbd> บนคีย์บอร์ดเพื่อเปลี่ยนสไลด์ได้อย่างรวดเร็ว
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN SLIDE STAGE -->
+  <main id="slides-container" class="flex-1 max-w-7xl w-full mx-auto px-4 py-6 flex flex-col justify-between">
+
+    <!-- SLIDE 1 -->
+    <section class="slide-section slide-fade space-y-6" data-slide="1" data-title="1. วิสัยทัศน์และภาพรวมระบบ Smart MSO">
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-3xl p-6 sm:p-8 shadow-sm relative overflow-hidden">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <span class="px-3 py-1 rounded-full text-xs font-bold bg-indigo-500/15 text-indigo-600 border border-indigo-500/30">
+            🚀 โครงการยกระดับสำนักงานดิจิทัล พมจ.กำแพงเพชร (Phase 12 Complete)
+          </span>
+          <span class="text-xs font-mono text-[var(--muted-foreground)]">
+            Next.js 16 App Router • Supabase Realtime • Synology NAS Private Cloud
+          </span>
+        </div>
+
+        <h1 class="text-2xl sm:text-4xl font-extrabold tracking-tight leading-tight">
+          Smart MSO Virtual Office
+        </h1>
+        <p class="mt-2 text-base sm:text-lg text-[var(--muted-foreground)] max-w-4xl leading-relaxed">
+          แพลตฟอร์มสำนักงานเสมือนจริงและศูนย์ปฏิบัติการข้อมูลทางสังคมแบบครบวงจร สำหรับสำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร เชื่อมโยงการทำงานทั้ง 4 กลุ่มภารกิจ 11 อำเภอ ในที่เดียว
+        </p>
+
+        <div class="mt-5 p-4 rounded-2xl border border-indigo-500/30 bg-indigo-500/10">
+          <div class="exec-only">
+            <div class="font-bold text-sm text-indigo-600 flex items-center gap-2">
+              <span>👔 สรุปสาระสำคัญสำหรับผู้บริหาร (Executive Summary):</span>
+            </div>
+            <p class="text-xs sm:text-sm mt-1 leading-relaxed">
+              ยกระดับการตัดสินใจด้วยข้อมูลสถิติกลุ่มเปราะบาง 11 อำเภอแบบเรียลไทม์ พร้อมออกรายงานเสนอที่ประชุม กบจ. ตราครุฑทันที ลดขั้นตอนกระดาษในงานสารบรรณและการขอใช้รถยนต์ราชการ พร้อมรักษาอธิปไตยข้อมูลราชการบนเซิร์ฟเวอร์ Synology NAS ของสำนักงานเอง 100%
+            </p>
+          </div>
+          <div class="officer-only hidden">
+            <div class="font-bold text-sm text-teal-600 flex items-center gap-2">
+              <span>💻 สรุปสาระสำคัญสำหรับเจ้าหน้าที่ (Officer Experience):</span>
+            </div>
+            <p class="text-xs sm:text-sm mt-1 leading-relaxed">
+              เข้าถึงระบบงานทั้ง 11 โมดูลด้วยบัญชี Synology NAS เดียว ไม่ต้องจำหลายรหัสผ่าน สแกนหนังสือเวียนสดผ่านกล้อง/มือถือ แชทงานกลุ่มพร้อมส่งไฟล์ใหญ่ลง NAS อัตโนมัติ จองรถยนต์พร้อมดูผังคิวรถว่าง และซิงก์ตารางประชุมเข้า Google Calendar ในคลิกเดียว
+            </p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mt-6">
+          <div class="p-4 rounded-2xl bg-[var(--background)] border border-[var(--border)]">
+            <div class="text-xs text-[var(--muted-foreground)] font-semibold">โมดูลงานราชการ</div>
+            <div class="text-2xl font-extrabold mt-1 text-indigo-600">11 โมดูล</div>
+            <div class="text-xs text-[var(--muted-foreground)] mt-1">จัดหมวดหมู่ 4 กลุ่มภารกิจ</div>
+          </div>
+          <div class="p-4 rounded-2xl bg-[var(--background)] border border-[var(--border)]">
+            <div class="text-xs text-[var(--muted-foreground)] font-semibold">พื้นที่ฐานข้อมูลสังคม</div>
+            <div class="text-2xl font-extrabold mt-1 text-emerald-600">11 อำเภอ</div>
+            <div class="text-xs text-[var(--muted-foreground)] mt-1">TPMAP 5 มิติ &amp; ศรส. 1300</div>
+          </div>
+          <div class="p-4 rounded-2xl bg-[var(--background)] border border-[var(--border)]">
+            <div class="text-xs text-[var(--muted-foreground)] font-semibold">มาตรฐานตัวเลขสองระบบ</div>
+            <div class="text-2xl font-extrabold mt-1 text-amber-600">0-9 / ๐-๙</div>
+            <div class="text-xs text-[var(--muted-foreground)] mt-1">UI สากล • หนังสือราชการเลขไทย</div>
+          </div>
+          <div class="p-4 rounded-2xl bg-[var(--background)] border border-[var(--border)]">
+            <div class="text-xs text-[var(--muted-foreground)] font-semibold">สถาปัตยกรรมจัดเก็บข้อมูล</div>
+            <div class="text-2xl font-extrabold mt-1 text-sky-600">Hybrid Cloud</div>
+            <div class="text-xs text-[var(--muted-foreground)] mt-1">Supabase + Synology NAS</div>
+          </div>
+          <div class="p-4 rounded-2xl bg-[var(--background)] border border-[var(--border)] col-span-2 sm:col-span-1">
+            <div class="text-xs text-[var(--muted-foreground)] font-semibold">ชุดทดสอบอัตโนมัติ E2E</div>
+            <div class="text-2xl font-extrabold mt-1 text-rose-600">70+ Tests</div>
+            <div class="text-xs text-[var(--muted-foreground)] mt-1">Playwright Verification 100%</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div onclick="goToSlide(3)" class="p-4 rounded-2xl bg-[var(--card)] border border-[var(--border)] hover:border-indigo-500 transition-all cursor-pointer flex items-start gap-3">
+          <span class="text-2xl">🏗️</span>
+          <div>
+            <div class="font-bold text-sm">เจาะลึกสถาปัตยกรรมไฮบริด (สไลด์ 3)</div>
+            <p class="text-xs text-[var(--muted-foreground)] mt-0.5">ดูแผนผังการทำงานร่วมกันระหว่าง Supabase, Cloudflare Tunnel และ Synology NAS</p>
+          </div>
+        </div>
+        <div onclick="goToSlide(6)" class="p-4 rounded-2xl bg-[var(--card)] border border-[var(--border)] hover:border-indigo-500 transition-all cursor-pointer flex items-start gap-3">
+          <span class="text-2xl">📜</span>
+          <div>
+            <div class="font-bold text-sm">ทดลองระบบเวียนหนังสือตราครุฑ (สไลด์ 6)</div>
+            <p class="text-xs text-[var(--muted-foreground)] mt-0.5">จำลองการออกหนังสือเวียน สแกนสด และพิมพ์ใบสรุปผลการเวียนพร้อม QR Code</p>
+          </div>
+        </div>
+        <div onclick="goToSlide(7)" class="p-4 rounded-2xl bg-[var(--card)] border border-[var(--border)] hover:border-indigo-500 transition-all cursor-pointer flex items-start gap-3">
+          <span class="text-2xl">🚐</span>
+          <div>
+            <div class="font-bold text-sm">ทดลองเกจน้ำมันและผังจองรถ (สไลด์ 7)</div>
+            <p class="text-xs text-[var(--muted-foreground)] mt-0.5">คลิกสลับรถยนต์ราชการเพื่อดูเกจน้ำมันเสมือนจริงและใบขออนุญาตใช้รถเลขไทย</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 2 -->
+    <section class="slide-section slide-fade hidden space-y-6" data-slide="2" data-title="2. การยกระดับการทำงานราชการ (Before vs After)">
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-3xl p-6 sm:p-8 shadow-sm">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+          <div>
+            <span class="text-xs font-bold uppercase tracking-wider text-indigo-600">Digital Transformation Impact</span>
+            <h2 class="text-xl sm:text-2xl font-extrabold mt-0.5">เปรียบเทียบรูปแบบการปฏิบัติงาน: ก่อนและหลังใช้ Smart MSO</h2>
+          </div>
+          <div class="flex items-center gap-1.5 bg-[var(--background)] p-1 rounded-xl border border-[var(--border)]">
+            <button type="button" onclick="filterComparison('all')" id="cmp-all" class="px-3 py-1 rounded-lg text-xs font-bold bg-indigo-600 text-white cursor-pointer">แสดงเปรียบเทียบคู่กัน</button>
+            <button type="button" onclick="filterComparison('problem')" id="cmp-prob" class="px-3 py-1 rounded-lg text-xs font-bold text-[var(--muted-foreground)] cursor-pointer">เฉพาะปัญหาเดิม</button>
+            <button type="button" onclick="filterComparison('solution')" id="cmp-sol" class="px-3 py-1 rounded-lg text-xs font-bold text-[var(--muted-foreground)] cursor-pointer">เฉพาะโซลูชัน Smart MSO</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <div id="col-before" class="p-5 rounded-2xl border border-rose-500/30 bg-rose-500/5 space-y-3">
+            <div class="flex items-center justify-between border-b border-rose-500/20 pb-2.5">
+              <span class="font-bold text-sm text-rose-600 flex items-center gap-2">⚠️ รูปแบบการทำงานแบบเดิม (Pain Points)</span>
+              <span class="text-xs px-2 py-0.5 rounded bg-rose-500/15 text-rose-600 font-semibold">แยกส่วน / ล่าช้า</span>
+            </div>
+            <div class="space-y-2.5 text-xs sm:text-sm">
+              <div class="p-3 rounded-xl bg-[var(--card)] border border-[var(--border)]">
+                <div class="font-bold">1. งานเวียนหนังสือราชการด้วยแฟ้มกระดาษ</div>
+                <p class="text-xs text-[var(--muted-foreground)] mt-1">ต้องเดินแฟ้มเสนอเซ็นตามโต๊ะ ติดตามไม่ได้ว่าใครรับทราบแล้วบ้าง และค้นหาหนังสือย้อนหลังยาก</p>
+              </div>
+              <div class="p-3 rounded-xl bg-[var(--card)] border border-[var(--border)]">
+                <div class="font-bold">2. ไฟล์งานและภาพถ่ายกระจายในแชทส่วนตัว</div>
+                <p class="text-xs text-[var(--muted-foreground)] mt-1">ไฟล์หมดอายุใน LINE ค้นหาภาพกิจกรรมตามปีงบประมาณไม่ได้ และเสี่ยงต่อการรั่วไหลของข้อมูลราชการ</p>
+              </div>
+              <div class="p-3 rounded-xl bg-[var(--card)] border border-[var(--border)]">
+                <div class="font-bold">3. การจองรถยนต์และห้องประชุมซ้ำซ้อน</div>
+                <p class="text-xs text-[var(--muted-foreground)] mt-1">ไม่เห็นคิวรถว่างแบบเรียลไทม์ ไม่ทราบระดับน้ำมันคงเหลือหรือเลขไมล์ล่าสุดของรถแต่ละคัน</p>
+              </div>
+              <div class="p-3 rounded-xl bg-[var(--card)] border border-[var(--border)]">
+                <div class="font-bold">4. ข้อมูลสถิติกลุ่มเปราะบางอยู่คนละไฟล์ Excel</div>
+                <p class="text-xs text-[var(--muted-foreground)] mt-1">เมื่อผู้บริหารต้องเข้าประชุม กบจ. ต้องใช้เวลารวบรวมและจัดหน้าเอกสารรายงานใหม่ทุกครั้ง</p>
+              </div>
+            </div>
+          </div>
+
+          <div id="col-after" class="p-5 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 space-y-3">
+            <div class="flex items-center justify-between border-b border-emerald-500/20 pb-2.5">
+              <span class="font-bold text-sm text-emerald-600 flex items-center gap-2">✅ ยกระดับด้วย Smart MSO Virtual Office</span>
+              <span class="text-xs px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-600 font-semibold">รวมศูนย์ / เรียลไทม์</span>
+            </div>
+            <div class="space-y-2.5 text-xs sm:text-sm">
+              <div class="p-3 rounded-xl bg-[var(--card)] border border-[var(--border)]">
+                <div class="font-bold text-emerald-600">1. เวียนหนังสืออิเล็กทรอนิกส์ + ใบสรุปผลตราครุฑ</div>
+                <p class="text-xs text-[var(--muted-foreground)] mt-1">แจ้งเตือนทันทีเมื่อมีหนังสือด่วนที่สุด กดรับทราบพร้อมบันทึกความเห็น และพิมพ์ใบสรุปผลพร้อม QR Code รับรอง</p>
+              </div>
+              <div class="p-3 rounded-xl bg-[var(--card)] border border-[var(--border)]">
+                <div class="font-bold text-emerald-600">2. ซิงก์ไฟล์และคลังภาพเข้า Synology NAS อัตโนมัติ</div>
+                <p class="text-xs text-[var(--muted-foreground)] mt-1">ทุกไฟล์แนบในแชทและหนังสือเวียนถูกจัดเก็บลง NAS ของสำนักงาน คัดกรองตามปีงบประมาณ (2567–2570) ได้ทันที</p>
+              </div>
+              <div class="p-3 rounded-xl bg-[var(--card)] border border-[var(--border)]">
+                <div class="font-bold text-emerald-600">3. ผังเวลา Gantt Timeline &amp; เกจวัดน้ำมันเสมือนจริง</div>
+                <p class="text-xs text-[var(--muted-foreground)] mt-1">ระบบป้องกันการจองรถ/ห้องประชุมทับซ้อนอัตโนมัติ แสดงเกจน้ำมัน เลขไมล์ และพิมพ์ใบขอใช้รถเลขไทยครบวงจร</p>
+              </div>
+              <div class="p-3 rounded-xl bg-[var(--card)] border border-[var(--border)]">
+                <div class="font-bold text-emerald-600">4. Smart Social Data Hub 11 อำเภอ พร้อมพิมพ์รายงาน กบจ.</div>
+                <p class="text-xs text-[var(--muted-foreground)] mt-1">วิเคราะห์ความยากจน 5 มิติ TPMAP รายอำเภอ ส่งออก CSV สำหรับ Excel และสั่งพิมพ์รายงานราชการตราครุฑใน 1 คลิก</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-6 pt-5 border-t border-[var(--border)] grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+          <div class="p-3 rounded-xl bg-[var(--background)] border border-[var(--border)]">
+            <div class="text-xl font-extrabold text-indigo-600">-96%</div>
+            <div class="text-xs text-[var(--muted-foreground)]">ลดขนาดข้อมูลซ้ำซ้อนใน DB (จาก 8.2MB เหลือ 320KB)</div>
+          </div>
+          <div class="p-3 rounded-xl bg-[var(--background)] border border-[var(--border)]">
+            <div class="text-xl font-extrabold text-emerald-600">&lt; 700 ms</div>
+            <div class="text-xs text-[var(--muted-foreground)]">ความเร็วในการโหลดข้อความและซิงก์ Realtime</div>
+          </div>
+          <div class="p-3 rounded-xl bg-[var(--background)] border border-[var(--border)]">
+            <div class="text-xl font-extrabold text-amber-600">3-Tier Cache</div>
+            <div class="text-xs text-[var(--muted-foreground)]">ระบบสำรองข้อมูลออฟไลน์ไร้ปัญหา Quota เต็ม</div>
+          </div>
+          <div class="p-3 rounded-xl bg-[var(--background)] border border-[var(--border)]">
+            <div class="text-xl font-extrabold text-sky-600">100%</div>
+            <div class="text-xs text-[var(--muted-foreground)]">ความถูกต้องตามระเบียบงานสารบรรณ พ.ศ. 2564</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 3 -->
+    <section class="slide-section slide-fade hidden space-y-6" data-slide="3" data-title="3. สถาปัตยกรรมไฮบริดและความมั่นคงปลอดภัย (Hybrid Architecture)">
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-3xl p-6 sm:p-8 shadow-sm">
+        <span class="text-xs font-bold uppercase tracking-wider text-indigo-600">Enterprise System Architecture</span>
+        <h2 class="text-xl sm:text-2xl font-extrabold mt-0.5">สถาปัตยกรรมไฮบริด (Hybrid Cloud + On-Premises Synology NAS)</h2>
+        <p class="text-xs sm:text-sm text-[var(--muted-foreground)] mt-1">
+          คลิกที่แต่ละองค์ประกอบในแผนผังด้านล่าง เพื่อดูรายละเอียดการทำงานเชิงเทคนิคและกลไกป้องกันระบบล่ม (Resilience)
+        </p>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mt-6">
+          <button type="button" onclick="selectArchNode('client')" id="arch-btn-client" class="text-left p-4 rounded-2xl border-2 border-indigo-600 bg-indigo-500/10 transition-all cursor-pointer">
+            <div class="flex items-center justify-between">
+              <span class="text-2xl">💻</span>
+              <span class="text-xs font-mono px-2 py-0.5 rounded bg-indigo-600 text-white">Layer 1</span>
+            </div>
+            <div class="font-bold text-sm mt-2">Client &amp; PWA Shell</div>
+            <div class="text-xs text-[var(--muted-foreground)] mt-0.5">Next.js 16 + React 19 + Modular Context</div>
+          </button>
+
+          <button type="button" onclick="selectArchNode('supabase')" id="arch-btn-supabase" class="text-left p-4 rounded-2xl border border-[var(--border)] bg-[var(--background)] hover:border-indigo-500 transition-all cursor-pointer">
+            <div class="flex items-center justify-between">
+              <span class="text-2xl">⚡</span>
+              <span class="text-xs font-mono px-2 py-0.5 rounded border border-[var(--border)]">Layer 2</span>
+            </div>
+            <div class="font-bold text-sm mt-2">Supabase Realtime DB</div>
+            <div class="text-xs text-[var(--muted-foreground)] mt-0.5">PostgreSQL + WebSocket Broadcast</div>
+          </button>
+
+          <button type="button" onclick="selectArchNode('tunnel')" id="arch-btn-tunnel" class="text-left p-4 rounded-2xl border border-[var(--border)] bg-[var(--background)] hover:border-indigo-500 transition-all cursor-pointer">
+            <div class="flex items-center justify-between">
+              <span class="text-2xl">🛡️</span>
+              <span class="text-xs font-mono px-2 py-0.5 rounded border border-[var(--border)]">Layer 3</span>
+            </div>
+            <div class="font-bold text-sm mt-2">Cloudflare &amp; LAN Failover</div>
+            <div class="text-xs text-[var(--muted-foreground)] mt-0.5">Zero-Trust Tunnel + Auto LAN Switch</div>
+          </button>
+
+          <button type="button" onclick="selectArchNode('nas')" id="arch-btn-nas" class="text-left p-4 rounded-2xl border border-[var(--border)] bg-[var(--background)] hover:border-indigo-500 transition-all cursor-pointer">
+            <div class="flex items-center justify-between">
+              <span class="text-2xl">🗄️</span>
+              <span class="text-xs font-mono px-2 py-0.5 rounded border border-[var(--border)]">Layer 4</span>
+            </div>
+            <div class="font-bold text-sm mt-2">Synology NAS (On-Prem)</div>
+            <div class="text-xs text-[var(--muted-foreground)] mt-0.5">DSM 7+ File Station &amp; Synology Photos</div>
+          </button>
+        </div>
+
+        <div id="arch-detail-box" class="mt-5 p-5 rounded-2xl bg-[var(--background)] border border-[var(--border)]">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <h3 id="arch-detail-title" class="font-bold text-base text-indigo-600">
+              💻 Layer 1: Next.js 16 App Router, Modular Context &amp; Progressive Web App (PWA)
+            </h3>
+            <span id="arch-detail-badge" class="text-xs font-mono px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-600 font-semibold">
+              สถานะ: พร้อมใช้งาน 100%
+            </span>
+          </div>
+          <p id="arch-detail-desc" class="text-xs sm:text-sm text-[var(--muted-foreground)] mt-2 leading-relaxed">
+            แยกโครงสร้าง State ออกเป็น UIContext และ AppContext เพื่อลดการ Re-render ที่ไม่จำเป็น รองรับการติดตั้งเป็นแอปพลิเคชันบนหน้าจอมือถือและแท็บเล็ต (PWA Service Worker) พร้อมระบบแคชข้อมูลอัจฉริยะ 3 ระดับ (3-Tier Safe Storage) ที่ช่วยให้เปิดอ่านข้อมูลได้แม้ขณะอินเทอร์เน็ตขัดข้อง
+          </p>
+          <div id="arch-detail-bullets" class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 text-xs">
+            <div class="p-3 rounded-xl bg-[var(--card)] border border-[var(--border)]">
+              <strong>• แถบเมนูย่อ/ขยายอัจฉริยะ:</strong> แบ่ง 4 กลุ่มงานราชการ ย่อเป็น Mini Sidebar (Icon-Only) เพื่อเพิ่มพื้นที่ทำงาน
+            </div>
+            <div class="p-3 rounded-xl bg-[var(--card)] border border-[var(--border)]">
+              <strong>• มาตรฐานตัวเลขคู่:</strong> หน้าจอ UI ปกติแสดงเลขอารบิกสากล (0-9) ส่วนหน้ากระดาษหนังสือราชการแสดงเลขไทย (๐-๙)
+            </div>
+            <div class="p-3 rounded-xl bg-[var(--card)] border border-[var(--border)]">
+              <strong>• รองรับ Dark / Light Theme:</strong> ปรับโทนสีสบายตาสำหรับการปฏิบัติงานตลอดทั้งวันและรองรับหน้าจอมือถือสมบูรณ์
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 4 -->
+    <section class="slide-section slide-fade hidden space-y-6" data-slide="4" data-title="4. โครงสร้าง 4 กลุ่มภารกิจ 11 โมดูลงานราชการ">
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-3xl p-6 sm:p-8 shadow-sm">
+        <span class="text-xs font-bold uppercase tracking-wider text-indigo-600">Grouped Navigation &amp; Module Ecosystem</span>
+        <h2 class="text-xl sm:text-2xl font-extrabold mt-0.5">สำรวจ 11 โมดูลงานราชการ ตามโครงสร้าง 4 กลุ่มเมนูหลัก</h2>
+        <p class="text-xs sm:text-sm text-[var(--muted-foreground)] mt-1">
+          คลิกเลือกกลุ่มเมนูด้านซ้าย เพื่อดูหน้าที่และจุดเด่นของแต่ละโมดูลในระบบ Smart MSO
+        </p>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 mt-5">
+          <div class="lg:col-span-4 space-y-2">
+            <button type="button" onclick="selectModuleGroup('overview')" id="grp-btn-overview" class="w-full text-left p-3.5 rounded-2xl border-2 border-indigo-600 bg-indigo-500/10 transition-all cursor-pointer flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <span class="text-xl">🏢</span>
+                <div>
+                  <div class="font-bold text-sm">1. ภาพรวมสำนักงาน</div>
+                  <div class="text-xs text-[var(--muted-foreground)]">Dashboard, Data Hub &amp; Reports (3 โมดูล)</div>
+                </div>
+              </div>
+              <span class="text-xs font-bold">▸</span>
+            </button>
+
+            <button type="button" onclick="selectModuleGroup('collab')" id="grp-btn-collab" class="w-full text-left p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--background)] hover:border-indigo-500 transition-all cursor-pointer flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <span class="text-xl">💬</span>
+                <div>
+                  <div class="font-bold text-sm">2. การประสานงาน &amp; สื่อสาร</div>
+                  <div class="text-xs text-[var(--muted-foreground)]">แชททีม, กระดานงาน, การประชุม (3 โมดูล)</div>
+                </div>
+              </div>
+              <span class="text-xs font-bold">▸</span>
+            </button>
+
+            <button type="button" onclick="selectModuleGroup('ops')" id="grp-btn-ops" class="w-full text-left p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--background)] hover:border-indigo-500 transition-all cursor-pointer flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <span class="text-xl">🏛️</span>
+                <div>
+                  <div class="font-bold text-sm">3. สารบรรณ &amp; บริการองค์กร</div>
+                  <div class="text-xs text-[var(--muted-foreground)]">หนังสือเวียน, รถราชการ, NAS DMS/Photos (4 โมดูล)</div>
+                </div>
+              </div>
+              <span class="text-xs font-bold">▸</span>
+            </button>
+
+            <button type="button" onclick="selectModuleGroup('admin')" id="grp-btn-admin" class="w-full text-left p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--background)] hover:border-indigo-500 transition-all cursor-pointer flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <span class="text-xl">⚙️</span>
+                <div>
+                  <div class="font-bold text-sm">4. ระบบและการตั้งค่า</div>
+                  <div class="text-xs text-[var(--muted-foreground)]">จัดการสิทธิ์ RBAC &amp; ข้อมูลส่วนตัว (2 โมดูล)</div>
+                </div>
+              </div>
+              <span class="text-xs font-bold">▸</span>
+            </button>
+          </div>
+
+          <div class="lg:col-span-8 p-5 rounded-2xl bg-[var(--background)] border border-[var(--border)]">
+            <div id="module-group-content" class="space-y-3"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 5 -->
+    <section class="slide-section slide-fade hidden space-y-6" data-slide="5" data-title="5. ศูนย์ข้อมูลและสถิติสังคม พม. (Data Hub 11 อำเภอ)">
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-3xl p-6 sm:p-8 shadow-sm">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div>
+            <span class="text-xs font-bold uppercase tracking-wider text-indigo-600">Smart Social Data Hub (/data-hub)</span>
+            <h2 class="text-xl sm:text-2xl font-extrabold mt-0.5">ศูนย์ข้อมูลและสถิติสังคม 11 อำเภอ &amp; รายงานทางการเสนอ กบจ.</h2>
+          </div>
+          <div class="flex items-center gap-1.5 bg-[var(--background)] p-1 rounded-xl border border-[var(--border)]">
+            <button type="button" id="dh-btn-ui" onclick="toggleDataHubMock('ui')" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white cursor-pointer">
+              📊 มุมมองแดชบอร์ด UI (เลขอารบิก 0-9)
+            </button>
+            <button type="button" id="dh-btn-doc" onclick="toggleDataHubMock('doc')" class="px-3 py-1.5 rounded-lg text-xs font-bold text-[var(--muted-foreground)] cursor-pointer">
+              🖨️ แผ่นรายงาน กบจ. ตราครุฑ (เลขไทย ๐-๙)
+            </button>
+          </div>
+        </div>
+
+        <div id="dh-view-ui" class="p-5 rounded-2xl bg-[var(--background)] border border-[var(--border)] space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-[var(--border)]">
+            <div class="flex items-center gap-2">
+              <span class="px-3 py-1 rounded-lg bg-indigo-600 text-white text-xs font-bold">📊 สถานการณ์กลุ่มเปราะบาง 11 อำเภอ</span>
+              <span class="px-3 py-1 rounded-lg border border-[var(--border)] text-xs font-semibold">🏛️ ระบบงาน 4 กลุ่มภารกิจ พมจ.</span>
+              <span class="px-3 py-1 rounded-lg border border-[var(--border)] text-xs font-semibold">👥 ทำเนียบบุคลากร</span>
+            </div>
+            <span class="text-xs text-emerald-600 font-bold">✓ แสดงผลด้วยเลขอารบิกสากล (0-9) อ่านง่ายบนหน้าจอ</span>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            <div class="p-3.5 rounded-xl bg-[var(--card)] border border-[var(--border)]">
+              <div class="text-xs text-[var(--muted-foreground)]">ครัวเรือนเปราะบาง</div>
+              <div class="text-xl font-extrabold mt-1">12,480</div>
+              <div class="text-xs text-[var(--muted-foreground)] mt-0.5">เป้าหมาย TPMAP 11 อำเภอ</div>
+            </div>
+            <div class="p-3.5 rounded-xl bg-[var(--card)] border border-[var(--border)]">
+              <div class="text-xs text-emerald-600 font-bold">ช่วยเหลือและพัฒนาแล้ว</div>
+              <div class="text-xl font-extrabold text-emerald-600 mt-1">10,925</div>
+              <div class="text-xs text-emerald-600 mt-0.5">✓ สำเร็จ 87.5% ของเป้าหมาย</div>
+            </div>
+            <div class="p-3.5 rounded-xl bg-[var(--card)] border border-[var(--border)]">
+              <div class="text-xs text-sky-600 font-bold">คนพิการมีบัตร</div>
+              <div class="text-xl font-extrabold text-sky-600 mt-1">24,310</div>
+              <div class="text-xs text-[var(--muted-foreground)] mt-0.5">เชื่อมโยงสิทธิสวัสดิการครบ</div>
+            </div>
+            <div class="p-3.5 rounded-xl bg-[var(--card)] border border-[var(--border)]">
+              <div class="text-xs text-amber-600 font-bold">เงินอุดหนุนเด็กแรกเกิด</div>
+              <div class="text-xl font-extrabold text-amber-600 mt-1">8,640</div>
+              <div class="text-xs text-amber-600 mt-0.5">ได้รับ 600 บาท/เดือน ต่อเนื่อง</div>
+            </div>
+            <div class="p-3.5 rounded-xl bg-[var(--card)] border border-[var(--border)] col-span-2 sm:col-span-1">
+              <div class="text-xs text-rose-600 font-bold">เคสฉุกเฉิน ศรส. 1300</div>
+              <div class="text-xl font-extrabold text-rose-600 mt-1">412</div>
+              <div class="text-xs text-rose-600 mt-0.5">ลงพื้นที่คุ้มครองเร่งด่วน</div>
+            </div>
+          </div>
+
+          <div class="p-4 rounded-xl bg-[var(--card)] border border-[var(--border)]">
+            <div class="font-bold text-xs sm:text-sm mb-2">🎯 การจำแนกสภาพปัญหา 5 มิติความยากจน (TPMAP Poverty Dimensions)</div>
+            <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+              <div class="p-2.5 rounded-lg border border-[var(--border)]">🩺 <strong>มิติสุขภาพ:</strong> 2,840 ครัวเรือน</div>
+              <div class="p-2.5 rounded-lg border border-[var(--border)]">🏠 <strong>มิติความเป็นอยู่:</strong> 2,190 ครัวเรือน</div>
+              <div class="p-2.5 rounded-lg border border-[var(--border)]">📚 <strong>มิติการศึกษา:</strong> 1,420 ครัวเรือน</div>
+              <div class="p-2.5 rounded-lg border border-[var(--border)]">💰 <strong>มิติรายได้ (&lt; 40,000 บ./ปี):</strong> 4,510 ครัวเรือน</div>
+              <div class="p-2.5 rounded-lg border border-[var(--border)]">🏛️ <strong>เข้าถึงบริการรัฐ:</strong> 1,520 ครัวเรือน</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="dh-view-doc" class="hidden p-6 rounded-2xl bg-white text-black border-2 border-slate-300 shadow-inner space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-200 pb-2 text-xs text-indigo-700 font-bold">
+            <span>📜 ตัวอย่างแผ่นเอกสารรายงานราชการ (แปลงเป็นเลขไทย ๐-๙ อัตโนมัติทั้งแผ่น)</span>
+            <span>ระเบียบสำนักนายกรัฐมนตรีว่าด้วยงานสารบรรณ พ.ศ. ๒๕๖๔</span>
+          </div>
+          <div class="text-center space-y-1">
+            <div class="text-2xl">🦅</div>
+            <div class="font-bold text-base">รายงานสรุปสถานการณ์ทางสังคมและผลการดำเนินงานช่วยเหลือกลุ่มเปราะบาง</div>
+            <div class="text-xs">สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร · ข้อมูลรวม ๑๑ อำเภอ ประจำปีงบประมาณ พ.ศ. ๒๕๖๙</div>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center text-xs pt-2">
+            <div class="p-3 rounded-lg border border-slate-300">
+              <div>ครัวเรือนเปราะบางทั้งสิ้น</div>
+              <div class="text-base font-bold mt-0.5">๑๒,๔๘๐ ครัวเรือน</div>
+            </div>
+            <div class="p-3 rounded-lg border border-slate-300">
+              <div>ดำเนินการช่วยเหลือแล้ว</div>
+              <div class="text-base font-bold mt-0.5">๑๐,๙๒๕ ครัวเรือน (๘๗.๕%)</div>
+            </div>
+            <div class="p-3 rounded-lg border border-slate-300">
+              <div>เด็กแรกเกิดรับเงินอุดหนุน</div>
+              <div class="text-base font-bold mt-0.5">๘,๖๔๐ ราย (๖๐๐ บ./ด.)</div>
+            </div>
+            <div class="p-3 rounded-lg border border-slate-300">
+              <div>ผู้มีรายได้ต่ำกว่า ๔๐,๐๐๐ บ./ปี</div>
+              <div class="text-base font-bold mt-0.5">๔,๕๑๐ ครัวเรือน</div>
+            </div>
+          </div>
+          <div class="text-right text-xs pt-3 pr-4">
+            <div>ลงชื่อ ....................................................... ผู้รับรองข้อมูล</div>
+            <div class="mt-0.5">( นางสาวมะลิวัน สิทธิโยธี )</div>
+            <div>พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 6 -->
+    <section class="slide-section slide-fade hidden space-y-6" data-slide="6" data-title="6. ระบบเวียนหนังสือราชการอิเล็กทรอนิกส์ (e-Saraban)">
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-3xl p-6 sm:p-8 shadow-sm">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div>
+            <span class="text-xs font-bold uppercase tracking-wider text-indigo-600">Electronic Circular Documents (/circular)</span>
+            <h2 class="text-xl sm:text-2xl font-extrabold mt-0.5">ระบบรับ-ส่งเวียนหนังสือราชการ ลงนามรับทราบ และใบสรุปผลการเวียนตราครุฑ</h2>
+          </div>
+          <div class="flex items-center gap-1.5 bg-[var(--background)] p-1 rounded-xl border border-[var(--border)]">
+            <button type="button" id="circ-btn-form" onclick="toggleCircularMock('form')" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white cursor-pointer">
+              📥 1. นำเข้าและกำหนดผู้รับเวียน
+            </button>
+            <button type="button" id="circ-btn-slip" onclick="toggleCircularMock('slip')" class="px-3 py-1.5 rounded-lg text-xs font-bold text-[var(--muted-foreground)] cursor-pointer">
+              🖨️ 2. ใบสรุปผลการเวียนตราครุฑ + QR
+            </button>
+          </div>
+        </div>
+
+        <div id="circ-view-form" class="p-5 rounded-2xl bg-[var(--background)] border border-[var(--border)] space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div class="p-4 rounded-xl bg-[var(--card)] border border-[var(--border)]">
+              <div class="text-xs font-bold text-indigo-600">1. ข้อมูลหนังสือเวียนที่นำมาเวียน</div>
+              <div class="mt-2 space-y-1.5 text-xs">
+                <div class="p-2 rounded bg-[var(--background)] border border-[var(--border)] font-mono">
+                  เลขที่หนังสือ: <strong>กพ ๐๐๓๒/ว ๒๕๖๙</strong>
+                </div>
+                <div class="p-2 rounded bg-[var(--background)] border border-[var(--border)]">
+                  ลงวันที่: <strong>๖ พฤศจิกายน ๒๕๖๙</strong> <span class="text-emerald-600 font-bold">(เลขไทยอัตโนมัติ)</span>
+                </div>
+                <div class="p-2 rounded bg-rose-500/10 text-rose-600 font-bold">
+                  ชั้นความเร็ว: 🚨 ด่วนที่สุด (แจ้งเตือนทันที)
+                </div>
+              </div>
+            </div>
+
+            <div class="p-4 rounded-xl bg-[var(--card)] border border-[var(--border)]">
+              <div class="text-xs font-bold text-indigo-600">2. กำหนดกลุ่มเป้าหมายผู้รับหนังสือเวียน</div>
+              <div class="mt-2 space-y-1.5 text-xs">
+                <div class="p-2 rounded bg-[var(--background)] border border-[var(--border)]">
+                  ✓ เวียนทุกคนในสำนักงาน หรือเลือกเฉพาะกลุ่มงาน
+                </div>
+                <div class="p-2 rounded bg-[var(--background)] border border-[var(--border)]">
+                  ✓ คัดกรองตามประเภทบุคลากร (ข้าราชการ / พนักงานราชการ / จ้างเหมา)
+                </div>
+                <div class="p-2 rounded bg-indigo-500/10 text-indigo-600 font-bold">
+                  🔔 ส่ง Notification เข้ากระดิ่งและ Desktop Push ทันที
+                </div>
+              </div>
+            </div>
+
+            <div class="p-4 rounded-xl bg-[var(--card)] border border-[var(--border)]">
+              <div class="text-xs font-bold text-indigo-600">3. ไฟล์หนังสือราชการต้นฉบับ (ผ่าน 3 ช่องทาง)</div>
+              <div class="mt-2 space-y-1.5 text-xs">
+                <div class="p-2 rounded bg-[var(--background)] border border-[var(--border)]">
+                  📷 <strong>ช่องทางที่ 1:</strong> สแกนสดผ่านกล้อง/เว็บแคม ปรับคมชัด A4
+                </div>
+                <div class="p-2 rounded bg-[var(--background)] border border-[var(--border)]">
+                  📁 <strong>ช่องทางที่ 2:</strong> อัปโหลดหลายไฟล์ (PDF, Word, Excel, ภาพ)
+                </div>
+                <div class="p-2 rounded bg-[var(--background)] border border-[var(--border)]">
+                  ☁️ <strong>ช่องทางที่ 3:</strong> ดึงไฟล์จากคลังเอกสาร Synology NAS
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="circ-view-slip" class="hidden p-6 rounded-2xl bg-white text-black border-2 border-slate-300 space-y-4">
+          <div class="flex items-start justify-between border-b border-slate-300 pb-3">
+            <div>
+              <div class="text-2xl">🦅</div>
+              <div class="font-bold text-base mt-1">บันทึกผลการเวียนหนังสือราชการและหลักฐานการรับทราบ</div>
+              <div class="text-xs text-slate-600">เลขที่หนังสือ: กพ ๐๐๓๒/ว ๒๕๖๙ • ลงวันที่ ๖ พฤศจิกายน ๒๕๖๙</div>
+            </div>
+            <div class="p-2.5 border border-slate-300 rounded-xl text-center text-xs">
+              <div class="font-mono font-bold">[ QR CODE ]</div>
+              <div class="text-xs mt-0.5">สแกนตรวจสอบความถูกต้อง</div>
+            </div>
+          </div>
+          <table class="w-full text-xs border-collapse border border-slate-300">
+            <thead>
+              <tr class="bg-slate-100">
+                <th class="border border-slate-300 p-2 text-left">ลำดับ</th>
+                <th class="border border-slate-300 p-2 text-left">ชื่อ-นามสกุล / ตำแหน่ง</th>
+                <th class="border border-slate-300 p-2 text-left">กลุ่ม/ฝ่าย</th>
+                <th class="border border-slate-300 p-2 text-left">การรับทราบและข้อสั่งการ</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="border border-slate-300 p-2">๑</td>
+                <td class="border border-slate-300 p-2 font-bold">นายเสกพล ดิษฐโชติ (นักพัฒนาสังคมชำนาญการ)</td>
+                <td class="border border-slate-300 p-2">ฝ่ายบริหารทั่วไป</td>
+                <td class="border border-slate-300 p-2 text-emerald-700 font-bold">✓ รับทราบแล้ว (๖ พ.ย. ๒๕๖๙ เวลา ๐๙:๑๕ น.)</td>
+              </tr>
+              <tr>
+                <td class="border border-slate-300 p-2">๒</td>
+                <td class="border border-slate-300 p-2 font-bold">นางอรัญญา เกิดสุข (นักวิเคราะห์นโยบายและแผน)</td>
+                <td class="border border-slate-300 p-2">กลุ่มนโยบายและวิชาการ</td>
+                <td class="border border-slate-300 p-2 text-emerald-700 font-bold">✓ รับทราบและแจ้งเวียนเจ้าหน้าที่ในสังกัดเรียบร้อย</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 7 -->
+    <section class="slide-section slide-fade hidden space-y-6" data-slide="7" data-title="7. ระบบยานพาหนะราชการ เกจน้ำมันเสมือนจริง และผังเวลา Gantt">
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-3xl p-6 sm:p-8 shadow-sm">
+        <span class="text-xs font-bold uppercase tracking-wider text-indigo-600">Smart Fleet Management (/carbooking)</span>
+        <h2 class="text-xl sm:text-2xl font-extrabold mt-0.5">บริหารจัดการรถยนต์ราชการ เกจวัดระดับน้ำมันแอนะล็อก และผังเวลาป้องกันจองซ้อน</h2>
+        <p class="text-xs sm:text-sm text-[var(--muted-foreground)] mt-1">
+          คลิกเลือกรถยนต์ราชการด้านล่าง เพื่อทดสอบการแสดงผลเกจน้ำมัน เลขไมล์ Odometer และตัวอย่างใบขออนุญาตใช้รถราชการ (เลขไทย)
+        </p>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 mt-5">
+          <div class="lg:col-span-5 p-5 rounded-2xl bg-[var(--background)] border border-[var(--border)] space-y-4">
+            <div class="flex gap-2">
+              <button type="button" onclick="selectVehicle(0)" id="veh-btn-0" class="flex-1 p-2.5 rounded-xl border-2 border-indigo-600 bg-indigo-500/10 text-xs font-bold cursor-pointer">
+                🚐 รถตู้ นข 4512 กพ
+              </button>
+              <button type="button" onclick="selectVehicle(1)" id="veh-btn-1" class="flex-1 p-2.5 rounded-xl border border-[var(--border)] bg-[var(--card)] text-xs font-bold cursor-pointer">
+                🛻 กระบะ กค 8821 กพ
+              </button>
+            </div>
+
+            <div class="p-4 rounded-2xl bg-[var(--card)] border border-[var(--border)] space-y-3">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div id="veh-name" class="font-bold text-sm">Toyota Commuter (รถตู้ส่วนกลาง)</div>
+                  <div id="veh-plate" class="text-xs font-mono text-indigo-600 font-bold">ทะเบียน: นข 4512 กำแพงเพชร</div>
+                </div>
+                <span id="veh-status" class="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-600">พร้อมใช้งาน</span>
+              </div>
+
+              <div class="space-y-1.5 pt-1">
+                <div class="flex justify-between text-xs font-bold">
+                  <span>⛽ เกจระดับน้ำมันหน้าปัดรถยนต์:</span>
+                  <span id="veh-fuel-text" class="text-emerald-600">85% (เต็มถัง F)</span>
+                </div>
+                <div class="w-full h-3 rounded-full bg-[var(--border)] overflow-hidden">
+                  <div id="veh-fuel-bar" class="h-full bg-emerald-500 transition-all duration-500" style="width: 85%;"></div>
+                </div>
+                <div class="flex justify-between text-xs text-[var(--muted-foreground)] font-mono">
+                  <span>E (0%)</span>
+                  <span>1/2 (50%)</span>
+                  <span>F (100%)</span>
+                </div>
+              </div>
+
+              <div class="p-2.5 rounded-xl bg-[var(--background)] border border-[var(--border)] flex items-center justify-between text-xs font-mono">
+                <span>🔢 ODOMETER (เลขไมล์ล่าสุด):</span>
+                <strong id="veh-mileage" class="text-sm">142,680 กม.</strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="lg:col-span-7 p-5 rounded-2xl bg-white text-black border-2 border-slate-300 space-y-2.5 text-xs">
+            <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+              <span class="font-bold text-indigo-700">📄 ตัวอย่างใบขออนุญาตใช้รถราชการ (แบบที่ ๓ แสดงผลเลขไทย ๐-๙)</span>
+              <span class="px-2 py-0.5 rounded bg-slate-100 font-mono">รองรับพิมพ์ A4 &amp; ดาวน์โหลด .docx</span>
+            </div>
+            <div class="text-center font-bold text-base pt-1">ใบขออนุญาตใช้รถราชการ</div>
+            <div class="text-right">วันที่ ๖ เดือน พฤศจิกายน พ.ศ. ๒๕๖๙</div>
+            <div><strong>เรียน</strong> พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร</div>
+            <p class="leading-relaxed indent-6">
+              ข้าพเจ้า <strong>นายธีรเดช สมหวัง</strong> ตำแหน่ง <strong>นักพัฒนาสังคมปฏิบัติการ</strong> ขออนุญาตใช้รถยนต์ <strong id="doc-veh-name">รถตู้ส่วนกลาง</strong> หมายเลขทะเบียน <strong id="doc-veh-plate">นข ๔๕๑๒ กพ</strong> ไปราชการที่ <strong>อำเภอคลองขลุง จังหวัดกำแพงเพชร</strong> เพื่อ <strong>ลงพื้นที่เยี่ยมบ้านครอบครัวเปราะบางตามฐานข้อมูล TPMAP</strong> มีคนนั่งทั้งสิ้น <strong>๕</strong> คน ระยะทางโดยประมาณ <strong>๑๒๐</strong> กิโลเมตร ในวันที่ <strong>๖ พฤศจิกายน ๒๕๖๙</strong> เวลา <strong>๐๘:๓๐</strong> น. ถึงเวลา <strong>๑๖:๓๐</strong> น.
+            </p>
+            <div class="pt-2 border-t border-dotted border-slate-300 flex items-center justify-between text-xs text-slate-600">
+              <span>✓ ๑. ผู้ขออนุญาต</span>
+              <span>✓ ๒. หัวหน้ากลุ่มงาน</span>
+              <span>✓ ๓. หน.ฝ่ายบริหารทั่วไป</span>
+              <span class="font-bold text-emerald-700">✓ ๔. พมจ. ผู้อนุญาต</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 8 -->
+    <section class="slide-section slide-fade hidden space-y-6" data-slide="8" data-title="8. แชททีมเรียลไทม์ กระดานงาน LINE และการประชุมมาตรฐานสากล">
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-3xl p-6 sm:p-8 shadow-sm">
+        <span class="text-xs font-bold uppercase tracking-wider text-indigo-600">Realtime Collaboration Suite</span>
+        <h2 class="text-xl sm:text-2xl font-extrabold mt-0.5">การสื่อสารภายในองค์กร ติดตามภารกิจ และตารางนัดหมายมาตรฐานสากล</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-5">
+          <div class="p-5 rounded-2xl bg-[var(--background)] border border-[var(--border)] flex flex-col justify-between space-y-4">
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-2xl">💬</span>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-600">🟢 Online Presence</span>
+              </div>
+              <h3 class="font-bold text-base">แชทกลุ่มราชการแบบเรียลไทม์</h3>
+              <p class="text-xs text-[var(--muted-foreground)] leading-relaxed">
+                แยกห้องสนทนาตามกลุ่มงานจริงของ พมจ.กำแพงเพชร ส่งข้อความไวระดับ 0ms ผ่าน Supabase WebSocket พร้อมแสดงสถานะผู้ที่กำลังพิมพ์ข้อความ (Typing Indicator)
+              </p>
+            </div>
+            <div class="p-3 rounded-xl bg-[var(--card)] border border-[var(--border)] text-xs space-y-1.5">
+              <div class="font-bold text-indigo-600">จุดเด่นสำคัญ:</div>
+              <div>• แนบไฟล์หลายประเภทซิงก์ลง Synology NAS อัตโนมัติ</div>
+              <div>• ป้องกัน Base64 ขนาดใหญ่ทำฐานข้อมูลเต็ม (ลดขนาด 96%)</div>
+            </div>
+          </div>
+
+          <div class="p-5 rounded-2xl bg-[var(--background)] border border-[var(--border)] flex flex-col justify-between space-y-4">
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-2xl">📋</span>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/15 text-amber-600">LINE Integration</span>
+              </div>
+              <h3 class="font-bold text-base">กระดานติดตามงาน 8 กลุ่มภารกิจ</h3>
+              <p class="text-xs text-[var(--muted-foreground)] leading-relaxed">
+                บริหารงานทั้งรูปแบบกระดาน Kanban และตารางรายการ แยกตามภารกิจ พมจ. (เช่น กลุ่มเปราะบาง/ศรส., เงินอุดหนุนเด็ก, กองทุนคนพิการ) พร้อมแจ้งเตือนงานใกล้ครบกำหนด
+              </p>
+            </div>
+            <div class="p-3 rounded-xl bg-[var(--card)] border border-[var(--border)] text-xs space-y-1.5">
+              <div class="font-bold text-emerald-600">จุดเด่นสำคัญ:</div>
+              <div>• สร้างข้อความสั่งการราชการส่งต่อเข้ากลุ่ม LINE ในคลิกเดียว</div>
+              <div>• รองรับรายการงานย่อย (Subtasks Checklist) รายภารกิจ</div>
+            </div>
+          </div>
+
+          <div class="p-5 rounded-2xl bg-[var(--background)] border border-[var(--border)] flex flex-col justify-between space-y-4">
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-2xl">📅</span>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-sky-500/15 text-sky-600">Google Calendar &amp; .ics</span>
+              </div>
+              <h3 class="font-bold text-base">ระบบการประชุมและสารบบห้องประชุม</h3>
+              <p class="text-xs text-[var(--muted-foreground)] leading-relaxed">
+                รองรับการประชุมทั้งวันเดียวและต่อเนื่องหลายวัน (Multi-day) พร้อมระบบตรวจสอบการจองห้องประชุมซ้ำซ้อนอัตโนมัติ และแม่แบบระเบียบวาระการประชุมมาตรฐาน
+              </p>
+            </div>
+            <div class="p-3 rounded-xl bg-[var(--card)] border border-[var(--border)] text-xs space-y-1.5">
+              <div class="font-bold text-sky-600">จุดเด่นสำคัญ:</div>
+              <div>• เพิ่มนัดหมายเข้า Google Calendar และ Outlook ในคลิกเดียว</div>
+              <div>• ส่งออกไฟล์ปฏิทินมาตรฐานสากล RFC 5545 (`.ics`)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 9 -->
+    <section class="slide-section slide-fade hidden space-y-6" data-slide="9" data-title="9. คลังเอกสารและคลังภาพกิจกรรมบน Synology NAS">
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-3xl p-6 sm:p-8 shadow-sm">
+        <span class="text-xs font-bold uppercase tracking-wider text-indigo-600">On-Premises Private Cloud Storage (/files &amp; /gallery)</span>
+        <h2 class="text-xl sm:text-2xl font-extrabold mt-0.5">คลังเอกสารราชการ (NAS DMS) และคลังภาพกิจกรรม (Synology Photos)</h2>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-5">
+          <div class="p-5 rounded-2xl bg-[var(--background)] border border-[var(--border)] space-y-3">
+            <div class="flex items-center justify-between">
+              <h3 class="font-bold text-base flex items-center gap-2">📁 คลังเอกสารราชการ (Synology File Station)</h3>
+              <span class="text-xs font-mono px-2 py-0.5 rounded bg-amber-500/15 text-amber-600 font-bold">ปี 2567–2570</span>
+            </div>
+            <p class="text-xs text-[var(--muted-foreground)] leading-relaxed">
+              บริหารจัดการโฟลเดอร์และไฟล์เอกสารราชการบนเซิร์ฟเวอร์ NAS ของสำนักงานโดยตรง พร้อมชิปกรองตามประเภทไฟล์ (PDF, Excel, ภาพ, ZIP) และตัวกรองปีงบประมาณ พ.ศ.
+            </p>
+            <div class="space-y-2 text-xs pt-1">
+              <div class="p-3 rounded-xl bg-[var(--card)] border border-[var(--border)]">
+                <strong>• ทางลัดสร้างโฟลเดอร์มาตรฐาน:</strong> มีปุ่มกดตั้งชื่อโฟลเดอร์ตามปีงบประมาณ (`+ ปี 2569`) และ 8 กลุ่มภารกิจของ พมจ.กำแพงเพชร อัตโนมัติ
+              </div>
+              <div class="p-3 rounded-xl bg-[var(--card)] border border-[var(--border)]">
+                <strong>• ปุ่มเชื่อมต่อเซสชันใหม่ (One-Click Reconnect):</strong> เมื่อเซสชัน NAS หมดอายุหรือเครือข่ายสะดุด เจ้าหน้าที่สามารถกดปุ่ม <code>🔄 เชื่อมต่อใหม่</code> ได้ทันทีโดยไม่ต้องล็อกอินซ้ำ
+              </div>
+            </div>
+          </div>
+
+          <div class="p-5 rounded-2xl bg-[var(--background)] border border-[var(--border)] space-y-3">
+            <div class="flex items-center justify-between">
+              <h3 class="font-bold text-base flex items-center gap-2">🖼️ คลังภาพและสื่อราชการ (Synology Photos)</h3>
+              <span class="text-xs font-mono px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-600 font-bold">DSM 7+ API</span>
+            </div>
+            <p class="text-xs text-[var(--muted-foreground)] leading-relaxed">
+              จัดเก็บภาพถ่ายการลงพื้นที่ช่วยเหลือประชาชนทั้ง 11 อำเภอ แยกตามพื้นที่ส่วนกลาง (Shared Space) และพื้นที่ส่วนตัว พร้อมระบบสร้างโฟลเดอร์อัตโนมัติก่อนอัปโหลด
+            </p>
+            <div class="space-y-2 text-xs pt-1">
+              <div class="p-3 rounded-xl bg-[var(--card)] border border-[var(--border)]">
+                <strong>• จัดการสิทธิ์ตามบัญชี NAS จริง:</strong> ควบคุมการสร้างอัลบั้ม อัปโหลด ดาวน์โหลด และลบภาพตามสิทธิ์ของผู้ใช้บน Synology DSM
+              </div>
+              <div class="p-3 rounded-xl bg-[var(--card)] border border-[var(--border)]">
+                <strong>• เปลี่ยนรหัสผ่าน NAS ด้วยตนเอง:</strong> บุคลากรสามารถเปลี่ยนรหัสผ่าน Synology DSM ผ่านหน้าโปรไฟล์ในเว็บแอปได้โดยตรง พร้อมตัวตรวจสอบความปลอดภัยรหัสผ่าน (ยาวอย่างน้อย 6 ตัวอักษร)
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 10 -->
+    <section class="slide-section slide-fade hidden space-y-6" data-slide="10" data-title="10. ความปลอดภัย RBAC และการรับรองคุณภาพ (QA Summary)">
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-3xl p-6 sm:p-8 shadow-sm">
+        <span class="text-xs font-bold uppercase tracking-wider text-indigo-600">Governance, Security &amp; Verification</span>
+        <h2 class="text-xl sm:text-2xl font-extrabold mt-0.5">การควบคุมสิทธิ์ตามลำดับชั้นราชการ (RBAC) และการรับรองความพร้อมใช้งาน</h2>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-5">
+          <div class="p-4 rounded-2xl bg-[var(--background)] border border-[var(--border)]">
+            <span class="px-2 py-0.5 rounded text-xs font-bold bg-rose-500/15 text-rose-600">Tier 1: Admin</span>
+            <div class="font-bold text-sm mt-2">ผู้บริหารระดับสูง / พมจ.</div>
+            <p class="text-xs text-[var(--muted-foreground)] mt-1">
+              อนุมัติคำขอใช้รถยนต์ขั้นสุดท้าย, กำหนดตารางสิทธิ์ RBAC Matrix, จัดการบุคลากร และดูประวัติ Audit Log ทั้งระบบ
+            </p>
+          </div>
+          <div class="p-4 rounded-2xl bg-[var(--background)] border border-[var(--border)]">
+            <span class="px-2 py-0.5 rounded text-xs font-bold bg-amber-500/15 text-amber-600">Tier 2: Manager</span>
+            <div class="font-bold text-sm mt-2">หัวหน้ากลุ่มงาน / ฝ่ายบริหาร</div>
+            <p class="text-xs text-[var(--muted-foreground)] mt-1">
+              กลั่นกรองคำขอใช้รถของกลุ่มงาน, จัดสรรรถยนต์และพนักงานขับรถ, ออกหนังสือเวียน และบริหารภารกิจกลุ่มงาน
+            </p>
+          </div>
+          <div class="p-4 rounded-2xl bg-[var(--background)] border border-[var(--border)]">
+            <span class="px-2 py-0.5 rounded text-xs font-bold bg-emerald-500/15 text-emerald-600">Tier 3: Member</span>
+            <div class="font-bold text-sm mt-2">ข้าราชการและเจ้าหน้าที่</div>
+            <p class="text-xs text-[var(--muted-foreground)] mt-1">
+              ปฏิบัติงานประจำวัน แชทกลุ่มงาน ลงนามรับทราบหนังสือเวียน ยื่นคำขอใช้รถ และอัปโหลดเอกสาร/ภาพถ่ายลง NAS
+            </p>
+          </div>
+          <div class="p-4 rounded-2xl bg-[var(--background)] border border-[var(--border)]">
+            <span class="px-2 py-0.5 rounded text-xs font-bold bg-slate-500/15 text-[var(--muted-foreground)]">Tier 4: Guest</span>
+            <div class="font-bold text-sm mt-2">ผู้เยี่ยมชม / รออนุมัติสิทธิ์</div>
+            <p class="text-xs text-[var(--muted-foreground)] mt-1">
+              เข้าดูข้อมูลภาพรวมที่ได้รับอนุญาต และยื่นคำขอสิทธิ์เข้าใช้งานระบบเพื่อรอผู้ดูแลระบบอนุมัติ
+            </p>
+          </div>
+        </div>
+
+        <div class="mt-6 p-5 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex flex-wrap items-center justify-between gap-4">
+          <div class="space-y-1">
+            <div class="font-extrabold text-base text-indigo-600">✅ ระบบผ่านการตรวจสอบคุณภาพระดับ Production-Ready ครบทุกมิติ</div>
+            <p class="text-xs text-[var(--muted-foreground)]">
+              ผ่านการตรวจสอบ TypeScript Strict Mode (0 Errors) • Next.js 16 Production Build • Playwright E2E Automated Testing ครบทุกโมดูล
+            </p>
+          </div>
+          <button
+            type="button"
+            onclick="goToSlide(1)"
+            class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold cursor-pointer shadow-xs"
+          >
+            ↺ กลับสู่สไลด์แรก
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <footer class="no-print mt-6 pt-4 border-t border-[var(--border)] flex flex-wrap items-center justify-between gap-3 text-xs text-[var(--muted-foreground)]">
+      <div>สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร (Smart MSO Virtual Office)</div>
+      <div id="pagination-dots" class="flex items-center gap-1.5"></div>
+      <div>กดปุ่ม <kbd class="px-1.5 py-0.5 rounded border border-[var(--border)] font-mono">←</kbd> <kbd class="px-1.5 py-0.5 rounded border border-[var(--border)] font-mono">→</kbd> เพื่อเลื่อนสไลด์</div>
+    </footer>
+  </main>
+
+  <script>
+    const totalSlides = 10;
+    let currentSlide = 1;
+    let audienceMode = "executive";
+
+    const slideTitles = [
+      "1. วิสัยทัศน์และภาพรวมระบบ Smart MSO",
+      "2. การยกระดับการทำงานราชการ (Before vs After)",
+      "3. สถาปัตยกรรมไฮบริดและความมั่นคงปลอดภัย",
+      "4. โครงสร้าง 4 กลุ่มภารกิจ 11 โมดูลงานราชการ",
+      "5. ศูนย์ข้อมูลและสถิติสังคม พม. (Data Hub 11 อำเภอ)",
+      "6. ระบบเวียนหนังสือราชการอิเล็กทรอนิกส์ (e-Saraban)",
+      "7. ระบบยานพาหนะราชการ เกจน้ำมัน และผังเวลา Gantt",
+      "8. แชททีมเรียลไทม์ กระดานงาน LINE และการประชุม",
+      "9. คลังเอกสารและคลังภาพกิจกรรมบน Synology NAS",
+      "10. ความปลอดภัย RBAC และการรับรองคุณภาพ"
+    ];
+
+    const archData = {
+      client: {
+        title: "💻 Layer 1: Next.js 16 App Router, Modular Context & Progressive Web App (PWA)",
+        badge: "Frontend & UX Layer",
+        desc: "แยกโครงสร้าง State ออกเป็น UIContext และ AppContext เพื่อความลื่นไหลสูงสุด รองรับการติดตั้งเป็นแอปพลิเคชันบนมือถือ/แท็บเล็ต (PWA) พร้อมระบบแคชข้อมูลอัจฉริยะ 3 ระดับ (3-Tier Safe Storage) ที่ป้องกันปัญหาหน่วยความจำเบราว์เซอร์เต็มได้อย่างสมบูรณ์",
+        bullets: [
+          "<strong>• แถบเมนูย่อ/ขยายอัจฉริยะ:</strong> แบ่ง 4 กลุ่มงานราชการ ย่อเป็น Mini Sidebar (Icon-Only) เพื่อเพิ่มพื้นที่ทำงาน",
+          "<strong>• มาตรฐานตัวเลขคู่:</strong> หน้าจอ UI ปกติแสดงเลขอารบิกสากล (0-9) ส่วนหน้ากระดาษหนังสือราชการแสดงเลขไทย (๐-๙)",
+          "<strong>• ศูนย์แจ้งเตือนรวมศูนย์:</strong> กระดิ่งแจ้งเตือนอัจฉริยะพร้อมตัวเลขแยกหมวดและระบบคลิกเปิดหน้าปลายทางทันที (Deeplinking)"
+        ]
+      },
+      supabase: {
+        title: "⚡ Layer 2: Supabase Realtime PostgreSQL & Ephemeral WebSocket Broadcast",
+        badge: "Realtime Cloud Layer",
+        desc: "ฐานข้อมูล PostgreSQL ที่เปิดใช้งาน Realtime Publication และตั้งค่า REPLICA IDENTITY FULL สำหรับตารางข้อความและหนังสือเวียน ส่งเฉพาะข้อมูลที่เปลี่ยนแปลงเข้าสู่หน้าจอเจ้าหน้าที่ทันทีในระดับมิลลิวินาทีโดยไม่ต้องโหลดหน้าเว็บใหม่",
+        bullets: [
+          "<strong>• Zero-Latency Chat:</strong> รับ-ส่งข้อความและอัปเดตสถานะกำลังพิมพ์ (Typing Indicator) ผ่าน WebSocket Broadcast",
+          "<strong>• Online Presence:</strong> แสดงจุดเขียวสถานะออนไลน์ของข้าราชการและเจ้าหน้าที่ในแต่ละกลุ่มงานแบบเรียลไทม์",
+          "<strong>• Database Sanitization:</strong> กรอง Base64 ขนาดใหญ่ออกจากตารางข้อความ ลดขนาดข้อมูลลงกว่า 96%"
+        ]
+      },
+      tunnel: {
+        title: "🛡️ Layer 3: Cloudflare Zero-Trust Tunnel & Automatic LAN Failover",
+        badge: "Network Resilience Layer",
+        desc: "เชื่อมต่อเซิร์ฟเวอร์ภายในสำนักงานออกสู่อินเทอร์เน็ตอย่างปลอดภัยผ่าน Cloudflare Tunnel (HTTPS) พร้อมกลไกตรวจสอบสุขภาพการเชื่อมต่อและสลับไปใช้เครือข่าย LAN ภายในศาลากลางอัตโนมัติเมื่อเครือข่ายภายนอกขัดข้อง",
+        bullets: [
+          "<strong>• Safe JSON Parsing:</strong> ดักจับ HTML Error Page ของ Cloudflare (เช่น 502/524) และแปลงเป็นข้อความภาษาไทยที่เข้าใจง่าย",
+          "<strong>• Turnstile Protection:</strong> ป้องกันบอทและการโจมตีหน้าล็อกอินด้วย Cloudflare Turnstile",
+          "<strong>• One-Click Reconnect:</strong> มีปุ่มเชื่อมต่อเซสชัน NAS ใหม่ได้ในคลิกเดียวเมื่อเครือข่ายกลับมาปกติ"
+        ]
+      },
+      nas: {
+        title: "🗄️ Layer 4: Synology NAS Private Cloud (DSM 7+ File Station & Synology Photos)",
+        badge: "On-Premises Storage Layer",
+        desc: "คลังจัดเก็บไฟล์เอกสารราชการและภาพถ่ายกิจกรรมทั้งหมดอยู่บนเซิร์ฟเวอร์ Synology NAS ภายในสำนักงาน พมจ.กำแพงเพชร รักษาความเป็นส่วนตัวและอธิปไตยของข้อมูลราชการตามมาตรฐานความมั่นคงปลอดภัย",
+        bullets: [
+          "<strong>• Single Sign-On ด้วยบัญชี NAS:</strong> ใช้ชื่อผู้ใช้และรหัสผ่านเดียวกับ Synology DSM พร้อมผสานข้อมูลสังกัดกลุ่มงานอัตโนมัติ",
+          "<strong>• Auto Directory Creation:</strong> สร้างโฟลเดอร์ปลายทางอัตโนมัติและตัดเครื่องหมายสแลชซ้ำซ้อน ป้องกันข้อผิดพลาดรหัส 407",
+          "<strong>• ซิงก์ไฟล์จากแชทและหนังสือเวียน:</strong> เอกสารแนบทุกชิ้นถูกจัดเก็บเข้าโฟลเดอร์มาตรฐานบน NAS โดยอัตโนมัติ"
+        ]
+      }
+    };
+
+    const moduleGroups = {
+      overview: [
+        { icon: "🏠", name: "1. หน้าแรกสำนักงาน (Dashboard)", route: "/dashboard", desc: "สรุปภาพรวมภารกิจประจำวัน สถานะรถยนต์ราชการ นัดหมายการประชุม และหนังสือเวียนที่รอรับทราบ" },
+        { icon: "📊", name: "2. ศูนย์ข้อมูลและสถิติสังคม (Data Hub)", route: "/data-hub", desc: "แดชบอร์ดกลุ่มเปราะบาง 11 อำเภอ 5 มิติความยากจน TPMAP ทำเนียบบุคลากร คลังแบบฟอร์ม และพิมพ์รายงาน กบจ. ตราครุฑ" },
+        { icon: "📈", name: "3. รายงานและสถิติภาพรวม (Reports)", route: "/reports", desc: "วิเคราะห์สถิติการปฏิบัติงานของแต่ละกลุ่มงานและสรุปตัวชี้วัดผลการดำเนินงานประจำปีงบประมาณ" }
+      ],
+      collab: [
+        { icon: "💬", name: "4. แชททีมและการสื่อสารภายใน (Team Chat)", route: "/chat", desc: "ห้องสนทนาแยกตามกลุ่มงานราชการ แสดงสถานะออนไลน์ กำลังพิมพ์ และแนบไฟล์หลากประเภทซิงก์ลง NAS" },
+        { icon: "📋", name: "5. กระดานติดตามงานและภารกิจ (Tasks)", route: "/tasks", desc: "กระดานงาน Kanban & ตารางรายการตาม 8 กลุ่มภารกิจ พมจ. พร้อมระบบแชร์คำสั่งงานเข้ากลุ่ม LINE" },
+        { icon: "📅", name: "6. การประชุมและตารางนัดหมาย (Meetings)", route: "/meetings", desc: "สร้างนัดหมายจากแม่แบบวาระการประชุม ตรวจห้องประชุมว่าง และซิงก์เข้า Google Calendar / .ics" }
+      ],
+      ops: [
+        { icon: "📜", name: "7. เวียนหนังสือราชการอิเล็กทรอนิกส์ (Circular)", route: "/circular", desc: "รับ-ส่งหนังสือเวียน สแกนสดผ่านกล้อง ลงนามรับทราบ และพิมพ์ใบสรุปผลการเวียนตราครุฑพร้อม QR Code" },
+        { icon: "🚐", name: "8. ยานพาหนะและการเดินทางราชการ (Car Booking)", route: "/carbooking", desc: "ขออนุญาตใช้รถราชการ ดูผังเวลา Gantt Timeline เกจวัดระดับน้ำมันเสมือนจริง และพิมพ์ใบขอใช้รถเลขไทย" },
+        { icon: "📁", name: "9. คลังเอกสารและแฟ้มราชการ (NAS DMS)", route: "/files", desc: "จัดการไฟล์และโฟลเดอร์บน Synology File Station พร้อมตัวกรองปีงบประมาณ 2567–2570" },
+        { icon: "🖼️", name: "10. คลังภาพกิจกรรมและสื่อราชการ (NAS Photos)", route: "/gallery", desc: "คลังภาพถ่ายกิจกรรมลงพื้นที่ 11 อำเภอ เชื่อมต่อ Synology Photos DSM 7+ ตามสิทธิ์ผู้ใช้งาน" }
+      ],
+      admin: [
+        { icon: "🛡️", name: "11. ระบบจัดการสิทธิ์และผู้ใช้งาน (Admin RBAC)", route: "/admin", desc: "บริหารจัดการรายชื่อบุคลากร อนุมัติคำขอสิทธิ์ ตาราง RBAC Matrix ยานพาหนะ ห้องประชุม และ Audit Logs" },
+        { icon: "👤", name: "ข้อมูลส่วนตัวและรหัสผ่าน NAS (User Profile)", route: "/user", desc: "แก้ไขข้อมูลโปรไฟล์ ตรวจสอบเซสชันที่กำลังออนไลน์ และเปลี่ยนรหัสผ่าน Synology NAS ด้วยตนเอง" }
+      ]
+    };
+
+    const vehicles = [
+      {
+        name: "Toyota Commuter (รถตู้ส่วนกลาง)",
+        shortName: "รถตู้ส่วนกลาง",
+        plate: "นข 4512 กำแพงเพชร",
+        thaiPlate: "นข ๔๕๑๒ กพ",
+        status: "พร้อมใช้งาน",
+        fuelPct: 85,
+        fuelLabel: "85% (เต็มถัง F)",
+        mileage: "142,680 กม."
+      },
+      {
+        name: "Isuzu D-Max Cab 4 (รถกระบะตรวจการณ์)",
+        shortName: "รถกระบะตรวจการณ์",
+        plate: "กค 8821 กำแพงเพชร",
+        thaiPlate: "กค ๘๘๒๑ กพ",
+        status: "พร้อมใช้งาน",
+        fuelPct: 60,
+        fuelLabel: "60% (เกินครึ่งถัง)",
+        mileage: "98,420 กม."
+      }
+    ];
+
+    function renderSlide() {
+      document.body.classList.remove("print-all-slides");
+      const sections = document.querySelectorAll(".slide-section");
+      sections.forEach((sec) => {
+        const sNum = parseInt(sec.getAttribute("data-slide"), 10);
+        if (sNum === currentSlide) {
+          sec.classList.remove("hidden");
+        } else {
+          sec.classList.add("hidden");
+        }
+      });
+
+      document.getElementById("slide-indicator").textContent = `${currentSlide} / ${totalSlides}`;
+      document.getElementById("slide-counter-badge").textContent = `${currentSlide}/${totalSlides}`;
+      document.getElementById("slide-progress-bar").style.width = `${(currentSlide / totalSlides) * 100}%`;
+
+      renderPaginationDots();
+      renderTocList();
+    }
+
+    function nextSlide() {
+      currentSlide = currentSlide < totalSlides ? currentSlide + 1 : 1;
+      renderSlide();
+    }
+
+    function prevSlide() {
+      currentSlide = currentSlide > 1 ? currentSlide - 1 : totalSlides;
+      renderSlide();
+    }
+
+    function goToSlide(n) {
+      currentSlide = n;
+      renderSlide();
+      document.getElementById("toc-drawer").classList.add("hidden");
+    }
+
+    function setAudienceMode(mode) {
+      audienceMode = mode;
+      const execBtn = document.getElementById("btn-mode-exec");
+      const offBtn = document.getElementById("btn-mode-officer");
+      const execBlocks = document.querySelectorAll(".exec-only");
+      const offBlocks = document.querySelectorAll(".officer-only");
+
+      if (mode === "executive") {
+        execBtn.className = "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer bg-indigo-600 text-white shadow-xs";
+        offBtn.className = "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer text-[var(--muted-foreground)] hover:text-[var(--foreground)]";
+        execBlocks.forEach(el => el.classList.remove("hidden"));
+        offBlocks.forEach(el => el.classList.add("hidden"));
+      } else {
+        offBtn.className = "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer bg-teal-600 text-white shadow-xs";
+        execBtn.className = "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer text-[var(--muted-foreground)] hover:text-[var(--foreground)]";
+        offBlocks.forEach(el => el.classList.remove("hidden"));
+        execBlocks.forEach(el => el.classList.add("hidden"));
+      }
+    }
+
+    function filterComparison(mode) {
+      const beforeCol = document.getElementById("col-before");
+      const afterCol = document.getElementById("col-after");
+      if (mode === "all") {
+        beforeCol.classList.remove("hidden");
+        afterCol.classList.remove("hidden");
+      } else if (mode.trim() === "problem") {
+        beforeCol.classList.remove("hidden");
+        afterCol.classList.add("hidden");
+      } else {
+        beforeCol.classList.add("hidden");
+        afterCol.classList.remove("hidden");
+      }
+    }
+
+    function selectArchNode(key) {
+      ["client", "supabase", "tunnel", "nas"].forEach((k) => {
+        const btn = document.getElementById(`arch-btn-${k}`);
+        if (k === key) {
+          btn.className = "text-left p-4 rounded-2xl border-2 border-indigo-600 bg-indigo-500/10 transition-all cursor-pointer";
+        } else {
+          btn.className = "text-left p-4 rounded-2xl border border-[var(--border)] bg-[var(--background)] hover:border-indigo-500 transition-all cursor-pointer";
+        }
+      });
+      const item = archData[key];
+      document.getElementById("arch-detail-title").textContent = item.title;
+      document.getElementById("arch-detail-badge").textContent = item.badge;
+      document.getElementById("arch-detail-desc").textContent = item.desc;
+      document.getElementById("arch-detail-bullets").innerHTML = item.bullets
+        .map((b) => `<div class="p-3 rounded-xl bg-[var(--card)] border border-[var(--border)]">${b}</div>`)
+        .join("");
+    }
+
+    function selectModuleGroup(groupKey) {
+      ["overview", "collab", "ops", "admin"].forEach((k) => {
+        const btn = document.getElementById(`grp-btn-${k}`);
+        if (k === groupKey) {
+          btn.className = "w-full text-left p-3.5 rounded-2xl border-2 border-indigo-600 bg-indigo-500/10 transition-all cursor-pointer flex items-center justify-between";
+        } else {
+          btn.className = "w-full text-left p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--background)] hover:border-indigo-500 transition-all cursor-pointer flex items-center justify-between";
+        }
+      });
+
+      const list = moduleGroups[groupKey] || [];
+      const container = document.getElementById("module-group-content");
+      container.innerHTML = list
+        .map(
+          (m) => `
+          <div class="p-4 rounded-xl bg-[var(--card)] border border-[var(--border)] flex items-start justify-between gap-3">
+            <div class="flex items-start gap-3">
+              <span class="text-2xl">${m.icon}</span>
+              <div>
+                <div class="font-bold text-sm">${m.name}</div>
+                <p class="text-xs text-[var(--muted-foreground)] mt-1 leading-relaxed">${m.desc}</p>
+              </div>
+            </div>
+            <span class="px-2.5 py-1 rounded-lg bg-[var(--background)] border border-[var(--border)] text-xs font-mono shrink-0">${m.route}</span>
+          </div>`
+        )
+        .join("");
+    }
+
+    function toggleDataHubMock(mode) {
+      const uiView = document.getElementById("dh-view-ui");
+      const docView = document.getElementById("dh-view-doc");
+      const btnUi = document.getElementById("dh-btn-ui");
+      const btnDoc = document.getElementById("dh-btn-doc");
+      if (mode === "ui") {
+        uiView.classList.remove("hidden");
+        docView.classList.add("hidden");
+        btnUi.className = "px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white cursor-pointer";
+        btnDoc.className = "px-3 py-1.5 rounded-lg text-xs font-bold text-[var(--muted-foreground)] cursor-pointer";
+      } else {
+        uiView.classList.add("hidden");
+        docView.classList.remove("hidden");
+        btnDoc.className = "px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white cursor-pointer";
+        btnUi.className = "px-3 py-1.5 rounded-lg text-xs font-bold text-[var(--muted-foreground)] cursor-pointer";
+      }
+    }
+
+    function toggleCircularMock(mode) {
+      const formView = document.getElementById("circ-view-form");
+      const slipView = document.getElementById("circ-view-slip");
+      const btnForm = document.getElementById("circ-btn-form");
+      const btnSlip = document.getElementById("circ-btn-slip");
+      if (mode === "form") {
+        formView.classList.remove("hidden");
+        slipView.classList.add("hidden");
+        btnForm.className = "px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white cursor-pointer";
+        btnSlip.className = "px-3 py-1.5 rounded-lg text-xs font-bold text-[var(--muted-foreground)] cursor-pointer";
+      } else {
+        formView.classList.add("hidden");
+        slipView.classList.remove("hidden");
+        btnSlip.className = "px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white cursor-pointer";
+        btnForm.className = "px-3 py-1.5 rounded-lg text-xs font-bold text-[var(--muted-foreground)] cursor-pointer";
+      }
+    }
+
+    function selectVehicle(index) {
+      const v = vehicles[index];
+      document.getElementById("veh-btn-0").className = index === 0
+        ? "flex-1 p-2.5 rounded-xl border-2 border-indigo-600 bg-indigo-500/10 text-xs font-bold cursor-pointer"
+        : "flex-1 p-2.5 rounded-xl border border-[var(--border)] bg-[var(--card)] text-xs font-bold cursor-pointer";
+      document.getElementById("veh-btn-1").className = index === 1
+        ? "flex-1 p-2.5 rounded-xl border-2 border-indigo-600 bg-indigo-500/10 text-xs font-bold cursor-pointer"
+        : "flex-1 p-2.5 rounded-xl border border-[var(--border)] bg-[var(--card)] text-xs font-bold cursor-pointer";
+
+      document.getElementById("veh-name").textContent = v.name;
+      document.getElementById("veh-plate").textContent = `ทะเบียน: ${v.plate}`;
+      document.getElementById("veh-fuel-text").textContent = v.fuelLabel;
+      document.getElementById("veh-fuel-bar").style.width = `${v.fuelPct}%`;
+      document.getElementById("veh-mileage").textContent = v.mileage;
+      document.getElementById("doc-veh-name").textContent = v.shortName;
+      document.getElementById("doc-veh-plate").textContent = v.thaiPlate;
+    }
+
+    function renderPaginationDots() {
+      const container = document.getElementById("pagination-dots");
+      container.innerHTML = Array.from({ length: totalSlides }, (_, idx) => {
+        const s = idx + 1;
+        const active = s === currentSlide;
+        return `<button type="button" onclick="goToSlide(${s})" title="${slideTitles[idx]}" class="h-2.5 rounded-full transition-all cursor-pointer ${
+          active ? "w-8 bg-indigo-600" : "w-2.5 bg-[var(--border)] hover:bg-indigo-400"
+        }"></button>`;
+      }).join("");
+    }
+
+    function renderTocList() {
+      const list = document.getElementById("toc-list");
+      list.innerHTML = slideTitles
+        .map((title, idx) => {
+          const s = idx + 1;
+          const active = s === currentSlide;
+          return `<button type="button" onclick="goToSlide(${s})" class="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center justify-between ${
+            active
+              ? "bg-indigo-600 text-white"
+              : "bg-[var(--background)] hover:border-indigo-500 border border-[var(--border)]"
+          }">
+            <span>${title}</span>
+            <span class="font-mono">${s}/10</span>
+          </button>`;
+        })
+        .join("");
+    }
+
+    function toggleDrawer() {
+      document.getElementById("toc-drawer").classList.toggle("hidden");
+    }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+
+    function printAllSlides() {
+      document.body.classList.add("print-all-slides");
+      window.print();
+    }
+
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowRight" || e.key === " ") {
+        e.preventDefault();
+        nextSlide();
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        prevSlide();
+      } else if (e.key === "Escape") {
+        document.getElementById("toc-drawer").classList.add("hidden");
+      }
+    });
+
+    selectModuleGroup("overview");
+    renderSlide();
+  </script>
+</body>
+</html>
+
