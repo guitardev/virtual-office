@@ -13,6 +13,7 @@
  */
 
 import net from 'node:net';
+import { classifyAttendanceByOfficialHours } from './attendance-rules-core.mjs';
 
 export interface HipConnectionOptions {
   ip: string;
@@ -60,9 +61,10 @@ export interface HipAttendanceRecord {
   machineId: number;
   timestamp: string;
   ioMode: number;
-  ioLabel: 'เข้างาน (Check-In)' | 'ออกงาน (Check-Out)' | string;
+  ioLabel: 'เข้าราชการเช้า (ปกติ)' | 'ออกราชการ (Check-Out)' | 'สาย / อาจลา (08:31-12:00)' | 'สแกนระหว่างวัน / ก่อน 16:30' | string;
   verifyMode: number;
   verifyLabel: 'ลายนิ้วมือ (FP)' | 'รหัสผ่าน (PWD)' | 'บัตร (Card)' | string;
+  rawIoMode?: number;
 }
 
 export interface HipUserRecord {
@@ -128,25 +130,21 @@ export function decodeCif12AttendanceRecords(
     const day = (w >>> 16) & 0x1f;
     const hour = (w >>> 21) & 0x1f;
     const minute = (w >>> 26) & 0x3f;
-    const ioMode = r[15];
+    const rawIoMode = r[15];
     const verifyMode = (r[19] >>> 4) & 0x0f;
 
     if (userId === 0 || userId === 0xffffffff) continue;
     if (month < 1 || month > 12 || day < 1 || day > 31) continue;
 
     const timestamp = `${year}-${pad(month)}-${pad(day)} ${pad(hour)}:${pad(minute)}:${pad(second)}`;
+    const classified = classifyAttendanceByOfficialHours(timestamp);
 
     records.push({
       userId,
       machineId,
       timestamp,
-      ioMode,
-      ioLabel:
-        ioMode === 1
-          ? 'เข้างาน (Check-In)'
-          : ioMode === 2
-          ? 'ออกงาน (Check-Out)'
-          : `โหมด ${ioMode}`,
+      ioMode: classified.ioMode,
+      ioLabel: classified.ioLabel,
       verifyMode,
       verifyLabel:
         verifyMode === 1
@@ -156,6 +154,7 @@ export function decodeCif12AttendanceRecords(
           : verifyMode === 3
           ? 'บัตร (Card)'
           : `รูปแบบ ${verifyMode}`,
+      rawIoMode,
     });
   }
 
