@@ -9,6 +9,14 @@ import {
   NasMysqlConfig,
   DeviceOverviewMetadata,
 } from "@/lib/attendance-db";
+import {
+  classifyAttendanceByOfficialHours,
+  getAttendanceIoLabel,
+  getThaiFiscalPeriod,
+  getMonthDateRange,
+  getFiscalYearDateRange,
+  groupMonthsByFiscalYear,
+} from "@/lib/attendance-rules";
 
 interface ScannerOverviewResponse {
   info?: {
@@ -66,6 +74,7 @@ export default function AttendancePage() {
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [lastMysqlSyncedAt, setLastMysqlSyncedAt] = useState<string | null>(null);
   const [availableDates, setAvailableDates] = useState<string[]>([]);
+  const [availableMonths, setAvailableMonths] = useState<string[]>([]);
   const [dataSource, setDataSource] = useState<"local" | "supabase">("local");
   const [isCloudServer, setIsCloudServer] = useState<boolean>(false);
   const [canSyncFromScanner, setCanSyncFromScanner] = useState<boolean>(true);
@@ -75,9 +84,13 @@ export default function AttendancePage() {
   const [pageSize, setPageSize] = useState<number>(200);
   const [totalPages, setTotalPages] = useState<number>(1);
   const [serverSummaryStats, setServerSummaryStats] = useState<{
-    checkIn: number;
+    checkInOnTime: number;
     checkOut: number;
+    lateOrLeave: number;
+    midDay: number;
+    checkInTotal: number;
     edited: number;
+    checkIn: number;
     lateCount: number;
     lateCountIsApprox?: boolean;
   } | null>(null);
@@ -106,6 +119,8 @@ export default function AttendancePage() {
   // ตัวกรองตาราง
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
+  const [selectedFiscalYear, setSelectedFiscalYear] = useState<string>("");
+  const [selectedFiscalMonth, setSelectedFiscalMonth] = useState<string>("");
   const [selectedScannerUid, setSelectedScannerUid] = useState<string>("all");
   const [selectedIoMode, setSelectedIoMode] = useState<string>("all");
   const [searchText, setSearchText] = useState<string>("");
@@ -205,6 +220,7 @@ export default function AttendancePage() {
           setLastSyncedAt(data.lastSyncedAt || null);
           setLastMysqlSyncedAt(data.lastMysqlSyncedAt || null);
           setAvailableDates(data.availableDates || []);
+          setAvailableMonths(data.availableMonths || []);
           if (data.dataSource) setDataSource(data.dataSource);
           if (typeof data.isCloudServer === "boolean") setIsCloudServer(data.isCloudServer);
           if (typeof data.canSyncFromScanner === "boolean") {
@@ -607,6 +623,8 @@ export default function AttendancePage() {
       "ชื่อ-นามสกุล",
       "กลุ่มงาน/ฝ่าย",
       "วัน-เวลาที่สแกน",
+      "เดือน/ปี (พ.ศ.)",
+      "ปีงบประมาณ",
       "เวลาเดิมก่อนแก้ไข",
       "ประเภท (เข้า/ออก)",
       "วิธีบันทึก",
@@ -614,19 +632,24 @@ export default function AttendancePage() {
       "ผู้แก้ไข",
       "หมายเหตุ",
     ];
-    const rows = logs.map((l, idx) => [
-      idx + 1,
-      l.scannerUserId,
-      `"${l.memberName.replace(/"/g, '""')}"`,
-      `"${(l.division || "").replace(/"/g, '""')}"`,
-      l.scanTimestamp,
-      l.originalTimestamp,
-      l.ioLabel,
-      l.verifyLabel,
-      l.isEdited ? "แก้ไขแล้ว" : "ต้นฉบับจากเครื่องสแกน",
-      `"${(l.editedBy || "-").replace(/"/g, '""')}"`,
-      `"${(l.editNote || "-").replace(/"/g, '""')}"`,
-    ]);
+    const rows = logs.map((l, idx) => {
+      const period = getThaiFiscalPeriod(l.scanTimestamp);
+      return [
+        idx + 1,
+        l.scannerUserId,
+        `"${l.memberName.replace(/"/g, '""')}"`,
+        `"${(l.division || "").replace(/"/g, '""')}"`,
+        l.scanTimestamp,
+        `"${period.monthYearLabel}"`,
+        `"${period.fiscalLabel}"`,
+        l.originalTimestamp,
+        l.ioLabel || getAttendanceIoLabel(l.ioMode),
+        l.verifyLabel,
+        l.isEdited ? "แก้ไขแล้ว" : "ต้นฉบับจากเครื่องสแกน",
+        `"${(l.editedBy || "-").replace(/"/g, '""')}"`,
+        `"${(l.editNote || "-").replace(/"/g, '""')}"`,
+      ];
+    });
 
     const csvContent =
       "\uFEFF" +
@@ -635,32 +658,106 @@ export default function AttendancePage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `attendance-smart-mso-${dateFrom || "all"}.csv`;
+    const fileSuffix = selectedFiscalMonth
+      ? `fy${getThaiFiscalPeriod(`${selectedFiscalMonth}-01`).fiscalYear}-${selectedFiscalMonth}`
+      : selectedFiscalYear
+      ? `fy${selectedFiscalYear}`
+      : dateFrom || "all";
+    a.download = `attendance-smart-mso-${fileSuffix}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     showToast("ดาวน์โหลดไฟล์ CSV สรุปเวลาปฏิบัติราชการเรียบร้อยแล้ว");
   };
 
-  // สรุปตัวเลขสถิติจากรายการที่กรอง
+  // สรุปตัวเลขสถิติจากรายการที่กรอง (ทั้ง 4 ช่วงเวลาตามระเบียบราชการ)
   const summaryStats = useMemo(() => {
-    let checkIn = 0;
+    let checkInOnTime = 0;
     let checkOut = 0;
+    let lateOrLeave = 0;
+    let midDay = 0;
     let edited = 0;
-    let lateCount = 0;
     for (const item of logs) {
       if (item.ioMode === 1) {
-        checkIn++;
-        const timePart = item.scanTimestamp.split(" ")[1] || "";
-        if (timePart > "08:30:59" && timePart < "12:00:00") {
-          lateCount++;
-        }
+        checkInOnTime++;
       } else if (item.ioMode === 2) {
         checkOut++;
+      } else if (item.ioMode === 3) {
+        lateOrLeave++;
+      } else if (item.ioMode === 4) {
+        midDay++;
       }
       if (item.isEdited) edited++;
     }
-    return { checkIn, checkOut, edited, lateCount };
+    const checkInTotal = checkInOnTime + lateOrLeave;
+    return {
+      checkInOnTime,
+      checkOut,
+      lateOrLeave,
+      midDay,
+      checkInTotal,
+      edited,
+      checkIn: checkInTotal,
+      lateCount: lateOrLeave,
+      lateCountIsApprox: false,
+    };
   }, [logs]);
+
+  const effectiveSummaryStats = useMemo(() => {
+    const s = serverSummaryStats || summaryStats;
+    const lateOrLeave = s.lateOrLeave ?? s.lateCount ?? 0;
+    const checkInOnTime =
+      s.checkInOnTime ?? Math.max(0, (s.checkIn || 0) - lateOrLeave);
+    const midDay = s.midDay ?? 0;
+    const checkOut = s.checkOut ?? 0;
+    const edited = s.edited ?? 0;
+    return {
+      checkInOnTime,
+      lateOrLeave,
+      midDay,
+      checkOut,
+      edited,
+      checkInTotal: s.checkInTotal ?? checkInOnTime + lateOrLeave,
+    };
+  }, [serverSummaryStats, summaryStats]);
+
+  const fiscalYearGroups = useMemo(
+    () => groupMonthsByFiscalYear(availableMonths),
+    [availableMonths]
+  );
+
+  const visibleFiscalMonthOptions = useMemo(() => {
+    const groups = selectedFiscalYear
+      ? fiscalYearGroups.filter((g) => String(g.fiscalYear) === selectedFiscalYear)
+      : fiscalYearGroups;
+    return groups.flatMap((group) =>
+      group.months.map((ym) => {
+        const period = getThaiFiscalPeriod(`${ym}-01`);
+        return {
+          yearMonth: ym,
+          fiscalYear: group.fiscalYear,
+          label: `${period.monthShort} ${period.calendarYearBE} (เดือน ${period.fiscalMonthOrder}/12 • ปีงบ ${group.fiscalYear})`,
+        };
+      })
+    );
+  }, [fiscalYearGroups, selectedFiscalYear]);
+
+  const activeFiscalSummaryText = useMemo(() => {
+    if (selectedFiscalMonth) {
+      const p = getThaiFiscalPeriod(`${selectedFiscalMonth}-01`);
+      return `${p.monthFull} ${p.calendarYearBE} (ปีงบประมาณ ${p.fiscalYear} • ไตรมาส ${p.quarter})`;
+    }
+    if (selectedFiscalYear) {
+      const fy = Number(selectedFiscalYear);
+      const startShort = (fy - 1) % 100;
+      const endShort = fy % 100;
+      return `ปีงบประมาณ ${fy} (ต.ค. ${String(startShort).padStart(2, "0")} – ก.ย. ${String(endShort).padStart(2, "0")})`;
+    }
+    if (dateFrom && dateTo && dateFrom === dateTo) {
+      const p = getThaiFiscalPeriod(dateFrom);
+      return `${p.dateShortBE} (ปีงบประมาณ ${p.fiscalYear} • ไตรมาส ${p.quarter})`;
+    }
+    return null;
+  }, [selectedFiscalMonth, selectedFiscalYear, dateFrom, dateTo]);
 
   return (
     <div className="space-y-6 pb-12">
@@ -938,44 +1035,56 @@ export default function AttendancePage() {
 
           {/* 3. สถิติรายการตามตัวกรอง */}
           <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-semibold text-slate-500 uppercase">
                 สถิติรายการตามตัวกรอง
               </span>
-              <span className="text-xs font-bold text-indigo-600">
-                {filteredTotal.toLocaleString()} รายการ
-              </span>
+              <div className="flex items-center gap-2">
+                {effectiveSummaryStats.midDay > 0 && (
+                  <span
+                    className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 text-[10px] font-semibold"
+                    title="สแกนช่วงระหว่างวัน 12:01-16:29 น. หรือ 00:00-04:59 น."
+                  >
+                    ระหว่างวัน {effectiveSummaryStats.midDay.toLocaleString()}
+                  </span>
+                )}
+                <span className="text-xs font-bold text-indigo-600">
+                  {filteredTotal.toLocaleString()} รายการ
+                </span>
+              </div>
             </div>
             <div className="grid grid-cols-4 gap-1.5 mt-2.5 text-center">
-              <div className="bg-emerald-50 dark:bg-emerald-950/40 rounded-xl p-1.5">
+              <div
+                className="bg-emerald-50 dark:bg-emerald-950/40 rounded-xl p-1.5"
+                title="สแกนเข้างานตรงเวลา 05:00 - 08:30:59 น."
+              >
                 <div className="text-[10px] text-emerald-700 dark:text-emerald-300">
-                  เข้างาน
+                  เข้าเช้าปกติ
                 </div>
                 <div className="text-sm font-bold text-emerald-700 dark:text-emerald-300">
-                  {(serverSummaryStats || summaryStats).checkIn.toLocaleString()}
-                </div>
-              </div>
-              <div className="bg-blue-50 dark:bg-blue-950/40 rounded-xl p-1.5">
-                <div className="text-[10px] text-blue-700 dark:text-blue-300">
-                  ออกงาน
-                </div>
-                <div className="text-sm font-bold text-blue-700 dark:text-blue-300">
-                  {(serverSummaryStats || summaryStats).checkOut.toLocaleString()}
+                  {effectiveSummaryStats.checkInOnTime.toLocaleString()}
                 </div>
               </div>
               <div
                 className="bg-rose-50 dark:bg-rose-950/40 rounded-xl p-1.5"
-                title={
-                  serverSummaryStats?.lateCountIsApprox
-                    ? "นับเฉพาะรายการที่แสดงในหน้านี้ (เลือก 1 วันเพื่อดูยอดทั้งวัน)"
-                    : "จำนวนการสแกนเข้างานระหว่าง 08:31 - 11:59 น."
-                }
+                title="สแกนระหว่าง 08:31 - 12:00:59 น. (มาสาย หรือ ลาครึ่งเช้า)"
               >
                 <div className="text-[10px] text-rose-700 dark:text-rose-300">
-                  หลัง 08:30{serverSummaryStats?.lateCountIsApprox ? "*" : ""}
+                  สาย / อาจลา
                 </div>
                 <div className="text-sm font-bold text-rose-700 dark:text-rose-300">
-                  {(serverSummaryStats || summaryStats).lateCount.toLocaleString()}
+                  {effectiveSummaryStats.lateOrLeave.toLocaleString()}
+                </div>
+              </div>
+              <div
+                className="bg-blue-50 dark:bg-blue-950/40 rounded-xl p-1.5"
+                title="สแกนออกราชการตั้งแต่ 16:30 น. เป็นต้นไป"
+              >
+                <div className="text-[10px] text-blue-700 dark:text-blue-300">
+                  ออกราชการ
+                </div>
+                <div className="text-sm font-bold text-blue-700 dark:text-blue-300">
+                  {effectiveSummaryStats.checkOut.toLocaleString()}
                 </div>
               </div>
               <div className="bg-amber-50 dark:bg-amber-950/40 rounded-xl p-1.5">
@@ -983,7 +1092,7 @@ export default function AttendancePage() {
                   แก้ไขแล้ว
                 </div>
                 <div className="text-sm font-bold text-amber-700 dark:text-amber-300">
-                  {(serverSummaryStats || summaryStats).edited.toLocaleString()}
+                  {effectiveSummaryStats.edited.toLocaleString()}
                 </div>
               </div>
             </div>
@@ -1070,6 +1179,107 @@ export default function AttendancePage() {
 
         {/* แถบตัวกรองและค้นหา (Filter Bar) */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 mt-4 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+          {/* แถวตัวกรองปฏิทินปีงบประมาณไทย (ต.ค.–ก.ย.) */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                ปีงบประมาณ (ต.ค. – ก.ย.)
+              </label>
+              <select
+                aria-label="ปีงบประมาณ"
+                value={selectedFiscalYear}
+                onChange={(e) => {
+                  const fy = e.target.value;
+                  setSelectedFiscalYear(fy);
+                  setSelectedFiscalMonth("");
+                  if (fy) {
+                    const range = getFiscalYearDateRange(Number(fy));
+                    setDateFrom(range.dateFrom);
+                    setDateTo(range.dateTo);
+                  } else {
+                    setDateFrom("");
+                    setDateTo("");
+                  }
+                  setPage(1);
+                }}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium"
+              >
+                <option value="">ทุกปีงบประมาณ</option>
+                {fiscalYearGroups.map((g) => {
+                  const startShort = String((g.fiscalYear - 1) % 100).padStart(2, "0");
+                  const endShort = String(g.fiscalYear % 100).padStart(2, "0");
+                  return (
+                    <option key={g.fiscalYear} value={String(g.fiscalYear)}>
+                      ปีงบ {g.fiscalYear} (ต.ค. {startShort} – ก.ย. {endShort}) • {g.months.length} เดือน
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                เดือน (ปฏิทินปีงบประมาณ)
+              </label>
+              <select
+                aria-label="เดือน (ปฏิทินปีงบประมาณ)"
+                value={selectedFiscalMonth}
+                onChange={(e) => {
+                  const ym = e.target.value;
+                  setSelectedFiscalMonth(ym);
+                  if (ym) {
+                    const period = getThaiFiscalPeriod(`${ym}-01`);
+                    const range = getMonthDateRange(ym);
+                    setSelectedFiscalYear(String(period.fiscalYear));
+                    setDateFrom(range.dateFrom);
+                    setDateTo(range.dateTo);
+                  } else if (selectedFiscalYear) {
+                    const range = getFiscalYearDateRange(Number(selectedFiscalYear));
+                    setDateFrom(range.dateFrom);
+                    setDateTo(range.dateTo);
+                  } else {
+                    setDateFrom("");
+                    setDateTo("");
+                  }
+                  setPage(1);
+                }}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium"
+              >
+                <option value="">ทุกเดือนในระบบ</option>
+                {visibleFiscalMonthOptions.map((opt) => (
+                  <option key={opt.yearMonth} value={opt.yearMonth}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-end">
+              {activeFiscalSummaryText ? (
+                <div className="w-full px-3 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-xs font-semibold text-indigo-700 dark:text-indigo-300 flex items-center justify-between gap-2">
+                  <span>📅 {activeFiscalSummaryText}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedFiscalYear("");
+                      setSelectedFiscalMonth("");
+                      setDateFrom("");
+                      setDateTo("");
+                      setPage(1);
+                    }}
+                    className="text-[11px] underline text-indigo-600 dark:text-indigo-300 cursor-pointer shrink-0"
+                  >
+                    แสดงทั้งหมด
+                  </button>
+                </div>
+              ) : (
+                <div className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-[11px] text-slate-500">
+                  📆 แสดงข้อมูลทุกปีงบประมาณ ({availableMonths.length} เดือนที่มีสแกน)
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
             <div>
               <label className="block text-[11px] font-semibold text-slate-500 mb-1">
@@ -1080,6 +1290,8 @@ export default function AttendancePage() {
                 value={dateFrom}
                 onChange={(e) => {
                   setDateFrom(e.target.value);
+                  setSelectedFiscalYear("");
+                  setSelectedFiscalMonth("");
                   setPage(1);
                 }}
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs"
@@ -1095,6 +1307,8 @@ export default function AttendancePage() {
                 value={dateTo}
                 onChange={(e) => {
                   setDateTo(e.target.value);
+                  setSelectedFiscalYear("");
+                  setSelectedFiscalMonth("");
                   setPage(1);
                 }}
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs"
@@ -1129,6 +1343,7 @@ export default function AttendancePage() {
                 ประเภทการลงเวลา
               </label>
               <select
+                aria-label="ประเภทการลงเวลา"
                 value={selectedIoMode}
                 onChange={(e) => {
                   setSelectedIoMode(e.target.value);
@@ -1136,9 +1351,11 @@ export default function AttendancePage() {
                 }}
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs"
               >
-                <option value="all">ทั้งหมด (เข้างาน + ออกงาน)</option>
-                <option value="1">เข้างาน (Check-In)</option>
-                <option value="2">ออกงาน (Check-Out)</option>
+                <option value="all">ทั้งหมด (ทุกช่วงเวลา 1-4)</option>
+                <option value="1">🟢 เข้าราชการเช้า (05:00-08:30)</option>
+                <option value="3">🔴 สาย / อาจลา (08:31-12:00)</option>
+                <option value="4">🟠 ระหว่างวัน / ก่อน 16:30</option>
+                <option value="2">🔵 ออกราชการ (16:30+)</option>
               </select>
             </div>
 
@@ -1161,6 +1378,8 @@ export default function AttendancePage() {
                   onClick={() => {
                     setDateFrom("");
                     setDateTo("");
+                    setSelectedFiscalYear("");
+                    setSelectedFiscalMonth("");
                     setSelectedScannerUid("all");
                     setSelectedIoMode("all");
                     setSearchText("");
@@ -1191,6 +1410,8 @@ export default function AttendancePage() {
                 onClick={() => {
                   setDateFrom("");
                   setDateTo("");
+                  setSelectedFiscalYear("");
+                  setSelectedFiscalMonth("");
                   setPage(1);
                 }}
                 className={`px-2.5 py-1 rounded-lg text-[11px] font-medium cursor-pointer ${
@@ -1201,23 +1422,29 @@ export default function AttendancePage() {
               >
                 ทุกวัน ({totalStoredLogs.toLocaleString()})
               </button>
-              {availableDates.slice(0, 8).map((d) => (
-                <button
-                  key={d}
-                  onClick={() => {
-                    setDateFrom(d);
-                    setDateTo(d);
-                    setPage(1);
-                  }}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-mono cursor-pointer ${
-                    dateFrom === d && dateTo === d
-                      ? "bg-indigo-600 text-white font-semibold"
-                      : "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
-                  }`}
-                >
-                  {d}
-                </button>
-              ))}
+              {availableDates.slice(0, 8).map((d) => {
+                const p = getThaiFiscalPeriod(d);
+                return (
+                  <button
+                    key={d}
+                    onClick={() => {
+                      setDateFrom(d);
+                      setDateTo(d);
+                      setSelectedFiscalYear("");
+                      setSelectedFiscalMonth("");
+                      setPage(1);
+                    }}
+                    title={`${d} (${p.fiscalLabel})`}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] cursor-pointer ${
+                      dateFrom === d && dateTo === d
+                        ? "bg-indigo-600 text-white font-semibold"
+                        : "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                    }`}
+                  >
+                    {p.dateShortBE}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -1280,10 +1507,9 @@ export default function AttendancePage() {
                 ) : (
                   logs.map((item) => {
                     const [datePart, timePart] = item.scanTimestamp.split(" ");
-                    const isLate =
-                      item.ioMode === 1 &&
-                      timePart > "08:30:59" &&
-                      timePart < "12:00:00";
+                    const period = getThaiFiscalPeriod(item.scanTimestamp);
+                    const isLateMode = item.ioMode === 3;
+                    const isMidDayMode = item.ioMode === 4;
 
                     return (
                       <tr
@@ -1305,21 +1531,29 @@ export default function AttendancePage() {
                             {item.division}
                           </div>
                         </td>
-                        <td className="py-3 px-4 font-mono">
-                          <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                            <span>{datePart}</span>
-                            <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-300">
+                        <td className="py-3 px-4">
+                          <div className="font-bold text-slate-900 dark:text-white flex flex-wrap items-center gap-1.5">
+                            <span title={datePart}>{period.dateShortBE}</span>
+                            <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-indigo-600 dark:text-indigo-300">
                               {timePart}
                             </span>
-                            {isLate && (
-                              <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 text-[10px] font-sans font-semibold">
+                            <span className="px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-[10px] font-semibold">
+                              ปีงบ {period.fiscalYear}
+                            </span>
+                            {isLateMode && (
+                              <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 text-[10px] font-semibold">
                                 หลัง 08:30
+                              </span>
+                            )}
+                            {isMidDayMode && (
+                              <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-semibold">
+                                ก่อน 16:30
                               </span>
                             )}
                           </div>
                           {item.isEdited &&
                             item.originalTimestamp !== item.scanTimestamp && (
-                              <div className="text-[10px] text-slate-400 line-through">
+                              <div className="text-[10px] text-slate-400 line-through font-mono">
                                 เวลาเดิม: {item.originalTimestamp}
                               </div>
                             )}
@@ -1327,11 +1561,23 @@ export default function AttendancePage() {
                         <td className="py-3 px-4">
                           {item.ioMode === 1 ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-                              🟢 เข้างาน (Check-In)
+                              🟢 {getAttendanceIoLabel(1)}
+                            </span>
+                          ) : item.ioMode === 3 ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300">
+                              🔴 {getAttendanceIoLabel(3)}
+                            </span>
+                          ) : item.ioMode === 4 ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                              🟠 {getAttendanceIoLabel(4)}
+                            </span>
+                          ) : item.ioMode === 2 ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
+                              🔵 {getAttendanceIoLabel(2)}
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
-                              🔵 ออกงาน (Check-Out)
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                              {item.ioLabel || getAttendanceIoLabel(item.ioMode)}
                             </span>
                           )}
                         </td>
@@ -1520,9 +1766,22 @@ export default function AttendancePage() {
                     step="1"
                     required
                     value={logForm.scanTime}
-                    onChange={(e) =>
-                      setLogForm({ ...logForm, scanTime: e.target.value })
-                    }
+                    onChange={(e) => {
+                      const nextTime = e.target.value;
+                      if (!editingLog && nextTime) {
+                        const normalized = nextTime.length === 5 ? `${nextTime}:00` : nextTime;
+                        const suggested = classifyAttendanceByOfficialHours(
+                          `${logForm.scanDate || getTodayThaiDate()} ${normalized}`
+                        );
+                        setLogForm({
+                          ...logForm,
+                          scanTime: nextTime,
+                          ioMode: suggested.ioMode,
+                        });
+                      } else {
+                        setLogForm({ ...logForm, scanTime: nextTime });
+                      }
+                    }}
                     className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono"
                   />
                 </div>
@@ -1540,8 +1799,10 @@ export default function AttendancePage() {
                     }
                     className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
                   >
-                    <option value={1}>🟢 เข้างาน (Check-In)</option>
-                    <option value={2}>🔵 ออกงาน (Check-Out)</option>
+                    <option value={1}>🟢 {getAttendanceIoLabel(1)}</option>
+                    <option value={3}>🔴 {getAttendanceIoLabel(3)}</option>
+                    <option value={4}>🟠 {getAttendanceIoLabel(4)}</option>
+                    <option value={2}>🔵 {getAttendanceIoLabel(2)}</option>
                   </select>
                 </div>
                 <div>
