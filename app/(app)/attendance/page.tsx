@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useAppContext } from "@/context/AppContext";
 import {
   AttendanceLogItem,
@@ -22,6 +22,17 @@ interface MysqlStatusInfo {
   setupAdvice?: string;
 }
 
+interface SupabaseStatusInfo {
+  ready: boolean;
+  count: number;
+  error?: string;
+}
+
+function getTodayThaiDate(): string {
+  const th = new Date(Date.now() + 7 * 3600000);
+  return th.toISOString().slice(0, 10);
+}
+
 export default function AttendancePage() {
   const { currentUser, currentUserRole, members, showToast, addAuditLog } =
     useAppContext();
@@ -37,6 +48,19 @@ export default function AttendancePage() {
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [lastMysqlSyncedAt, setLastMysqlSyncedAt] = useState<string | null>(null);
   const [availableDates, setAvailableDates] = useState<string[]>([]);
+  const [dataSource, setDataSource] = useState<"local" | "supabase">("local");
+
+  // Pagination & Stats
+  const [page, setPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(200);
+  const [totalPages, setTotalPages] = useState<number>(1);
+  const [serverSummaryStats, setServerSummaryStats] = useState<{
+    checkIn: number;
+    checkOut: number;
+    edited: number;
+    lateCount: number;
+    lateCountIsApprox?: boolean;
+  } | null>(null);
 
   const [mysqlConfig, setMysqlConfig] = useState<NasMysqlConfig>({
     connectionMode: "direct_tcp",
@@ -52,6 +76,7 @@ export default function AttendancePage() {
     scannerPassword: 0,
   });
   const [mysqlStatus, setMysqlStatus] = useState<MysqlStatusInfo | null>(null);
+  const [supabaseStatus, setSupabaseStatus] = useState<SupabaseStatusInfo | null>(null);
   const [setupSql, setSetupSql] = useState<string>("");
   const [mappings, setMappings] = useState<Record<number, ScannerUserMapping>>({});
   const [authorizedEditors, setAuthorizedEditors] = useState<
@@ -64,13 +89,14 @@ export default function AttendancePage() {
   const [selectedScannerUid, setSelectedScannerUid] = useState<string>("all");
   const [selectedIoMode, setSelectedIoMode] = useState<string>("all");
   const [searchText, setSearchText] = useState<string>("");
+  const [debouncedSearchText, setDebouncedSearchText] = useState<string>("");
 
   // Modals
   const [showLogModal, setShowLogModal] = useState<boolean>(false);
   const [editingLog, setEditingLog] = useState<AttendanceLogItem | null>(null);
   const [logForm, setLogForm] = useState({
     scannerUserId: 1,
-    scanDate: "2026-11-06",
+    scanDate: getTodayThaiDate(),
     scanTime: "08:30:00",
     ioMode: 1,
     verifyMode: 1,
@@ -88,10 +114,23 @@ export default function AttendancePage() {
     division: "",
     position: "",
   });
+  const [savingMapping, setSavingMapping] = useState<boolean>(false);
 
   const [showEditorsModal, setShowEditorsModal] = useState<boolean>(false);
+  const [savingEditors, setSavingEditors] = useState<boolean>(false);
   const [showMysqlModal, setShowMysqlModal] = useState<boolean>(false);
+  const [showMysqlPassword, setShowMysqlPassword] = useState<boolean>(false);
   const [testingMysql, setTestingMysql] = useState<boolean>(false);
+  const didInitialFetchRef = useRef<boolean>(false);
+  const fetchSeqRef = useRef<number>(0);
+
+  // Debounce ช่องค้นหา 300ms เพื่อลดการยิง API ถี่เกินไปขณะพิมพ์
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchText(searchText);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchText]);
 
   // ตรวจสอบว่าผู้ใช้ปัจจุบันมีสิทธิ์ แก้ไข/เพิ่ม/ลบ เวลาเข้า-ออกงานหรือไม่
   const canEditAttendance = useMemo(() => {
@@ -108,21 +147,27 @@ export default function AttendancePage() {
     async (opts?: {
       customDateFrom?: string;
       customDateTo?: string;
+      customPage?: number;
       autoSyncIfEmpty?: boolean;
     }) => {
+      const seq = ++fetchSeqRef.current;
       try {
         setLoading(true);
         const params = new URLSearchParams();
         const df = opts?.customDateFrom !== undefined ? opts.customDateFrom : dateFrom;
         const dt = opts?.customDateTo !== undefined ? opts.customDateTo : dateTo;
+        const p = opts?.customPage !== undefined ? opts.customPage : page;
         if (df) params.set("dateFrom", df);
         if (dt) params.set("dateTo", dt);
         if (selectedScannerUid !== "all") params.set("scannerUserId", selectedScannerUid);
         if (selectedIoMode !== "all") params.set("ioMode", selectedIoMode);
-        if (searchText.trim()) params.set("search", searchText.trim());
+        if (debouncedSearchText.trim()) params.set("search", debouncedSearchText.trim());
+        params.set("page", String(p));
+        params.set("pageSize", String(pageSize));
 
         const res = await fetch(`/api/attendance?${params.toString()}`);
         const data = await res.json();
+        if (seq !== fetchSeqRef.current) return; // Ignore stale out-of-order response
         if (data.success) {
           setLogs(data.logs || []);
           setFilteredTotal(data.filteredTotal || 0);
@@ -131,43 +176,77 @@ export default function AttendancePage() {
           setLastSyncedAt(data.lastSyncedAt || null);
           setLastMysqlSyncedAt(data.lastMysqlSyncedAt || null);
           setAvailableDates(data.availableDates || []);
+          if (data.dataSource) setDataSource(data.dataSource);
+          if (typeof data.totalPages === "number") setTotalPages(data.totalPages);
+          if (data.summaryStats) setServerSummaryStats(data.summaryStats);
           if (data.mysqlConfig) setMysqlConfig(data.mysqlConfig);
           if (data.mysqlStatus) setMysqlStatus(data.mysqlStatus);
+          if (data.supabaseStatus) setSupabaseStatus(data.supabaseStatus);
           if (data.setupSql) setSetupSql(data.setupSql);
           if (data.mappings) setMappings(data.mappings);
           if (data.authorizedEditors) {
             setAuthorizedEditors(data.authorizedEditors);
             if (typeof window !== "undefined") {
               try {
-                localStorage.setItem("smartmso_attendance_editors", JSON.stringify(data.authorizedEditors));
+                localStorage.setItem(
+                  "smartmso_attendance_editors",
+                  JSON.stringify(data.authorizedEditors)
+                );
+                window.dispatchEvent(
+                  new CustomEvent("smartmso:attendance_editors_updated", {
+                    detail: data.authorizedEditors,
+                  })
+                );
               } catch {}
             }
           }
 
-          // หากยังไม่มีข้อมูลใน Store เลย ให้ซิงก์ 1,500 รายการล่าสุดจากเครื่อง 192.168.162.15 อัตโนมัติในครั้งแรก
-          if (opts?.autoSyncIfEmpty && (data.totalStoredLogs || 0) === 0) {
+          // ซิงก์จากเครื่องสแกนอัตโนมัติครั้งแรกเฉพาะเมื่อยังไม่มีข้อมูลทั้ง Local และ Cloud Supabase และผู้ใช้มีสิทธิ์
+          const hasCloudData = Boolean(
+            data.supabaseStatus?.ready && (data.supabaseStatus?.count || 0) > 0
+          );
+          const userCanSync =
+            currentUserRole === "admin" ||
+            (Array.isArray(data.authorizedEditors) &&
+              currentUser &&
+              data.authorizedEditors.some(
+                (ed: AuthorizedAttendanceEditor) =>
+                  ed.memberId === currentUser.id ||
+                  ed.memberName.trim() === currentUser.name.trim()
+              ));
+          if (
+            opts?.autoSyncIfEmpty &&
+            userCanSync &&
+            data.dataSource === "local" &&
+            (data.totalStoredLogs || 0) === 0 &&
+            !hasCloudData
+          ) {
             await handleSyncFromDevice(1500, true);
           }
         }
       } catch (err) {
-        console.error("Failed to fetch attendance:", err);
+        if (seq === fetchSeqRef.current) {
+          console.error("Failed to fetch attendance:", err);
+        }
       } finally {
-        setLoading(false);
+        if (seq === fetchSeqRef.current) {
+          setLoading(false);
+        }
       }
     },
-    [dateFrom, dateTo, selectedScannerUid, selectedIoMode, searchText]
+    [dateFrom, dateTo, selectedScannerUid, selectedIoMode, debouncedSearchText, page, pageSize]
   );
 
   useEffect(() => {
-    fetchAttendanceData({ autoSyncIfEmpty: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
+    if (!didInitialFetchRef.current) {
+      didInitialFetchRef.current = true;
+      fetchAttendanceData({ autoSyncIfEmpty: true });
+      return;
+    }
     fetchAttendanceData();
-  }, [dateFrom, dateTo, selectedScannerUid, selectedIoMode, searchText, fetchAttendanceData]);
+  }, [fetchAttendanceData]);
 
-  // ซิงก์ข้อมูลจากเครื่องสแกนลายนิ้วมือ HIP CMi681S (192.168.162.15:5005)
+  // ซิงก์ข้อมูลจากเครื่องสแกนลายนิ้วมือ HIP CMi681S
   const handleSyncFromDevice = async (limit = syncLimit, silent = false) => {
     try {
       setSyncing(true);
@@ -182,6 +261,9 @@ export default function AttendancePage() {
         body: JSON.stringify({
           action: "sync_device",
           limitLatest: limit,
+          actorId: currentUser?.id,
+          actorRole: currentUserRole,
+          actorName: currentUser?.name || "ผู้ดูแลระบบ",
         }),
       });
       const data = await res.json();
@@ -194,11 +276,11 @@ export default function AttendancePage() {
         );
         const mysqlMsg = data.mysqlSync?.synced
           ? `และบันทึกลง Synology MySQL (${data.mysqlSync.upsertedLogs.toLocaleString()} รายการ) สำเร็จ`
-          : `(บันทึกในระบบแคชเรียบร้อย — รอเปิดสิทธิ์ Host บน Synology MySQL)`;
+          : `(บันทึกในระบบแคช/Cloud เรียบร้อย)`;
         showToast(
           `ซิงก์สำเร็จ! ดึงข้อมูล ${data.pulledCount.toLocaleString()} รายการจาก HIP CMi681S ${mysqlMsg}`
         );
-        await fetchAttendanceData();
+        await fetchAttendanceData({ customPage: 1 });
       } else {
         showToast(`ซิงก์ข้อมูลไม่สำเร็จ: ${data.error || "ไม่ทราบสาเหตุ"}`);
       }
@@ -212,7 +294,7 @@ export default function AttendancePage() {
 
   // เปิด Modal เพิ่มรายการใหม่
   const handleOpenAddModal = () => {
-    const defaultDate = availableDates[0] || "2026-11-06";
+    const defaultDate = availableDates[0] || getTodayThaiDate();
     setEditingLog(null);
     setLogForm({
       scannerUserId: 1,
@@ -231,7 +313,7 @@ export default function AttendancePage() {
     const [d, t] = item.scanTimestamp.split(" ");
     setLogForm({
       scannerUserId: item.scannerUserId,
-      scanDate: d || "2026-11-06",
+      scanDate: d || getTodayThaiDate(),
       scanTime: t || "08:30:00",
       ioMode: item.ioMode,
       verifyMode: item.verifyMode,
@@ -254,11 +336,15 @@ export default function AttendancePage() {
           action: "update_log",
           id: editingLog.id,
           ...logForm,
+          actorId: currentUser?.id,
+          actorRole: currentUserRole,
           actorName,
         }
       : {
           action: "add_log",
           ...logForm,
+          actorId: currentUser?.id,
+          actorRole: currentUserRole,
           actorName,
         };
 
@@ -297,6 +383,8 @@ export default function AttendancePage() {
       body: JSON.stringify({
         action: "delete_log",
         id: deletingLog.id,
+        actorId: currentUser?.id,
+        actorRole: currentUserRole,
         actorName,
         editNote: deleteReason,
       }),
@@ -340,22 +428,32 @@ export default function AttendancePage() {
 
   const handleSaveMapping = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = await fetch("/api/attendance", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "save_mapping",
-        scannerUserId: editingMappingUid,
-        ...mappingForm,
-        actorName: currentUser?.name || "ผู้ดูแลระบบ",
-      }),
-    });
-    const data = await res.json();
-    if (data.success) {
-      showToast(
-        `อัปเดตชื่อรหัสสแกน #${editingMappingUid} เป็น "${mappingForm.memberName}" เรียบร้อยแล้ว`
-      );
-      await fetchAttendanceData();
+    if (savingMapping) return;
+    try {
+      setSavingMapping(true);
+      const res = await fetch("/api/attendance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "save_mapping",
+          scannerUserId: editingMappingUid,
+          ...mappingForm,
+          actorId: currentUser?.id,
+          actorRole: currentUserRole,
+          actorName: currentUser?.name || "ผู้ดูแลระบบ",
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(
+          `อัปเดตชื่อรหัสสแกน #${editingMappingUid} เป็น "${mappingForm.memberName}" เรียบร้อยแล้ว`
+        );
+        await fetchAttendanceData();
+      } else {
+        showToast(`บันทึกไม่สำเร็จ: ${data.error}`);
+      }
+    } finally {
+      setSavingMapping(false);
     }
   };
 
@@ -366,6 +464,7 @@ export default function AttendancePage() {
     division: string;
     role: string;
   }) => {
+    if (savingEditors) return;
     const exists = authorizedEditors.some((ed) => ed.memberId === member.id);
     const nextEditors = exists
       ? authorizedEditors.filter((ed) => ed.memberId !== member.id)
@@ -381,33 +480,48 @@ export default function AttendancePage() {
           },
         ];
 
-    setAuthorizedEditors(nextEditors);
-    if (typeof window !== "undefined") {
-      try {
-        localStorage.setItem("smartmso_attendance_editors", JSON.stringify(nextEditors));
-      } catch {}
-    }
-    const res = await fetch("/api/attendance", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "save_editors",
-        editors: nextEditors,
-      }),
-    });
-    const data = await res.json();
-    if (data.success) {
-      addAuditLog(
-        currentUser?.name || "ผู้ดูแลระบบ",
-        "ปรับปรุงสิทธิ์ผู้จัดการข้อมูลลงเวลาราชการ",
-        `${exists ? "ยกเลิกสิทธิ์" : "มอบสิทธิ์แก้ไขเวลาให้"} ${member.name}`,
-        "success"
-      );
-      showToast(
-        exists
-          ? `ยกเลิกสิทธิ์การแก้ไขเวลาของ ${member.name} แล้ว`
-          : `มอบสิทธิ์การแก้ไขเวลาเข้า-ออกงานให้ ${member.name} เรียบร้อยแล้ว`
-      );
+    try {
+      setSavingEditors(true);
+      const res = await fetch("/api/attendance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "save_editors",
+          editors: nextEditors,
+          actorId: currentUser?.id,
+          actorRole: currentUserRole,
+          actorName: currentUser?.name || "ผู้ดูแลระบบ",
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAuthorizedEditors(nextEditors);
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.setItem("smartmso_attendance_editors", JSON.stringify(nextEditors));
+            window.dispatchEvent(
+              new CustomEvent("smartmso:attendance_editors_updated", {
+                detail: nextEditors,
+              })
+            );
+          } catch {}
+        }
+        addAuditLog(
+          currentUser?.name || "ผู้ดูแลระบบ",
+          "ปรับปรุงสิทธิ์ผู้จัดการข้อมูลลงเวลาราชการ",
+          `${exists ? "ยกเลิกสิทธิ์" : "มอบสิทธิ์แก้ไขเวลาให้"} ${member.name}`,
+          "success"
+        );
+        showToast(
+          exists
+            ? `ยกเลิกสิทธิ์การแก้ไขเวลาของ ${member.name} แล้ว`
+            : `มอบสิทธิ์การแก้ไขเวลาเข้า-ออกงานให้ ${member.name} เรียบร้อยแล้ว`
+        );
+      } else {
+        showToast(`เกิดข้อผิดพลาด: ${data.error}`);
+      }
+    } finally {
+      setSavingEditors(false);
     }
   };
 
@@ -422,11 +536,17 @@ export default function AttendancePage() {
         body: JSON.stringify({
           action: "save_mysql_config",
           mysqlConfig,
+          actorId: currentUser?.id,
+          actorRole: currentUserRole,
+          actorName: currentUser?.name || "ผู้ดูแลระบบ",
         }),
       });
       const data = await res.json();
       if (data.mysqlStatus) {
         setMysqlStatus(data.mysqlStatus);
+      }
+      if (data.mysqlConfig) {
+        setMysqlConfig(data.mysqlConfig);
       }
       if (data.setupSql) {
         setSetupSql(data.setupSql);
@@ -438,7 +558,7 @@ export default function AttendancePage() {
         await fetchAttendanceData();
       } else {
         showToast(
-          `ยังไม่สามารถเข้าถึง MySQL: ${data.mysqlStatus?.errorMessage || "กรุณาตรวจสอบสิทธิ์ Host ใน phpMyAdmin"}`
+          `ยังไม่สามารถเข้าถึง MySQL: ${data.mysqlStatus?.errorMessage || data.error || "กรุณาตรวจสอบสิทธิ์ Host ใน phpMyAdmin"}`
         );
       }
     } finally {
@@ -519,7 +639,18 @@ export default function AttendancePage() {
               <div className="flex items-center gap-2.5">
                 <span className="text-2xl">⏱️</span>
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-500/30 border border-indigo-400/40 text-indigo-200">
-                  HIP CMi681S TCP 5005 ↔ Synology NAS MySQL
+                  HIP CMi681S ↔ Synology NAS ↔ Supabase Cloud
+                </span>
+                <span
+                  className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+                    dataSource === "supabase"
+                      ? "bg-sky-500/20 border-sky-400/40 text-sky-200"
+                      : "bg-slate-800/70 border-slate-600 text-slate-200"
+                  }`}
+                >
+                  {dataSource === "supabase"
+                    ? "☁️ โหมด Cloud Replica (Supabase)"
+                    : "🏢 โหมด Local / NAS On-Premise"}
                 </span>
                 {canEditAttendance ? (
                   <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 border border-emerald-400/40 text-emerald-300">
@@ -541,9 +672,10 @@ export default function AttendancePage() {
                 </span>{" "}
                 จัดเก็บลงฐานข้อมูล{" "}
                 <span className="font-mono text-emerald-300">
-                  MariaDB/MySQL บน Synology NAS ({mysqlConfig.host}:{mysqlConfig.port})
+                  MariaDB บน Synology NAS ({mysqlConfig.host}:{mysqlConfig.port})
                 </span>{" "}
-                พร้อมระบบปรับปรุงเวลาสำหรับผู้ดูแลระบบและเจ้าหน้าที่ที่ได้รับมอบหมาย
+                และสำรองข้อมูลขึ้น{" "}
+                <span className="font-mono text-sky-300">Supabase Cloud</span> แบบ Realtime Hybrid
               </p>
             </div>
 
@@ -570,14 +702,19 @@ export default function AttendancePage() {
                 </select>
                 <button
                   onClick={() => handleSyncFromDevice(syncLimit)}
-                  disabled={syncing}
+                  disabled={syncing || dataSource === "supabase"}
+                  title={
+                    dataSource === "supabase"
+                      ? "การดึงข้อมูลจากเครื่องสแกนใช้ได้เฉพาะเครือข่ายภายในสำนักงาน (LAN)"
+                      : `ซิงก์ข้อมูลจาก ${mysqlConfig.scannerIp}`
+                  }
                   className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold flex items-center gap-2 transition cursor-pointer"
                 >
                   <span>{syncing ? "⏳" : "🔄"}</span>
                   <span>
                     {syncing
                       ? "กำลังซิงก์จากเครื่องสแกน..."
-                      : "ซิงก์ข้อมูลจาก 192.168.162.15"}
+                      : `ซิงก์ข้อมูลจาก ${mysqlConfig.scannerIp}`}
                   </span>
                 </button>
               </div>
@@ -596,15 +733,23 @@ export default function AttendancePage() {
         </div>
 
         {/* การ์ดสถานะ 4 บล็อก */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mt-4">
           {/* 1. สถานะเครื่องสแกน HIP CMi681S */}
           <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-500 uppercase">
                 เครื่องสแกนลายนิ้วมือ
               </span>
-              <span className="px-2 py-0.5 text-[11px] font-semibold rounded-full bg-emerald-100 text-emerald-700">
-                ● Online (TCP 5005)
+              <span
+                className={`px-2 py-0.5 text-[11px] font-semibold rounded-full ${
+                  dataSource === "supabase"
+                    ? "bg-slate-100 text-slate-600"
+                    : "bg-emerald-100 text-emerald-700"
+                }`}
+              >
+                {dataSource === "supabase"
+                  ? "🏢 ใช้งานเฉพาะวง LAN"
+                  : `● Ready (TCP ${mysqlConfig.scannerPort})`}
               </span>
             </div>
             <div className="mt-2 font-bold text-slate-900 dark:text-white text-base">
@@ -626,42 +771,61 @@ export default function AttendancePage() {
             </div>
           </div>
 
-          {/* 2. สถานะฐานข้อมูล Synology NAS MySQL */}
+          {/* 2. สถานะฐานข้อมูล Synology NAS MySQL & Supabase Cloud */}
           <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-500 uppercase">
-                Synology NAS MySQL Server
+                ฐานข้อมูล Hybrid (NAS + Cloud)
               </span>
               {mysqlStatus?.connected ? (
                 <span className="px-2 py-0.5 text-[11px] font-semibold rounded-full bg-emerald-100 text-emerald-700">
-                  ● เชื่อมต่อ MySQL สำเร็จ
+                  ● NAS MySQL สำเร็จ
+                </span>
+              ) : mysqlStatus?.errorCode === "CLOUD_LAN_UNREACHABLE" ? (
+                <span className="px-2 py-0.5 text-[11px] font-semibold rounded-full bg-sky-100 text-sky-700">
+                  ☁️ Cloud Replica
                 </span>
               ) : (
                 <span className="px-2 py-0.5 text-[11px] font-semibold rounded-full bg-amber-100 text-amber-800">
-                  ⚠️ รอปลดล็อกสิทธิ์ Host บน NAS
+                  ⚠️ รอเปิดสิทธิ์ NAS
                 </span>
               )}
             </div>
             <div className="mt-2 font-bold text-slate-900 dark:text-white text-base flex items-center justify-between">
-              <span>
+              <span className="truncate">
                 {mysqlConfig.host}:{mysqlConfig.port}
               </span>
-              <button
-                onClick={() => setShowMysqlModal(true)}
-                className="text-xs font-semibold text-indigo-600 hover:text-indigo-500 underline cursor-pointer"
-              >
-                ตั้งค่า / ดูวิธีเปิดสิทธิ์
-              </button>
+              {currentUserRole === "admin" && (
+                <button
+                  onClick={() => setShowMysqlModal(true)}
+                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-500 underline cursor-pointer shrink-0 ml-2"
+                >
+                  ตั้งค่า MySQL
+                </button>
+              )}
             </div>
-            <div className="mt-1 text-xs text-slate-500">
-              DB: <span className="font-mono">{mysqlConfig.database}</span> | เก็บแล้ว:{" "}
-              <span className="font-semibold text-slate-700 dark:text-slate-300">
-                {totalStoredLogs.toLocaleString()} รายการ
+            <div className="mt-1 text-xs text-slate-500 flex items-center justify-between gap-2">
+              <span className="truncate">
+                NAS:{" "}
+                <strong className="text-slate-700 dark:text-slate-300">
+                  {mysqlStatus?.connected && typeof mysqlStatus.rowCount === "number"
+                    ? `${mysqlStatus.rowCount.toLocaleString()} รายการ`
+                    : mysqlStatus?.errorCode === "CLOUD_LAN_UNREACHABLE"
+                    ? "โหมด Cloud"
+                    : "ยังไม่ซิงก์"}
+                </strong>
               </span>
+              {supabaseStatus?.ready ? (
+                <span className="text-[11px] font-semibold text-sky-600 dark:text-sky-400">
+                  ☁️ Supabase: {supabaseStatus.count.toLocaleString()} รายการ
+                </span>
+              ) : (
+                <span className="text-[11px] text-rose-500">☁️ Cloud ไม่พร้อม</span>
+              )}
             </div>
           </div>
 
-          {/* 3. สถิติรายการที่แสดง */}
+          {/* 3. สถิติรายการตามตัวกรอง */}
           <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-500 uppercase">
@@ -671,29 +835,44 @@ export default function AttendancePage() {
                 {filteredTotal.toLocaleString()} รายการ
               </span>
             </div>
-            <div className="grid grid-cols-3 gap-2 mt-2.5 text-center">
+            <div className="grid grid-cols-4 gap-1.5 mt-2.5 text-center">
               <div className="bg-emerald-50 dark:bg-emerald-950/40 rounded-xl p-1.5">
-                <div className="text-[11px] text-emerald-700 dark:text-emerald-300">
+                <div className="text-[10px] text-emerald-700 dark:text-emerald-300">
                   เข้างาน
                 </div>
                 <div className="text-sm font-bold text-emerald-700 dark:text-emerald-300">
-                  {summaryStats.checkIn.toLocaleString()}
+                  {(serverSummaryStats || summaryStats).checkIn.toLocaleString()}
                 </div>
               </div>
               <div className="bg-blue-50 dark:bg-blue-950/40 rounded-xl p-1.5">
-                <div className="text-[11px] text-blue-700 dark:text-blue-300">
+                <div className="text-[10px] text-blue-700 dark:text-blue-300">
                   ออกงาน
                 </div>
                 <div className="text-sm font-bold text-blue-700 dark:text-blue-300">
-                  {summaryStats.checkOut.toLocaleString()}
+                  {(serverSummaryStats || summaryStats).checkOut.toLocaleString()}
+                </div>
+              </div>
+              <div
+                className="bg-rose-50 dark:bg-rose-950/40 rounded-xl p-1.5"
+                title={
+                  serverSummaryStats?.lateCountIsApprox
+                    ? "นับเฉพาะรายการที่แสดงในหน้านี้ (เลือก 1 วันเพื่อดูยอดทั้งวัน)"
+                    : "จำนวนการสแกนเข้างานระหว่าง 08:31 - 11:59 น."
+                }
+              >
+                <div className="text-[10px] text-rose-700 dark:text-rose-300">
+                  หลัง 08:30{serverSummaryStats?.lateCountIsApprox ? "*" : ""}
+                </div>
+                <div className="text-sm font-bold text-rose-700 dark:text-rose-300">
+                  {(serverSummaryStats || summaryStats).lateCount.toLocaleString()}
                 </div>
               </div>
               <div className="bg-amber-50 dark:bg-amber-950/40 rounded-xl p-1.5">
-                <div className="text-[11px] text-amber-700 dark:text-amber-300">
+                <div className="text-[10px] text-amber-700 dark:text-amber-300">
                   แก้ไขแล้ว
                 </div>
                 <div className="text-sm font-bold text-amber-700 dark:text-amber-300">
-                  {summaryStats.edited.toLocaleString()}
+                  {(serverSummaryStats || summaryStats).edited.toLocaleString()}
                 </div>
               </div>
             </div>
@@ -734,35 +913,38 @@ export default function AttendancePage() {
           </div>
         </div>
 
-        {/* แจ้งเตือนคำแนะนำการตั้งค่า MySQL บน Synology NAS หากยังติดเรื่อง Host Permission */}
-        {mysqlStatus && !mysqlStatus.connected && (
-          <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-amber-900 dark:text-amber-200 font-bold text-sm">
-                <span>🗄️</span>
-                <span>
-                  ตรวจพบเซิร์ฟเวอร์ MariaDB 10 บน Synology NAS ({mysqlConfig.host}:
-                  {mysqlConfig.port}) เปิดอยู่แล้ว!
-                </span>
+        {/* แจ้งเตือนคำแนะนำการตั้งค่า MySQL บน Synology NAS เฉพาะ Admin เมื่อเชื่อมต่อ LAN ไม่สำเร็จ */}
+        {currentUserRole === "admin" &&
+          mysqlStatus &&
+          !mysqlStatus.connected &&
+          mysqlStatus.errorCode !== "CLOUD_LAN_UNREACHABLE" && (
+            <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-2xl p-4 mt-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-amber-900 dark:text-amber-200 font-bold text-sm">
+                  <span>🗄️</span>
+                  <span>
+                    สถานะ MariaDB 10 บน Synology NAS ({mysqlConfig.host}:
+                    {mysqlConfig.port})
+                  </span>
+                </div>
+                <p className="text-xs text-amber-800 dark:text-amber-300">
+                  {mysqlStatus.setupAdvice} — ข้อมูลทั้งหมดที่ซิงก์และแก้ไขถูกสำรองไว้บนระบบเรียบร้อยแล้ว
+                  สามารถกด{" "}
+                  <strong>&ldquo;คู่มือตั้งค่า & คำสั่ง SQL เปิดสิทธิ์ MySQL บน Synology NAS&rdquo;</strong>{" "}
+                  เพื่อทดสอบและตรวจสอบการเชื่อมต่อได้ทันที
+                </p>
               </div>
-              <p className="text-xs text-amber-800 dark:text-amber-300">
-                {mysqlStatus.setupAdvice} — ข้อมูลทั้งหมดที่ซิงก์และแก้ไขในตอนนี้ถูกบันทึกไว้ในระบบแล้ว
-                และสามารถกด{" "}
-                <strong>&ldquo;คู่มือตั้งค่า & คำสั่ง SQL เปิดสิทธิ์ MySQL บน Synology NAS&rdquo;</strong>{" "}
-                เพื่อเชื่อมต่อเข้า MariaDB ได้ทันที
-              </p>
+              <button
+                onClick={() => setShowMysqlModal(true)}
+                className="shrink-0 px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shadow transition cursor-pointer"
+              >
+                📖 เปิดคู่มือตั้งค่า MySQL บน Synology NAS
+              </button>
             </div>
-            <button
-              onClick={() => setShowMysqlModal(true)}
-              className="shrink-0 px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shadow transition cursor-pointer"
-            >
-              📖 เปิดคู่มือตั้งค่า MySQL บน Synology NAS
-            </button>
-          </div>
-        )}
+          )}
 
         {/* แถบตัวกรองและค้นหา (Filter Bar) */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 mt-4 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
             <div>
               <label className="block text-[11px] font-semibold text-slate-500 mb-1">
@@ -771,7 +953,10 @@ export default function AttendancePage() {
               <input
                 type="date"
                 value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
+                onChange={(e) => {
+                  setDateFrom(e.target.value);
+                  setPage(1);
+                }}
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs"
               />
             </div>
@@ -783,23 +968,29 @@ export default function AttendancePage() {
               <input
                 type="date"
                 value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
+                onChange={(e) => {
+                  setDateTo(e.target.value);
+                  setPage(1);
+                }}
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs"
               />
             </div>
 
             <div>
               <label className="block text-[11px] font-semibold text-slate-500 mb-1">
-                บุคลากร / รหัสเครื่องสแกน
+                บุคลากร / รหัสเครื่องสแกน (ทั้งหมด 1-64)
               </label>
               <select
                 value={selectedScannerUid}
-                onChange={(e) => setSelectedScannerUid(e.target.value)}
+                onChange={(e) => {
+                  setSelectedScannerUid(e.target.value);
+                  setPage(1);
+                }}
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs"
               >
                 <option value="all">ทั้งหมด (ทุก User ID)</option>
                 {Object.values(mappings)
-                  .slice(0, 45)
+                  .sort((a, b) => a.scannerUserId - b.scannerUserId)
                   .map((m) => (
                     <option key={m.scannerUserId} value={String(m.scannerUserId)}>
                       #{m.scannerUserId} - {m.memberName}
@@ -814,7 +1005,10 @@ export default function AttendancePage() {
               </label>
               <select
                 value={selectedIoMode}
-                onChange={(e) => setSelectedIoMode(e.target.value)}
+                onChange={(e) => {
+                  setSelectedIoMode(e.target.value);
+                  setPage(1);
+                }}
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs"
               >
                 <option value="all">ทั้งหมด (เข้างาน + ออกงาน)</option>
@@ -825,14 +1019,17 @@ export default function AttendancePage() {
 
             <div className="lg:col-span-2">
               <label className="block text-[11px] font-semibold text-slate-500 mb-1">
-                ค้นหา (ชื่อบุคลากร / รหัสสแกน / วันที่ / หมายเหตุ)
+                ค้นหา (ชื่อบุคลากร / รหัสสแกน / กลุ่มงาน / หมายเหตุ)
               </label>
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={searchText}
-                  onChange={(e) => setSearchText(e.target.value)}
-                  placeholder="พิมพ์ชื่อ, รหัสสแกน เช่น 18, หรือ 2026-11-06..."
+                  onChange={(e) => {
+                    setSearchText(e.target.value);
+                    setPage(1);
+                  }}
+                  placeholder={`พิมพ์ชื่อ, รหัสสแกน เช่น 18, หรือ ${getTodayThaiDate()}...`}
                   className="flex-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs"
                 />
                 <button
@@ -842,6 +1039,8 @@ export default function AttendancePage() {
                     setSelectedScannerUid("all");
                     setSelectedIoMode("all");
                     setSearchText("");
+                    setDebouncedSearchText("");
+                    setPage(1);
                   }}
                   className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-xs font-medium text-slate-600 dark:text-slate-300 cursor-pointer"
                 >
@@ -867,6 +1066,7 @@ export default function AttendancePage() {
                 onClick={() => {
                   setDateFrom("");
                   setDateTo("");
+                  setPage(1);
                 }}
                 className={`px-2.5 py-1 rounded-lg text-[11px] font-medium cursor-pointer ${
                   !dateFrom && !dateTo
@@ -882,6 +1082,7 @@ export default function AttendancePage() {
                   onClick={() => {
                     setDateFrom(d);
                     setDateTo(d);
+                    setPage(1);
                   }}
                   className={`px-2.5 py-1 rounded-lg text-[11px] font-mono cursor-pointer ${
                     dateFrom === d && dateTo === d
@@ -897,13 +1098,29 @@ export default function AttendancePage() {
         </div>
 
         {/* ตารางแสดงข้อมูลการลงเวลา */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl mt-4 border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
           <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
             <div className="text-sm font-bold text-slate-800 dark:text-white">
               รายการบันทึกเวลาเข้า-ออกงาน ({filteredTotal.toLocaleString()} รายการ)
             </div>
-            <div className="text-xs text-slate-500">
-              แสดงสูงสุด 1,000 รายการล่าสุดตามเงื่อนไขตัวกรอง
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <span>แสดงต่อหน้า:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs"
+              >
+                <option value={100}>100</option>
+                <option value={200}>200</option>
+                <option value={500}>500</option>
+                <option value={1000}>1,000</option>
+              </select>
+              <span>
+                (หน้า {page} / {totalPages})
+              </span>
             </div>
           </div>
 
@@ -931,7 +1148,7 @@ export default function AttendancePage() {
                   <tr>
                     <td colSpan={7} className="py-12 text-center text-slate-400">
                       ไม่พบข้อมูลการลงเวลาตามตัวกรองที่เลือก — กดปุ่ม{" "}
-                      <strong>&ldquo;ซิงก์ข้อมูลจาก 192.168.162.15&rdquo;</strong>{" "}
+                      <strong>&ldquo;ซิงก์ข้อมูลจาก {mysqlConfig.scannerIp}&rdquo;</strong>{" "}
                       ด้านบนเพื่อดึงข้อมูลจากเครื่องสแกน
                     </td>
                   </tr>
@@ -1055,6 +1272,57 @@ export default function AttendancePage() {
               </tbody>
             </table>
           </div>
+
+          {/* แถบแบ่งหน้า (Pagination Bar) */}
+          {filteredTotal > 0 && (
+            <div className="px-5 py-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="text-slate-600 dark:text-slate-400">
+                แสดงลำดับที่{" "}
+                <strong>{((page - 1) * pageSize + 1).toLocaleString()}</strong> –{" "}
+                <strong>
+                  {Math.min(page * pageSize, filteredTotal).toLocaleString()}
+                </strong>{" "}
+                จากทั้งหมด <strong>{filteredTotal.toLocaleString()}</strong> รายการ
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={page <= 1 || loading}
+                  onClick={() => setPage(1)}
+                  className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-slate-100 cursor-pointer"
+                >
+                  « หน้าแรก
+                </button>
+                <button
+                  type="button"
+                  disabled={page <= 1 || loading}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-slate-100 cursor-pointer"
+                >
+                  ‹ ก่อนหน้า
+                </button>
+                <span className="px-3 py-1.5 font-semibold text-indigo-600 dark:text-indigo-400">
+                  หน้า {page.toLocaleString()} / {totalPages.toLocaleString()}
+                </span>
+                <button
+                  type="button"
+                  disabled={page >= totalPages || loading}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-slate-100 cursor-pointer"
+                >
+                  ถัดไป ›
+                </button>
+                <button
+                  type="button"
+                  disabled={page >= totalPages || loading}
+                  onClick={() => setPage(totalPages)}
+                  className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-slate-100 cursor-pointer"
+                >
+                  สุดท้าย »
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1093,11 +1361,13 @@ export default function AttendancePage() {
                   }
                   className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
                 >
-                  {Object.values(mappings).map((m) => (
-                    <option key={m.scannerUserId} value={m.scannerUserId}>
-                      รหัสสแกน #{m.scannerUserId} — {m.memberName} ({m.division})
-                    </option>
-                  ))}
+                  {Object.values(mappings)
+                    .sort((a, b) => a.scannerUserId - b.scannerUserId)
+                    .map((m) => (
+                      <option key={m.scannerUserId} value={m.scannerUserId}>
+                        รหัสสแกน #{m.scannerUserId} — {m.memberName} ({m.division})
+                      </option>
+                    ))}
                 </select>
               </div>
 
@@ -1328,7 +1598,7 @@ export default function AttendancePage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     ชื่อ-นามสกุลจริงที่ต้องการแสดงผล
@@ -1339,6 +1609,19 @@ export default function AttendancePage() {
                     value={mappingForm.memberName}
                     onChange={(e) =>
                       setMappingForm({ ...mappingForm, memberName: e.target.value })
+                    }
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    ตำแหน่ง
+                  </label>
+                  <input
+                    type="text"
+                    value={mappingForm.position}
+                    onChange={(e) =>
+                      setMappingForm({ ...mappingForm, position: e.target.value })
                     }
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
                   />
@@ -1368,9 +1651,12 @@ export default function AttendancePage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold cursor-pointer"
+                  disabled={savingMapping}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold cursor-pointer"
                 >
-                  💾 บันทึกการจับคู่ User ID #{editingMappingUid}
+                  {savingMapping
+                    ? "⏳ กำลังบันทึก..."
+                    : `💾 บันทึกการจับคู่ User ID #${editingMappingUid}`}
                 </button>
               </div>
             </form>
@@ -1430,8 +1716,9 @@ export default function AttendancePage() {
                       </span>
                     ) : (
                       <button
+                        disabled={savingEditors}
                         onClick={() => handleToggleEditorMember(m)}
-                        className={`px-3 py-1.5 rounded-xl font-semibold transition cursor-pointer ${
+                        className={`px-3 py-1.5 rounded-xl font-semibold transition cursor-pointer disabled:opacity-50 ${
                           isAuthorized
                             ? "bg-emerald-600 text-white"
                             : "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
@@ -1619,19 +1906,34 @@ export default function AttendancePage() {
                 </div>
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    MySQL Password
+                    MySQL Password (โหลดจาก Server / .env อัตโนมัติ)
                   </label>
-                  <input
-                    type="text"
-                    value={mysqlConfig.password || ""}
-                    onChange={(e) =>
-                      setMysqlConfig({
-                        ...mysqlConfig,
-                        password: e.target.value,
-                      })
-                    }
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono"
-                  />
+                  <div className="relative flex items-center">
+                    <input
+                      type={showMysqlPassword ? "text" : "password"}
+                      value={mysqlConfig.password || ""}
+                      onFocus={() => {
+                        if (mysqlConfig.password === "••••••••") {
+                          setMysqlConfig({ ...mysqlConfig, password: "" });
+                        }
+                      }}
+                      onChange={(e) =>
+                        setMysqlConfig({
+                          ...mysqlConfig,
+                          password: e.target.value,
+                        })
+                      }
+                      placeholder="เว้นว่างเพื่อใช้ค่าเดิมจาก .env.local (หรือพิมพ์รหัสผ่านใหม่)"
+                      className="w-full px-3 py-2 pr-12 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowMysqlPassword((v) => !v)}
+                      className="absolute right-2 px-2 py-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
+                    >
+                      {showMysqlPassword ? "ซ่อน" : "แสดง"}
+                    </button>
+                  </div>
                 </div>
               </div>
 

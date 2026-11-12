@@ -76,32 +76,36 @@ export interface AttendanceStoreData {
   deviceTotalRecords: number;
   mappings: Record<number, ScannerUserMapping>;
   authorizedEditors: AuthorizedAttendanceEditor[];
+  editorsCustomized?: boolean;
   logs: AttendanceLogItem[];
 }
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const STORE_PATH = path.join(DATA_DIR, "attendance-store.json");
 
-export const DEFAULT_NAS_MYSQL_CONFIG: NasMysqlConfig = {
-  connectionMode:
-    (process.env.NAS_MYSQL_MODE as "direct_tcp" | "cloudflare_bridge") ||
-    "direct_tcp",
-  host: process.env.NAS_MYSQL_HOST || "192.168.162.23",
-  port: Number(process.env.NAS_MYSQL_PORT || 3308),
-  user: process.env.NAS_MYSQL_USER || "smartmso",
-  password: process.env.NAS_MYSQL_PASSWORD || "",
-  database: process.env.NAS_MYSQL_DATABASE || "smart_mso_attendance",
-  cloudflareBridgeUrl:
-    process.env.NAS_MYSQL_BRIDGE_URL ||
-    "https://db.smso.site/attendance-bridge.php",
-  cloudflareBridgeSecret:
-    process.env.NAS_MYSQL_BRIDGE_SECRET || "",
-  scannerIp: process.env.HIP_SCANNER_IP || "192.168.162.15",
-  scannerPort: Number(process.env.HIP_SCANNER_PORT || 5005),
-  scannerPassword: Number(process.env.HIP_SCANNER_PASSWORD || 1234),
-};
+export function getEnvMysqlDefaults(): NasMysqlConfig {
+  return {
+    connectionMode:
+      (process.env.NAS_MYSQL_MODE as "direct_tcp" | "cloudflare_bridge") ||
+      "direct_tcp",
+    host: process.env.NAS_MYSQL_HOST || "192.168.162.23",
+    port: Number(process.env.NAS_MYSQL_PORT || 3308),
+    user: process.env.NAS_MYSQL_USER || "smartmso",
+    password: process.env.NAS_MYSQL_PASSWORD || "",
+    database: process.env.NAS_MYSQL_DATABASE || "smart_mso_attendance",
+    cloudflareBridgeUrl:
+      process.env.NAS_MYSQL_BRIDGE_URL ||
+      "https://db.smso.site/attendance-bridge.php",
+    cloudflareBridgeSecret: process.env.NAS_MYSQL_BRIDGE_SECRET || "",
+    scannerIp: process.env.HIP_SCANNER_IP || "192.168.162.15",
+    scannerPort: Number(process.env.HIP_SCANNER_PORT || 5005),
+    scannerPassword: Number(process.env.HIP_SCANNER_PASSWORD || 1234),
+  };
+}
 
-function buildDefaultMappings(): Record<number, ScannerUserMapping> {
+export const DEFAULT_NAS_MYSQL_CONFIG: NasMysqlConfig = getEnvMysqlDefaults();
+
+export function buildDefaultMappings(): Record<number, ScannerUserMapping> {
   const map: Record<number, ScannerUserMapping> = {};
   for (let uid = 1; uid <= 64; uid++) {
     const staff = OFFICIAL_OFFICE_PERSONNEL[uid - 1];
@@ -126,7 +130,7 @@ function buildDefaultMappings(): Record<number, ScannerUserMapping> {
   return map;
 }
 
-function buildDefaultEditors(): AuthorizedAttendanceEditor[] {
+export function buildDefaultEditors(): AuthorizedAttendanceEditor[] {
   // ค่าเริ่มต้น: ให้หัวหน้าฝ่ายบริหารทั่วไป (usr_2) และเจ้าหน้าที่ระบบงานคอมพิวเตอร์ (usr_5) มีสิทธิ์แก้ไขเวลาได้นอกเหนือจาก Admin (usr_1)
   return [
     {
@@ -149,6 +153,7 @@ function buildDefaultEditors(): AuthorizedAttendanceEditor[] {
 }
 
 export function loadAttendanceStore(): AttendanceStoreData {
+  const envDefaults = getEnvMysqlDefaults();
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -156,13 +161,65 @@ export function loadAttendanceStore(): AttendanceStoreData {
     if (fs.existsSync(STORE_PATH)) {
       const raw = fs.readFileSync(STORE_PATH, "utf8");
       const parsed = JSON.parse(raw) as Partial<AttendanceStoreData>;
+      const parsedCfg = parsed.mysqlConfig || ({} as Partial<NasMysqlConfig>);
+
+      const resolvedConfig: NasMysqlConfig = {
+        connectionMode: process.env.NAS_MYSQL_MODE
+          ? (process.env.NAS_MYSQL_MODE as "direct_tcp" | "cloudflare_bridge")
+          : parsedCfg.connectionMode || envDefaults.connectionMode,
+        host: process.env.NAS_MYSQL_HOST || parsedCfg.host || envDefaults.host,
+        port: process.env.NAS_MYSQL_PORT
+          ? Number(process.env.NAS_MYSQL_PORT)
+          : Number(parsedCfg.port || envDefaults.port),
+        user: process.env.NAS_MYSQL_USER || parsedCfg.user || envDefaults.user,
+        password:
+          envDefaults.password ||
+          (parsedCfg.password && parsedCfg.password !== "••••••••"
+            ? parsedCfg.password
+            : ""),
+        database:
+          process.env.NAS_MYSQL_DATABASE ||
+          parsedCfg.database ||
+          envDefaults.database,
+        cloudflareBridgeUrl:
+          process.env.NAS_MYSQL_BRIDGE_URL ||
+          parsedCfg.cloudflareBridgeUrl ||
+          envDefaults.cloudflareBridgeUrl,
+        cloudflareBridgeSecret:
+          envDefaults.cloudflareBridgeSecret ||
+          (parsedCfg.cloudflareBridgeSecret &&
+          parsedCfg.cloudflareBridgeSecret !== "••••••••"
+            ? parsedCfg.cloudflareBridgeSecret
+            : ""),
+        scannerIp:
+          process.env.HIP_SCANNER_IP ||
+          parsedCfg.scannerIp ||
+          envDefaults.scannerIp,
+        scannerPort: process.env.HIP_SCANNER_PORT
+          ? Number(process.env.HIP_SCANNER_PORT)
+          : Number(parsedCfg.scannerPort || envDefaults.scannerPort),
+        scannerPassword: process.env.HIP_SCANNER_PASSWORD
+          ? Number(process.env.HIP_SCANNER_PASSWORD)
+          : Number(parsedCfg.scannerPassword || envDefaults.scannerPassword || 1234),
+      };
+
+      const hasCustomEditors = Boolean(parsed.editorsCustomized);
+      const parsedEditors = Array.isArray(parsed.authorizedEditors)
+        ? parsed.authorizedEditors
+        : [];
+      const authorizedEditors =
+        parsedEditors.length > 0 || hasCustomEditors
+          ? parsedEditors
+          : buildDefaultEditors();
+
       return {
-        mysqlConfig: { ...DEFAULT_NAS_MYSQL_CONFIG, ...(parsed.mysqlConfig || {}) },
+        mysqlConfig: resolvedConfig,
         lastSyncedAt: parsed.lastSyncedAt || null,
         lastMysqlSyncedAt: parsed.lastMysqlSyncedAt || null,
         deviceTotalRecords: parsed.deviceTotalRecords || 0,
         mappings: { ...buildDefaultMappings(), ...(parsed.mappings || {}) },
-        authorizedEditors: parsed.authorizedEditors || buildDefaultEditors(),
+        authorizedEditors,
+        editorsCustomized: hasCustomEditors,
         logs: Array.isArray(parsed.logs) ? parsed.logs : [],
       };
     }
@@ -171,30 +228,55 @@ export function loadAttendanceStore(): AttendanceStoreData {
   }
 
   return {
-    mysqlConfig: { ...DEFAULT_NAS_MYSQL_CONFIG },
+    mysqlConfig: { ...envDefaults },
     lastSyncedAt: null,
     lastMysqlSyncedAt: null,
     deviceTotalRecords: 0,
     mappings: buildDefaultMappings(),
     authorizedEditors: buildDefaultEditors(),
+    editorsCustomized: false,
     logs: [],
   };
 }
 
 export function saveAttendanceStore(store: AttendanceStoreData): void {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    const sanitizedStore: AttendanceStoreData = {
+      ...store,
+      mysqlConfig: {
+        ...store.mysqlConfig,
+        // ไม่บันทึกรหัสผ่าน Plaintext ลง JSON เมื่อกำหนดผ่าน Environment Variables แล้ว
+        password: process.env.NAS_MYSQL_PASSWORD ? "" : store.mysqlConfig.password,
+        cloudflareBridgeSecret: process.env.NAS_MYSQL_BRIDGE_SECRET
+          ? ""
+          : store.mysqlConfig.cloudflareBridgeSecret,
+        scannerPassword: process.env.HIP_SCANNER_PASSWORD
+          ? undefined
+          : store.mysqlConfig.scannerPassword,
+      },
+    };
+    const serialized =
+      sanitizedStore.logs.length > 500
+        ? JSON.stringify(sanitizedStore)
+        : JSON.stringify(sanitizedStore, null, 2);
+    fs.writeFileSync(STORE_PATH, serialized, "utf8");
+  } catch (err) {
+    // กรณีทำงานบน Read-Only Serverless (เช่น Vercel) ให้ข้ามการเขียนไฟล์ Local โดยไม่ให้ API Crash
+    console.warn("Skip saving local attendance-store.json:", (err as Error)?.message || err);
   }
-  fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2), "utf8");
 }
 
 /**
  * สร้างคำสั่ง SQL สำหรับตั้งค่าบน Synology NAS MariaDB 10 (ผ่าน phpMyAdmin หรือ SSH)
+ * ไม่ฝังรหัสผ่านจริงใน Payload ที่ส่งผ่าน API เพื่อความปลอดภัย
  */
 export function getSynologyMysqlSetupSql(config: NasMysqlConfig, clientIp = "192.168.162.%"): string {
   const db = config.database || "smart_mso_attendance";
   const user = config.user || "smartmso";
-  const pass = config.password || process.env.NAS_MYSQL_PASSWORD || "YOUR_STRONG_PASSWORD";
+  const pass = "YOUR_STRONG_PASSWORD";
 
   return `-- 1. สร้างฐานข้อมูลสำหรับเก็บข้อมูลเวลาปฏิบัติราชการ Smart MSO
 CREATE DATABASE IF NOT EXISTS \`${db}\`
@@ -261,6 +343,14 @@ CREATE TABLE IF NOT EXISTS attendance_authorized_editors (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`;
 }
 
+function isCloudPrivateLanBlocked(cfg: NasMysqlConfig): boolean {
+  if (cfg.connectionMode === "cloudflare_bridge") return false;
+  const isPrivateIp = /^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[0-1])\.|127\.)/.test(
+    cfg.host || ""
+  );
+  return process.env.VERCEL === "1" && isPrivateIp;
+}
+
 /**
  * ทดสอบการเชื่อมต่อและสร้างตารางอัตโนมัติบน Synology NAS MariaDB
  */
@@ -279,7 +369,21 @@ export async function testAndInitSynologyMysql(
   setupAdvice?: string;
 }> {
   const store = loadAttendanceStore();
-  const cfg: NasMysqlConfig = { ...store.mysqlConfig, ...(customConfig || {}) };
+  const safeCustom = customConfig
+    ? {
+        ...customConfig,
+        password:
+          customConfig.password && customConfig.password !== "••••••••"
+            ? customConfig.password
+            : store.mysqlConfig.password,
+        cloudflareBridgeSecret:
+          customConfig.cloudflareBridgeSecret &&
+          customConfig.cloudflareBridgeSecret !== "••••••••"
+            ? customConfig.cloudflareBridgeSecret
+            : store.mysqlConfig.cloudflareBridgeSecret,
+      }
+    : {};
+  const cfg: NasMysqlConfig = { ...store.mysqlConfig, ...safeCustom };
 
   // กรณีเลือกโหมดเชื่อมต่อผ่านอินเทอร์เน็ตด้วย Cloudflare HTTPS Bridge (ผ่านพอร์ต 443 -> NAS Web Station -> 127.0.0.1:3308)
   if (cfg.connectionMode === "cloudflare_bridge" && cfg.cloudflareBridgeUrl) {
@@ -353,6 +457,21 @@ export async function testAndInitSynologyMysql(
     }
   }
 
+  // กรณีรันบน Vercel Cloud แล้วตั้งค่าโหมด Direct TCP เป็น Private LAN IP จะไม่สามารถเชื่อมตรงได้ (ไม่ต้องรอ Timeout)
+  if (isCloudPrivateLanBlocked(cfg)) {
+    return {
+      connected: false,
+      host: cfg.host,
+      port: cfg.port,
+      database: cfg.database,
+      user: cfg.user,
+      errorCode: "CLOUD_LAN_UNREACHABLE",
+      errorMessage: `ขณะนี้ใช้งานผ่าน Cloud Server (Vercel) จึงไม่สามารถเข้าถึง IP วงแลนภายใน (${cfg.host}:${cfg.port}) โดยตรงได้`,
+      setupAdvice:
+        "กำลังแสดงผลข้อมูลจาก Cloud Replica (Supabase) — หากต้องการซิงก์เข้า MariaDB บน NAS จากภายนอก กรุณาเปลี่ยนเป็นโหมด Cloudflare Tunnel Bridge",
+    };
+  }
+
   let conn: mysql.Connection | null = null;
   try {
     conn = await mysql.createConnection({
@@ -360,7 +479,7 @@ export async function testAndInitSynologyMysql(
       port: cfg.port,
       user: cfg.user,
       password: cfg.password,
-      connectTimeout: 4000,
+      connectTimeout: 2500,
       multipleStatements: true,
     });
 
@@ -557,23 +676,30 @@ export async function pushStoreToSynologyMysql(store: AttendanceStoreData): Prom
       );
     }
 
-    // 2. Sync Authorized Editors
-    await conn.query("DELETE FROM attendance_authorized_editors");
-    if (store.authorizedEditors.length > 0) {
-      const editorValues = store.authorizedEditors.map((ed) => [
-        ed.memberId,
-        ed.memberName,
-        ed.division || "",
-        ed.role || "member",
-        ed.grantedBy || "admin",
-        ed.grantedAt ? ed.grantedAt.slice(0, 19).replace("T", " ") : new Date(),
-      ]);
-      await conn.query(
-        `INSERT INTO attendance_authorized_editors
-          (member_id, member_name, division, role, granted_by, granted_at)
-         VALUES ?`,
-        [editorValues]
-      );
+    // 2. Sync Authorized Editors inside transaction
+    await conn.beginTransaction();
+    try {
+      await conn.query("DELETE FROM attendance_authorized_editors");
+      if (store.authorizedEditors.length > 0) {
+        const editorValues = store.authorizedEditors.map((ed) => [
+          ed.memberId,
+          ed.memberName,
+          ed.division || "",
+          ed.role || "member",
+          ed.grantedBy || "admin",
+          ed.grantedAt ? ed.grantedAt.slice(0, 19).replace("T", " ") : new Date(),
+        ]);
+        await conn.query(
+          `INSERT INTO attendance_authorized_editors
+            (member_id, member_name, division, role, granted_by, granted_at)
+           VALUES ?`,
+          [editorValues]
+        );
+      }
+      await conn.commit();
+    } catch (txErr) {
+      await conn.rollback();
+      throw txErr;
     }
 
     // 3. Batch Upsert Attendance Logs in chunks of 500
@@ -656,6 +782,43 @@ export async function upsertSingleLogToSynologyMysql(
   cfg: NasMysqlConfig,
   item: AttendanceLogItem
 ): Promise<{ synced: boolean; error?: string }> {
+  // กรณีเลือกโหมด Cloudflare HTTPS Bridge
+  if (cfg.connectionMode === "cloudflare_bridge" && cfg.cloudflareBridgeUrl) {
+    try {
+      const res = await fetch(cfg.cloudflareBridgeUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Bridge-Secret": cfg.cloudflareBridgeSecret || process.env.NAS_MYSQL_BRIDGE_SECRET || "",
+        },
+        body: JSON.stringify({
+          action: "sync_store",
+          dbConfig: {
+            host: "127.0.0.1",
+            port: cfg.port || 3308,
+            user: cfg.user,
+            password: cfg.password,
+            database: cfg.database,
+          },
+          mappings: [],
+          logs: [item],
+        }),
+      });
+      const data = await res.json();
+      if (data.synced) {
+        return { synced: true };
+      }
+      return { synced: false, error: data.error || "Cloudflare Bridge Single Upsert Failed" };
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      return { synced: false, error: e.message || "Cloudflare Bridge Unreachable" };
+    }
+  }
+
+  if (isCloudPrivateLanBlocked(cfg)) {
+    return { synced: false, error: "CLOUD_LAN_UNREACHABLE" };
+  }
+
   let conn: mysql.Connection | null = null;
   try {
     conn = await mysql.createConnection({
@@ -664,7 +827,7 @@ export async function upsertSingleLogToSynologyMysql(
       user: cfg.user,
       password: cfg.password,
       database: cfg.database,
-      connectTimeout: 4000,
+      connectTimeout: 2500,
     });
 
     const editedAt = item.editedAt
@@ -726,6 +889,193 @@ export async function upsertSingleLogToSynologyMysql(
       } catch {
         // ignore
       }
+    }
+    const e = err as { message?: string };
+    return { synced: false, error: e.message };
+  }
+}
+
+/**
+ * อัปเดตการจับคู่ User ID + ชื่อบุคลากรในประวัติลงเวลาบน Synology NAS MariaDB ทันที (< 25ms)
+ */
+export async function syncMappingToSynologyMysql(
+  cfg: NasMysqlConfig,
+  mapping: ScannerUserMapping
+): Promise<{ synced: boolean; error?: string }> {
+  if (cfg.connectionMode === "cloudflare_bridge" && cfg.cloudflareBridgeUrl) {
+    try {
+      const res = await fetch(cfg.cloudflareBridgeUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Bridge-Secret": cfg.cloudflareBridgeSecret || process.env.NAS_MYSQL_BRIDGE_SECRET || "",
+        },
+        body: JSON.stringify({
+          action: "sync_store",
+          dbConfig: {
+            host: "127.0.0.1",
+            port: cfg.port || 3308,
+            user: cfg.user,
+            password: cfg.password,
+            database: cfg.database,
+          },
+          mappings: [mapping],
+          logs: [],
+        }),
+      });
+      const data = await res.json();
+      return data.synced ? { synced: true } : { synced: false, error: data.error };
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      return { synced: false, error: e.message };
+    }
+  }
+
+  if (isCloudPrivateLanBlocked(cfg)) {
+    return { synced: false, error: "CLOUD_LAN_UNREACHABLE" };
+  }
+
+  let conn: mysql.Connection | null = null;
+  try {
+    conn = await mysql.createConnection({
+      host: cfg.host,
+      port: cfg.port || 3308,
+      user: cfg.user,
+      password: cfg.password,
+      database: cfg.database,
+      connectTimeout: 2500,
+    });
+
+    await conn.query(
+      `INSERT INTO attendance_user_mappings
+        (scanner_user_id, member_id, member_name, division, position, updated_by)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+        member_id = VALUES(member_id),
+        member_name = VALUES(member_name),
+        division = VALUES(division),
+        position = VALUES(position),
+        updated_by = VALUES(updated_by)`,
+      [
+        mapping.scannerUserId,
+        mapping.memberId,
+        mapping.memberName,
+        mapping.division || "",
+        mapping.position || "",
+        mapping.updatedBy || "system",
+      ]
+    );
+
+    await conn.query(
+      `UPDATE attendance_logs
+       SET member_id = ?, member_name = ?, division = ?, position = ?
+       WHERE scanner_user_id = ?`,
+      [
+        mapping.memberId,
+        mapping.memberName,
+        mapping.division || "",
+        mapping.position || "",
+        mapping.scannerUserId,
+      ]
+    );
+
+    await conn.end();
+    return { synced: true };
+  } catch (err: unknown) {
+    if (conn) {
+      try {
+        await conn.end();
+      } catch {}
+    }
+    const e = err as { message?: string };
+    return { synced: false, error: e.message };
+  }
+}
+
+/**
+ * อัปเดตรายชื่อผู้ได้รับสิทธิ์จัดการเวลาบน Synology NAS MariaDB ทันที (< 25ms)
+ */
+export async function syncEditorsToSynologyMysql(
+  cfg: NasMysqlConfig,
+  editors: AuthorizedAttendanceEditor[]
+): Promise<{ synced: boolean; error?: string }> {
+  if (cfg.connectionMode === "cloudflare_bridge" && cfg.cloudflareBridgeUrl) {
+    try {
+      const res = await fetch(cfg.cloudflareBridgeUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Bridge-Secret": cfg.cloudflareBridgeSecret || process.env.NAS_MYSQL_BRIDGE_SECRET || "",
+        },
+        body: JSON.stringify({
+          action: "sync_store",
+          dbConfig: {
+            host: "127.0.0.1",
+            port: cfg.port || 3308,
+            user: cfg.user,
+            password: cfg.password,
+            database: cfg.database,
+          },
+          mappings: [],
+          authorizedEditors: editors,
+          logs: [],
+        }),
+      });
+      const data = await res.json();
+      return data.synced ? { synced: true } : { synced: false, error: data.error };
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      return { synced: false, error: e.message };
+    }
+  }
+
+  if (isCloudPrivateLanBlocked(cfg)) {
+    return { synced: false, error: "CLOUD_LAN_UNREACHABLE" };
+  }
+
+  let conn: mysql.Connection | null = null;
+  try {
+    conn = await mysql.createConnection({
+      host: cfg.host,
+      port: cfg.port || 3308,
+      user: cfg.user,
+      password: cfg.password,
+      database: cfg.database,
+      connectTimeout: 2500,
+    });
+
+    await conn.beginTransaction();
+    try {
+      await conn.query("DELETE FROM attendance_authorized_editors");
+      if (editors.length > 0) {
+        const editorValues = editors.map((ed) => [
+          ed.memberId,
+          ed.memberName,
+          ed.division || "",
+          ed.role || "member",
+          ed.grantedBy || "admin",
+          ed.grantedAt ? ed.grantedAt.slice(0, 19).replace("T", " ") : new Date(),
+        ]);
+        await conn.query(
+          `INSERT INTO attendance_authorized_editors
+            (member_id, member_name, division, role, granted_by, granted_at)
+           VALUES ?`,
+          [editorValues]
+        );
+      }
+      await conn.commit();
+    } catch (txErr) {
+      await conn.rollback();
+      throw txErr;
+    }
+
+    await conn.end();
+    return { synced: true };
+  } catch (err: unknown) {
+    if (conn) {
+      try {
+        await conn.end();
+      } catch {}
     }
     const e = err as { message?: string };
     return { synced: false, error: e.message };

@@ -278,6 +278,9 @@ function AppProviderInner({ children }: { children: React.ReactNode }) {
 
   // ─── RBAC STATE ───
   const [currentUserRole, setCurrentUserRole] = useState<Role>("admin");
+  const [attendanceEditors, setAttendanceEditors] = useState<
+    Array<{ memberId?: string; memberName?: string }>
+  >([]);
   const [rolePermissions, setRolePermissions] = useState<Record<Role, Record<ModuleId, boolean>>>(
     INITIAL_ROLE_PERMISSIONS
   );
@@ -932,20 +935,82 @@ function AppProviderInner({ children }: { children: React.ReactNode }) {
     return () => cleanup();
   }, [currentUser?.id, loginTime]);
 
+  // ซิงก์รายชื่อผู้ได้รับมอบสิทธิ์จัดการข้อมูลลงเวลา (Attendance Editors) จาก Server/Supabase ให้ใช้ได้จากทุกเครื่อง
+  useEffect(() => {
+    if (!currentUser) return;
+    let active = true;
+
+    const loadEditors = async () => {
+      try {
+        const res = await fetch("/api/attendance?onlyEditors=1");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (active && data?.success && Array.isArray(data.authorizedEditors)) {
+          setAttendanceEditors(data.authorizedEditors);
+          if (typeof window !== "undefined") {
+            try {
+              localStorage.setItem(
+                "smartmso_attendance_editors",
+                JSON.stringify(data.authorizedEditors)
+              );
+            } catch {}
+          }
+        }
+      } catch {
+        // fallback gracefully to localStorage
+      }
+    };
+
+    loadEditors();
+
+    const handleEditorsUpdated = (e: Event) => {
+      const customEvt = e as CustomEvent<Array<{ memberId?: string; memberName?: string }>>;
+      if (Array.isArray(customEvt.detail)) {
+        setAttendanceEditors(customEvt.detail);
+      } else {
+        loadEditors();
+      }
+    };
+    window.addEventListener("smartmso:attendance_editors_updated", handleEditorsUpdated);
+
+    return () => {
+      active = false;
+      window.removeEventListener("smartmso:attendance_editors_updated", handleEditorsUpdated);
+    };
+  }, [currentUser?.id]);
+
   const canAccess = (moduleId: ModuleId, role: Role = currentUserRole): boolean => {
     // กรณีโมดูล attendance (ลงเวลาราชการ): ผู้ใช้ต้องเป็น admin หรือมีสิทธิ์ในตารางผู้แก้ไขเวลา
     if (moduleId === "attendance") {
       if (role === "admin" || currentUserRole === "admin") return true;
-      if (typeof window !== "undefined" && currentUser) {
-        try {
-          const raw = localStorage.getItem("smartmso_attendance_editors");
-          if (raw) {
-            const editors = JSON.parse(raw);
-            if (Array.isArray(editors) && editors.some((ed: any) => ed.memberId === currentUser.id || ed.memberName?.trim() === currentUser.name?.trim())) {
-              return true;
+      if (currentUser) {
+        if (
+          attendanceEditors.some(
+            (ed) =>
+              ed.memberId === currentUser.id ||
+              ed.memberName?.trim() === currentUser.name?.trim()
+          )
+        ) {
+          return true;
+        }
+        if (typeof window !== "undefined") {
+          try {
+            const raw = localStorage.getItem("smartmso_attendance_editors");
+            if (raw) {
+              const editors = JSON.parse(raw);
+              if (
+                Array.isArray(editors) &&
+                editors.some(
+                  (ed: any) =>
+                    ed.memberId === currentUser.id ||
+                    ed.memberName?.trim() === currentUser.name?.trim()
+                )
+              ) {
+                return true;
+              }
             }
-          }
-        } catch {}
+          } catch {}
+        }
       }
       return !!rolePermissions[role]?.attendance;
     }

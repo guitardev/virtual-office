@@ -144,6 +144,26 @@ try {
             ]);
         }
 
+        // Sync authorized editors if provided
+        if (array_key_exists('authorizedEditors', $payload) && is_array($payload['authorizedEditors'])) {
+            $pdo->exec("DELETE FROM attendance_authorized_editors");
+            $stmtEditor = $pdo->prepare("
+                INSERT INTO attendance_authorized_editors (member_id, member_name, division, role, granted_by, granted_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ");
+            foreach ($payload['authorizedEditors'] as $ed) {
+                $grantedAt = !empty($ed['grantedAt']) ? substr(str_replace('T', ' ', $ed['grantedAt']), 0, 19) : date('Y-m-d H:i:s');
+                $stmtEditor->execute([
+                    $ed['memberId'] ?? '',
+                    $ed['memberName'] ?? '',
+                    $ed['division'] ?? '',
+                    $ed['role'] ?? 'member',
+                    $ed['grantedBy'] ?? 'admin',
+                    $grantedAt,
+                ]);
+            }
+        }
+
         // Sync logs
         $logs = $payload['logs'] ?? [];
         $stmtLog = $pdo->prepare("
