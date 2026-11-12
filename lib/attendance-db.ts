@@ -68,11 +68,26 @@ export interface AuthorizedAttendanceEditor {
   grantedAt: string;
 }
 
+export interface DeviceOverviewMetadata {
+  productCode?: string;
+  vendorName?: string;
+  serialNumber?: string;
+  deviceTime?: string;
+  registeredUsersCount?: number;
+  fingerprintsCount?: number;
+  passwordsCount?: number;
+  idCardsCount?: number;
+  attendanceLogsCount?: number;
+  maxAttendanceLogs?: number;
+  checkedAt?: string;
+}
+
 export interface AttendanceStoreData {
   mysqlConfig: NasMysqlConfig;
   lastSyncedAt: string | null;
   lastMysqlSyncedAt: string | null;
   deviceTotalRecords: number;
+  deviceOverview?: DeviceOverviewMetadata;
   mappings: Record<number, ScannerUserMapping>;
   authorizedEditors: AuthorizedAttendanceEditor[];
   editorsCustomized?: boolean;
@@ -205,6 +220,7 @@ export function loadAttendanceStore(): AttendanceStoreData {
         lastSyncedAt: parsed.lastSyncedAt || null,
         lastMysqlSyncedAt: parsed.lastMysqlSyncedAt || null,
         deviceTotalRecords: parsed.deviceTotalRecords || 0,
+        deviceOverview: parsed.deviceOverview || undefined,
         mappings: { ...buildDefaultMappings(), ...(parsed.mappings || {}) },
         authorizedEditors,
         editorsCustomized: hasCustomEditors,
@@ -580,7 +596,10 @@ export async function testAndInitSynologyMysql(
 /**
  * ซิงก์ข้อมูลจาก Store ปัจจุบันขึ้นตาราง MySQL บน Synology NAS (Batch Upsert)
  */
-export async function pushStoreToSynologyMysql(store: AttendanceStoreData): Promise<{
+export async function pushStoreToSynologyMysql(
+  store: AttendanceStoreData,
+  targetLogs?: AttendanceLogItem[]
+): Promise<{
   synced: boolean;
   upsertedLogs: number;
   error?: string;
@@ -590,6 +609,7 @@ export async function pushStoreToSynologyMysql(store: AttendanceStoreData): Prom
   // กรณีเลือกโหมดเชื่อมต่อผ่านอินเทอร์เน็ตด้วย Cloudflare HTTPS Bridge
   if (cfg.connectionMode === "cloudflare_bridge" && cfg.cloudflareBridgeUrl) {
     try {
+      const bridgeLogs = targetLogs ?? store.logs.slice(0, 1500);
       const res = await fetch(cfg.cloudflareBridgeUrl, {
         method: "POST",
         headers: {
@@ -607,7 +627,7 @@ export async function pushStoreToSynologyMysql(store: AttendanceStoreData): Prom
           },
           mappings: Object.values(store.mappings),
           authorizedEditors: store.authorizedEditors,
-          logs: store.logs.slice(0, 1500),
+          logs: bridgeLogs,
         }),
       });
       const data = await res.json();
@@ -691,10 +711,19 @@ export async function pushStoreToSynologyMysql(store: AttendanceStoreData): Prom
     }
 
     // 3. Batch Upsert Attendance Logs in chunks of 500
+    // หากส่ง targetLogs (เฉพาะรายการใหม่/เปลี่ยนแปลง) และ MariaDB มีจำนวนเดิมครบแล้ว ให้ส่งเฉพาะ delta เพื่อความเร็วสูงสุด
+    const activeCountInStore = store.logs.filter((l) => !l.isDeleted).length;
+    const mysqlExistingCount = typeof check.rowCount === "number" ? check.rowCount : 0;
+    const logsToUpsert =
+      Array.isArray(targetLogs) &&
+      mysqlExistingCount >= Math.max(0, activeCountInStore - targetLogs.length)
+        ? targetLogs
+        : store.logs;
+
     const batchSize = 500;
     let totalUpserted = 0;
-    for (let i = 0; i < store.logs.length; i += batchSize) {
-      const slice = store.logs.slice(i, i + batchSize);
+    for (let i = 0; i < logsToUpsert.length; i += batchSize) {
+      const slice = logsToUpsert.slice(i, i + batchSize);
       const values = slice.map((l) => [
         l.id,
         l.recordUid,
@@ -1076,8 +1105,14 @@ export async function syncEditorsToSynologyMysql(
 export function mergeDeviceRecordsIntoStore(
   store: AttendanceStoreData,
   deviceRecords: HipAttendanceRecord[],
-  deviceTotalCount: number
-): { addedCount: number; updatedCount: number; totalStored: number } {
+  deviceTotalCount: number,
+  deviceOverview?: DeviceOverviewMetadata
+): {
+  addedCount: number;
+  updatedCount: number;
+  totalStored: number;
+  changedLogs: AttendanceLogItem[];
+} {
   const existingByUid = new Map<string, AttendanceLogItem>();
   for (const item of store.logs) {
     existingByUid.set(item.recordUid, item);
@@ -1085,6 +1120,7 @@ export function mergeDeviceRecordsIntoStore(
 
   let addedCount = 0;
   let updatedCount = 0;
+  const changedLogs: AttendanceLogItem[] = [];
 
   for (const rec of deviceRecords) {
     const recordUid = `dev_${rec.machineId}_${rec.userId}_${rec.timestamp}`;
@@ -1119,18 +1155,21 @@ export function mergeDeviceRecordsIntoStore(
       };
       store.logs.push(newItem);
       existingByUid.set(recordUid, newItem);
+      changedLogs.push(newItem);
       addedCount++;
     } else if (!existing.isEdited && !existing.isDeleted) {
       // อัปเดตเฉพาะชื่อ/สังกัดตาม Mapping ปัจจุบัน โดยไม่ทับรายการที่แอดมินเคยแก้ไขเวลาแล้ว
       if (
         existing.memberName !== mapInfo.memberName ||
         existing.division !== mapInfo.division ||
-        existing.memberId !== mapInfo.memberId
+        existing.memberId !== mapInfo.memberId ||
+        existing.position !== mapInfo.position
       ) {
         existing.memberId = mapInfo.memberId;
         existing.memberName = mapInfo.memberName;
         existing.division = mapInfo.division;
         existing.position = mapInfo.position;
+        changedLogs.push(existing);
         updatedCount++;
       }
     }
@@ -1140,12 +1179,83 @@ export function mergeDeviceRecordsIntoStore(
   store.logs.sort((a, b) => b.scanTimestamp.localeCompare(a.scanTimestamp));
   store.lastSyncedAt = new Date().toISOString();
   store.deviceTotalRecords = deviceTotalCount;
+  if (deviceOverview) {
+    store.deviceOverview = {
+      ...(store.deviceOverview || {}),
+      ...deviceOverview,
+      attendanceLogsCount: deviceTotalCount,
+      checkedAt: store.lastSyncedAt,
+    };
+  }
   saveAttendanceStore(store);
 
   return {
     addedCount,
     updatedCount,
     totalStored: store.logs.filter((l) => !l.isDeleted).length,
+    changedLogs,
   };
+}
+
+/**
+ * ผสานการแก้ไข/ลบ/เพิ่ม Manual จาก Supabase Cloud เข้า Local Store ก่อนซิงก์จากเครื่องสแกน
+ * เพื่อไม่ให้ข้อมูลที่ผู้ดูแลแก้ไขบน Vercel Cloud ถูกเขียนทับ
+ */
+export function reconcileCloudChangesIntoStore(
+  store: AttendanceStoreData,
+  cloudOverrides: AttendanceLogItem[] | null,
+  cloudMappings: Record<number, ScannerUserMapping> | null
+): { pulledOverridesCount: number; updatedMappingsCount: number } {
+  let updatedMappingsCount = 0;
+  if (cloudMappings) {
+    for (const [uidKey, cloudMap] of Object.entries(cloudMappings)) {
+      const uid = Number(uidKey);
+      if (!Number.isFinite(uid) || !cloudMap) continue;
+      const localMap = store.mappings[uid];
+      const cloudTs = cloudMap.updatedAt ? new Date(cloudMap.updatedAt).getTime() : 0;
+      const localTs = localMap?.updatedAt ? new Date(localMap.updatedAt).getTime() : 0;
+      if (!localMap || (!localMap.updatedAt && cloudMap.updatedAt) || cloudTs > localTs) {
+        store.mappings[uid] = cloudMap;
+        updatedMappingsCount++;
+      }
+    }
+  }
+
+  let pulledOverridesCount = 0;
+  if (cloudOverrides && cloudOverrides.length > 0) {
+    const byUid = new Map<string, AttendanceLogItem>();
+    const byId = new Map<string, AttendanceLogItem>();
+    for (const item of store.logs) {
+      byUid.set(item.recordUid, item);
+      byId.set(item.id, item);
+    }
+
+    for (const cloudItem of cloudOverrides) {
+      const localItem = byUid.get(cloudItem.recordUid) || byId.get(cloudItem.id);
+      if (!localItem) {
+        store.logs.push(cloudItem);
+        byUid.set(cloudItem.recordUid, cloudItem);
+        byId.set(cloudItem.id, cloudItem);
+        pulledOverridesCount++;
+      } else {
+        const cloudEditedMs = cloudItem.editedAt ? new Date(cloudItem.editedAt).getTime() : 0;
+        const localEditedMs = localItem.editedAt ? new Date(localItem.editedAt).getTime() : 0;
+        const shouldAdopt =
+          (!localItem.isEdited && !localItem.isDeleted) ||
+          cloudEditedMs > localEditedMs;
+        if (shouldAdopt) {
+          Object.assign(localItem, cloudItem);
+          pulledOverridesCount++;
+        }
+      }
+    }
+  }
+
+  if (pulledOverridesCount > 0 || updatedMappingsCount > 0) {
+    store.logs.sort((a, b) => b.scanTimestamp.localeCompare(a.scanTimestamp));
+    saveAttendanceStore(store);
+  }
+
+  return { pulledOverridesCount, updatedMappingsCount };
 }
 

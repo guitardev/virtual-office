@@ -75,6 +75,36 @@ function mapLogToSupabase(log: AttendanceLogItem) {
     edited_at: editedAtIso,
     edit_note: log.editNote || null,
     is_deleted: log.isDeleted || false,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function mapSupabaseRowToAttendanceLog(row: Record<string, unknown>): AttendanceLogItem {
+  const ts = formatIsoToThaiTimestamp(row.scan_timestamp as string);
+  const origTs =
+    formatIsoToThaiTimestamp(row.original_timestamp as string) || ts;
+
+  return {
+    id: String(row.id),
+    recordUid: String(row.record_uid),
+    scannerUserId: Number(row.scanner_user_id),
+    memberId: String(row.member_id || ""),
+    memberName: String(row.member_name || ""),
+    division: String(row.division || ""),
+    position: String(row.position || ""),
+    scanTimestamp: ts,
+    originalTimestamp: origTs,
+    ioMode: Number(row.io_mode),
+    ioLabel: String(row.io_label || ""),
+    verifyMode: Number(row.verify_mode),
+    verifyLabel: String(row.verify_label || ""),
+    machineId: Number(row.machine_id || 1),
+    source: (row.source === "manual" ? "manual" : "device") as "device" | "manual",
+    isEdited: Boolean(row.is_edited),
+    editedBy: row.edited_by ? String(row.edited_by) : undefined,
+    editedAt: row.edited_at ? String(row.edited_at) : undefined,
+    editNote: row.edit_note ? String(row.edit_note) : undefined,
+    isDeleted: Boolean(row.is_deleted),
   };
 }
 
@@ -160,34 +190,9 @@ export async function fetchAttendanceLogsFromSupabase(filter?: {
     const { data, count, error } = await query;
     if (error) throw error;
 
-    const logs: AttendanceLogItem[] = (data || []).map((row: Record<string, unknown>) => {
-      const ts = formatIsoToThaiTimestamp(row.scan_timestamp as string);
-      const origTs =
-        formatIsoToThaiTimestamp(row.original_timestamp as string) || ts;
-
-      return {
-        id: String(row.id),
-        recordUid: String(row.record_uid),
-        scannerUserId: Number(row.scanner_user_id),
-        memberId: String(row.member_id || ""),
-        memberName: String(row.member_name || ""),
-        division: String(row.division || ""),
-        position: String(row.position || ""),
-        scanTimestamp: ts,
-        originalTimestamp: origTs,
-        ioMode: Number(row.io_mode),
-        ioLabel: String(row.io_label || ""),
-        verifyMode: Number(row.verify_mode),
-        verifyLabel: String(row.verify_label || ""),
-        machineId: Number(row.machine_id || 1),
-        source: (row.source === "manual" ? "manual" : "device") as "device" | "manual",
-        isEdited: Boolean(row.is_edited),
-        editedBy: row.edited_by ? String(row.edited_by) : undefined,
-        editedAt: row.edited_at ? String(row.edited_at) : undefined,
-        editNote: row.edit_note ? String(row.edit_note) : undefined,
-        isDeleted: Boolean(row.is_deleted),
-      };
-    });
+    const logs: AttendanceLogItem[] = (data || []).map((row: Record<string, unknown>) =>
+      mapSupabaseRowToAttendanceLog(row)
+    );
 
     return {
       success: true,
@@ -511,6 +516,187 @@ export async function fetchAuthorizedEditorsFromSupabase(): Promise<
       grantedBy: row.granted_by ? String(row.granted_by) : "ระบบ",
       grantedAt: row.granted_at ? String(row.granted_at) : new Date().toISOString(),
     }));
+  } catch {
+    return null;
+  }
+}
+
+export interface AttendanceSyncTelemetry {
+  lastSyncedAt: string | null;
+  lastMysqlSyncedAt?: string | null;
+  deviceTotalRecords: number;
+  registeredUsersCount?: number;
+  fingerprintsCount?: number;
+  passwordsCount?: number;
+  idCardsCount?: number;
+  maxAttendanceLogs?: number;
+  serialNumber?: string;
+  productCode?: string;
+  deviceTime?: string;
+  scannerIp?: string;
+  addedCount?: number;
+  pulledCount?: number;
+  source?: string;
+}
+
+const SYNC_TELEMETRY_ACTOR_ID = "hip_cmi681s_sync";
+
+/**
+ * ดึงรายการที่ถูกแก้ไข, ลบ (soft-delete) หรือเพิ่มแบบ Manual จาก Supabase
+ * เพื่อป้องกันการซิงก์จากเครื่องสแกนทับข้อมูลที่แก้ไขผ่านหน้าเว็บ Cloud
+ */
+export async function fetchCloudEditedOrManualLogsFromSupabase(): Promise<
+  AttendanceLogItem[] | null
+> {
+  try {
+    const allRows: AttendanceLogItem[] = [];
+    const pageSize = 1000;
+    let offset = 0;
+
+    while (true) {
+      const { data, error } = await supabaseClient
+        .from("attendance_logs")
+        .select("*")
+        .or("is_edited.eq.true,is_deleted.eq.true,source.eq.manual")
+        .order("scan_timestamp", { ascending: false })
+        .range(offset, offset + pageSize - 1);
+
+      if (error) return null;
+      if (!data || data.length === 0) break;
+
+      for (const row of data) {
+        allRows.push(mapSupabaseRowToAttendanceLog(row as Record<string, unknown>));
+      }
+      if (data.length < pageSize) break;
+      offset += pageSize;
+    }
+
+    return allRows;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * บันทึก Telemetry การซิงก์ล่าสุดขึ้น Supabase (audit_logs) เพื่อให้ฝั่ง Cloud/Vercel
+ * แสดงยอดล่าสุดในเครื่องสแกนและเวลาซิงก์ล่าสุดตรงกัน
+ */
+export async function recordAttendanceSyncTelemetryToSupabase(
+  telemetry: AttendanceSyncTelemetry,
+  actorName?: string,
+  forceInsert = false
+): Promise<{ success: boolean; skipped?: boolean; error?: string }> {
+  try {
+    const prev = await fetchLatestAttendanceSyncTelemetryFromSupabase();
+    if (!forceInsert && prev) {
+      const prevTs = prev.lastSyncedAt ? new Date(prev.lastSyncedAt).getTime() : 0;
+      const elapsedMs = Date.now() - prevTs;
+      const sameTotal = prev.deviceTotalRecords === telemetry.deviceTotalRecords;
+      const noNewRows = (telemetry.addedCount || 0) === 0;
+      if (sameTotal && noNewRows && elapsedMs < 6 * 3600 * 1000) {
+        return { success: true, skipped: true };
+      }
+    }
+
+    const { error } = await supabaseClient.from("audit_logs").insert({
+      actor_id: SYNC_TELEMETRY_ACTOR_ID,
+      actor_name: actorName || "ระบบซิงก์เครื่องสแกนอัตโนมัติ (LAN)",
+      action: "ซิงก์ข้อมูลเวลาปฏิบัติราชการจากเครื่องสแกน HIP CMi681S",
+      target: `เครื่องสแกน ${telemetry.scannerIp || "HIP CMi681S"} — ยอดในเครื่อง ${telemetry.deviceTotalRecords.toLocaleString()} รายการ (เพิ่มใหม่ ${(telemetry.addedCount || 0).toLocaleString()} รายการ)`,
+      status: "success",
+      metadata: {
+        type: "attendance_device_sync",
+        ...telemetry,
+      },
+    });
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch (err: unknown) {
+    const e = err as { message?: string };
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * ดึง Telemetry การซิงก์เครื่องสแกนล่าสุดจาก Supabase (สำหรับแสดงบน Cloud/Vercel)
+ */
+export async function fetchLatestAttendanceSyncTelemetryFromSupabase(): Promise<AttendanceSyncTelemetry | null> {
+  try {
+    const { data, error } = await supabaseClient
+      .from("audit_logs")
+      .select("timestamp, metadata")
+      .eq("actor_id", SYNC_TELEMETRY_ACTOR_ID)
+      .order("timestamp", { ascending: false })
+      .limit(1);
+
+    if (error || !data || data.length === 0) return null;
+    const row = data[0] as {
+      timestamp?: string;
+      metadata?: Record<string, unknown> | null;
+    };
+    const meta = row.metadata || {};
+    return {
+      lastSyncedAt:
+        (typeof meta.lastSyncedAt === "string" ? meta.lastSyncedAt : null) ||
+        row.timestamp ||
+        null,
+      lastMysqlSyncedAt:
+        typeof meta.lastMysqlSyncedAt === "string" ? meta.lastMysqlSyncedAt : null,
+      deviceTotalRecords: Number(meta.deviceTotalRecords || 0),
+      registeredUsersCount:
+        typeof meta.registeredUsersCount === "number"
+          ? meta.registeredUsersCount
+          : undefined,
+      fingerprintsCount:
+        typeof meta.fingerprintsCount === "number"
+          ? meta.fingerprintsCount
+          : undefined,
+      passwordsCount:
+        typeof meta.passwordsCount === "number" ? meta.passwordsCount : undefined,
+      idCardsCount:
+        typeof meta.idCardsCount === "number" ? meta.idCardsCount : undefined,
+      maxAttendanceLogs:
+        typeof meta.maxAttendanceLogs === "number"
+          ? meta.maxAttendanceLogs
+          : undefined,
+      serialNumber:
+        typeof meta.serialNumber === "string" ? meta.serialNumber : undefined,
+      productCode:
+        typeof meta.productCode === "string" ? meta.productCode : undefined,
+      deviceTime: typeof meta.deviceTime === "string" ? meta.deviceTime : undefined,
+      scannerIp: typeof meta.scannerIp === "string" ? meta.scannerIp : undefined,
+      addedCount:
+        typeof meta.addedCount === "number" ? meta.addedCount : undefined,
+      pulledCount:
+        typeof meta.pulledCount === "number" ? meta.pulledCount : undefined,
+      source: typeof meta.source === "string" ? meta.source : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * ดึงวัน-เวลาที่สแกนล่าสุดในฐานข้อมูล Supabase
+ */
+export async function fetchLatestAttendanceTimestampFromSupabase(): Promise<
+  string | null
+> {
+  try {
+    const { data, error } = await supabaseClient
+      .from("attendance_logs")
+      .select("scan_timestamp")
+      .eq("is_deleted", false)
+      .order("scan_timestamp", { ascending: false })
+      .limit(1);
+
+    if (error || !data || data.length === 0) return null;
+    return (
+      formatIsoToThaiTimestamp(
+        (data[0] as { scan_timestamp: string }).scan_timestamp
+      ) || null
+    );
   } catch {
     return null;
   }

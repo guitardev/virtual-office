@@ -7,7 +7,22 @@ import {
   ScannerUserMapping,
   AuthorizedAttendanceEditor,
   NasMysqlConfig,
+  DeviceOverviewMetadata,
 } from "@/lib/attendance-db";
+
+interface ScannerOverviewResponse {
+  info?: {
+    productCode?: string;
+    serialNumber?: string;
+    deviceTime?: string;
+  };
+  status?: {
+    registeredUsersCount?: number;
+    fingerprintsCount?: number;
+    attendanceLogsCount?: number;
+  };
+  error?: string;
+}
 
 interface MysqlStatusInfo {
   connected: boolean;
@@ -44,11 +59,16 @@ export default function AttendancePage() {
   const [logs, setLogs] = useState<AttendanceLogItem[]>([]);
   const [filteredTotal, setFilteredTotal] = useState<number>(0);
   const [totalStoredLogs, setTotalStoredLogs] = useState<number>(0);
-  const [deviceTotalRecords, setDeviceTotalRecords] = useState<number>(30061);
+  const [deviceTotalRecords, setDeviceTotalRecords] = useState<number>(0);
+  const [deviceOverview, setDeviceOverview] = useState<DeviceOverviewMetadata | null>(null);
+  const [scannerOverview, setScannerOverview] = useState<ScannerOverviewResponse | null>(null);
+  const [latestScanTimestamp, setLatestScanTimestamp] = useState<string | null>(null);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [lastMysqlSyncedAt, setLastMysqlSyncedAt] = useState<string | null>(null);
   const [availableDates, setAvailableDates] = useState<string[]>([]);
   const [dataSource, setDataSource] = useState<"local" | "supabase">("local");
+  const [isCloudServer, setIsCloudServer] = useState<boolean>(false);
+  const [canSyncFromScanner, setCanSyncFromScanner] = useState<boolean>(true);
 
   // Pagination & Stats
   const [page, setPage] = useState<number>(1);
@@ -149,6 +169,7 @@ export default function AttendancePage() {
       customDateTo?: string;
       customPage?: number;
       autoSyncIfEmpty?: boolean;
+      checkHardware?: boolean;
     }) => {
       const seq = ++fetchSeqRef.current;
       try {
@@ -162,6 +183,7 @@ export default function AttendancePage() {
         if (selectedScannerUid !== "all") params.set("scannerUserId", selectedScannerUid);
         if (selectedIoMode !== "all") params.set("ioMode", selectedIoMode);
         if (debouncedSearchText.trim()) params.set("search", debouncedSearchText.trim());
+        if (opts?.checkHardware) params.set("checkHardware", "1");
         params.set("page", String(p));
         params.set("pageSize", String(pageSize));
 
@@ -172,11 +194,22 @@ export default function AttendancePage() {
           setLogs(data.logs || []);
           setFilteredTotal(data.filteredTotal || 0);
           setTotalStoredLogs(data.totalStoredLogs || 0);
-          setDeviceTotalRecords(data.deviceTotalRecords || 30061);
+          setDeviceTotalRecords(
+            typeof data.deviceTotalRecords === "number"
+              ? data.deviceTotalRecords
+              : data.totalStoredLogs || 0
+          );
+          if (data.deviceOverview) setDeviceOverview(data.deviceOverview);
+          if (data.scannerOverview !== undefined) setScannerOverview(data.scannerOverview);
+          setLatestScanTimestamp(data.latestScanTimestamp || null);
           setLastSyncedAt(data.lastSyncedAt || null);
           setLastMysqlSyncedAt(data.lastMysqlSyncedAt || null);
           setAvailableDates(data.availableDates || []);
           if (data.dataSource) setDataSource(data.dataSource);
+          if (typeof data.isCloudServer === "boolean") setIsCloudServer(data.isCloudServer);
+          if (typeof data.canSyncFromScanner === "boolean") {
+            setCanSyncFromScanner(data.canSyncFromScanner);
+          }
           if (typeof data.totalPages === "number") setTotalPages(data.totalPages);
           if (data.summaryStats) setServerSummaryStats(data.summaryStats);
           if (data.mysqlConfig) setMysqlConfig(data.mysqlConfig);
@@ -240,7 +273,7 @@ export default function AttendancePage() {
   useEffect(() => {
     if (!didInitialFetchRef.current) {
       didInitialFetchRef.current = true;
-      fetchAttendanceData({ autoSyncIfEmpty: true });
+      fetchAttendanceData({ autoSyncIfEmpty: true, checkHardware: true });
       return;
     }
     fetchAttendanceData();
@@ -278,9 +311,9 @@ export default function AttendancePage() {
           ? `และบันทึกลง Synology MySQL (${data.mysqlSync.upsertedLogs.toLocaleString()} รายการ) สำเร็จ`
           : `(บันทึกในระบบแคช/Cloud เรียบร้อย)`;
         showToast(
-          `ซิงก์สำเร็จ! ดึงข้อมูล ${data.pulledCount.toLocaleString()} รายการจาก HIP CMi681S ${mysqlMsg}`
+          `ซิงก์สำเร็จ! ดึงข้อมูล ${data.pulledCount.toLocaleString()} รายการ (เพิ่มใหม่ ${data.mergeResult.addedCount.toLocaleString()} รายการ) ${mysqlMsg}`
         );
-        await fetchAttendanceData({ customPage: 1 });
+        await fetchAttendanceData({ customPage: 1, checkHardware: true });
       } else {
         showToast(`ซิงก์ข้อมูลไม่สำเร็จ: ${data.error || "ไม่ทราบสาเหตุ"}`);
       }
@@ -697,15 +730,26 @@ export default function AttendancePage() {
                     ดึง 5,000 รายการล่าสุด (~4 วินาที)
                   </option>
                   <option value={0} className="bg-slate-900">
-                    ดึงทั้งหมด 30,061+ รายการ (~18 วินาที)
+                    ดึงทั้งหมด{" "}
+                    {deviceTotalRecords > 0
+                      ? `${deviceTotalRecords.toLocaleString()} `
+                      : ""}
+                    รายการ (~18 วินาที)
                   </option>
                 </select>
                 <button
                   onClick={() => handleSyncFromDevice(syncLimit)}
-                  disabled={syncing || dataSource === "supabase"}
+                  disabled={
+                    syncing ||
+                    isCloudServer ||
+                    !canSyncFromScanner ||
+                    !canEditAttendance
+                  }
                   title={
-                    dataSource === "supabase"
-                      ? "การดึงข้อมูลจากเครื่องสแกนใช้ได้เฉพาะเครือข่ายภายในสำนักงาน (LAN)"
+                    isCloudServer || !canSyncFromScanner
+                      ? "การดึงข้อมูลจากเครื่องสแกนใช้ได้เฉพาะเครือข่ายภายในสำนักงาน (LAN) หรือสคริปต์ Auto-Sync"
+                      : !canEditAttendance
+                      ? "เฉพาะผู้ดูแลระบบหรือผู้ได้รับสิทธิ์แก้ไขเวลาจึงสามารถซิงก์จากเครื่องสแกนได้"
                       : `ซิงก์ข้อมูลจาก ${mysqlConfig.scannerIp}`
                   }
                   className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold flex items-center gap-2 transition cursor-pointer"
@@ -735,41 +779,108 @@ export default function AttendancePage() {
         {/* การ์ดสถานะ 4 บล็อก */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mt-4">
           {/* 1. สถานะเครื่องสแกน HIP CMi681S */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500 uppercase">
-                เครื่องสแกนลายนิ้วมือ
-              </span>
-              <span
-                className={`px-2 py-0.5 text-[11px] font-semibold rounded-full ${
-                  dataSource === "supabase"
-                    ? "bg-slate-100 text-slate-600"
-                    : "bg-emerald-100 text-emerald-700"
-                }`}
-              >
-                {dataSource === "supabase"
-                  ? "🏢 ใช้งานเฉพาะวง LAN"
-                  : `● Ready (TCP ${mysqlConfig.scannerPort})`}
-              </span>
-            </div>
-            <div className="mt-2 font-bold text-slate-900 dark:text-white text-base">
-              HIP CMi681S ({mysqlConfig.scannerIp})
-            </div>
-            <div className="mt-1 text-xs text-slate-500 space-y-0.5">
-              <div>
-                Serial: <span className="font-mono font-medium">6812112298</span> | บัญชี:{" "}
-                <span className="font-semibold text-slate-700 dark:text-slate-300">
-                  64 คน (40 ลายนิ้วมือ)
-                </span>
+          {(() => {
+            const serial =
+              scannerOverview?.info?.serialNumber ||
+              deviceOverview?.serialNumber ||
+              "-";
+            const usersCnt =
+              scannerOverview?.status?.registeredUsersCount ??
+              deviceOverview?.registeredUsersCount;
+            const fpCnt =
+              scannerOverview?.status?.fingerprintsCount ??
+              deviceOverview?.fingerprintsCount;
+            const unsyncedDiff =
+              !isCloudServer &&
+              canSyncFromScanner &&
+              deviceTotalRecords > totalStoredLogs
+                ? deviceTotalRecords - totalStoredLogs
+                : 0;
+
+            return (
+              <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-slate-500 uppercase">
+                    เครื่องสแกนลายนิ้วมือ
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {!isCloudServer && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          fetchAttendanceData({ checkHardware: true })
+                        }
+                        className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-500 underline cursor-pointer"
+                        title="ตรวจสอบยอดล่าสุดจากเครื่องสแกนจริง"
+                      >
+                        เช็คยอด
+                      </button>
+                    )}
+                    <span
+                      className={`px-2 py-0.5 text-[11px] font-semibold rounded-full ${
+                        scannerOverview?.info
+                          ? "bg-emerald-100 text-emerald-700"
+                          : isCloudServer
+                          ? "bg-sky-100 text-sky-700"
+                          : scannerOverview?.error
+                          ? "bg-amber-100 text-amber-800"
+                          : "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {scannerOverview?.info
+                        ? `● Online (TCP ${mysqlConfig.scannerPort})`
+                        : isCloudServer
+                        ? "☁️ ดูผ่าน Cloud (ซิงก์บน LAN)"
+                        : scannerOverview?.error
+                        ? "⚠️ ไม่พบเครื่องใน LAN"
+                        : `● Ready (TCP ${mysqlConfig.scannerPort})`}
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-2 font-bold text-slate-900 dark:text-white text-base">
+                  HIP CMi681S ({mysqlConfig.scannerIp})
+                </div>
+                <div className="mt-1 text-xs text-slate-500 space-y-0.5">
+                  <div>
+                    Serial: <span className="font-mono font-medium">{serial}</span>{" "}
+                    | บัญชี:{" "}
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">
+                      {typeof usersCnt === "number"
+                        ? `${usersCnt.toLocaleString()} คน (${(
+                            fpCnt ?? 0
+                          ).toLocaleString()} ลายนิ้วมือ)`
+                        : "รอดึงข้อมูล"}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span>
+                      {isCloudServer
+                        ? "ยอดในเครื่อง (ณ เวลาซิงก์ล่าสุด):"
+                        : "บันทึกในเครื่องทั้งหมด:"}{" "}
+                      <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+                        {deviceTotalRecords > 0
+                          ? `${deviceTotalRecords.toLocaleString()} รายการ`
+                          : "-"}
+                      </span>
+                    </span>
+                    {unsyncedDiff > 0 && (
+                      <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 text-[10px] font-bold">
+                        +{unsyncedDiff.toLocaleString()} ยังไม่ซิงก์
+                      </span>
+                    )}
+                  </div>
+                  {latestScanTimestamp && (
+                    <div className="text-[11px] text-slate-400">
+                      สแกนล่าสุดในฐานข้อมูล:{" "}
+                      <span className="font-mono text-slate-600 dark:text-slate-300">
+                        {latestScanTimestamp} น.
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
-              <div>
-                บันทึกในเครื่องทั้งหมด:{" "}
-                <span className="font-semibold text-indigo-600">
-                  {deviceTotalRecords.toLocaleString()} รายการ
-                </span>
-              </div>
-            </div>
-          </div>
+            );
+          })()}
 
           {/* 2. สถานะฐานข้อมูล Synology NAS MySQL & Supabase Cloud */}
           <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
@@ -884,10 +995,24 @@ export default function AttendancePage() {
               <span className="text-xs font-semibold text-slate-500 uppercase">
                 การตั้งค่าบุคลากร & สิทธิ์แก้ไข
               </span>
-              <span className="text-[11px] text-slate-400">
+              <span
+                className="text-[11px] text-slate-400"
+                title={
+                  lastMysqlSyncedAt
+                    ? `ซิงก์ NAS MySQL ล่าสุด: ${new Date(
+                        lastMysqlSyncedAt
+                      ).toLocaleString("th-TH")}`
+                    : undefined
+                }
+              >
                 ซิงก์ล่าสุด:{" "}
                 {lastSyncedAt
-                  ? new Date(lastSyncedAt).toLocaleTimeString("th-TH")
+                  ? new Date(lastSyncedAt).toLocaleString("th-TH", {
+                      day: "numeric",
+                      month: "short",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })
                   : "-"}
               </span>
             </div>

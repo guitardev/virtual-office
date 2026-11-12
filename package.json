@@ -10,6 +10,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "sync:attendance": "node scripts/sync-attendance.mjs",
+    "sync:attendance:daemon": "node scripts/sync-attendance.mjs --schedule --log",
+    "sync:attendance:check": "node scripts/sync-attendance.mjs --check-only",
     "test": "playwright test",
     "test:headed": "playwright test --headed",
     "test:report": "playwright show-report"

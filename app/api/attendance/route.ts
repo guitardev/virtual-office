@@ -4,6 +4,7 @@ import {
   loadAttendanceStore,
   saveAttendanceStore,
   mergeDeviceRecordsIntoStore,
+  reconcileCloudChangesIntoStore,
   testAndInitSynologyMysql,
   pushStoreToSynologyMysql,
   upsertSingleLogToSynologyMysql,
@@ -14,6 +15,7 @@ import {
   AttendanceLogItem,
   AuthorizedAttendanceEditor,
   AttendanceStoreData,
+  DeviceOverviewMetadata,
 } from "@/lib/attendance-db";
 import {
   supabaseClient,
@@ -23,6 +25,10 @@ import {
   fetchAttendanceLogsFromSupabase,
   fetchSummaryStatsFromSupabase,
   fetchAvailableDatesFromSupabase,
+  fetchCloudEditedOrManualLogsFromSupabase,
+  fetchLatestAttendanceSyncTelemetryFromSupabase,
+  fetchLatestAttendanceTimestampFromSupabase,
+  recordAttendanceSyncTelemetryToSupabase,
   syncMappingsToSupabase,
   fetchMappingsFromSupabase,
   syncEditorsToSupabase,
@@ -148,25 +154,62 @@ export async function GET(req: NextRequest) {
       Math.max(20, Number(searchParams.get("pageSize") || 200))
     );
 
-    // ตรวจสอบสถานะ MySQL บน Synology NAS และ Supabase Cloud พร้อมกัน
-    const [mysqlStatus, supabaseStatus] = await Promise.all([
-      testAndInitSynologyMysql(store.mysqlConfig),
-      checkSupabaseAttendanceReady(),
-    ]);
+    const scannerIp = store.mysqlConfig.scannerIp || "192.168.162.15";
+    const isScannerPrivateLan = /^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[0-1])\.|127\.)/.test(
+      scannerIp
+    );
+    const isCloudServer = process.env.VERCEL === "1" && isScannerPrivateLan;
+    const canSyncFromScanner = !isCloudServer;
 
-    // ตรวจสอบสถานะเครื่องสแกน HIP CMi681S (192.168.162.15:5005) หากระบุ checkHardware=1
+    // ตรวจสอบสถานะ MySQL บน Synology NAS, Supabase Cloud และ Telemetry ล่าสุดพร้อมกัน
+    const [mysqlStatus, supabaseStatus, cloudTelemetry, latestCloudScanTs] =
+      await Promise.all([
+        testAndInitSynologyMysql(store.mysqlConfig),
+        checkSupabaseAttendanceReady(),
+        fetchLatestAttendanceSyncTelemetryFromSupabase(),
+        fetchLatestAttendanceTimestampFromSupabase(),
+      ]);
+
+    // ตรวจสอบสถานะเครื่องสแกน HIP CMi681S (192.168.162.15:5005) หากไม่ได้อยู่บน Cloud Serverless และระบุ checkHardware=1
     let scannerOverview: unknown = null;
-    if (checkHardware) {
+    let liveDeviceOverviewMeta: DeviceOverviewMetadata | null = null;
+    if (checkHardware && !isCloudServer) {
       const client = new HipCmi681sClient({
         ip: store.mysqlConfig.scannerIp,
         port: store.mysqlConfig.scannerPort,
         password: store.mysqlConfig.scannerPassword,
-        timeoutMs: 5000,
+        timeoutMs: 1800,
       });
       try {
         await client.connect();
-        scannerOverview = await client.getDeviceOverview();
+        const overview = await client.getDeviceOverview();
         client.disconnect();
+        scannerOverview = overview;
+        liveDeviceOverviewMeta = {
+          productCode: overview.info.productCode,
+          vendorName: overview.info.vendorName,
+          serialNumber: overview.info.serialNumber,
+          deviceTime: overview.info.deviceTime,
+          registeredUsersCount: overview.status.registeredUsersCount,
+          fingerprintsCount: overview.status.fingerprintsCount,
+          passwordsCount: overview.status.passwordsCount,
+          idCardsCount: overview.status.idCardsCount,
+          attendanceLogsCount: overview.status.attendanceLogsCount,
+          maxAttendanceLogs: overview.status.capacities.maxAttendanceLogs,
+          checkedAt: new Date().toISOString(),
+        };
+
+        // อัปเดตยอดจริงจากฮาร์ดแวร์ลงแคชท้องถิ่นทันทีเมื่อจำนวนบนเครื่องสแกนเปลี่ยน
+        if (
+          overview.status.attendanceLogsCount !== store.deviceTotalRecords ||
+          !store.deviceOverview ||
+          store.deviceOverview.registeredUsersCount !==
+            overview.status.registeredUsersCount
+        ) {
+          store.deviceTotalRecords = overview.status.attendanceLogsCount;
+          store.deviceOverview = liveDeviceOverviewMeta;
+          saveAttendanceStore(store);
+        }
       } catch (err: unknown) {
         client.disconnect();
         const e = err as { message?: string };
@@ -305,9 +348,66 @@ export async function GET(req: NextRequest) {
       scannerPassword: 0,
     };
 
+    const pickNewerIso = (a?: string | null, b?: string | null) => {
+      if (!a) return b || null;
+      if (!b) return a || null;
+      return new Date(a).getTime() >= new Date(b).getTime() ? a : b;
+    };
+
+    const effectiveLastSyncedAt = pickNewerIso(
+      store.lastSyncedAt,
+      cloudTelemetry?.lastSyncedAt
+    );
+    const effectiveLastMysqlSyncedAt = pickNewerIso(
+      store.lastMysqlSyncedAt,
+      cloudTelemetry?.lastMysqlSyncedAt
+    );
+
+    const effectiveDeviceTotalRecords =
+      liveDeviceOverviewMeta?.attendanceLogsCount ??
+      (dataSource === "supabase"
+        ? Math.max(
+            cloudTelemetry?.deviceTotalRecords || 0,
+            supabaseStatus.count || 0,
+            store.deviceTotalRecords || 0
+          )
+        : Math.max(
+            store.deviceTotalRecords || 0,
+            cloudTelemetry?.deviceTotalRecords || 0,
+            totalStoredLogs || 0
+          ));
+
+    const latestLocalScanTs =
+      activeLocalLogs.length > 0 ? activeLocalLogs[0].scanTimestamp : null;
+    const latestScanTimestamp =
+      latestCloudScanTs &&
+      (!latestLocalScanTs || latestCloudScanTs > latestLocalScanTs)
+        ? latestCloudScanTs
+        : latestLocalScanTs;
+
+    const effectiveDeviceOverview =
+      liveDeviceOverviewMeta ||
+      store.deviceOverview ||
+      (cloudTelemetry
+        ? {
+            productCode: cloudTelemetry.productCode,
+            serialNumber: cloudTelemetry.serialNumber,
+            deviceTime: cloudTelemetry.deviceTime,
+            registeredUsersCount: cloudTelemetry.registeredUsersCount,
+            fingerprintsCount: cloudTelemetry.fingerprintsCount,
+            passwordsCount: cloudTelemetry.passwordsCount,
+            idCardsCount: cloudTelemetry.idCardsCount,
+            attendanceLogsCount: cloudTelemetry.deviceTotalRecords,
+            maxAttendanceLogs: cloudTelemetry.maxAttendanceLogs,
+            checkedAt: cloudTelemetry.lastSyncedAt || undefined,
+          }
+        : null);
+
     return NextResponse.json({
       success: true,
       dataSource,
+      isCloudServer,
+      canSyncFromScanner,
       page,
       pageSize,
       totalPages,
@@ -316,10 +416,11 @@ export async function GET(req: NextRequest) {
       supabaseStatus,
       setupSql: getSynologyMysqlSetupSql(store.mysqlConfig),
       scannerOverview,
-      lastSyncedAt: store.lastSyncedAt,
-      lastMysqlSyncedAt: store.lastMysqlSyncedAt,
-      deviceTotalRecords:
-        store.deviceTotalRecords || supabaseStatus.count || 30061,
+      deviceOverview: effectiveDeviceOverview,
+      lastSyncedAt: effectiveLastSyncedAt,
+      lastMysqlSyncedAt: effectiveLastMysqlSyncedAt,
+      latestScanTimestamp,
+      deviceTotalRecords: effectiveDeviceTotalRecords,
       totalStoredLogs,
       availableDates,
       mappings,
@@ -359,8 +460,37 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const limitLatest =
+      const scannerIp = store.mysqlConfig.scannerIp || "192.168.162.15";
+      const isScannerPrivateLan = /^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[0-1])\.|127\.)/.test(
+        scannerIp
+      );
+      if (process.env.VERCEL === "1" && isScannerPrivateLan) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "เซิร์ฟเวอร์ Cloud (Vercel) ไม่สามารถเชื่อม IP เครื่องสแกนภายในวง LAN ได้โดยตรง กรุณากดซิงก์จากเครื่องในสำนักงาน หรือรันคำสั่ง npm run sync:attendance",
+          },
+          { status: 400 }
+        );
+      }
+
+      const requestedLimit =
         typeof body.limitLatest === "number" ? body.limitLatest : 1500;
+
+      // ผสานข้อมูลที่ถูกแก้ไข/ลบ/เพิ่ม Manual และ Mapping บน Supabase Cloud เข้ามาก่อนเสมอเพื่อไม่ให้ถูกเขียนทับ
+      const [cloudOverrides, cloudMappings, cloudEditors, preSupaStatus, latestCloudTs] =
+        await Promise.all([
+          fetchCloudEditedOrManualLogsFromSupabase(),
+          fetchMappingsFromSupabase(),
+          fetchAuthorizedEditorsFromSupabase(),
+          checkSupabaseAttendanceReady(),
+          fetchLatestAttendanceTimestampFromSupabase(),
+        ]);
+      reconcileCloudChangesIntoStore(store, cloudOverrides, cloudMappings);
+      if (cloudEditors && (cloudEditors.length > 0 || store.editorsCustomized)) {
+        store.authorizedEditors = cloudEditors;
+      }
 
       const client = new HipCmi681sClient({
         ip: store.mysqlConfig.scannerIp,
@@ -373,6 +503,13 @@ export async function POST(req: NextRequest) {
       const overview = await client.getDeviceOverview();
       client.disconnect();
 
+      const activeBeforeSync = store.logs.filter((l) => !l.isDeleted).length;
+      const estimatedGap = overview.status.attendanceLogsCount - activeBeforeSync;
+      const effectiveLimit =
+        requestedLimit <= 0 || estimatedGap > Math.max(0, requestedLimit - 100)
+          ? undefined
+          : requestedLimit;
+
       const logClient = new HipCmi681sClient({
         ip: store.mysqlConfig.scannerIp,
         port: store.mysqlConfig.scannerPort,
@@ -380,32 +517,54 @@ export async function POST(req: NextRequest) {
         timeoutMs: 35000,
       });
       await logClient.connect();
-      const pulled = await logClient.getAttendanceLogs(
-        limitLatest > 0 ? limitLatest : undefined
-      );
+      const pulled = await logClient.getAttendanceLogs(effectiveLimit);
       logClient.disconnect();
+
+      const deviceOverviewMeta: DeviceOverviewMetadata = {
+        productCode: overview.info.productCode,
+        vendorName: overview.info.vendorName,
+        serialNumber: overview.info.serialNumber,
+        deviceTime: overview.info.deviceTime,
+        registeredUsersCount: overview.status.registeredUsersCount,
+        fingerprintsCount: overview.status.fingerprintsCount,
+        passwordsCount: overview.status.passwordsCount,
+        idCardsCount: overview.status.idCardsCount,
+        attendanceLogsCount: overview.status.attendanceLogsCount,
+        maxAttendanceLogs: overview.status.capacities.maxAttendanceLogs,
+        checkedAt: new Date().toISOString(),
+      };
 
       const mergeResult = mergeDeviceRecordsIntoStore(
         store,
         pulled.records,
-        pulled.totalCount
+        pulled.totalCount,
+        deviceOverviewMeta
       );
 
-      // พยายามซิงก์ขึ้น MySQL บน Synology NAS ทันที
-      const mysqlSync = await pushStoreToSynologyMysql(store);
+      // ซิงก์ขึ้น MySQL บน Synology NAS (ส่งเฉพาะรายการเปลี่ยนแปลงหาก NAS มีฐานเดิมครบแล้ว)
+      const mysqlSync = await pushStoreToSynologyMysql(
+        store,
+        mergeResult.changedLogs
+      );
 
-      // ดึง Object ที่มี ID จริงจาก Store (ป้องกัน Primary Key ชนบน Supabase) แล้วส่งขึ้น Cloud Replica
-      const byUid = new Map<string, AttendanceLogItem>();
-      for (const item of store.logs) {
-        byUid.set(item.recordUid, item);
-      }
-      const logsForSupabase: AttendanceLogItem[] = [];
-      for (const r of pulled.records) {
-        const uid = `dev_${r.machineId}_${r.userId}_${r.timestamp}`;
-        const matched = byUid.get(uid);
-        if (matched && !matched.isEdited && !matched.isDeleted) {
-          logsForSupabase.push(matched);
-        }
+      // เตรียมรายการสำหรับส่งขึ้น Supabase Cloud (ถ้า Cloud มีจำนวนน้อยกว่า Store ให้ซ่อมยอดครบทั้ง Store; ถ้าเพิ่งสร้าง Local Cache ใหม่และ Cloud มีเกือบครบแล้วให้ส่งเฉพาะส่วนที่ใหม่กว่า)
+      const supaGapBefore = mergeResult.totalStored - preSupaStatus.count;
+      let logsForSupabase: AttendanceLogItem[];
+      if (preSupaStatus.ready && supaGapBefore > mergeResult.changedLogs.length) {
+        logsForSupabase = store.logs.filter((l) => !l.isEdited && !l.isDeleted);
+      } else if (
+        preSupaStatus.ready &&
+        activeBeforeSync === 0 &&
+        supaGapBefore <= 0 &&
+        latestCloudTs
+      ) {
+        logsForSupabase = mergeResult.changedLogs.filter(
+          (l) => !l.isEdited && !l.isDeleted && l.scanTimestamp >= latestCloudTs
+        );
+      } else {
+        logsForSupabase = mergeResult.changedLogs.filter(
+          (l) => !l.isEdited && !l.isDeleted
+        );
       }
 
       const [supabaseSync] = await Promise.all([
@@ -414,12 +573,40 @@ export async function POST(req: NextRequest) {
         syncEditorsToSupabase(store.authorizedEditors),
       ]);
 
+      // บันทึก Telemetry การซิงก์เพื่อให้ฝั่ง Cloud/Vercel เห็นยอดและเวลาซิงก์ล่าสุดตรงกับเครื่องสแกน
+      await recordAttendanceSyncTelemetryToSupabase(
+        {
+          lastSyncedAt: store.lastSyncedAt,
+          lastMysqlSyncedAt: store.lastMysqlSyncedAt,
+          deviceTotalRecords: pulled.totalCount,
+          registeredUsersCount: overview.status.registeredUsersCount,
+          fingerprintsCount: overview.status.fingerprintsCount,
+          passwordsCount: overview.status.passwordsCount,
+          idCardsCount: overview.status.idCardsCount,
+          maxAttendanceLogs: overview.status.capacities.maxAttendanceLogs,
+          serialNumber: overview.info.serialNumber,
+          productCode: overview.info.productCode,
+          deviceTime: overview.info.deviceTime,
+          scannerIp: store.mysqlConfig.scannerIp,
+          addedCount: mergeResult.addedCount,
+          pulledCount: pulled.records.length,
+          source: "ui_sync",
+        },
+        actorName || "ผู้ดูแลระบบ",
+        true
+      );
+
       return NextResponse.json({
         success: true,
         overview,
+        deviceOverview: deviceOverviewMeta,
         pulledCount: pulled.records.length,
         deviceTotalCount: pulled.totalCount,
-        mergeResult,
+        mergeResult: {
+          addedCount: mergeResult.addedCount,
+          updatedCount: mergeResult.updatedCount,
+          totalStored: mergeResult.totalStored,
+        },
         mysqlSync,
         supabaseSync,
         lastSyncedAt: store.lastSyncedAt,
