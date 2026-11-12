@@ -236,7 +236,16 @@ export async function fetchAvailableDatesFromSupabase(): Promise<string[]> {
 }
 
 let cachedAvailableMonths: { months: string[]; expiresAt: number } | null = null;
+let availableMonthsBypassTelemetry = false;
 const AVAILABLE_MONTHS_CACHE_TTL_MS = 60 * 1000;
+
+/**
+ * ล้างแคชรายการเดือนที่ดึงไว้ (เช่น หลังเพิ่มรายการลงเวลาด้วยตนเองในเดือนใหม่)
+ */
+export function invalidateAvailableMonthsCache(): void {
+  cachedAvailableMonths = null;
+  availableMonthsBypassTelemetry = true;
+}
 
 /**
  * ดึงรายการเดือน ("YYYY-MM") ทั้งหมดที่มีข้อมูลใน Supabase
@@ -246,7 +255,15 @@ const AVAILABLE_MONTHS_CACHE_TTL_MS = 60 * 1000;
 export async function fetchAvailableMonthsFromSupabase(
   telemetryMonths?: string[]
 ): Promise<string[]> {
-  if (Array.isArray(telemetryMonths) && telemetryMonths.length > 0) {
+  if (cachedAvailableMonths && Date.now() < cachedAvailableMonths.expiresAt) {
+    return cachedAvailableMonths.months;
+  }
+
+  if (
+    !availableMonthsBypassTelemetry &&
+    Array.isArray(telemetryMonths) &&
+    telemetryMonths.length > 0
+  ) {
     const normalized = Array.from(
       new Set(
         telemetryMonths.filter(
@@ -259,14 +276,11 @@ export async function fetchAvailableMonthsFromSupabase(
     }
   }
 
-  if (cachedAvailableMonths && Date.now() < cachedAvailableMonths.expiresAt) {
-    return cachedAvailableMonths.months;
-  }
-
   try {
     const monthsSet = new Set<string>();
     let monthStartIso: string | null = null;
     const maxIterations = 240;
+    let hasQueryError = false;
 
     for (let i = 0; i < maxIterations; i++) {
       let query = supabaseClient
@@ -281,7 +295,11 @@ export async function fetchAvailableMonthsFromSupabase(
       }
 
       const { data, error } = await query;
-      if (error || !data || data.length === 0) break;
+      if (error) {
+        hasQueryError = true;
+        break;
+      }
+      if (!data || data.length === 0) break;
 
       const ts = formatIsoToThaiTimestamp(
         (data[0] as { scan_timestamp: string }).scan_timestamp
@@ -299,11 +317,15 @@ export async function fetchAvailableMonthsFromSupabase(
     }
 
     const months = Array.from(monthsSet).sort((a, b) => b.localeCompare(a));
-    if (months.length > 0) {
+    if (!hasQueryError && months.length > 0) {
       cachedAvailableMonths = {
         months,
         expiresAt: Date.now() + AVAILABLE_MONTHS_CACHE_TTL_MS,
       };
+      availableMonthsBypassTelemetry = false;
+    }
+    if (hasQueryError && months.length === 0 && cachedAvailableMonths) {
+      return cachedAvailableMonths.months;
     }
     return months;
   } catch {
@@ -684,6 +706,7 @@ export async function recordAttendanceSyncTelemetryToSupabase(
         months: [...telemetry.availableMonths].sort((a, b) => b.localeCompare(a)),
         expiresAt: Date.now() + AVAILABLE_MONTHS_CACHE_TTL_MS,
       };
+      availableMonthsBypassTelemetry = false;
     }
     return { success: true };
   } catch (err: unknown) {

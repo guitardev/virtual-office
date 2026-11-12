@@ -26,6 +26,7 @@ import {
   fetchSummaryStatsFromSupabase,
   fetchAvailableDatesFromSupabase,
   fetchAvailableMonthsFromSupabase,
+  invalidateAvailableMonthsCache,
   fetchCloudEditedOrManualLogsFromSupabase,
   fetchLatestAttendanceSyncTelemetryFromSupabase,
   fetchLatestAttendanceTimestampFromSupabase,
@@ -38,10 +39,23 @@ import {
 } from "@/lib/attendance-supabase";
 import {
   getAttendanceIoLabel,
+  classifyAttendanceByOfficialHours,
   collectAvailableMonths,
 } from "@/lib/attendance-rules";
 
 export const dynamic = "force-dynamic";
+
+const VALID_ATTENDANCE_IO_MODES = new Set([1, 2, 3, 4]);
+
+function parseValidIoMode(raw: unknown): 1 | 2 | 3 | 4 | null {
+  if (typeof raw === "boolean") return null;
+  if (typeof raw === "string" && raw.trim() === "") return null;
+  const num = Number(raw);
+  if (!Number.isInteger(num) || !VALID_ATTENDANCE_IO_MODES.has(num)) {
+    return null;
+  }
+  return num as 1 | 2 | 3 | 4;
+}
 
 async function resolveEffectiveEditors(
   store: AttendanceStoreData
@@ -753,7 +767,20 @@ export async function POST(req: NextRequest) {
           ? `${scanTime}:00`
           : scanTime || "08:30:00";
       const scanTimestamp = `${scanDate} ${normalizedTime}`;
-      const modeNum = Number(ioMode || 1);
+
+      let modeNum: number;
+      if (ioMode !== undefined && ioMode !== null && ioMode !== "") {
+        const parsedMode = parseValidIoMode(ioMode);
+        if (parsedMode === null) {
+          return NextResponse.json(
+            { success: false, error: "ioMode ต้องเป็นค่า 1, 2, 3 หรือ 4 เท่านั้น" },
+            { status: 400 }
+          );
+        }
+        modeNum = parsedMode;
+      } else {
+        modeNum = classifyAttendanceByOfficialHours(scanTimestamp).ioMode;
+      }
       const vModeNum = Number(verifyMode || 9);
 
       const ioLabel = getAttendanceIoLabel(modeNum);
@@ -798,6 +825,8 @@ export async function POST(req: NextRequest) {
         pushSingleLogToSupabase(newLog),
       ]);
 
+      invalidateAvailableMonthsCache();
+
       return NextResponse.json({
         success: true,
         item: newLog,
@@ -830,6 +859,18 @@ export async function POST(req: NextRequest) {
         verifyMode,
         editNote,
       } = body;
+
+      let validatedIoMode: 1 | 2 | 3 | 4 | undefined;
+      if (ioMode !== undefined) {
+        const parsedMode = parseValidIoMode(ioMode);
+        if (parsedMode === null) {
+          return NextResponse.json(
+            { success: false, error: "ioMode ต้องเป็นค่า 1, 2, 3 หรือ 4 เท่านั้น" },
+            { status: 400 }
+          );
+        }
+        validatedIoMode = parsedMode;
+      }
 
       let target = store.logs.find((l) => l.id === id);
       let fromSupabaseOnly = false;
@@ -866,10 +907,9 @@ export async function POST(req: NextRequest) {
         target.scanTimestamp = `${scanDate} ${normalizedTime}`;
       }
 
-      if (ioMode !== undefined) {
-        const modeNum = Number(ioMode);
-        target.ioMode = modeNum;
-        target.ioLabel = getAttendanceIoLabel(modeNum);
+      if (validatedIoMode !== undefined) {
+        target.ioMode = validatedIoMode;
+        target.ioLabel = getAttendanceIoLabel(validatedIoMode);
       }
 
       if (verifyMode !== undefined) {

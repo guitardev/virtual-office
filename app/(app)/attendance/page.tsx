@@ -632,22 +632,27 @@ export default function AttendancePage() {
       "ผู้แก้ไข",
       "หมายเหตุ",
     ];
+    const csvCell = (val: string | number | null | undefined): string => {
+      const str = val === null || val === undefined ? "" : String(val);
+      const safe = /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
+      return `"${safe.replace(/"/g, '""')}"`;
+    };
     const rows = logs.map((l, idx) => {
       const period = getThaiFiscalPeriod(l.scanTimestamp);
       return [
         idx + 1,
         l.scannerUserId,
-        `"${l.memberName.replace(/"/g, '""')}"`,
-        `"${(l.division || "").replace(/"/g, '""')}"`,
-        l.scanTimestamp,
-        `"${period.monthYearLabel}"`,
-        `"${period.fiscalLabel}"`,
-        l.originalTimestamp,
-        l.ioLabel || getAttendanceIoLabel(l.ioMode),
-        l.verifyLabel,
-        l.isEdited ? "แก้ไขแล้ว" : "ต้นฉบับจากเครื่องสแกน",
-        `"${(l.editedBy || "-").replace(/"/g, '""')}"`,
-        `"${(l.editNote || "-").replace(/"/g, '""')}"`,
+        csvCell(l.memberName),
+        csvCell(l.division || ""),
+        csvCell(l.scanTimestamp),
+        csvCell(period.monthYearLabel),
+        csvCell(period.fiscalLabel),
+        csvCell(l.originalTimestamp),
+        csvCell(l.ioLabel || getAttendanceIoLabel(l.ioMode)),
+        csvCell(l.verifyLabel),
+        csvCell(l.isEdited ? "แก้ไขแล้ว" : "ต้นฉบับจากเครื่องสแกน"),
+        csvCell(l.editedBy || "-"),
+        csvCell(l.editNote || "-"),
       ];
     });
 
@@ -755,6 +760,15 @@ export default function AttendancePage() {
     if (dateFrom && dateTo && dateFrom === dateTo) {
       const p = getThaiFiscalPeriod(dateFrom);
       return `${p.dateShortBE} (ปีงบประมาณ ${p.fiscalYear} • ไตรมาส ${p.quarter})`;
+    }
+    if (dateFrom && dateTo) {
+      return `${getThaiFiscalPeriod(dateFrom).dateShortBE} – ${getThaiFiscalPeriod(dateTo).dateShortBE}`;
+    }
+    if (dateFrom) {
+      return `ตั้งแต่ ${getThaiFiscalPeriod(dateFrom).dateShortBE}`;
+    }
+    if (dateTo) {
+      return `ถึง ${getThaiFiscalPeriod(dateTo).dateShortBE}`;
     }
     return null;
   }, [selectedFiscalMonth, selectedFiscalYear, dateFrom, dateTo]);
