@@ -10,7 +10,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import mysql from "mysql2/promise";
-import { OFFICIAL_OFFICE_PERSONNEL } from "./office-personnel";
 import { HipAttendanceRecord } from "./hip-cmi681s";
 
 export interface NasMysqlConfig {
@@ -108,33 +107,22 @@ export const DEFAULT_NAS_MYSQL_CONFIG: NasMysqlConfig = getEnvMysqlDefaults();
 export function buildDefaultMappings(): Record<number, ScannerUserMapping> {
   const map: Record<number, ScannerUserMapping> = {};
   for (let uid = 1; uid <= 64; uid++) {
-    const staff = OFFICIAL_OFFICE_PERSONNEL[uid - 1];
-    if (staff) {
-      map[uid] = {
-        scannerUserId: uid,
-        memberId: staff.id,
-        memberName: staff.name,
-        division: staff.division,
-        position: staff.position,
-      };
-    } else {
-      map[uid] = {
-        scannerUserId: uid,
-        memberId: `scanner_uid_${uid}`,
-        memberName: `บุคลากร พมจ. (รหัสสแกน #${uid})`,
-        division: "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
-        position: "เจ้าหน้าที่ปฏิบัติงาน",
-      };
-    }
+    map[uid] = {
+      scannerUserId: uid,
+      memberId: `scanner_uid_${uid}`,
+      memberName: `บุคลากร พมจ. (รหัสสแกน #${uid})`,
+      division: "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
+      position: "เจ้าหน้าที่ปฏิบัติงาน",
+    };
   }
   return map;
 }
 
 export function buildDefaultEditors(): AuthorizedAttendanceEditor[] {
-  // ค่าเริ่มต้น: ให้หัวหน้าฝ่ายบริหารทั่วไป (usr_2) และเจ้าหน้าที่ระบบงานคอมพิวเตอร์ (usr_5) มีสิทธิ์แก้ไขเวลาได้นอกเหนือจาก Admin (usr_1)
+  // ค่าเริ่มต้น: ให้หัวหน้าฝ่ายบริหารทั่วไป (syno_เสกพล) และเจ้าหน้าที่กลุ่มนโยบายและวิชาการ (syno_ขวัญนภา) มีสิทธิ์แก้ไขเวลาได้นอกเหนือจาก Admin
   return [
     {
-      memberId: "usr_2",
+      memberId: "syno_เสกพล",
       memberName: "นายเสกพล ดิษฐโชติ",
       division: "ฝ่ายบริหารทั่วไป",
       role: "manager",
@@ -142,7 +130,7 @@ export function buildDefaultEditors(): AuthorizedAttendanceEditor[] {
       grantedAt: new Date().toISOString(),
     },
     {
-      memberId: "usr_5",
+      memberId: "syno_ขวัญนภา",
       memberName: "นางสาวขวัญนภา ศิริสมบัติ",
       division: "กลุ่มนโยบายและวิชาการ",
       role: "member",

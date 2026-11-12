@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Member, ChatGroup, ChatMessage, ChatAttachment, AttachmentType } from "@/lib/types";
-import { INITIAL_MEMBERS, ROLE_CONFIG } from "@/lib/rbac";
+import { ROLE_CONFIG } from "@/lib/rbac";
 import {
   loadStoredChatGroups,
   saveStoredChatGroups,
@@ -54,7 +54,7 @@ interface ChatPageProps {
 export function ChatPage({
   currentUser,
   showToast,
-  members = INITIAL_MEMBERS,
+  members = [],
   initialGroupId,
 }: ChatPageProps) {
   const [groups, setGroups] = useState<ChatGroup[]>([]);

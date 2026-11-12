@@ -104,34 +104,42 @@ test.describe("ศูนย์ข้อมูลและสถิติสั�
     await expect(page.locator("text=แบบฟอร์มขอใช้รถยนต์ราชการ (กพพ. 01)").first()).toBeVisible();
   });
 
-  test("5. ทำเนียบข้าราชการและเจ้าหน้าที่ พมจ.กำแพงเพชร: แสดงข้อมูลบุคคลจริง ผู้บริหาร หัวหน้ากลุ่มงาน และการค้นหา", async ({
+  test("5. ทำเนียบข้าราชการและเจ้าหน้าที่ พมจ.กำแพงเพชร: แสดงข้อมูลจริงจาก Supabase ปราศจาก mock data พร้อมผู้บริหาร หัวหน้ากลุ่มงาน และการค้นหา", async ({
     page,
   }) => {
-    // 1. ตรวจสอบในแท็บ 4 กลุ่มภารกิจ ว่าแสดงชื่อหัวหน้ากลุ่มงานที่เป็นข้อมูลจริง
+    // 1. ตรวจสอบในแท็บ 4 กลุ่มภารกิจ ว่าแสดงชื่อหัวหน้ากลุ่มงานจริงจาก Supabase (เช่น วรวุฒิ=นโยบายฯ, พนมศักย์=พัฒนาสังคมฯ)
     await page.locator("button:has-text('ระบบงาน 4 กลุ่มภารกิจ พมจ.')").first().click();
-    await expect(page.locator("text=นายเสกพล ดิษฐโชติ").first()).toBeVisible();
-    await expect(page.locator("text=นายพนมศักย์ บริภัทรจิรากร").first()).toBeVisible();
+    await expect(page.locator("text=นายเสกพล ดิษฐโชติ").first()).toBeVisible({ timeout: 10000 });
     await expect(page.locator("text=นายวรวุฒิ พึ่งพัก").first()).toBeVisible();
+    await expect(page.locator("text=นายพนมศักย์ บริภัทรจิรากร").first()).toBeVisible();
     await expect(page.locator("text=นางสาวสุมาลี แสงแก้ว").first()).toBeVisible();
 
     // 2. สลับไปแท็บ 'ทำเนียบข้าราชการและเจ้าหน้าที่'
     await page.locator("button:has-text('ทำเนียบข้าราชการและเจ้าหน้าที่')").first().click();
 
-    // ตรวจสอบส่วนผู้บริหาร (Executive Director Banner)
+    // ตรวจสอบป้ายแหล่งข้อมูลจริง Supabase และส่วนผู้บริหาร (Executive Director Banner)
+    await expect(page.locator("text=ข้อมูลจริงจาก Supabase (public.users)").first()).toBeVisible();
     await expect(page.locator("text=นางสาวมะลิวัน สิทธิโยธี").first()).toBeVisible();
     await expect(page.locator("text=พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร").first()).toBeVisible();
-    await expect(page.locator("text=055-705031 ต่อ 101").first()).toBeVisible();
-    await expect(page.locator("text=maliwan.s@m-society.go.th").first()).toBeVisible();
+
+    // ยืนยันว่าลบ mock data เดิมออกทั้งหมดแล้ว (ไม่พบเบอร์/อีเมลปลอม บุคคลสมมติ หรือบัญชีระบบ NAS)
+    await expect(page.locator("text=055-705031 ต่อ 101")).toHaveCount(0);
+    await expect(page.locator("text=maliwan.s@m-society.go.th")).toHaveCount(0);
+    await expect(page.locator("text=นางสาวอารีวรรณ ประเสริฐอุดมศักดิ์")).toHaveCount(0);
+    await expect(page.locator("text=นายสมหมาย มั่นคง")).toHaveCount(0);
+    await expect(page.locator("text=นายธีรพัฒน์ บุญยืน")).toHaveCount(0);
+    await expect(page.locator("text=ดร. ศรัณย์ สิทธิโชค")).toHaveCount(0);
+    await expect(page.locator("text=นายผู้ดูแลระบบ Nas Server")).toHaveCount(0);
 
     const personnelCards = page.locator("[data-testid='personnel-card']");
 
-    // ตรวจสอบรายชื่อเจ้าหน้าที่ในการ์ดทำเนียบ
+    // ตรวจสอบรายชื่อเจ้าหน้าที่จริงจาก Supabase ในการ์ดทำเนียบ
     await expect(personnelCards.filter({ hasText: "นายเสกพล ดิษฐโชติ" }).first()).toBeVisible();
     await expect(personnelCards.filter({ hasText: "นายวรวุฒิ พึ่งพัก" }).first()).toBeVisible();
-    await expect(personnelCards.filter({ hasText: "นางสาวอารีวรรณ ประเสริฐอุดมศักดิ์" }).first()).toBeVisible();
+    await expect(personnelCards.filter({ hasText: "นายธนวัฒน์ แกมขุนทด" }).first()).toBeVisible();
 
-    // 3. ทดสอบการค้นหาด้วยชื่อเล่น (เช่น 'เจมส์')
-    const searchInput = page.locator("input[placeholder*='ค้นหาชื่อ, ตำแหน่ง']").first();
+    // 3. ทดสอบการค้นหาด้วยชื่อเล่นจริงจาก Supabase (เช่น 'เจมส์')
+    const searchInput = page.locator("input[placeholder*='ค้นหาชื่อ']").first();
     await searchInput.fill("เจมส์");
     await expect(personnelCards.filter({ hasText: "นายวรวุฒิ พึ่งพัก" }).first()).toBeVisible();
     await expect(personnelCards.filter({ hasText: "นายเสกพล ดิษฐโชติ" })).toBeHidden();

@@ -15,7 +15,6 @@ import {
   GOVERNMENT_PERSONNEL_TYPES,
   PERSONNEL_TYPE_CONFIG,
 } from "@/lib/rbac";
-import { OFFICIAL_AVATAR_PRESETS } from "@/components/user/EditProfileModal";
 
 export interface AdminEditFormState {
   prefix: string;
@@ -72,6 +71,8 @@ export interface EditRequestFormState {
 }
 
 interface AdminModalsProps {
+  // Members directory (live Supabase)
+  members?: Member[];
   // View Member Modal
   viewingMember: Member | null;
   setViewingMember: (m: Member | null) => void;
@@ -130,6 +131,7 @@ interface AdminModalsProps {
 }
 
 export function AdminModals({
+  members = [],
   viewingMember,
   setViewingMember,
   currentUser,
@@ -593,43 +595,54 @@ export function AdminModals({
                   </div>
                 )}
 
-                {/* Official Preset Gallery Grid */}
+                {/* Live Supabase Directory Avatar Picker */}
                 {showAdminPresetGallery && (
                   <div className="pt-2 border-t border-slate-200/80 animate-fade-in space-y-2">
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      {OFFICIAL_AVATAR_PRESETS.map((p) => {
-                        const isSelected = adminEditForm.avatarUrl === p.url;
-                        return (
-                          <button
-                            key={p.id}
-                            type="button"
-                            onClick={() => {
-                              setAdminEditForm((prev) => ({ ...prev, avatarUrl: p.url }));
-                              setShowAdminPresetGallery(false);
-                            }}
-                            className={`p-1.5 rounded-xl border text-left transition-all flex items-center gap-2 cursor-pointer ${
-                              isSelected
-                                ? "border-indigo-600 bg-indigo-50/80 ring-2 ring-indigo-600/30 shadow-xs"
-                                : "border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50/80"
-                            }`}
-                          >
-                            <img
-                              src={p.url}
-                              alt={p.name}
-                              className="w-9 h-9 rounded-lg object-cover shrink-0 border border-slate-200"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <div className="text-[11px] font-bold text-slate-800 truncate">
-                                {p.name.split(" ")[0]}
-                              </div>
-                              <div className="text-[10px] text-slate-500 truncate">
-                                {p.position}
-                              </div>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
+                    {members.filter((m) => Boolean(m.avatarUrl)).length === 0 ? (
+                      <div className="text-center py-3 text-xs text-slate-400">
+                        ยังไม่มีรูปถ่ายโปรไฟล์ในฐานข้อมูล สามารถอัปโหลดรูปหรือระบุ URL ได้ด้านบน
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {members
+                          .filter((m) => Boolean(m.avatarUrl))
+                          .map((m) => {
+                            const isSelected = adminEditForm.avatarUrl === m.avatarUrl;
+                            return (
+                              <button
+                                key={m.id}
+                                type="button"
+                                onClick={() => {
+                                  setAdminEditForm((prev) => ({
+                                    ...prev,
+                                    avatarUrl: m.avatarUrl,
+                                  }));
+                                  setShowAdminPresetGallery(false);
+                                }}
+                                className={`p-1.5 rounded-xl border text-left transition-all flex items-center gap-2 cursor-pointer ${
+                                  isSelected
+                                    ? "border-indigo-600 bg-indigo-50/80 ring-2 ring-indigo-600/30 shadow-xs"
+                                    : "border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50/80"
+                                }`}
+                              >
+                                <img
+                                  src={m.avatarUrl}
+                                  alt={m.name}
+                                  className="w-9 h-9 rounded-lg object-cover shrink-0 border border-slate-200"
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-[11px] font-bold text-slate-800 truncate">
+                                    {m.firstName || m.name.split(" ")[0]}
+                                  </div>
+                                  <div className="text-[10px] text-slate-500 truncate">
+                                    {m.position}
+                                  </div>
+                                </div>
+                              </button>
+                            );
+                          })}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

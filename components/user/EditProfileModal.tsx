@@ -18,57 +18,6 @@ export interface EditProfileFormData {
   avatarUrl?: string;
 }
 
-export const OFFICIAL_AVATAR_PRESETS = [
-  {
-    id: "maliwan",
-    name: "นางสาวมะลิวัน สิทธิโยธี",
-    position: "พัฒนาสังคมฯ จังหวัด",
-    url: "https://kamphaengphet.m-society.go.th/wp-content/uploads/2024/10/S__2457668.jpg",
-  },
-  {
-    id: "sekpol",
-    name: "นายเสกพล ดิษฐโชติ",
-    position: "หน.ฝ่ายบริหารทั่วไป",
-    url: "https://kamphaengphet.m-society.go.th/wp-content/uploads/2024/12/2b6d8e58-bfd5-44a7-a18d-4fb8e685452f-e1734057934925.png",
-  },
-  {
-    id: "worawut",
-    name: "นายวรวุฒิ พึ่งพัก",
-    position: "หน.กลุ่มพัฒนาสังคม",
-    url: "https://kamphaengphet.m-society.go.th/wp-content/uploads/2024/11/e735d8a3-9afc-4271-803e-0438ae7cb5371-1-1-e1731912123637.png",
-  },
-  {
-    id: "phanomsak",
-    name: "นายพนมศักย์ บริภัทรจิรากร",
-    position: "รก.หน.กลุ่มนโยบาย",
-    url: "https://kamphaengphet.m-society.go.th/wp-content/uploads/2024/11/%E0%B8%9E%E0%B8%B5%E0%B9%88%E0%B8%94%E0%B8%B2%E0%B8%A7-1-1-e1734061864108.png",
-  },
-  {
-    id: "kwannapa",
-    name: "นางสาวขวัญนภา ศิริสมบัติ",
-    position: "จนท.ระบบคอมพิวเตอร์",
-    url: "https://kamphaengphet.m-society.go.th/wp-content/uploads/2024/11/a864cd1c-9230-490f-b838-5f62aa24bfca-e1732079225217.png",
-  },
-  {
-    id: "sumalee",
-    name: "นางสาวสุมาลี แสงแก้ว",
-    position: "นักสังคมสงเคราะห์",
-    url: "https://kamphaengphet.m-society.go.th/wp-content/uploads/2024/11/e69828cb-560e-4c87-a197-91e98179257a-e1732768762731.png",
-  },
-  {
-    id: "pitchapa",
-    name: "นางสาวพิชชาภา ห้าวหาญ",
-    position: "นักสังคมสงเคราะห์",
-    url: "https://kamphaengphet.m-society.go.th/wp-content/uploads/2024/12/88a864d8-a374-4867-87c8-4daa2671153e-e1734057993409.png",
-  },
-  {
-    id: "areewan",
-    name: "นางสาวอารีวรรณ ประเสริฐอุดมศักดิ์",
-    position: "จนท.การเงินและบัญชี",
-    url: "https://kamphaengphet.m-society.go.th/wp-content/uploads/2024/11/%E0%B8%9E%E0%B8%99%E0%B8%A1%E0%B8%A8%E0%B8%B1%E0%B8%81%E0%B8%A2%E0%B9%8C-%E0%B8%9A%E0%B8%A3%E0%B8%B4%E0%B8%A0%E0%B8%B1%E0%B8%97%E0%B8%A3%E0%B8%88%E0%B8%B4%E0%B8%A3%E0%B8%B2%E0%B8%81%E0%B8%A3-1-e1734061426233.png",
-  },
-];
-
 interface EditProfileModalProps {
   isOpen: boolean;
   onClose: () => void;

@@ -193,17 +193,17 @@ test.describe("ระบบแชทกลุ่มทางการของ�
     // กำหนด session เป็นบุคลากรกลุ่มนโยบายและวิชาการ (นางสาวขวัญนภา ศิริสมบัติ - เจ้าหน้าที่ระบบงานคอมพิวเตอร์)
     await page.addInitScript(() => {
       const policyOfficer = {
-        id: "usr_5",
+        id: "syno_ขวัญนภา",
         prefix: "นางสาว",
         firstName: "ขวัญนภา",
         lastName: "ศิริสมบัติ",
         name: "นางสาวขวัญนภา ศิริสมบัติ",
         nickname: "ขวัญ",
-        personnelType: "พนักงานราชการ",
-        position: "เจ้าหน้าที่ระบบงานคอมพิวเตอร์",
+        personnelType: "พนักงานจ้างเหมาบริการ",
+        position: "รอกำหนดตำแหน่ง",
         division: "กลุ่มนโยบายและวิชาการ",
         department: "กลุ่มนโยบายและวิชาการ",
-        email: "kwannapa.s@m-society.go.th",
+        email: "user_2qlrcn@nas.local",
         role: "member",
         status: "active",
       };
@@ -249,8 +249,8 @@ test.describe("ระบบแชทกลุ่มทางการของ�
     await expect(drawerSummary).toBeVisible();
     await expect(drawerSummary).not.toContainText("สมาชิกทั้งหมด 0 คน");
 
-    // ตรวจสอบว่าพบนายพนมศักย์ บริภัทรจิรากร (หัวหน้ากลุ่ม) และนางสาวขวัญนภา ศิริสมบัติ ในลิ้นชัก
-    await expect(page.locator("text=นายพนมศักย์ บริภัทรจิรากร").first()).toBeVisible();
+    // ตรวจสอบว่าพบนายวรวุฒิ พึ่งพัก (หัวหน้ากลุ่มนโยบายและวิชาการจาก Supabase) และนางสาวขวัญนภา ศิริสมบัติ ในลิ้นชัก
+    await expect(page.locator("text=นายวรวุฒิ พึ่งพัก").first()).toBeVisible();
     await expect(page.locator("text=นางสาวขวัญนภา ศิริสมบัติ").first()).toBeVisible();
   });
 
@@ -262,7 +262,7 @@ test.describe("ระบบแชทกลุ่มทางการของ�
       const otherUserMsg = {
         id: "msg_test_other_user_img",
         groupId: "ch_all_staff",
-        senderId: "usr_3",
+        senderId: "syno_วรวุฒิ",
         senderName: "นายวรวุฒิ พึ่งพัก",
         senderRole: "manager",
         senderPosition: "นักพัฒนาสังคมชำนาญการพิเศษ (หัวหน้ากลุ่มการพัฒนาสังคมและสวัสดิการ)",

@@ -1,5 +1,4 @@
 import { Role, ModuleId, RoleInfo, Member, AuditLog, SystemModule, PersonnelType, AccessRequest, TaskItem, TaskVisibility } from "./types";
-import { OFFICIAL_OFFICE_PERSONNEL } from "./office-personnel";
 
 export const ROLE_CONFIG: Record<Role, RoleInfo> = {
   admin: {
@@ -325,11 +324,13 @@ export const GOVERNMENT_DIVISIONS = [
   "คณะทำงานที่ปรึกษาและภาคีเครือข่ายภายนอก",
 ] as const;
 
-export const INITIAL_MEMBERS: Member[] = OFFICIAL_OFFICE_PERSONNEL;
+export const INITIAL_MEMBERS: Member[] = [];
 
 export const INITIAL_AUDIT_LOGS: AuditLog[] = [];
 
 export const INITIAL_ACCESS_REQUESTS: AccessRequest[] = [];
+
+const LEGACY_MOCK_ID_PATTERN = /^usr_(\d{1,4}|mock|head_.*)$/;
 
 /**
  * ตรวจสอบว่าสมาชิกเป็นบุคลากรปฏิบัติงานทั่วไป (Operational Member) หรือไม่
@@ -343,8 +344,7 @@ export function isOperationalMember(m: Member | null | undefined): boolean {
   if (
     m.id === "syno_admin" ||
     m.id === "syno_guitardev" ||
-    m.id === "usr_1" ||
-    m.id === "usr_mock"
+    LEGACY_MOCK_ID_PATTERN.test(m.id)
   ) {
     return false;
   }

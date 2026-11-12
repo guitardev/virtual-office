@@ -198,31 +198,31 @@ export function CarBookingPage({
   const [formSelectedReviewerId, setFormSelectedReviewerId] = useState<string>("");
   const [formDispatcherId, setFormDispatcherId] = useState<string>("");
 
-  // Step 1: Detect Division Head for Current User
+  // Step 1: Detect Division Head for Current User (aligned with live Supabase users)
   const detectedDivisionHead = useMemo(() => {
     const userDiv = currentUser?.division || "";
     const head = members.find((m) => m.division === userDiv && (m.role === "manager" || m.position.includes("หัวหน้า")));
     if (head) return head;
-    if (userDiv.includes("พัฒนาสังคม")) {
-      return members.find(m => m.name.includes("วรวุฒิ")) || {
-        id: "usr_head_dev",
-        name: "นายวรวุฒิ พึ่งพัก",
-        position: "นักพัฒนาสังคมชำนาญการพิเศษ (หัวหน้ากลุ่มการพัฒนาสังคมและสวัสดิการ)",
-        division: "กลุ่มการพัฒนาสังคมและสวัสดิการ",
-      };
-    }
     if (userDiv.includes("นโยบาย")) {
-      return members.find(m => m.name.includes("พนมศักย์")) || {
-        id: "usr_head_policy",
-        name: "นายพนมศักย์ บริภัทรจิรากร",
-        position: "นักวิเคราะห์นโยบายและแผนชำนาญการ (หัวหน้ากลุ่มนโยบายและวิชาการ)",
+      return members.find((m) => m.division?.includes("นโยบาย") && m.role === "manager") || members.find((m) => m.name.includes("วรวุฒิ")) || {
+        id: "syno_วรวุฒิ",
+        name: "นายวรวุฒิ พึ่งพัก",
+        position: "นักพัฒนาสังคมชำนาญการพิเศษ",
         division: "กลุ่มนโยบายและวิชาการ",
       };
     }
-    return members.find(m => m.name.includes("เสกพล")) || {
-      id: "usr_2",
+    if (userDiv.includes("พัฒนาสังคม")) {
+      return members.find((m) => m.division?.includes("พัฒนาสังคม") && m.role === "manager") || members.find((m) => m.name.includes("พนมศักย์")) || {
+        id: "syno_พนมศักย์",
+        name: "นายพนมศักย์ บริภัทรจิรากร",
+        position: "นักพัฒนาสังคมชำนาญการ",
+        division: "กลุ่มการพัฒนาสังคมและสวัสดิการ",
+      };
+    }
+    return members.find((m) => m.name.includes("เสกพล")) || {
+      id: "syno_เสกพล",
       name: "นายเสกพล ดิษฐโชติ",
-      position: "นักพัฒนาสังคมชำนาญการ (หัวหน้าฝ่ายบริหารทั่วไป)",
+      position: "นักพัฒนาสังคมชำนาญการ",
       division: "ฝ่ายบริหารทั่วไป",
     };
   }, [members, currentUser]);

@@ -24,7 +24,6 @@ import {
   OfficialDocumentType,
 } from "./types";
 import {
-  INITIAL_MEMBERS,
   INITIAL_SYSTEM_MODULES,
   INITIAL_ACCESS_REQUESTS,
   INITIAL_AUDIT_LOGS,
@@ -243,21 +242,23 @@ export function mapRowToMember(row: any): Member {
   const firstName = row.first_name || (row.name ? row.name.split(" ")[0] : "");
   const lastName = row.last_name ?? "";
   const fullName = formatFullMemberName(prefix, row.name, firstName, lastName);
+  const rawNickname = typeof row.nickname === "string" ? row.nickname.trim() : "";
+  const cleanNickname = rawNickname && rawNickname !== "-" ? rawNickname : undefined;
 
   return {
     id: row.id,
     prefix,
     firstName,
     lastName,
-    nickname: row.nickname || undefined,
+    nickname: cleanNickname,
     name: fullName,
     personnelType: row.personnel_type ? (row.personnel_type as PersonnelType) : undefined,
     position: row.position || "รอกำหนดตำแหน่ง",
     division: row.division || "รอกำหนดกลุ่มงาน",
     department: row.division || "รอกำหนดกลุ่มงาน",
-    email: row.email,
-    phone: row.phone || "-",
-    lineId: row.line_id || "-",
+    email: row.email || "",
+    phone: row.phone && row.phone !== "-" ? row.phone : "-",
+    lineId: row.line_id && row.line_id !== "-" ? row.line_id : "-",
     role: (row.role as Role) || "member",
     status: row.status === "inactive" ? "inactive" : "active",
     joinedDate: row.created_at
@@ -301,29 +302,48 @@ export function mapMemberToRow(member: Member): any {
   };
 }
 
-const MEMBERS_STORAGE_KEY = "smartmso_members_cache_v3";
+const MEMBERS_STORAGE_KEY = "smartmso_members_cache_v4";
 const LEGACY_MEMBERS_STORAGE_KEYS = [
+  "smartmso_members_cache_v3",
   "smartmso_members_cache_v2",
   "omnioffice_members_cache_v2",
 ];
 
+const LEGACY_MOCK_MEMBER_ID_RE = /^usr_(\d{1,4}|mock|head_.*)$/;
+
 /**
- * Filter out legacy mock user IDs (usr_mock only)
+ * Filter out legacy mock user IDs (usr_mock, usr_1..usr_9999, usr_head_*)
+ * while keeping real Supabase users (syno_*, usr_line_*, UUID, and timestamp IDs usr_<13+ digits>)
  */
 export function isRealMember(m: Member): boolean {
   if (!m || !m.id) return false;
-  // Filter out only legacy mock user 'usr_mock', keeping real seeded personnel (usr_1 through usr_99), syno_*, line_*, etc.
-  if (m.id === "usr_mock") return false;
+  if (LEGACY_MOCK_MEMBER_ID_RE.test(m.id)) return false;
   return true;
+}
+
+/**
+ * Identify Synology DSM technical admin accounts that are not civil service personnel
+ */
+export function isSystemServiceAccount(m: Member | null | undefined): boolean {
+  if (!m || !m.id) return false;
+  const email = (m.email || "").toLowerCase().trim();
+  const pos = (m.position || "").trim();
+  return (
+    m.id === "syno_admin" ||
+    m.id === "syno_guitardev" ||
+    email === "admin@nas.local" ||
+    email === "guitardev@nas.local" ||
+    pos === "ผู้ดูแลระบบ Synology DSM"
+  );
 }
 
 export { isOperationalMember, getOperationalMembers, isEligibleDriver, getEligibleDrivers };
 
 /**
- * Get members from local cache or fallback to INITIAL_MEMBERS
+ * Get members from local cache (returns empty array when no cache exists)
  */
 export function getLocalMembers(): Member[] {
-  if (typeof window === "undefined") return INITIAL_MEMBERS;
+  if (typeof window === "undefined") return [];
   try {
     // Purge legacy storage keys that may contain mock data
     LEGACY_MEMBERS_STORAGE_KEYS.forEach((key) => {
@@ -333,17 +353,18 @@ export function getLocalMembers(): Member[] {
     });
 
     const raw = localStorage.getItem(MEMBERS_STORAGE_KEY);
-    if (!raw) return INITIAL_MEMBERS;
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
       return parsed.filter(isRealMember).map((m: Member) => ({
         ...m,
+        nickname: m.nickname && m.nickname !== "-" ? m.nickname : undefined,
         name: formatFullMemberName(m.prefix, m.name, m.firstName, m.lastName),
       }));
     }
-    return INITIAL_MEMBERS;
+    return [];
   } catch {
-    return INITIAL_MEMBERS;
+    return [];
   }
 }
 
@@ -355,6 +376,7 @@ export function saveLocalMembers(members: Member[]) {
   try {
     const cleanMembers = members.filter(isRealMember).map((m) => ({
       ...m,
+      nickname: m.nickname && m.nickname !== "-" ? m.nickname : undefined,
       name: formatFullMemberName(m.prefix, m.name, m.firstName, m.lastName),
     }));
     localStorage.setItem(MEMBERS_STORAGE_KEY, JSON.stringify(cleanMembers));
@@ -364,7 +386,8 @@ export function saveLocalMembers(members: Member[]) {
 }
 
 /**
- * Fetch members from Supabase, with automatic local cache synchronization and fallback
+ * Fetch members directly from Supabase `public.users` as Single Source of Truth,
+ * falling back to clean local cache only when Supabase is offline/unavailable.
  */
 export async function fetchMembers(): Promise<Member[]> {
   const localMembers = getLocalMembers().filter(isRealMember);
@@ -382,57 +405,13 @@ export async function fetchMembers(): Promise<Member[]> {
     }
 
     if (!data || data.length === 0) {
-      return localMembers;
+      saveLocalMembers([]);
+      return [];
     }
 
     const liveMembers = data.map(mapRowToMember).filter(isRealMember);
-    const liveIds = new Set(liveMembers.map((m) => m.id));
-    const localMap = new Map(localMembers.map((m) => [m.id, m]));
-    const mergedLive = liveMembers.map((live) => {
-      const local = localMap.get(live.id);
-      if (!local) return live;
-      const prefix = live.prefix || local.prefix || "";
-      const firstName = live.firstName || local.firstName || "";
-      const lastName = live.lastName || local.lastName || "";
-      // If live.name from DB is more complete or has prefix, prefer live.name
-      const chosenName =
-        live.name && live.name.length >= (local.name?.length || 0)
-          ? live.name
-          : local.name || live.name;
-      const formattedName = formatFullMemberName(prefix, chosenName, firstName, lastName);
-
-      // Live database from Supabase is Single Source of Truth; fallback to local only when live is missing
-      return {
-        ...local,
-        ...live,
-        prefix: prefix,
-        firstName: firstName,
-        lastName: lastName,
-        name: formattedName,
-        nickname: live.nickname || local.nickname,
-        position: live.position && live.position !== "รอกำหนดตำแหน่ง" ? live.position : local.position || live.position,
-        division: live.division && live.division !== "รอกำหนดกลุ่มงาน" ? live.division : local.division || live.division,
-        department: live.department || local.department,
-        personnelType: live.personnelType || local.personnelType,
-        phone: live.phone && live.phone !== "-" ? live.phone : local.phone || live.phone,
-        lineId: live.lineId && live.lineId !== "-" ? live.lineId : local.lineId || live.lineId,
-        avatarUrl: live.avatarUrl || local.avatarUrl,
-        avatarText: live.avatarText || local.avatarText,
-        role: live.role || local.role,
-      };
-    });
-    // Preserve local-only real members (e.g. offline created users or local LINE profiles not yet synced)
-    const localOnly = localMembers
-      .filter((m) => !liveIds.has(m.id) && isRealMember(m))
-      .map((m) => ({
-        ...m,
-        name: formatFullMemberName(m.prefix, m.name, m.firstName, m.lastName),
-      }));
-    const mergedMembers = [...mergedLive, ...localOnly];
-
-    // Keep local cache up-to-date with latest records
-    saveLocalMembers(mergedMembers);
-    return mergedMembers;
+    saveLocalMembers(liveMembers);
+    return liveMembers;
   } catch (err) {
     console.error("Error fetching members from Supabase, using local cache:", err);
     return localMembers;
@@ -1214,11 +1193,14 @@ export function mapRowToChatGroup(row: any): ChatGroup {
     type: row.type || "division",
     isOfficial: Boolean(row.is_official),
     memberIds: Array.isArray(row.member_ids)
-      ? row.member_ids.filter((id: string) => id !== "usr_1" && id !== "usr_mock")
+      ? row.member_ids.filter((id: string) => !LEGACY_MOCK_MEMBER_ID_RE.test(id))
       : [],
     pinnedMessageIds: Array.isArray(row.pinned_message_ids) ? row.pinned_message_ids : [],
     createdAt: row.created_at ? new Date(row.created_at).toLocaleDateString("th-TH") : "วันนี้",
-    createdBy: row.created_by && row.created_by !== "usr_1" && row.created_by !== "usr_mock" ? row.created_by : undefined,
+    createdBy:
+      row.created_by && !LEGACY_MOCK_MEMBER_ID_RE.test(row.created_by)
+        ? row.created_by
+        : undefined,
   };
 }
 

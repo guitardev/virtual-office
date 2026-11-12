@@ -1237,6 +1237,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* ─── GLOBAL MODALS ─── */}
       <AdminModals
+        members={members}
         viewingMember={viewingMember}
         setViewingMember={setViewingMember}
         currentUser={currentUser}

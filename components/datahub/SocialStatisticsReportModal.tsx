@@ -17,6 +17,7 @@ interface SocialStatisticsReportModalProps {
   fiscalYear: string;
   currentUser: Member;
   selectedDistrictName?: string;
+  director?: Member | null;
 }
 
 export function SocialStatisticsReportModal({
@@ -26,6 +27,7 @@ export function SocialStatisticsReportModal({
   fiscalYear,
   currentUser,
   selectedDistrictName,
+  director,
 }: SocialStatisticsReportModalProps) {
   if (!isOpen) return null;
 
@@ -258,8 +260,12 @@ export function SocialStatisticsReportModal({
 
               <div>
                 <div className="text-slate-500 mb-12">ผู้อนุมัติและรับรองรายงาน</div>
-                <div className="font-bold text-slate-800">(นางสาวมะลิวัน สิทธิโยธี)</div>
-                <div className="text-[11px] text-slate-500 mt-0.5">พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร</div>
+                <div className="font-bold text-slate-800">
+                  ({director?.name || "ผู้บริหาร พมจ.กำแพงเพชร"})
+                </div>
+                <div className="text-[11px] text-slate-500 mt-0.5">
+                  {director?.position || "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"}
+                </div>
                 <div className="text-[10px] text-slate-400 mt-0.5">สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร</div>
               </div>
             </div>

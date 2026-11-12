@@ -23,7 +23,6 @@ import {
   ROLE_CONFIG,
   MODULE_NAMES,
   INITIAL_ROLE_PERMISSIONS,
-  INITIAL_MEMBERS,
   INITIAL_AUDIT_LOGS,
   INITIAL_SYSTEM_MODULES,
   INITIAL_ACCESS_REQUESTS,
@@ -285,7 +284,7 @@ function AppProviderInner({ children }: { children: React.ReactNode }) {
     INITIAL_ROLE_PERMISSIONS
   );
   const [systemModules, setSystemModules] = useState<Record<ModuleId, SystemModule>>(INITIAL_SYSTEM_MODULES);
-  const [members, setMembers] = useState<Member[]>(INITIAL_MEMBERS);
+  const [members, setMembers] = useState<Member[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(INITIAL_AUDIT_LOGS);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [meetings, setMeetings] = useState<MeetingItem[]>([]);
@@ -577,7 +576,7 @@ function AppProviderInner({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (isLiveConnected) {
       fetchMembers().then((liveMembers) => {
-        if (liveMembers && liveMembers.length > 0) {
+        if (Array.isArray(liveMembers)) {
           setMembers(liveMembers);
           setCurrentUser((prev) => {
             if (!prev) return null;
@@ -590,14 +589,18 @@ function AppProviderInner({ children }: { children: React.ReactNode }) {
             if (liveMatch) {
               const updated = {
                 ...prev,
+                id: liveMatch.id,
                 prefix: liveMatch.prefix || prev.prefix,
                 firstName: liveMatch.firstName || prev.firstName,
                 lastName: liveMatch.lastName || prev.lastName,
+                nickname: liveMatch.nickname || prev.nickname,
                 name: liveMatch.name || prev.name,
                 division: liveMatch.division || prev.division,
                 department: liveMatch.department || prev.department,
                 position: liveMatch.position || prev.position,
                 personnelType: liveMatch.personnelType || prev.personnelType,
+                phone: liveMatch.phone && liveMatch.phone !== "-" ? liveMatch.phone : prev.phone,
+                lineId: liveMatch.lineId && liveMatch.lineId !== "-" ? liveMatch.lineId : prev.lineId,
                 avatarUrl: liveMatch.avatarUrl || prev.avatarUrl,
                 role: prev.role === "admin" ? "admin" : liveMatch.role || prev.role,
               };
