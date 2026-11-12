@@ -7,7 +7,7 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
-import {
+import type {
   AttendanceLogItem,
   ScannerUserMapping,
   AuthorizedAttendanceEditor,
@@ -235,6 +235,82 @@ export async function fetchAvailableDatesFromSupabase(): Promise<string[]> {
   }
 }
 
+let cachedAvailableMonths: { months: string[]; expiresAt: number } | null = null;
+const AVAILABLE_MONTHS_CACHE_TTL_MS = 60 * 1000;
+
+/**
+ * ดึงรายการเดือน ("YYYY-MM") ทั้งหมดที่มีข้อมูลใน Supabase
+ * ใช้ Telemetry ที่แคชไว้เมื่อมี หรือทำการ Skip-Scan ผ่านดัชนี scan_timestamp (แคช 60 วินาที)
+ * โดยไม่ต้องดาวน์โหลดข้อมูลทั้งหมด
+ */
+export async function fetchAvailableMonthsFromSupabase(
+  telemetryMonths?: string[]
+): Promise<string[]> {
+  if (Array.isArray(telemetryMonths) && telemetryMonths.length > 0) {
+    const normalized = Array.from(
+      new Set(
+        telemetryMonths.filter(
+          (m): m is string => typeof m === "string" && /^\d{4}-\d{2}$/.test(m)
+        )
+      )
+    ).sort((a, b) => b.localeCompare(a));
+    if (normalized.length > 0) {
+      return normalized;
+    }
+  }
+
+  if (cachedAvailableMonths && Date.now() < cachedAvailableMonths.expiresAt) {
+    return cachedAvailableMonths.months;
+  }
+
+  try {
+    const monthsSet = new Set<string>();
+    let monthStartIso: string | null = null;
+    const maxIterations = 240;
+
+    for (let i = 0; i < maxIterations; i++) {
+      let query = supabaseClient
+        .from("attendance_logs")
+        .select("scan_timestamp")
+        .eq("is_deleted", false)
+        .order("scan_timestamp", { ascending: false })
+        .limit(1);
+
+      if (monthStartIso) {
+        query = query.lt("scan_timestamp", monthStartIso);
+      }
+
+      const { data, error } = await query;
+      if (error || !data || data.length === 0) break;
+
+      const ts = formatIsoToThaiTimestamp(
+        (data[0] as { scan_timestamp: string }).scan_timestamp
+      );
+      const yearMonth = ts ? ts.slice(0, 7) : "";
+      if (!/^\d{4}-\d{2}$/.test(yearMonth)) break;
+
+      monthsSet.add(yearMonth);
+
+      const nextMonthStartIso = new Date(
+        `${yearMonth}-01T00:00:00+07:00`
+      ).toISOString();
+      if (monthStartIso && nextMonthStartIso >= monthStartIso) break;
+      monthStartIso = nextMonthStartIso;
+    }
+
+    const months = Array.from(monthsSet).sort((a, b) => b.localeCompare(a));
+    if (months.length > 0) {
+      cachedAvailableMonths = {
+        months,
+        expiresAt: Date.now() + AVAILABLE_MONTHS_CACHE_TTL_MS,
+      };
+    }
+    return months;
+  } catch {
+    return cachedAvailableMonths?.months || [];
+  }
+}
+
 /**
  * บันทึกรายการเดี่ยวขึ้น Supabase (Upsert Single Record)
  */
@@ -377,8 +453,21 @@ export async function syncEditorsToSupabase(
   }
 }
 
+export interface AttendanceSummaryStats {
+  checkInOnTime: number;
+  checkOut: number;
+  lateOrLeave: number;
+  midDay: number;
+  checkInTotal: number;
+  edited: number;
+  checkIn: number;
+  lateCount: number;
+  lateCountIsApprox: boolean;
+}
+
 /**
- * นับสถิติรวม (เข้างาน / ออกงาน / แก้ไขแล้ว / มาหลัง 08:30) จาก Supabase ตามตัวกรองปัจจุบัน
+ * นับสถิติรวมทั้ง 4 ประเภทตามระเบียบเวลาราชการ (เข้าเช้าปกติ / ออกราชการ / สายหรืออาจลา / ระหว่างวัน / แก้ไขแล้ว)
+ * จาก Supabase ตามตัวกรองปัจจุบัน
  */
 export async function fetchSummaryStatsFromSupabase(
   filter: {
@@ -389,33 +478,19 @@ export async function fetchSummaryStatsFromSupabase(
     search?: string;
   },
   fallbackPageLogs: AttendanceLogItem[]
-): Promise<{
-  checkIn: number;
-  checkOut: number;
-  edited: number;
-  lateCount: number;
-  lateCountIsApprox?: boolean;
-}> {
+): Promise<AttendanceSummaryStats> {
   try {
-    const checkInPromise =
-      filter.ioMode === 2
-        ? Promise.resolve({ count: 0 })
-        : applyAttendanceSupabaseFilters(
-            supabaseClient
-              .from("attendance_logs")
-              .select("*", { count: "exact", head: true }),
-            { ...filter, ioMode: 1 }
-          );
-
-    const checkOutPromise =
-      filter.ioMode === 1
-        ? Promise.resolve({ count: 0 })
-        : applyAttendanceSupabaseFilters(
-            supabaseClient
-              .from("attendance_logs")
-              .select("*", { count: "exact", head: true }),
-            { ...filter, ioMode: 2 }
-          );
+    const countForMode = (mode: 1 | 2 | 3 | 4) => {
+      if (filter.ioMode && filter.ioMode !== mode) {
+        return Promise.resolve({ count: 0 });
+      }
+      return applyAttendanceSupabaseFilters(
+        supabaseClient
+          .from("attendance_logs")
+          .select("*", { count: "exact", head: true }),
+        { ...filter, ioMode: mode }
+      );
+    };
 
     const editedPromise = applyAttendanceSupabaseFilters(
       supabaseClient
@@ -425,74 +500,62 @@ export async function fetchSummaryStatsFromSupabase(
       filter
     );
 
-    const isSingleDay = Boolean(
-      filter.dateFrom && filter.dateTo && filter.dateFrom === filter.dateTo
-    );
-    const latePromise =
-      filter.ioMode === 2
-        ? Promise.resolve({ count: 0, exact: true })
-        : isSingleDay
-        ? applyAttendanceSupabaseFilters(
-            supabaseClient
-              .from("attendance_logs")
-              .select("*", { count: "exact", head: true })
-              .gte(
-                "scan_timestamp",
-                new Date(`${filter.dateFrom}T08:31:00+07:00`).toISOString()
-              )
-              .lt(
-                "scan_timestamp",
-                new Date(`${filter.dateFrom}T12:00:00+07:00`).toISOString()
-              ),
-            { ...filter, ioMode: 1 }
-          ).then((r: { count?: number | null }) => ({
-            count: Number(r?.count || 0),
-            exact: true,
-          }))
-        : Promise.resolve({ count: -1, exact: false });
-
-    const [inRes, outRes, edRes, lateRes] = await Promise.all([
-      checkInPromise,
-      checkOutPromise,
+    const [m1Res, m2Res, m3Res, m4Res, edRes] = await Promise.all([
+      countForMode(1),
+      countForMode(2),
+      countForMode(3),
+      countForMode(4),
       editedPromise,
-      latePromise,
     ]);
 
-    let pageLateCount = 0;
-    for (const item of fallbackPageLogs) {
-      if (item.ioMode === 1) {
-        const timePart = item.scanTimestamp.split(" ")[1] || "";
-        if (timePart > "08:30:59" && timePart < "12:00:00") {
-          pageLateCount++;
-        }
-      }
-    }
+    const checkInOnTime = Number((m1Res as { count?: number | null })?.count || 0);
+    const checkOut = Number((m2Res as { count?: number | null })?.count || 0);
+    const lateOrLeave = Number((m3Res as { count?: number | null })?.count || 0);
+    const midDay = Number((m4Res as { count?: number | null })?.count || 0);
+    const edited = Number((edRes as { count?: number | null })?.count || 0);
+    const checkInTotal = checkInOnTime + lateOrLeave;
 
     return {
-      checkIn: Number((inRes as { count?: number | null })?.count || 0),
-      checkOut: Number((outRes as { count?: number | null })?.count || 0),
-      edited: Number((edRes as { count?: number | null })?.count || 0),
-      lateCount: lateRes.exact ? lateRes.count : pageLateCount,
-      lateCountIsApprox: !lateRes.exact,
+      checkInOnTime,
+      checkOut,
+      lateOrLeave,
+      midDay,
+      checkInTotal,
+      edited,
+      checkIn: checkInTotal,
+      lateCount: lateOrLeave,
+      lateCountIsApprox: false,
     };
   } catch {
-    let checkIn = 0;
+    let checkInOnTime = 0;
     let checkOut = 0;
+    let lateOrLeave = 0;
+    let midDay = 0;
     let edited = 0;
-    let lateCount = 0;
     for (const item of fallbackPageLogs) {
       if (item.ioMode === 1) {
-        checkIn++;
-        const timePart = item.scanTimestamp.split(" ")[1] || "";
-        if (timePart > "08:30:59" && timePart < "12:00:00") {
-          lateCount++;
-        }
+        checkInOnTime++;
       } else if (item.ioMode === 2) {
         checkOut++;
+      } else if (item.ioMode === 3) {
+        lateOrLeave++;
+      } else if (item.ioMode === 4) {
+        midDay++;
       }
       if (item.isEdited) edited++;
     }
-    return { checkIn, checkOut, edited, lateCount, lateCountIsApprox: true };
+    const checkInTotal = checkInOnTime + lateOrLeave;
+    return {
+      checkInOnTime,
+      checkOut,
+      lateOrLeave,
+      midDay,
+      checkInTotal,
+      edited,
+      checkIn: checkInTotal,
+      lateCount: lateOrLeave,
+      lateCountIsApprox: true,
+    };
   }
 }
 
@@ -536,6 +599,7 @@ export interface AttendanceSyncTelemetry {
   scannerIp?: string;
   addedCount?: number;
   pulledCount?: number;
+  availableMonths?: string[];
   source?: string;
 }
 
@@ -593,7 +657,11 @@ export async function recordAttendanceSyncTelemetryToSupabase(
       const elapsedMs = Date.now() - prevTs;
       const sameTotal = prev.deviceTotalRecords === telemetry.deviceTotalRecords;
       const noNewRows = (telemetry.addedCount || 0) === 0;
-      if (sameTotal && noNewRows && elapsedMs < 6 * 3600 * 1000) {
+      const hasMonthsAlready =
+        !telemetry.availableMonths?.length ||
+        (Array.isArray(prev.availableMonths) &&
+          prev.availableMonths.length === telemetry.availableMonths.length);
+      if (sameTotal && noNewRows && hasMonthsAlready && elapsedMs < 6 * 3600 * 1000) {
         return { success: true, skipped: true };
       }
     }
@@ -611,6 +679,12 @@ export async function recordAttendanceSyncTelemetryToSupabase(
     });
 
     if (error) return { success: false, error: error.message };
+    if (Array.isArray(telemetry.availableMonths) && telemetry.availableMonths.length > 0) {
+      cachedAvailableMonths = {
+        months: [...telemetry.availableMonths].sort((a, b) => b.localeCompare(a)),
+        expiresAt: Date.now() + AVAILABLE_MONTHS_CACHE_TTL_MS,
+      };
+    }
     return { success: true };
   } catch (err: unknown) {
     const e = err as { message?: string };
@@ -670,6 +744,14 @@ export async function fetchLatestAttendanceSyncTelemetryFromSupabase(): Promise<
         typeof meta.addedCount === "number" ? meta.addedCount : undefined,
       pulledCount:
         typeof meta.pulledCount === "number" ? meta.pulledCount : undefined,
+      availableMonths: Array.isArray(meta.availableMonths)
+        ? meta.availableMonths
+            .filter(
+              (m): m is string =>
+                typeof m === "string" && /^\d{4}-\d{2}$/.test(m)
+            )
+            .sort((a, b) => b.localeCompare(a))
+        : undefined,
       source: typeof meta.source === "string" ? meta.source : undefined,
     };
   } catch {

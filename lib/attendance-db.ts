@@ -10,7 +10,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import mysql from "mysql2/promise";
-import { HipAttendanceRecord } from "./hip-cmi681s";
+import type { HipAttendanceRecord } from "./hip-cmi681s";
+import { classifyAttendanceByOfficialHours } from "./attendance-rules-core.mjs";
 
 export interface NasMysqlConfig {
   connectionMode?: "direct_tcp" | "cloudflare_bridge";
@@ -36,7 +37,7 @@ export interface AttendanceLogItem {
   position: string;
   scanTimestamp: string; // "YYYY-MM-DD HH:mm:ss"
   originalTimestamp: string;
-  ioMode: number; // 1 = เข้างาน, 2 = ออกงาน
+  ioMode: number; // 1 = เข้าราชการเช้า, 2 = ออกราชการ, 3 = สาย/อาจลา, 4 = สแกนระหว่างวัน
   ioLabel: string;
   verifyMode: number; // 1 = ลายนิ้วมือ, 2 = รหัสผ่าน, 3 = บัตร, 9 = บันทึกโดยผู้ดูแล
   verifyLabel: string;
@@ -1100,6 +1101,35 @@ export async function syncEditorsToSynologyMysql(
 }
 
 /**
+ * จำแนกประเภทการลงเวลา (ioMode 1..4) ตามระเบียบเวลาราชการ (08:30-16:30 น.)
+ * ให้กับรายการจากเครื่องสแกนที่ยังไม่เคยถูกแก้ไขด้วยมือ (isEdited === false && source === "device")
+ */
+export function reclassifyAttendanceStoreByOfficialHours(
+  store: AttendanceStoreData
+): {
+  updatedCount: number;
+  changedLogs: AttendanceLogItem[];
+} {
+  let updatedCount = 0;
+  const changedLogs: AttendanceLogItem[] = [];
+
+  for (const log of store.logs) {
+    if (log.isEdited || log.isDeleted || log.source !== "device") {
+      continue;
+    }
+    const classified = classifyAttendanceByOfficialHours(log.scanTimestamp);
+    if (log.ioMode !== classified.ioMode || log.ioLabel !== classified.ioLabel) {
+      log.ioMode = classified.ioMode;
+      log.ioLabel = classified.ioLabel;
+      changedLogs.push(log);
+      updatedCount++;
+    }
+  }
+
+  return { updatedCount, changedLogs };
+}
+
+/**
  * แปลงรายการสแกนจาก HIP CMi681S และผสานเข้ากับ Store (โดยไม่เขียนทับรายการที่ถูกแก้ไขหรือลบแล้ว)
  */
 export function mergeDeviceRecordsIntoStore(
@@ -1134,6 +1164,7 @@ export function mergeDeviceRecordsIntoStore(
 
     const existing = existingByUid.get(recordUid);
     if (!existing) {
+      const classified = classifyAttendanceByOfficialHours(rec.timestamp);
       const newItem: AttendanceLogItem = {
         id: `att_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         recordUid,
@@ -1144,8 +1175,8 @@ export function mergeDeviceRecordsIntoStore(
         position: mapInfo.position,
         scanTimestamp: rec.timestamp,
         originalTimestamp: rec.timestamp,
-        ioMode: rec.ioMode,
-        ioLabel: rec.ioLabel,
+        ioMode: classified.ioMode,
+        ioLabel: classified.ioLabel,
         verifyMode: rec.verifyMode,
         verifyLabel: rec.verifyLabel,
         machineId: rec.machineId,
@@ -1158,17 +1189,32 @@ export function mergeDeviceRecordsIntoStore(
       changedLogs.push(newItem);
       addedCount++;
     } else if (!existing.isEdited && !existing.isDeleted) {
-      // อัปเดตเฉพาะชื่อ/สังกัดตาม Mapping ปัจจุบัน โดยไม่ทับรายการที่แอดมินเคยแก้ไขเวลาแล้ว
-      if (
+      // อัปเดตชื่อ/สังกัดตาม Mapping ปัจจุบัน และปรับ ioMode/ioLabel ตามระเบียบเวลาราชการเมื่อเป็นรายการจากเครื่องที่ยังไม่ถูกแก้ไข
+      const mappingChanged =
         existing.memberName !== mapInfo.memberName ||
         existing.division !== mapInfo.division ||
         existing.memberId !== mapInfo.memberId ||
-        existing.position !== mapInfo.position
-      ) {
-        existing.memberId = mapInfo.memberId;
-        existing.memberName = mapInfo.memberName;
-        existing.division = mapInfo.division;
-        existing.position = mapInfo.position;
+        existing.position !== mapInfo.position;
+      const classified =
+        existing.source === "device"
+          ? classifyAttendanceByOfficialHours(existing.scanTimestamp || rec.timestamp)
+          : null;
+      const ioChanged =
+        classified !== null &&
+        (existing.ioMode !== classified.ioMode ||
+          existing.ioLabel !== classified.ioLabel);
+
+      if (mappingChanged || ioChanged) {
+        if (mappingChanged) {
+          existing.memberId = mapInfo.memberId;
+          existing.memberName = mapInfo.memberName;
+          existing.division = mapInfo.division;
+          existing.position = mapInfo.position;
+        }
+        if (ioChanged && classified) {
+          existing.ioMode = classified.ioMode;
+          existing.ioLabel = classified.ioLabel;
+        }
         changedLogs.push(existing);
         updatedCount++;
       }

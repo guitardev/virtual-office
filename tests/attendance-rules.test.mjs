@@ -11,6 +11,7 @@ import {
   collectAvailableMonths,
 } from '../lib/attendance-rules.ts';
 import { decodeCif12AttendanceRecords } from '../lib/hip-cmi681s.ts';
+import { reclassifyAttendanceStoreByOfficialHours } from '../lib/attendance-db.ts';
 
 describe('Task 1: Shared Official Hours Classifier & Thai Fiscal Calendar Utility', () => {
   describe('classifyAttendanceByOfficialHours', () => {
@@ -225,3 +226,103 @@ describe('Task 1: Shared Official Hours Classifier & Thai Fiscal Calendar Utilit
     });
   });
 });
+
+describe('Task 2: reclassifyAttendanceStoreByOfficialHours', () => {
+  it('should reclassify unedited device logs while preserving edited device logs and manual logs', () => {
+    const mockStore = {
+      mysqlConfig: {
+        host: '127.0.0.1',
+        port: 3308,
+        user: 'smartmso',
+        database: 'smart_mso_attendance',
+        scannerIp: '192.168.162.15',
+        scannerPort: 5005,
+      },
+      lastSyncedAt: null,
+      lastMysqlSyncedAt: null,
+      deviceTotalRecords: 3,
+      mappings: {},
+      authorizedEditors: [],
+      logs: [
+        {
+          id: 'log_unedited_evening',
+          recordUid: 'dev_1_10_2026-11-12 17:00:00',
+          scannerUserId: 10,
+          memberId: 'm_10',
+          memberName: 'เจ้าหน้าที่ ทดสอบ 1',
+          division: 'ฝ่ายบริหารทั่วไป',
+          position: 'นักวิชาการ',
+          scanTimestamp: '2026-11-12 17:00:00',
+          originalTimestamp: '2026-11-12 17:00:00',
+          ioMode: 1,
+          ioLabel: 'เข้างาน (Check-In)',
+          verifyMode: 1,
+          verifyLabel: 'ลายนิ้วมือ (FP)',
+          machineId: 1,
+          source: 'device',
+          isEdited: false,
+          isDeleted: false,
+        },
+        {
+          id: 'log_edited_evening',
+          recordUid: 'dev_1_11_2026-11-12 17:00:00',
+          scannerUserId: 11,
+          memberId: 'm_11',
+          memberName: 'เจ้าหน้าที่ ทดสอบ 2',
+          division: 'ฝ่ายบริหารทั่วไป',
+          position: 'นักวิชาการ',
+          scanTimestamp: '2026-11-12 17:00:00',
+          originalTimestamp: '2026-11-12 17:00:00',
+          ioMode: 1,
+          ioLabel: 'เข้างาน (Check-In)',
+          verifyMode: 1,
+          verifyLabel: 'ลายนิ้วมือ (FP)',
+          machineId: 1,
+          source: 'device',
+          isEdited: true,
+          editedBy: 'ผู้ดูแลระบบ',
+          editNote: 'ตั้งใจบันทึกเป็นเข้างานกะพิเศษ',
+          isDeleted: false,
+        },
+        {
+          id: 'log_manual_late',
+          recordUid: 'manual_12_2026-11-12 08:40:00_1',
+          scannerUserId: 12,
+          memberId: 'm_12',
+          memberName: 'เจ้าหน้าที่ ทดสอบ 3',
+          division: 'ฝ่ายบริหารทั่วไป',
+          position: 'นักวิชาการ',
+          scanTimestamp: '2026-11-12 08:40:00',
+          originalTimestamp: '2026-11-12 08:40:00',
+          ioMode: 1,
+          ioLabel: 'เข้างาน (Check-In)',
+          verifyMode: 9,
+          verifyLabel: 'บันทึกโดยผู้ดูแล (Manual)',
+          machineId: 1,
+          source: 'manual',
+          isEdited: false,
+          isDeleted: false,
+        },
+      ],
+    };
+
+    const result = reclassifyAttendanceStoreByOfficialHours(mockStore);
+
+    assert.equal(result.updatedCount, 1);
+    assert.equal(result.changedLogs.length, 1);
+    assert.equal(result.changedLogs[0].id, 'log_unedited_evening');
+
+    // 1. Unedited device log at 17:00:00 updated to ioMode 2
+    assert.equal(mockStore.logs[0].ioMode, 2);
+    assert.equal(mockStore.logs[0].ioLabel, 'ออกราชการ (Check-Out)');
+
+    // 2. Edited device log (isEdited: true) untouched
+    assert.equal(mockStore.logs[1].ioMode, 1);
+    assert.equal(mockStore.logs[1].ioLabel, 'เข้างาน (Check-In)');
+
+    // 3. Manual log (source: "manual") untouched
+    assert.equal(mockStore.logs[2].ioMode, 1);
+    assert.equal(mockStore.logs[2].ioLabel, 'เข้างาน (Check-In)');
+  });
+});
+

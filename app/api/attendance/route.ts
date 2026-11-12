@@ -25,6 +25,7 @@ import {
   fetchAttendanceLogsFromSupabase,
   fetchSummaryStatsFromSupabase,
   fetchAvailableDatesFromSupabase,
+  fetchAvailableMonthsFromSupabase,
   fetchCloudEditedOrManualLogsFromSupabase,
   fetchLatestAttendanceSyncTelemetryFromSupabase,
   fetchLatestAttendanceTimestampFromSupabase,
@@ -33,7 +34,12 @@ import {
   fetchMappingsFromSupabase,
   syncEditorsToSupabase,
   fetchAuthorizedEditorsFromSupabase,
+  AttendanceSummaryStats,
 } from "@/lib/attendance-supabase";
+import {
+  getAttendanceIoLabel,
+  collectAvailableMonths,
+} from "@/lib/attendance-rules";
 
 export const dynamic = "force-dynamic";
 
@@ -223,16 +229,21 @@ export async function GET(req: NextRequest) {
     let filteredTotal = 0;
     let totalStoredLogs = 0;
     let availableDates: string[] = [];
+    let availableMonths: string[] = [];
     let mappings = store.mappings;
     let authorizedEditors = await resolveEffectiveEditors(store);
     let dataSource: "local" | "supabase" = "local";
-    let summaryStats: {
-      checkIn: number;
-      checkOut: number;
-      edited: number;
-      lateCount: number;
-      lateCountIsApprox?: boolean;
-    } = { checkIn: 0, checkOut: 0, edited: 0, lateCount: 0 };
+    let summaryStats: AttendanceSummaryStats = {
+      checkInOnTime: 0,
+      checkOut: 0,
+      lateOrLeave: 0,
+      midDay: 0,
+      checkInTotal: 0,
+      edited: 0,
+      checkIn: 0,
+      lateCount: 0,
+      lateCountIsApprox: false,
+    };
 
     const activeLocalLogs = store.logs.filter((l) => !l.isDeleted);
     const localIncomplete =
@@ -276,19 +287,24 @@ export async function GET(req: NextRequest) {
         );
       }
 
-      // คำนวณสถิติรวมจากข้อมูลที่กรองทั้งหมด (ไม่ใช่แค่หน้าที่แสดง)
+      // คำนวณสถิติรวมทั้ง 4 ประเภทจากข้อมูลที่กรองทั้งหมด (ไม่ใช่แค่หน้าที่แสดง)
       for (const item of filtered) {
         if (item.ioMode === 1) {
-          summaryStats.checkIn++;
-          const timePart = item.scanTimestamp.split(" ")[1] || "";
-          if (timePart > "08:30:59" && timePart < "12:00:00") {
-            summaryStats.lateCount++;
-          }
+          summaryStats.checkInOnTime++;
         } else if (item.ioMode === 2) {
           summaryStats.checkOut++;
+        } else if (item.ioMode === 3) {
+          summaryStats.lateOrLeave++;
+        } else if (item.ioMode === 4) {
+          summaryStats.midDay++;
         }
         if (item.isEdited) summaryStats.edited++;
       }
+      summaryStats.checkInTotal =
+        summaryStats.checkInOnTime + summaryStats.lateOrLeave;
+      summaryStats.checkIn = summaryStats.checkInTotal;
+      summaryStats.lateCount = summaryStats.lateOrLeave;
+      summaryStats.lateCountIsApprox = false;
 
       filteredTotal = filtered.length;
       const startIdx = (page - 1) * pageSize;
@@ -300,6 +316,7 @@ export async function GET(req: NextRequest) {
       )
         .sort((a, b) => b.localeCompare(a))
         .slice(0, 60);
+      availableMonths = collectAvailableMonths(activeLocalLogs);
     } else if (supabaseStatus.ready) {
       // โหมด Cloud Fallback (ทำงานบน Vercel หรือเครื่องใหม่ที่ยังไม่มี Local JSON Cache ครบ)
       dataSource = "supabase";
@@ -313,13 +330,14 @@ export async function GET(req: NextRequest) {
         ioMode: ioMode && ioMode !== "all" ? Number(ioMode) : undefined,
         search: search || undefined,
       };
-      const [supaRes, supaDates, supaMappings] = await Promise.all([
+      const [supaRes, supaDates, supaMonths, supaMappings] = await Promise.all([
         fetchAttendanceLogsFromSupabase({
           ...supaFilter,
           page,
           pageSize,
         }),
         fetchAvailableDatesFromSupabase(),
+        fetchAvailableMonthsFromSupabase(cloudTelemetry?.availableMonths),
         fetchMappingsFromSupabase(),
       ]);
 
@@ -327,6 +345,7 @@ export async function GET(req: NextRequest) {
       filteredTotal = supaRes.filteredTotal;
       totalStoredLogs = supabaseStatus.count;
       availableDates = supaDates;
+      availableMonths = supaMonths;
       if (supaMappings) {
         mappings = { ...buildDefaultMappings(), ...supaMappings };
       }
@@ -423,6 +442,7 @@ export async function GET(req: NextRequest) {
       deviceTotalRecords: effectiveDeviceTotalRecords,
       totalStoredLogs,
       availableDates,
+      availableMonths,
       mappings,
       authorizedEditors,
       summaryStats,
@@ -573,6 +593,10 @@ export async function POST(req: NextRequest) {
         syncEditorsToSupabase(store.authorizedEditors),
       ]);
 
+      const availableMonths = collectAvailableMonths(
+        store.logs.filter((l) => !l.isDeleted)
+      );
+
       // บันทึก Telemetry การซิงก์เพื่อให้ฝั่ง Cloud/Vercel เห็นยอดและเวลาซิงก์ล่าสุดตรงกับเครื่องสแกน
       await recordAttendanceSyncTelemetryToSupabase(
         {
@@ -590,6 +614,7 @@ export async function POST(req: NextRequest) {
           scannerIp: store.mysqlConfig.scannerIp,
           addedCount: mergeResult.addedCount,
           pulledCount: pulled.records.length,
+          availableMonths,
           source: "ui_sync",
         },
         actorName || "ผู้ดูแลระบบ",
@@ -731,8 +756,7 @@ export async function POST(req: NextRequest) {
       const modeNum = Number(ioMode || 1);
       const vModeNum = Number(verifyMode || 9);
 
-      const ioLabel =
-        modeNum === 1 ? "เข้างาน (Check-In)" : "ออกงาน (Check-Out)";
+      const ioLabel = getAttendanceIoLabel(modeNum);
       const verifyLabel =
         vModeNum === 1
           ? "ลายนิ้วมือ (FP)"
@@ -845,8 +869,7 @@ export async function POST(req: NextRequest) {
       if (ioMode !== undefined) {
         const modeNum = Number(ioMode);
         target.ioMode = modeNum;
-        target.ioLabel =
-          modeNum === 1 ? "เข้างาน (Check-In)" : "ออกงาน (Check-Out)";
+        target.ioLabel = getAttendanceIoLabel(modeNum);
       }
 
       if (verifyMode !== undefined) {
