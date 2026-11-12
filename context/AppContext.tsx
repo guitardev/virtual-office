@@ -1874,6 +1874,7 @@ function AppProviderInner({ children }: { children: React.ReactNode }) {
       gallery: 0,
       datahub: 0,
       qrcode: 0,
+      shorturl: 0,
       bgremove: 0,
       reports: 0,
       admin: currentUserRole === "admin" ? pendingReqCount : 0,

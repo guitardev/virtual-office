@@ -71,6 +71,19 @@ export function QRCodeToolPage({ currentUser, showToast }: QRCodeToolPageProps) 
   // URL
   const [urlInput, setUrlInput] = useState<string>("https://kamphaengphet.m-society.go.th");
 
+  // Support pre-filling URL when navigated from Short URL tool (/tools/qrcode?url=...)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const prefillUrl = params.get("url");
+      if (prefillUrl && /^https?:\/\//i.test(prefillUrl.trim())) {
+        setQrType("url");
+        setUrlInput(prefillUrl.trim());
+      }
+    } catch {}
+  }, []);
+
   // vCard
   const [vCardData, setVCardData] = useState<VCardContactInfo>({
     fullName: currentUser?.name || "ข้าราชการ สนง.พมจ.กำแพงเพชร",

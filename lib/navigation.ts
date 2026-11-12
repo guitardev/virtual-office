@@ -52,6 +52,7 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: "🛠️",
     items: [
       { id: "qrcode", label: "QR Code", icon: "📱" },
+      { id: "shorturl", label: "Short URL", icon: "🔗" },
       { id: "bgremove", label: "BG Remove", icon: "✂️" },
     ],
   },
@@ -82,6 +83,7 @@ export const MODULE_TO_ROUTE: Record<ModuleId, string> = {
   files: "/files",
   gallery: "/gallery",
   qrcode: "/tools/qrcode",
+  shorturl: "/tools/shorturl",
   bgremove: "/tools/bgremove",
   admin: "/admin",
   user: "/user",
@@ -103,6 +105,7 @@ export const ROUTE_TO_MODULE: Record<string, ModuleId> = {
   "/gallery": "gallery",
   "/tools": "qrcode",
   "/tools/qrcode": "qrcode",
+  "/tools/shorturl": "shorturl",
   "/tools/bgremove": "bgremove",
   "/admin": "admin",
   "/user": "user",

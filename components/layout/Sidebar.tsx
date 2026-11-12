@@ -12,6 +12,7 @@ const pages = [
   { id: "files", label: "เอกสาร NAS", icon: "📁" },
   { id: "gallery", label: "ภาพ & สื่อ", icon: "📸" },
   { id: "tools/qrcode", label: "QR Code", icon: "📱" },
+  { id: "tools/shorturl", label: "Short URL", icon: "🔗" },
   { id: "tools/bgremove", label: "BG Remove", icon: "✂️" },
   { id: "admin", label: "จัดการระบบ", icon: "⚙️" },
   { id: "user", label: "ข้อมูลส่วนตัว", icon: "👤" },

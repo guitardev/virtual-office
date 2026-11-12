@@ -47,6 +47,7 @@ export const MODULE_NAMES: Record<ModuleId, { name: string; icon: string; desc: 
   gallery: { name: "ภาพ & สื่อ (Synology Photos)", icon: "📸", desc: "คลังจัดเก็บและสืบค้นภาพถ่าย/วิดีโอกิจกรรมราชการ" },
   datahub: { name: "ระบบรวมข้อมูล", icon: "🗃️", desc: "ศูนย์รวมข้อมูลและสถิติตามกลุ่มภารกิจงาน" },
   qrcode: { name: "QR Code", icon: "📱", desc: "เครื่องมือสร้าง QR Code ถาวร" },
+  shorturl: { name: "Short URL", icon: "🔗", desc: "เครื่องมือย่อลิงก์ราชการและติดตามสถิติการคลิก" },
   bgremove: { name: "BG Remove", icon: "✂️", desc: "เครื่องมือลบพื้นหลังภาพ" },
 };
 
@@ -163,6 +164,14 @@ export const INITIAL_SYSTEM_MODULES: Record<ModuleId, SystemModule> = {
     enabled: true,
     maintenanceNotice: "เครื่องมือ QR Code เปิดให้บริการปกติ",
   },
+  shorturl: {
+    id: "shorturl",
+    name: "Short URL",
+    icon: "🔗",
+    desc: "เครื่องมือย่อลิงก์ราชการและติดตามสถิติการคลิก",
+    enabled: true,
+    maintenanceNotice: "เครื่องมือ Short URL เปิดให้บริการปกติ",
+  },
   bgremove: {
     id: "bgremove",
     name: "BG Remove",
@@ -190,6 +199,7 @@ export const INITIAL_ROLE_PERMISSIONS: Record<Role, Record<ModuleId, boolean>> =
     gallery: true,
     datahub: true,
     qrcode: true,
+    shorturl: true,
     bgremove: true,
   },
   manager: {
@@ -207,6 +217,7 @@ export const INITIAL_ROLE_PERMISSIONS: Record<Role, Record<ModuleId, boolean>> =
     gallery: true,
     datahub: true,
     qrcode: true,
+    shorturl: true,
     bgremove: true,
   },
   member: {
@@ -224,6 +235,7 @@ export const INITIAL_ROLE_PERMISSIONS: Record<Role, Record<ModuleId, boolean>> =
     gallery: true,
     datahub: true,
     qrcode: true,
+    shorturl: true,
     bgremove: true,
   },
   guest: {
@@ -241,6 +253,7 @@ export const INITIAL_ROLE_PERMISSIONS: Record<Role, Record<ModuleId, boolean>> =
     gallery: false,
     datahub: false,
     qrcode: true,
+    shorturl: true,
     bgremove: true,
   },
 };

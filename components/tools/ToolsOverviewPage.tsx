@@ -30,6 +30,24 @@ export function ToolsOverviewPage({ currentUser }: ToolsOverviewPageProps) {
       ],
     },
     {
+      id: "shorturl",
+      title: "Short URL",
+      subtitle: "ย่อลิงก์ราชการภายใต้โดเมน smso.site",
+      description:
+        "แปลงลิงก์ Google Forms, Google Drive หรือลิงก์ประชุมออนไลน์ที่ยาวให้อ่านง่ายและจำง่าย (/s/ชื่อย่อ) สามารถเปลี่ยน URL ปลายทางได้ภายหลังโดยไม่ต้องพิมพ์เอกสารหรือ QR Code ใหม่",
+      icon: "🔗",
+      route: "/tools/shorturl",
+      badge: "smso.site/s/...",
+      badgeColor: "bg-cyan-100 text-cyan-800 border-cyan-200",
+      gradient: "from-indigo-600 to-cyan-600",
+      features: [
+        "กำหนดชื่อย่อเองได้ (เช่น /s/kpp-form) หรือสุ่มรหัสอ่านง่าย",
+        "Dynamic Redirect แก้ไขลิงก์ปลายทางและวันหมดอายุได้ตลอด",
+        "นับสถิติยอดคลิกใช้งานจริงแบบเรียลไทม์",
+        "ส่งต่อเข้าเครื่องมือ QR Code ป้าย A4 ได้ในคลิกเดียว",
+      ],
+    },
+    {
       id: "bgremove",
       title: "BG Remove",
       subtitle: "ลบและเปลี่ยนภาพพื้นหลังอัจฉริยะ",
@@ -71,13 +89,13 @@ export function ToolsOverviewPage({ currentUser }: ToolsOverviewPageProps) {
 
           <div className="p-4 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 text-center shrink-0">
             <div className="text-[10px] text-indigo-200 font-bold">เครื่องมือพร้อมใช้งาน</div>
-            <div className="text-2xl font-extrabold text-white">2 เครื่องมือ</div>
+            <div className="text-2xl font-extrabold text-white">{tools.length} เครื่องมือ</div>
           </div>
         </div>
       </div>
 
       {/* ─── TOOLS GRID ─── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {tools.map((tool) => (
           <div
             key={tool.id}
@@ -86,11 +104,11 @@ export function ToolsOverviewPage({ currentUser }: ToolsOverviewPageProps) {
             <div className="space-y-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${tool.gradient} text-white flex items-center justify-center text-3xl shadow-sm group-hover:scale-105 transition-transform`}>
+                  <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${tool.gradient} text-white flex items-center justify-center text-3xl shadow-sm group-hover:scale-105 transition-transform shrink-0`}>
                     {tool.icon}
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <h2 className="text-xl font-extrabold text-slate-900 group-hover:text-indigo-700 transition-colors">
                         {tool.title}
                       </h2>
@@ -135,4 +153,3 @@ export function ToolsOverviewPage({ currentUser }: ToolsOverviewPageProps) {
     </div>
   );
 }
-

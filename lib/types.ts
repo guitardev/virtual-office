@@ -26,6 +26,7 @@ export type ModuleId =
   | "gallery"
   | "datahub"
   | "qrcode"
+  | "shorturl"
   | "bgremove";
 
 export interface RoleInfo {
@@ -577,4 +578,21 @@ export interface SystemNotification {
     targetId?: string;        // groupId for chat, docId for circular, requestId for admin
     subTab?: string;
   };
+}
+
+// ─── SHORT URL TYPES ───
+export interface ShortLinkItem {
+  id: string;
+  slug: string;
+  targetUrl: string;
+  title: string;
+  division?: string;
+  clickCount: number;
+  lastClickedAt?: string | null;
+  expiresAt?: string | null;
+  isActive: boolean;
+  createdBy?: string | null;
+  createdByName?: string;
+  createdAt: string;
+  updatedAt?: string;
 }

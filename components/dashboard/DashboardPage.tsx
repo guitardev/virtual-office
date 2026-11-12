@@ -1165,7 +1165,7 @@ export function DashboardPage({
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-2.5 pt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
               <button
                 type="button"
                 onClick={() => navigateTo("/tools/qrcode", "qrcode")}
@@ -1176,6 +1176,18 @@ export function DashboardPage({
                   QR Code
                 </span>
                 <span className="text-[10px] text-slate-400 block">ถาวร 100% ไม่มีหมดอายุ</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigateTo("/tools/shorturl", "shorturl")}
+                className="p-3 rounded-2xl bg-white dark:bg-slate-800 border border-purple-200/60 dark:border-slate-700 text-left hover:border-purple-400 transition-all shadow-2xs cursor-pointer group"
+              >
+                <span className="text-xl block group-hover:scale-110 transition-transform">🔗</span>
+                <span className="font-bold text-xs text-slate-800 dark:text-slate-200 block mt-1">
+                  Short URL
+                </span>
+                <span className="text-[10px] text-slate-400 block">ย่อลิงก์ smso.site/s/...</span>
               </button>
 
               <button
