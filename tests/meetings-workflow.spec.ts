@@ -148,4 +148,136 @@ test.describe("ระบบการประชุมและนัดหม�
       await expect(page.locator("text=ดาวน์โหลดปฏิทินการประชุมทั้งหมด (.ics) เรียบร้อย")).toBeVisible();
     }
   });
+
+  test("6. หน้า /meetings ต้องแสดงรายการ 'กำลังจะถึง' เป็นค่าเริ่มต้น พร้อมสลับดูทั้งหมดและที่ผ่านมาแล้วได้", async ({
+    page,
+  }) => {
+    const now = Date.now();
+    const pastStart = new Date(now - 72 * 3600 * 1000).toISOString();
+    const pastEnd = new Date(now - 70 * 3600 * 1000).toISOString();
+    const soonStart = new Date(now + 24 * 3600 * 1000).toISOString();
+    const soonEnd = new Date(now + 26 * 3600 * 1000).toISOString();
+    const laterStart = new Date(now + 96 * 3600 * 1000).toISOString();
+    const laterEnd = new Date(now + 98 * 3600 * 1000).toISOString();
+
+    await page.route("**/rest/v1/meetings*", async (route) => {
+      if (route.request().method() === "GET") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([
+            {
+              id: "11111111-1111-4111-8111-111111111111",
+              title: "ประชุมทดสอบที่ผ่านมาแล้ว (Past Mock)",
+              start_time: pastStart,
+              end_time: pastEnd,
+              location: "ห้องประชุม 1",
+              type: "onsite",
+              category: "general",
+              status: "confirmed",
+              attendees: [],
+            },
+            {
+              id: "22222222-2222-4222-8222-222222222222",
+              title: "ประชุมทดสอบระยะไกลถัดไป (Later Upcoming Mock)",
+              start_time: laterStart,
+              end_time: laterEnd,
+              location: "ห้องประชุม 2",
+              type: "online",
+              category: "division",
+              status: "confirmed",
+              attendees: [],
+            },
+            {
+              id: "33333333-3333-4333-8333-333333333333",
+              title: "ประชุมทดสอบที่กำลังจะถึงเร็วๆ นี้ (Soonest Upcoming Mock)",
+              start_time: soonStart,
+              end_time: soonEnd,
+              location: "ห้องประชุม 1",
+              type: "hybrid",
+              category: "management",
+              status: "confirmed",
+              attendees: [],
+            },
+          ]),
+        });
+        return;
+      }
+      await route.continue();
+    });
+
+    await page.goto("/meetings", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("h1:has-text('การประชุมและนัดหมาย')")).toBeVisible();
+
+    const upcomingBtn = page.locator("button:has-text('กำลังจะถึง (2)')");
+    const allBtn = page.locator("button:has-text('ทั้งหมด (3)')");
+    const pastBtn = page.locator("button:has-text('ที่ผ่านมาแล้ว (1)')");
+
+    await expect(upcomingBtn).toHaveAttribute("aria-pressed", "true");
+    await expect(allBtn).toHaveAttribute("aria-pressed", "false");
+    await expect(pastBtn).toHaveAttribute("aria-pressed", "false");
+
+    // Default shows only upcoming meetings sorted soonest-first
+    await expect(page.locator("h3:has-text('Soonest Upcoming Mock')")).toBeVisible();
+    await expect(page.locator("h3:has-text('Later Upcoming Mock')")).toBeVisible();
+    await expect(page.locator("h3:has-text('Past Mock')")).not.toBeVisible();
+
+    const visibleTitles = await page.locator("div.grid h3").allTextContents();
+    expect(visibleTitles[0]).toContain("Soonest Upcoming Mock");
+    expect(visibleTitles[1]).toContain("Later Upcoming Mock");
+
+    // Switch to Past
+    await pastBtn.click();
+    await expect(pastBtn).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("h3:has-text('Past Mock')")).toBeVisible();
+    await expect(page.locator("h3:has-text('Soonest Upcoming Mock')")).not.toBeVisible();
+
+    // Switch to All
+    await allBtn.click();
+    await expect(allBtn).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("h3:has-text('Past Mock')")).toBeVisible();
+    await expect(page.locator("h3:has-text('Soonest Upcoming Mock')")).toBeVisible();
+    await expect(page.locator("h3:has-text('Later Upcoming Mock')")).toBeVisible();
+  });
+
+  test("7. เมื่อไม่มีนัดหมายที่กำลังจะถึง ต้องแสดงข้อความเฉพาะและปุ่มดูการประชุมทั้งหมดได้ทันที", async ({
+    page,
+  }) => {
+    const now = Date.now();
+    const pastStart = new Date(now - 48 * 3600 * 1000).toISOString();
+    const pastEnd = new Date(now - 46 * 3600 * 1000).toISOString();
+
+    await page.route("**/rest/v1/meetings*", async (route) => {
+      if (route.request().method() === "GET") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([
+            {
+              id: "44444444-4444-4444-8444-444444444444",
+              title: "ประชุมประวัติย้อนหลังเท่านั้น (Archive Only Mock)",
+              start_time: pastStart,
+              end_time: pastEnd,
+              location: "ห้องประชุม 1",
+              type: "onsite",
+              category: "general",
+              status: "confirmed",
+              attendees: [],
+            },
+          ]),
+        });
+        return;
+      }
+      await route.continue();
+    });
+
+    await page.goto("/meetings", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("h3:has-text('ยังไม่มีนัดหมายการประชุมที่กำลังจะถึง')")).toBeVisible();
+
+    const viewAllBtn = page.locator("button:has-text('ดูการประชุมทั้งหมด (1)')");
+    await expect(viewAllBtn).toBeVisible();
+    await viewAllBtn.click();
+
+    await expect(page.locator("h3:has-text('Archive Only Mock')")).toBeVisible();
+  });
 });

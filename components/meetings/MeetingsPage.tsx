@@ -45,6 +45,34 @@ interface MeetingsPageProps {
   setRooms?: React.Dispatch<React.SetStateAction<MeetingRoomMaster[]>>;
 }
 
+function getDefaultNewMeetingSchedule() {
+  const now = new Date();
+  const hour = now.getHours();
+  let startHour = 9;
+  let startMinute = 30;
+  const targetDate = new Date(now);
+
+  if (hour >= 16) {
+    targetDate.setDate(targetDate.getDate() + 1);
+  } else if (hour >= 9) {
+    startHour = hour + 1;
+    startMinute = 0;
+  }
+
+  const endHour = Math.min(23, startHour + 2);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const dateIso = formatIsoDateOnly(targetDate);
+  const endDate = new Date(targetDate);
+  endDate.setDate(endDate.getDate() + 2);
+
+  return {
+    dateIso,
+    multiDayEndIso: formatIsoDateOnly(endDate),
+    startTime: `${pad(startHour)}:${pad(startMinute)}`,
+    endTime: `${pad(endHour)}:${pad(startMinute)}`,
+  };
+}
+
 export function MeetingsPage({
   meetings,
   showToast,
@@ -86,7 +114,7 @@ export function MeetingsPage({
   const [selectedCategory, setSelectedCategory] = useState<"all" | MeetingCategory>("all");
   const [selectedType, setSelectedType] = useState<"all" | MeetingType>("all");
   const [selectedRoomFilter, setSelectedRoomFilter] = useState<string>("all");
-  const [timeframe, setTimeframe] = useState<"upcoming" | "all" | "past">("all");
+  const [timeframe, setTimeframe] = useState<"upcoming" | "all" | "past">("upcoming");
 
   // View Mode: Calendar | Room Booking | List
   const [activeView, setActiveView] = useState<"calendar" | "rooms" | "list">("list");
@@ -118,18 +146,11 @@ export function MeetingsPage({
   const [formType, setFormType] = useState<MeetingType>("hybrid");
   const [formLocation, setFormLocation] = useState("ห้องประชุม 1 (ศาลากลางจังหวัด ชั้น 2)");
   const [formMeetingLink, setFormMeetingLink] = useState("https://meet.google.com/kpp-msoc");
-  const [formDate, setFormDate] = useState(() => {
-    const today = new Date();
-    return today.toISOString().slice(0, 10);
-  });
+  const [formDate, setFormDate] = useState(() => getDefaultNewMeetingSchedule().dateIso);
   const [formIsMultiDay, setFormIsMultiDay] = useState(false);
-  const [formEndDate, setFormEndDate] = useState(() => {
-    const next = new Date();
-    next.setDate(next.getDate() + 2);
-    return next.toISOString().slice(0, 10);
-  });
-  const [formStartTime, setFormStartTime] = useState("09:30");
-  const [formEndTime, setFormEndTime] = useState("11:30");
+  const [formEndDate, setFormEndDate] = useState(() => getDefaultNewMeetingSchedule().multiDayEndIso);
+  const [formStartTime, setFormStartTime] = useState(() => getDefaultNewMeetingSchedule().startTime);
+  const [formEndTime, setFormEndTime] = useState(() => getDefaultNewMeetingSchedule().endTime);
   const [formDescription, setFormDescription] = useState("");
   const [selectedAttendeeIds, setSelectedAttendeeIds] = useState<string[]>([]);
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
@@ -168,15 +189,12 @@ export function MeetingsPage({
     setFormType("hybrid");
     setFormLocation("ห้องประชุม 1 (ศาลากลางจังหวัด ชั้น 2)");
     setFormMeetingLink("https://meet.google.com/kpp-msoc");
-    const today = new Date();
-    const todayIso = today.toISOString().slice(0, 10);
-    setFormDate(todayIso);
+    const defaults = getDefaultNewMeetingSchedule();
+    setFormDate(defaults.dateIso);
     setFormIsMultiDay(false);
-    const next = new Date(today);
-    next.setDate(next.getDate() + 2);
-    setFormEndDate(next.toISOString().slice(0, 10));
-    setFormStartTime("09:30");
-    setFormEndTime("11:30");
+    setFormEndDate(defaults.multiDayEndIso);
+    setFormStartTime(defaults.startTime);
+    setFormEndTime(defaults.endTime);
     setFormDescription("");
     // Default attendees: current user + all managers or active members
     if (currentUser?.id) {
@@ -231,8 +249,8 @@ export function MeetingsPage({
     setFormLocation(meeting.location || "ห้องประชุม 1 (ศาลากลางจังหวัด ชั้น 2)");
     setFormMeetingLink(meeting.meetingLink || "");
 
-    // Extract date & times
-    let dateVal = new Date().toISOString().slice(0, 10);
+    // Extract date & times (in local calendar date & time)
+    let dateVal = formatIsoDateOnly(new Date());
     let endDateVal = dateVal;
     let isMulti = Boolean(meeting.isMultiDay);
     let startVal = "09:30";
@@ -240,14 +258,14 @@ export function MeetingsPage({
     if (meeting.startTime) {
       const s = new Date(meeting.startTime);
       if (!isNaN(s.getTime())) {
-        dateVal = s.toISOString().slice(0, 10);
+        dateVal = formatIsoDateOnly(s);
         startVal = s.toTimeString().slice(0, 5);
       }
     }
     if (meeting.endTime) {
       const e = new Date(meeting.endTime);
       if (!isNaN(e.getTime())) {
-        endDateVal = e.toISOString().slice(0, 10);
+        endDateVal = formatIsoDateOnly(e);
         endVal = e.toTimeString().slice(0, 5);
         if (endDateVal !== dateVal) {
           isMulti = true;
@@ -433,6 +451,12 @@ export function MeetingsPage({
         return [meetingPayload, ...prev];
       });
     }
+    const nowMs = Date.now();
+    if (endDateTime.getTime() < nowMs && timeframe === "upcoming") {
+      setTimeframe("all");
+    } else if (endDateTime.getTime() >= nowMs && timeframe === "past") {
+      setTimeframe("upcoming");
+    }
     setShowAddModal(false);
     showToast(
       editingMeetingId
@@ -512,10 +536,26 @@ export function MeetingsPage({
     showToast("📋 คัดลอกข้อความเชิญประชุมมาตรฐานราชการเรียบร้อย");
   };
 
-  // Filtered meetings
+  // Timeframe counts
+  const { upcomingCount, pastCount } = useMemo(() => {
+    const nowMs = Date.now();
+    let upcoming = 0;
+    let past = 0;
+    meetings.forEach((m) => {
+      const { endDate } = getMeetingDateRange(m);
+      if (endDate.getTime() >= nowMs) {
+        upcoming++;
+      } else {
+        past++;
+      }
+    });
+    return { upcomingCount: upcoming, pastCount: past };
+  }, [meetings]);
+
+  // Filtered and sorted meetings
   const filteredMeetings = useMemo(() => {
-    const now = new Date();
-    return meetings.filter((m) => {
+    const nowMs = Date.now();
+    const result = meetings.filter((m) => {
       // Category filter
       if (selectedCategory !== "all" && m.category !== selectedCategory) {
         return false;
@@ -527,10 +567,10 @@ export function MeetingsPage({
       // Timeframe filter
       if (timeframe !== "all") {
         const { endDate } = getMeetingDateRange(m);
-        if (timeframe === "upcoming" && endDate.getTime() < now.getTime()) {
+        if (timeframe === "upcoming" && endDate.getTime() < nowMs) {
           return false;
         }
-        if (timeframe === "past" && endDate.getTime() >= now.getTime()) {
+        if (timeframe === "past" && endDate.getTime() >= nowMs) {
           return false;
         }
       }
@@ -556,6 +596,15 @@ export function MeetingsPage({
         }
       }
       return true;
+    });
+
+    return result.sort((a, b) => {
+      const aStart = getMeetingDateRange(a).startDate.getTime();
+      const bStart = getMeetingDateRange(b).startDate.getTime();
+      if (timeframe === "past") {
+        return bStart - aStart;
+      }
+      return aStart - bStart;
     });
   }, [meetings, selectedCategory, selectedType, selectedRoomFilter, timeframe, searchQuery]);
 
@@ -724,10 +773,27 @@ export function MeetingsPage({
           </div>
 
           {/* Timeframe Filter */}
-          <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-2xl text-xs self-start md:self-auto">
+          <div
+            role="group"
+            aria-label="ตัวกรองช่วงเวลาการประชุม"
+            className="flex flex-wrap items-center gap-1 p-1 bg-slate-100 rounded-2xl text-xs self-start md:self-auto"
+          >
+            <button
+              type="button"
+              onClick={() => setTimeframe("upcoming")}
+              aria-pressed={timeframe === "upcoming"}
+              className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
+                timeframe === "upcoming"
+                  ? "bg-white text-indigo-700 shadow-2xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              กำลังจะถึง ({upcomingCount})
+            </button>
             <button
               type="button"
               onClick={() => setTimeframe("all")}
+              aria-pressed={timeframe === "all"}
               className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
                 timeframe === "all"
                   ? "bg-white text-indigo-700 shadow-2xs"
@@ -738,25 +804,15 @@ export function MeetingsPage({
             </button>
             <button
               type="button"
-              onClick={() => setTimeframe("upcoming")}
-              className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
-                timeframe === "upcoming"
-                  ? "bg-white text-indigo-700 shadow-2xs"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              กำลังจะถึง
-            </button>
-            <button
-              type="button"
               onClick={() => setTimeframe("past")}
+              aria-pressed={timeframe === "past"}
               className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
                 timeframe === "past"
                   ? "bg-white text-indigo-700 shadow-2xs"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              ที่ผ่านมาแล้ว
+              ที่ผ่านมาแล้ว ({pastCount})
             </button>
           </div>
         </div>
@@ -880,41 +936,69 @@ export function MeetingsPage({
 
       {/* ─── MEETINGS LIST / GRID ─── */}
       {filteredMeetings.length === 0 ? (
-        <div className="bg-white p-12 rounded-3xl border border-slate-200/80 text-center space-y-3 shadow-2xs">
-          <span className="text-5xl block mb-2">📹</span>
-          <h3 className="font-bold font-heading text-lg text-slate-800">
-            {searchQuery || selectedCategory !== "all" || selectedType !== "all" || selectedRoomFilter !== "all"
-              ? "ไม่พบนัดหมายการประชุมตามเงื่อนไขที่เลือก"
-              : "ยังไม่มีนัดหมายการประชุมในระบบ"}
-          </h3>
-          <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
-            ท่านสามารถสร้างการประชุมใหม่ กำหนดสถานที่ ระเบียบวาระ และเชิญบุคลากร พร้อมบันทึกลง Google Calendar ได้ทันที
-          </p>
-          <div className="pt-2 flex items-center justify-center gap-2">
-            {(searchQuery || selectedCategory !== "all" || selectedType !== "all" || selectedRoomFilter !== "all") && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchQuery("");
-                  setSelectedCategory("all");
-                  setSelectedType("all");
-                  setSelectedRoomFilter("all");
-                  setTimeframe("all");
-                }}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-              >
-                ล้างตัวกรอง
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={handleOpenAddModal}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-xs"
-            >
-              + สร้างการประชุมใหม่
-            </button>
-          </div>
-        </div>
+        (() => {
+          const hasSecondaryFilters = Boolean(
+            searchQuery.trim() ||
+              selectedCategory !== "all" ||
+              selectedType !== "all" ||
+              selectedRoomFilter !== "all"
+          );
+          const heading = hasSecondaryFilters
+            ? "ไม่พบนัดหมายการประชุมตามเงื่อนไขที่เลือก"
+            : timeframe === "upcoming"
+            ? "ยังไม่มีนัดหมายการประชุมที่กำลังจะถึง"
+            : timeframe === "past"
+            ? "ยังไม่มีประวัติการประชุมที่ผ่านมาแล้ว"
+            : "ยังไม่มีนัดหมายการประชุมในระบบ";
+
+          const subtitle = hasSecondaryFilters
+            ? timeframe !== "all" && meetings.length > 0
+              ? "ลองปรับคำค้นหา ล้างตัวกรอง หรือสลับไปค้นหาจากรายการทั้งหมด"
+              : "ลองปรับคำค้นหาหรือล้างตัวกรองเพื่อดูรายการนัดหมายอื่น ๆ"
+            : timeframe === "upcoming" && pastCount > 0
+            ? `มีนัดหมายที่ผ่านมาแล้วในระบบ ${pastCount} รายการ ท่านสามารถดูรายการทั้งหมดหรือสร้างการประชุมใหม่ได้ทันที`
+            : "ท่านสามารถสร้างการประชุมใหม่ กำหนดสถานที่ ระเบียบวาระ และเชิญบุคลากร พร้อมบันทึกลง Google Calendar ได้ทันที";
+
+          return (
+            <div className="bg-white p-12 rounded-3xl border border-slate-200/80 text-center space-y-3 shadow-2xs">
+              <span className="text-5xl block mb-2">📹</span>
+              <h3 className="font-bold font-heading text-lg text-slate-800">{heading}</h3>
+              <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed">{subtitle}</p>
+              <div className="pt-2 flex flex-wrap items-center justify-center gap-2">
+                {hasSecondaryFilters && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery("");
+                      setSelectedCategory("all");
+                      setSelectedType("all");
+                      setSelectedRoomFilter("all");
+                    }}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    ล้างตัวกรอง
+                  </button>
+                )}
+                {timeframe !== "all" && meetings.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setTimeframe("all")}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    ดูการประชุมทั้งหมด ({meetings.length})
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleOpenAddModal}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-xs"
+                >
+                  + สร้างการประชุมใหม่
+                </button>
+              </div>
+            </div>
+          );
+        })()
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredMeetings.map((m) => {
