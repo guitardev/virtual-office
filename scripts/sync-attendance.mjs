@@ -629,8 +629,12 @@ async function reconcileSupabaseOverrides(supabase, store) {
       .from("attendance_logs")
       .select("*")
       .or("is_edited.eq.true,is_deleted.eq.true,source.eq.manual")
+      .order("record_uid", { ascending: true })
       .range(offset, offset + 999);
-    if (error || !data || data.length === 0) break;
+    if (error) {
+      throw new Error(`Supabase override reconcile error: ${error.message}`);
+    }
+    if (!data || data.length === 0) break;
     overrides.push(...data.map(mapSupabaseRowToLog));
     if (data.length < 1000) break;
     offset += 1000;
@@ -1055,7 +1059,7 @@ async function runSyncOnce() {
         addedCount > 0 ||
         updatedCount > 0 ||
         prevTotal !== pulled.totalCount ||
-        prevMonths.length !== availableMonths.length ||
+        prevMonths.join(",") !== availableMonths.join(",") ||
         !prevRow ||
         Date.now() - prevTs >= 5 * 3600 * 1000;
 
@@ -1130,9 +1134,11 @@ async function runReclassifyOnce() {
   log(`Smart MSO Attendance Reclassify (${new Date().toLocaleString("th-TH")})`);
   log(`Local store logs: ${store.logs.length} | NAS: ${cfg.host}:${cfg.port}`);
 
+  let adoptedOverrides = 0;
   if (supabase) {
-    const adoptedOverrides = await reconcileSupabaseOverrides(supabase, store);
+    adoptedOverrides = await reconcileSupabaseOverrides(supabase, store);
     if (adoptedOverrides > 0) {
+      store.logs.sort((a, b) => b.scanTimestamp.localeCompare(a.scanTimestamp));
       log(`☁️ Adopted ${adoptedOverrides} Cloud edited/manual/deleted overrides before reclassify`);
     }
   }
@@ -1150,7 +1156,7 @@ async function runReclassifyOnce() {
     }
   }
 
-  if (changedLogs.length > 0) {
+  if (changedLogs.length > 0 || adoptedOverrides > 0) {
     saveStore(store);
   }
 
@@ -1195,8 +1201,8 @@ async function runReclassifyOnce() {
           machine_id, source, is_edited, edited_by, edited_at, edit_note, is_deleted
         ) VALUES ?
         ON DUPLICATE KEY UPDATE
-          io_mode = VALUES(io_mode),
-          io_label = VALUES(io_label)`,
+          io_mode = IF(is_edited = 0 AND is_deleted = 0 AND source = 'device', VALUES(io_mode), io_mode),
+          io_label = IF(is_edited = 0 AND is_deleted = 0 AND source = 'device', VALUES(io_label), io_label)`,
         [values]
       );
       nasUpserted += slice.length;
@@ -1234,7 +1240,7 @@ async function runReclassifyOnce() {
         saveStore(store);
       }
     } catch (err) {
-      log(`⚠️ NAS MariaDB unreachable during reclassify: ${err.message}`);
+      log(`⚠️ NAS MariaDB error during reclassify: ${err.message}`);
     }
 
     // 2. Update Supabase Cloud in 500-row batches + insert telemetry
@@ -1284,37 +1290,73 @@ async function runReclassifyOnce() {
         supaCounts = await querySupaCounts();
       }
 
-      const deviceOverview = store.deviceOverview || {};
-      const { error: telErr } = await supabase.from("audit_logs").insert({
-        actor_id: "hip_cmi681s_sync",
-        actor_name: "ระบบจำแนกเวลาปฏิบัติราชการอัตโนมัติ (LAN CLI)",
-        action: "จำแนกประเภทย้อนหลังตามระเบียบเวลาราชการ (08:30-16:30 น.)",
-        target: `อัปเดต ${changedLogs.length.toLocaleString()} รายการ (รวม ${localCounts.total.toLocaleString()} รายการ • ${availableMonths.length} เดือน)`,
-        status: "success",
-        metadata: {
+      if (store.logs.length > 0) {
+        let fallbackMeta = {};
+        if (!store.deviceOverview || !store.deviceOverview.serialNumber) {
+          const { data: prevTelemetry } = await supabase
+            .from("audit_logs")
+            .select("metadata")
+            .eq("actor_id", "hip_cmi681s_sync")
+            .order("timestamp", { ascending: false })
+            .limit(1);
+          if (
+            prevTelemetry?.[0]?.metadata &&
+            typeof prevTelemetry[0].metadata === "object"
+          ) {
+            fallbackMeta = prevTelemetry[0].metadata;
+          }
+        }
+
+        const deviceOverview = store.deviceOverview || {};
+        const telemetryMetadata = {
           type: "attendance_device_sync",
-          lastSyncedAt: store.lastSyncedAt || new Date().toISOString(),
-          lastMysqlSyncedAt: store.lastMysqlSyncedAt,
-          deviceTotalRecords: store.deviceTotalRecords || localCounts.total,
-          registeredUsersCount: deviceOverview.registeredUsersCount,
-          fingerprintsCount: deviceOverview.fingerprintsCount,
-          passwordsCount: deviceOverview.passwordsCount,
-          idCardsCount: deviceOverview.idCardsCount,
-          maxAttendanceLogs: deviceOverview.maxAttendanceLogs,
-          serialNumber: deviceOverview.serialNumber,
-          productCode: deviceOverview.productCode,
-          deviceTime: deviceOverview.deviceTime,
+          lastSyncedAt:
+            store.lastSyncedAt ||
+            fallbackMeta.lastSyncedAt ||
+            new Date().toISOString(),
+          lastMysqlSyncedAt:
+            store.lastMysqlSyncedAt || fallbackMeta.lastMysqlSyncedAt || null,
+          deviceTotalRecords:
+            store.deviceTotalRecords ||
+            fallbackMeta.deviceTotalRecords ||
+            localCounts.total,
           scannerIp: cfg.scannerIp,
           addedCount: 0,
           reclassifiedCount: changedLogs.length,
           availableMonths,
           source: "cli_reclassify",
-        },
-      });
-      if (telErr) {
-        throw new Error(`Supabase telemetry insert error: ${telErr.message}`);
+        };
+
+        const optionalOverviewKeys = [
+          "registeredUsersCount",
+          "fingerprintsCount",
+          "passwordsCount",
+          "idCardsCount",
+          "maxAttendanceLogs",
+          "serialNumber",
+          "productCode",
+          "deviceTime",
+        ];
+        for (const key of optionalOverviewKeys) {
+          const val = deviceOverview[key] ?? fallbackMeta[key];
+          if (val !== undefined && val !== null) {
+            telemetryMetadata[key] = val;
+          }
+        }
+
+        const { error: telErr } = await supabase.from("audit_logs").insert({
+          actor_id: "hip_cmi681s_sync",
+          actor_name: "ระบบจำแนกเวลาปฏิบัติราชการอัตโนมัติ (LAN CLI)",
+          action: "จำแนกประเภทย้อนหลังตามระเบียบเวลาราชการ (08:30-16:30 น.)",
+          target: `อัปเดต ${changedLogs.length.toLocaleString()} รายการ (รวม ${localCounts.total.toLocaleString()} รายการ • ${availableMonths.length} เดือน)`,
+          status: "success",
+          metadata: telemetryMetadata,
+        });
+        if (telErr) {
+          throw new Error(`Supabase telemetry insert error: ${telErr.message}`);
+        }
+        telemetryInserted = true;
       }
-      telemetryInserted = true;
     }
 
     const elapsed = Date.now() - t0;
