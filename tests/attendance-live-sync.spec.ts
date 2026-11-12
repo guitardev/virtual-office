@@ -72,8 +72,10 @@ test.describe("ระบบจัดการข้อมูลลงเวล�
     const statsCard = page.locator("div:has(> div > span:has-text('สถิติรายการตามตัวกรอง'))").first();
     await expect(statsCard).toContainText("เข้าเช้าปกติ");
     await expect(statsCard).toContainText("สาย / อาจลา");
+    await expect(statsCard).toContainText("ระหว่างวัน");
     await expect(statsCard).toContainText("ออกราชการ");
     await expect(statsCard).toContainText("แก้ไขแล้ว");
+    await expect(statsCard).toContainText(/30,\d{3} รายการ/);
 
     // ตรวจสอบตารางแสดงป้ายปีงบประมาณและเดือน พ.ศ.
     const firstRow = page.locator("tbody tr").first();
@@ -88,12 +90,31 @@ test.describe("ระบบจัดการข้อมูลลงเวล�
     const monthSelect = page.getByLabel("เดือน (ปฏิทินปีงบประมาณ)");
     await expect(monthSelect).toContainText("พ.ย. 2569");
 
-    // เลือกเดือน พ.ย. 2569 (2026-11) แล้วตรวจการกรอง
+    // เลือกเดือน พ.ย. 2569 (2026-11) แล้วรอผลกรองจาก API และตรวจยอดรายการที่กรองได้
+    const novResponsePromise = page.waitForResponse(
+      (res) =>
+        res.url().includes("/api/attendance") &&
+        res.url().includes("dateFrom=2026-11-01") &&
+        res.url().includes("dateTo=2026-11-30") &&
+        res.status() === 200
+    );
     await monthSelect.selectOption("2026-11");
+    const novRes = await novResponsePromise;
+    const novData = await novRes.json();
+    expect(novData.success).toBe(true);
+    expect(novData.filteredTotal).toBeGreaterThanOrEqual(643);
+    expect(novData.filteredTotal).toBeLessThan(5000);
+
+    const formattedNovCount = `${novData.filteredTotal.toLocaleString()} รายการ`;
     await expect(page.locator("text=พฤศจิกายน 2569 (ปีงบประมาณ 2570 • ไตรมาส 1)")).toBeVisible({
       timeout: 10000,
     });
+    await expect(statsCard).toContainText(formattedNovCount);
+    await expect(
+      page.locator(`text=รายการบันทึกเวลาเข้า-ออกงาน (${formattedNovCount})`)
+    ).toBeVisible();
     await expect(page.locator("tbody tr").first()).toContainText("พ.ย. 2569");
+    await expect(page.locator("tbody tr").first()).toContainText("ปีงบ 2570");
   });
 
   test("3. จำลองโหมด Cloud Server (Vercel) ต้องแสดงยอด Telemetry ล่าสุด ตัวเลือกปีงบประมาณ และปิดปุ่มซิงก์เครื่อง LAN อย่างถูกต้อง", async ({
