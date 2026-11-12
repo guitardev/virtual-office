@@ -10,6 +10,7 @@
  *   node scripts/sync-attendance.mjs --log       # บันทึก log ย่อลงไฟล์ data/attendance-sync.log
  *   node scripts/sync-attendance.mjs --schedule  # โหมดเฝ้าเวลาใน Terminal (ดึงอัตโนมัติทุกวัน 08:32 และ 16:32 น.)
  *   node scripts/sync-attendance.mjs --schedule --times=08:32,16:32 --log --run-now
+ *   node scripts/sync-attendance.mjs --reclassify # จำแนกประเภทเวลา (1..4) ย้อนหลังตามระเบียบเวลาราชการทั้ง Local, NAS และ Supabase
  */
 
 import fs from "node:fs";
@@ -18,6 +19,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import mysql from "mysql2/promise";
 import { createClient } from "@supabase/supabase-js";
+import {
+  classifyAttendanceByOfficialHours,
+  collectAvailableMonths,
+} from "../lib/attendance-rules-core.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,6 +37,7 @@ const QUIET = args.has("--quiet");
 const WRITE_LOG = args.has("--log");
 const DAEMON_SCHEDULE = args.has("--schedule");
 const RUN_NOW = args.has("--run-now");
+const RECLASSIFY = args.has("--reclassify");
 const limitArg = process.argv.find((a) => a.startsWith("--limit="));
 const REQUESTED_LIMIT = limitArg ? Number(limitArg.split("=")[1]) : 1500;
 const timesArg = process.argv.find((a) => a.startsWith("--times="));
@@ -188,23 +194,21 @@ function decodeCif12AttendanceRecords(rawBuffer, expectedCount) {
     const day = (w >>> 16) & 0x1f;
     const hour = (w >>> 21) & 0x1f;
     const minute = (w >>> 26) & 0x3f;
-    const ioMode = r[15];
+    const rawIoMode = r[15];
     const verifyMode = (r[19] >>> 4) & 0x0f;
 
     if (userId === 0 || userId === 0xffffffff) continue;
     if (month < 1 || month > 12 || day < 1 || day > 31) continue;
 
+    const timestamp = `${year}-${pad(month)}-${pad(day)} ${pad(hour)}:${pad(minute)}:${pad(second)}`;
+    const classified = classifyAttendanceByOfficialHours(timestamp);
+
     records.push({
       userId,
       machineId,
-      timestamp: `${year}-${pad(month)}-${pad(day)} ${pad(hour)}:${pad(minute)}:${pad(second)}`,
-      ioMode,
-      ioLabel:
-        ioMode === 1
-          ? "เข้างาน (Check-In)"
-          : ioMode === 2
-          ? "ออกงาน (Check-Out)"
-          : `โหมด ${ioMode}`,
+      timestamp,
+      ioMode: classified.ioMode,
+      ioLabel: classified.ioLabel,
       verifyMode,
       verifyLabel:
         verifyMode === 1
@@ -214,6 +218,7 @@ function decodeCif12AttendanceRecords(rawBuffer, expectedCount) {
           : verifyMode === 3
           ? "บัตร (Card)"
           : `รูปแบบ ${verifyMode}`,
+      rawIoMode,
     });
   }
   return records;
@@ -578,11 +583,7 @@ function mapLogToSupabase(l) {
   };
 }
 
-async function runSyncOnce() {
-  const t0 = Date.now();
-  const store = loadStore();
-  const cfg = store.mysqlConfig;
-
+function createSupabaseClientFromEnv() {
   const supabaseUrl =
     process.env.NEXT_PUBLIC_SUPABASE_URL ||
     process.env.SUPABASE_URL ||
@@ -591,7 +592,101 @@ async function runSyncOnce() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     process.env.SUPABASE_ANON_KEY ||
     "";
-  const supabase = supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
+  return supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
+}
+
+function mapLogToMysqlTuple(l) {
+  return [
+    l.id,
+    l.recordUid,
+    l.scannerUserId,
+    l.memberId,
+    l.memberName,
+    l.division || "",
+    l.position || "",
+    l.scanTimestamp,
+    l.originalTimestamp,
+    l.ioMode,
+    l.ioLabel,
+    l.verifyMode,
+    l.verifyLabel,
+    l.machineId,
+    l.source,
+    l.isEdited ? 1 : 0,
+    l.editedBy || null,
+    l.editedAt ? l.editedAt.slice(0, 19).replace("T", " ") : null,
+    l.editNote || null,
+    l.isDeleted ? 1 : 0,
+  ];
+}
+
+async function reconcileSupabaseOverrides(supabase, store) {
+  if (!supabase) return 0;
+  const overrides = [];
+  let offset = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("attendance_logs")
+      .select("*")
+      .or("is_edited.eq.true,is_deleted.eq.true,source.eq.manual")
+      .range(offset, offset + 999);
+    if (error || !data || data.length === 0) break;
+    overrides.push(...data.map(mapSupabaseRowToLog));
+    if (data.length < 1000) break;
+    offset += 1000;
+  }
+
+  let adopted = 0;
+  const byUid = new Map(store.logs.map((l) => [l.recordUid, l]));
+  const byId = new Map(store.logs.map((l) => [l.id, l]));
+  for (const ci of overrides) {
+    const li = byUid.get(ci.recordUid) || byId.get(ci.id);
+    if (!li) {
+      store.logs.push(ci);
+      byUid.set(ci.recordUid, ci);
+      byId.set(ci.id, ci);
+      adopted++;
+    } else {
+      const cMs = ci.editedAt ? new Date(ci.editedAt).getTime() : 0;
+      const lMs = li.editedAt ? new Date(li.editedAt).getTime() : 0;
+      if ((!li.isEdited && !li.isDeleted) || cMs > lMs) {
+        Object.assign(li, ci);
+        adopted++;
+      }
+    }
+  }
+  return adopted;
+}
+
+function summarizeModeCounts(logs) {
+  const counts = { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 };
+  for (const l of logs) {
+    if (l.isDeleted) continue;
+    counts.total++;
+    if (l.ioMode === 1 || l.ioMode === 2 || l.ioMode === 3 || l.ioMode === 4) {
+      counts[l.ioMode]++;
+    }
+  }
+  return counts;
+}
+
+function modeCountsMatch(a, b) {
+  return Boolean(
+    a &&
+      b &&
+      a[1] === b[1] &&
+      a[2] === b[2] &&
+      a[3] === b[3] &&
+      a[4] === b[4] &&
+      a.total === b.total
+  );
+}
+
+async function runSyncOnce() {
+  const t0 = Date.now();
+  const store = loadStore();
+  const cfg = store.mysqlConfig;
+  const supabase = createSupabaseClientFromEnv();
 
   log("=================================================");
   log(`Smart MSO Attendance Sync (${new Date().toLocaleString("th-TH")})`);
@@ -684,36 +779,7 @@ async function runSyncOnce() {
 
     // 3. Reconcile Cloud edits/deletes/manual records & mappings
     if (supabase) {
-      const overrides = [];
-      let offset = 0;
-      while (true) {
-        const { data, error } = await supabase
-          .from("attendance_logs")
-          .select("*")
-          .or("is_edited.eq.true,is_deleted.eq.true,source.eq.manual")
-          .range(offset, offset + 999);
-        if (error || !data || data.length === 0) break;
-        overrides.push(...data.map(mapSupabaseRowToLog));
-        if (data.length < 1000) break;
-        offset += 1000;
-      }
-
-      const byUid = new Map(store.logs.map((l) => [l.recordUid, l]));
-      const byId = new Map(store.logs.map((l) => [l.id, l]));
-      for (const ci of overrides) {
-        const li = byUid.get(ci.recordUid) || byId.get(ci.id);
-        if (!li) {
-          store.logs.push(ci);
-          byUid.set(ci.recordUid, ci);
-          byId.set(ci.id, ci);
-        } else {
-          const cMs = ci.editedAt ? new Date(ci.editedAt).getTime() : 0;
-          const lMs = li.editedAt ? new Date(li.editedAt).getTime() : 0;
-          if ((!li.isEdited && !li.isDeleted) || cMs > lMs) {
-            Object.assign(li, ci);
-          }
-        }
-      }
+      await reconcileSupabaseOverrides(supabase, store);
 
       const { data: mapRows } = await supabase.from("attendance_user_mappings").select("*");
       if (mapRows && mapRows.length > 0) {
@@ -808,16 +874,31 @@ async function runSyncOnce() {
         changedLogs.push(newItem);
         addedCount++;
       } else if (!existing.isEdited && !existing.isDeleted) {
-        if (
+        const mappingChanged =
           existing.memberName !== mapInfo.memberName ||
           existing.division !== mapInfo.division ||
           existing.memberId !== mapInfo.memberId ||
-          existing.position !== mapInfo.position
-        ) {
-          existing.memberId = mapInfo.memberId;
-          existing.memberName = mapInfo.memberName;
-          existing.division = mapInfo.division;
-          existing.position = mapInfo.position;
+          existing.position !== mapInfo.position;
+        const classified =
+          existing.source === "device"
+            ? classifyAttendanceByOfficialHours(existing.scanTimestamp || rec.timestamp)
+            : null;
+        const ioChanged =
+          classified !== null &&
+          (existing.ioMode !== classified.ioMode ||
+            existing.ioLabel !== classified.ioLabel);
+
+        if (mappingChanged || ioChanged) {
+          if (mappingChanged) {
+            existing.memberId = mapInfo.memberId;
+            existing.memberName = mapInfo.memberName;
+            existing.division = mapInfo.division;
+            existing.position = mapInfo.position;
+          }
+          if (ioChanged && classified) {
+            existing.ioMode = classified.ioMode;
+            existing.ioLabel = classified.ioLabel;
+          }
           changedLogs.push(existing);
           updatedCount++;
         }
@@ -875,28 +956,7 @@ async function runSyncOnce() {
 
       for (let i = 0; i < nasLogs.length; i += 500) {
         const slice = nasLogs.slice(i, i + 500);
-        const values = slice.map((l) => [
-          l.id,
-          l.recordUid,
-          l.scannerUserId,
-          l.memberId,
-          l.memberName,
-          l.division || "",
-          l.position || "",
-          l.scanTimestamp,
-          l.originalTimestamp,
-          l.ioMode,
-          l.ioLabel,
-          l.verifyMode,
-          l.verifyLabel,
-          l.machineId,
-          l.source,
-          l.isEdited ? 1 : 0,
-          l.editedBy || null,
-          l.editedAt ? l.editedAt.slice(0, 19).replace("T", " ") : null,
-          l.editNote || null,
-          l.isDeleted ? 1 : 0,
-        ]);
+        const values = slice.map(mapLogToMysqlTuple);
         await mysqlConn.query(
           `INSERT INTO attendance_logs (
             id, record_uid, scanner_user_id, member_id, member_name, division, position,
@@ -972,6 +1032,10 @@ async function runSyncOnce() {
         .eq("is_deleted", false);
       if (typeof cAfter === "number") supaAfter = cAfter;
 
+      const availableMonths = collectAvailableMonths(
+        store.logs.filter((l) => !l.isDeleted)
+      );
+
       // Telemetry in audit_logs (insert on new records, changed total, --all, or >=5h heartbeat for 08:32 / 16:32 schedule)
       const { data: prevTelemetry } = await supabase
         .from("audit_logs")
@@ -983,15 +1047,20 @@ async function runSyncOnce() {
       const prevRow = prevTelemetry?.[0];
       const prevTotal = Number(prevRow?.metadata?.deviceTotalRecords || 0);
       const prevTs = prevRow?.timestamp ? new Date(prevRow.timestamp).getTime() : 0;
+      const prevMonths = Array.isArray(prevRow?.metadata?.availableMonths)
+        ? prevRow.metadata.availableMonths
+        : [];
       const shouldInsertTelemetry =
         FORCE_ALL ||
         addedCount > 0 ||
+        updatedCount > 0 ||
         prevTotal !== pulled.totalCount ||
+        prevMonths.length !== availableMonths.length ||
         !prevRow ||
         Date.now() - prevTs >= 5 * 3600 * 1000;
 
       if (shouldInsertTelemetry) {
-        await supabase.from("audit_logs").insert({
+        const { error: telErr } = await supabase.from("audit_logs").insert({
           actor_id: "hip_cmi681s_sync",
           actor_name: "ระบบซิงก์เครื่องสแกนอัตโนมัติ (LAN CLI)",
           action: "ซิงก์ข้อมูลเวลาปฏิบัติราชการจากเครื่องสแกน HIP CMi681S",
@@ -1013,9 +1082,13 @@ async function runSyncOnce() {
             scannerIp: cfg.scannerIp,
             addedCount,
             pulledCount: pulled.records.length,
+            availableMonths,
             source: FORCE_ALL ? "cli_sync_all" : "cli_sync",
           },
         });
+        if (telErr) {
+          log(`⚠️ Supabase telemetry insert warning: ${telErr.message}`);
+        }
       }
     }
 
@@ -1047,6 +1120,229 @@ async function runSyncOnce() {
   }
 }
 
+async function runReclassifyOnce() {
+  const t0 = Date.now();
+  const store = loadStore();
+  const cfg = store.mysqlConfig;
+  const supabase = createSupabaseClientFromEnv();
+
+  log("=================================================");
+  log(`Smart MSO Attendance Reclassify (${new Date().toLocaleString("th-TH")})`);
+  log(`Local store logs: ${store.logs.length} | NAS: ${cfg.host}:${cfg.port}`);
+
+  if (supabase) {
+    const adoptedOverrides = await reconcileSupabaseOverrides(supabase, store);
+    if (adoptedOverrides > 0) {
+      log(`☁️ Adopted ${adoptedOverrides} Cloud edited/manual/deleted overrides before reclassify`);
+    }
+  }
+
+  const changedLogs = [];
+  for (const item of store.logs) {
+    if (item.isEdited || item.isDeleted || item.source !== "device") {
+      continue;
+    }
+    const classified = classifyAttendanceByOfficialHours(item.scanTimestamp);
+    if (item.ioMode !== classified.ioMode || item.ioLabel !== classified.ioLabel) {
+      item.ioMode = classified.ioMode;
+      item.ioLabel = classified.ioLabel;
+      changedLogs.push(item);
+    }
+  }
+
+  if (changedLogs.length > 0) {
+    saveStore(store);
+  }
+
+  const localCounts = summarizeModeCounts(store.logs);
+  const activeLogs = store.logs.filter((l) => !l.isDeleted);
+  const availableMonths = collectAvailableMonths(activeLogs);
+  const allUneditedDeviceLogs = activeLogs.filter(
+    (l) => !l.isEdited && l.source === "device"
+  );
+
+  let mysqlConn = null;
+  let nasUpserted = 0;
+  let nasCounts = null;
+  let supaUpserted = 0;
+  let supaCounts = null;
+  let telemetryInserted = false;
+
+  const queryNasCounts = async (conn) => {
+    const [modeRows] = await conn.query(
+      "SELECT io_mode, COUNT(*) AS cnt FROM attendance_logs WHERE is_deleted = 0 GROUP BY io_mode"
+    );
+    const counts = { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 };
+    for (const row of modeRows || []) {
+      const mode = Number(row.io_mode);
+      const cnt = Number(row.cnt || 0);
+      counts.total += cnt;
+      if (mode >= 1 && mode <= 4) {
+        counts[mode] = cnt;
+      }
+    }
+    return counts;
+  };
+
+  const upsertLogsToNas = async (conn, rowsToSend) => {
+    for (let i = 0; i < rowsToSend.length; i += 500) {
+      const slice = rowsToSend.slice(i, i + 500);
+      const values = slice.map(mapLogToMysqlTuple);
+      await conn.query(
+        `INSERT INTO attendance_logs (
+          id, record_uid, scanner_user_id, member_id, member_name, division, position,
+          scan_timestamp, original_timestamp, io_mode, io_label, verify_mode, verify_label,
+          machine_id, source, is_edited, edited_by, edited_at, edit_note, is_deleted
+        ) VALUES ?
+        ON DUPLICATE KEY UPDATE
+          io_mode = VALUES(io_mode),
+          io_label = VALUES(io_label)`,
+        [values]
+      );
+      nasUpserted += slice.length;
+    }
+  };
+
+  try {
+    // 1. Update Synology NAS MariaDB in 500-row batches
+    try {
+      mysqlConn = await mysql.createConnection({
+        host: cfg.host,
+        port: cfg.port,
+        user: cfg.user,
+        password: cfg.password,
+        database: cfg.database,
+        connectTimeout: 5000,
+      });
+
+      const nasBefore = await queryNasCounts(mysqlConn);
+      let nasTargetLogs = FORCE_ALL ? allUneditedDeviceLogs : changedLogs;
+      if (!FORCE_ALL && changedLogs.length === 0 && !modeCountsMatch(nasBefore, localCounts)) {
+        nasTargetLogs = allUneditedDeviceLogs;
+      }
+      await upsertLogsToNas(mysqlConn, nasTargetLogs);
+      nasCounts = await queryNasCounts(mysqlConn);
+
+      if (!FORCE_ALL && nasTargetLogs === changedLogs && !modeCountsMatch(nasCounts, localCounts)) {
+        log("🔄 NAS MariaDB counts still differ from local store; performing full unedited backfill...");
+        await upsertLogsToNas(mysqlConn, allUneditedDeviceLogs);
+        nasCounts = await queryNasCounts(mysqlConn);
+      }
+
+      if (nasUpserted > 0) {
+        store.lastMysqlSyncedAt = new Date().toISOString();
+        saveStore(store);
+      }
+    } catch (err) {
+      log(`⚠️ NAS MariaDB unreachable during reclassify: ${err.message}`);
+    }
+
+    // 2. Update Supabase Cloud in 500-row batches + insert telemetry
+    if (supabase) {
+      const countSupaMode = async (mode) => {
+        let q = supabase
+          .from("attendance_logs")
+          .select("*", { count: "exact", head: true })
+          .eq("is_deleted", false);
+        if (mode !== null) q = q.eq("io_mode", mode);
+        const { count, error } = await q;
+        if (error) throw new Error(`Supabase count error: ${error.message}`);
+        return Number(count || 0);
+      };
+      const querySupaCounts = async () => {
+        const [m1, m2, m3, m4, mTotal] = await Promise.all([
+          countSupaMode(1),
+          countSupaMode(2),
+          countSupaMode(3),
+          countSupaMode(4),
+          countSupaMode(null),
+        ]);
+        return { 1: m1, 2: m2, 3: m3, 4: m4, total: mTotal };
+      };
+      const upsertLogsToSupa = async (rowsToSend) => {
+        for (let i = 0; i < rowsToSend.length; i += 500) {
+          const slice = rowsToSend.slice(i, i + 500).map(mapLogToSupabase);
+          const { error } = await supabase
+            .from("attendance_logs")
+            .upsert(slice, { onConflict: "record_uid" });
+          if (error) throw new Error(`Supabase upsert error: ${error.message}`);
+          supaUpserted += slice.length;
+        }
+      };
+
+      const supaBefore = await querySupaCounts();
+      let supaTargetLogs = FORCE_ALL ? allUneditedDeviceLogs : changedLogs;
+      if (!FORCE_ALL && changedLogs.length === 0 && !modeCountsMatch(supaBefore, localCounts)) {
+        supaTargetLogs = allUneditedDeviceLogs;
+      }
+      await upsertLogsToSupa(supaTargetLogs);
+      supaCounts = await querySupaCounts();
+
+      if (!FORCE_ALL && supaTargetLogs === changedLogs && !modeCountsMatch(supaCounts, localCounts)) {
+        log("🔄 Supabase counts still differ from local store; performing full unedited backfill...");
+        await upsertLogsToSupa(allUneditedDeviceLogs);
+        supaCounts = await querySupaCounts();
+      }
+
+      const deviceOverview = store.deviceOverview || {};
+      const { error: telErr } = await supabase.from("audit_logs").insert({
+        actor_id: "hip_cmi681s_sync",
+        actor_name: "ระบบจำแนกเวลาปฏิบัติราชการอัตโนมัติ (LAN CLI)",
+        action: "จำแนกประเภทย้อนหลังตามระเบียบเวลาราชการ (08:30-16:30 น.)",
+        target: `อัปเดต ${changedLogs.length.toLocaleString()} รายการ (รวม ${localCounts.total.toLocaleString()} รายการ • ${availableMonths.length} เดือน)`,
+        status: "success",
+        metadata: {
+          type: "attendance_device_sync",
+          lastSyncedAt: store.lastSyncedAt || new Date().toISOString(),
+          lastMysqlSyncedAt: store.lastMysqlSyncedAt,
+          deviceTotalRecords: store.deviceTotalRecords || localCounts.total,
+          registeredUsersCount: deviceOverview.registeredUsersCount,
+          fingerprintsCount: deviceOverview.fingerprintsCount,
+          passwordsCount: deviceOverview.passwordsCount,
+          idCardsCount: deviceOverview.idCardsCount,
+          maxAttendanceLogs: deviceOverview.maxAttendanceLogs,
+          serialNumber: deviceOverview.serialNumber,
+          productCode: deviceOverview.productCode,
+          deviceTime: deviceOverview.deviceTime,
+          scannerIp: cfg.scannerIp,
+          addedCount: 0,
+          reclassifiedCount: changedLogs.length,
+          availableMonths,
+          source: "cli_reclassify",
+        },
+      });
+      if (telErr) {
+        throw new Error(`Supabase telemetry insert error: ${telErr.message}`);
+      }
+      telemetryInserted = true;
+    }
+
+    const elapsed = Date.now() - t0;
+    const result = {
+      mode: "reclassify",
+      success: true,
+      elapsedMs: elapsed,
+      reclassifiedCount: changedLogs.length,
+      localCounts,
+      nasUpserted,
+      nasCounts,
+      supabaseUpserted: supaUpserted,
+      supabaseCounts: supaCounts,
+      availableMonths,
+      telemetryInserted,
+    };
+    appendSyncLog(
+      `[RECLASSIFY] changed=${changedLogs.length} local=${localCounts[1]}/${localCounts[2]}/${localCounts[3]}/${localCounts[4]} (${localCounts.total}) nas=${nasCounts ? `${nasCounts[1]}/${nasCounts[2]}/${nasCounts[3]}/${nasCounts[4]} (${nasCounts.total})` : "N/A"} supa=${supaCounts ? `${supaCounts[1]}/${supaCounts[2]}/${supaCounts[3]}/${supaCounts[4]} (${supaCounts.total})` : "N/A"} months=${availableMonths.length} elapsed=${elapsed}ms`
+    );
+    console.log(JSON.stringify(result, null, 2));
+    return result;
+  } finally {
+    if (mysqlConn) {
+      await mysqlConn.end().catch(() => {});
+    }
+  }
+}
+
 async function waitUntilOrAbort(targetTimeMs, isAborted) {
   while (!isAborted()) {
     const remaining = targetTimeMs - Date.now();
@@ -1058,6 +1354,10 @@ async function waitUntilOrAbort(targetTimeMs, isAborted) {
 }
 
 async function main() {
+  if (RECLASSIFY) {
+    await runReclassifyOnce();
+    return;
+  }
   if (!DAEMON_SCHEDULE) {
     await runSyncOnce();
     return;
