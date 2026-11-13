@@ -8,6 +8,7 @@ import {
   AuthorizedAttendanceEditor,
   NasMysqlConfig,
   DeviceOverviewMetadata,
+  ScannerUidStat,
 } from "@/lib/attendance-db";
 import {
   classifyAttendanceByOfficialHours,
@@ -49,6 +50,16 @@ interface SupabaseStatusInfo {
   ready: boolean;
   count: number;
   error?: string;
+}
+
+interface SystemUserOption {
+  id: string;
+  name: string;
+  nickname?: string | null;
+  division: string;
+  position: string;
+  role: string;
+  status: string;
 }
 
 interface RemoteSyncRequestInfo {
@@ -138,6 +149,10 @@ export default function AttendancePage() {
   const [supabaseStatus, setSupabaseStatus] = useState<SupabaseStatusInfo | null>(null);
   const [setupSql, setSetupSql] = useState<string>("");
   const [mappings, setMappings] = useState<Record<number, ScannerUserMapping>>({});
+  const [systemUsers, setSystemUsers] = useState<SystemUserOption[]>([]);
+  const [scannerUidStats, setScannerUidStats] = useState<
+    Record<number, ScannerUidStat>
+  >({});
   const [authorizedEditors, setAuthorizedEditors] = useState<
     AuthorizedAttendanceEditor[]
   >([]);
@@ -170,11 +185,19 @@ export default function AttendancePage() {
   const [showMappingModal, setShowMappingModal] = useState<boolean>(false);
   const [editingMappingUid, setEditingMappingUid] = useState<number>(1);
   const [mappingForm, setMappingForm] = useState({
+    userId: "",
     memberId: "",
     memberName: "",
     division: "",
     position: "",
   });
+  const [mappingFilterMode, setMappingFilterMode] = useState<
+    "all" | "active_unmapped" | "mapped"
+  >("all");
+  const [mappingSearch, setMappingSearch] = useState<string>("");
+  const [draftUserMappings, setDraftUserMappings] = useState<
+    Record<number, { userId: string; matchMethod: "manual" | "auto_name" }>
+  >({});
   const [savingMapping, setSavingMapping] = useState<boolean>(false);
 
   const [showEditorsModal, setShowEditorsModal] = useState<boolean>(false);
@@ -262,6 +285,8 @@ export default function AttendancePage() {
           if (data.supabaseStatus) setSupabaseStatus(data.supabaseStatus);
           if (data.setupSql) setSetupSql(data.setupSql);
           if (data.mappings) setMappings(data.mappings);
+          if (Array.isArray(data.systemUsers)) setSystemUsers(data.systemUsers);
+          if (data.scannerUidStats) setScannerUidStats(data.scannerUidStats);
           if (data.authorizedEditors) {
             setAuthorizedEditors(data.authorizedEditors);
             if (typeof window !== "undefined") {
@@ -543,12 +568,37 @@ export default function AttendancePage() {
     }
   };
 
+  const effectiveUsersList = useMemo<SystemUserOption[]>(() => {
+    if (systemUsers.length > 0) return systemUsers;
+    return members.map((m) => ({
+      id: m.id,
+      name: m.name,
+      nickname: null,
+      division: m.division,
+      position: m.position,
+      role: m.role,
+      status: "active",
+    }));
+  }, [systemUsers, members]);
+
+  const myMappedScannerUid = useMemo(() => {
+    if (!currentUser) return null;
+    const match = Object.values(mappings).find(
+      (m) =>
+        m.userId === currentUser.id ||
+        m.memberId === currentUser.id ||
+        (m.memberName && m.memberName.trim() === currentUser.name.trim())
+    );
+    return match ? match.scannerUserId : null;
+  }, [mappings, currentUser]);
+
   // บันทึกการจับคู่รหัสสแกนนิ้ว (User ID) กับชื่อบุคลากร
   const handleSelectMappingUid = (uid: number) => {
     setEditingMappingUid(uid);
     const current = mappings[uid];
     if (current) {
       setMappingForm({
+        userId: current.userId || "",
         memberId: current.memberId,
         memberName: current.memberName,
         division: current.division,
@@ -556,6 +606,7 @@ export default function AttendancePage() {
       });
     } else {
       setMappingForm({
+        userId: "",
         memberId: `scanner_uid_${uid}`,
         memberName: `บุคลากร พมจ. (รหัสสแกน #${uid})`,
         division: "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
@@ -575,7 +626,12 @@ export default function AttendancePage() {
         body: JSON.stringify({
           action: "save_mapping",
           scannerUserId: editingMappingUid,
-          ...mappingForm,
+          userId: mappingForm.userId || null,
+          memberId: mappingForm.memberId,
+          memberName: mappingForm.memberName,
+          division: mappingForm.division,
+          position: mappingForm.position,
+          matchMethod: "manual",
           actorId: currentUser?.id,
           actorRole: currentUserRole,
           actorName: currentUser?.name || "ผู้ดูแลระบบ",
@@ -589,6 +645,134 @@ export default function AttendancePage() {
         await fetchAttendanceData();
       } else {
         showToast(`บันทึกไม่สำเร็จ: ${data.error}`);
+      }
+    } finally {
+      setSavingMapping(false);
+    }
+  };
+
+  const handleAutoMatchMappings = () => {
+    const stripHonorific = (raw: string) =>
+      raw
+        .replace(/^(นางสาว|นาย|นาง|ดร\.|ผศ\.)\s*/g, "")
+        .trim()
+        .toLowerCase();
+
+    const nextDrafts: Record<
+      number,
+      { userId: string; matchMethod: "manual" | "auto_name" }
+    > = { ...draftUserMappings };
+    let matchedCount = 0;
+
+    for (let uid = 1; uid <= 64; uid++) {
+      const m = mappings[uid];
+      if (!m || m.userId) continue;
+      const rawName = (m.memberName || "").trim();
+      if (!rawName || rawName.startsWith("บุคลากร พมจ.")) continue;
+      const cleanName = stripHonorific(rawName);
+      if (!cleanName) continue;
+
+      const found = effectiveUsersList.find((u) => {
+        const uClean = stripHonorific(u.name);
+        const uFirst = uClean.split(/\s+/)[0] || "";
+        const uNick = (u.nickname || "").trim().toLowerCase();
+        return (
+          uClean === cleanName ||
+          uFirst === cleanName ||
+          (uNick && uNick === cleanName) ||
+          uClean.includes(cleanName)
+        );
+      });
+
+      if (found) {
+        nextDrafts[uid] = { userId: found.id, matchMethod: "auto_name" };
+        matchedCount++;
+      }
+    }
+
+    setDraftUserMappings(nextDrafts);
+    if (matchedCount > 0) {
+      showToast(
+        `พบคู่ที่ตรงกับผู้ใช้ระบบ ${matchedCount} รายการ — กด "บันทึกทั้งหมดที่เลือก" เพื่อยืนยัน`
+      );
+    } else {
+      showToast("ไม่พบชื่อที่ตรงกับผู้ใช้ระบบเพิ่มเติม กรุณาเลือกจากรายการด้านล่าง");
+    }
+  };
+
+  const handleSaveMappingsBatch = async () => {
+    const entries = Object.entries(draftUserMappings);
+    if (entries.length === 0 || savingMapping) return;
+    try {
+      setSavingMapping(true);
+      const payload = entries
+        .map(([uidStr, draft]) => {
+          const uid = Number(uidStr);
+          const u = effectiveUsersList.find((item) => item.id === draft.userId);
+          if (!u) return null;
+          return {
+            scannerUserId: uid,
+            userId: u.id,
+            memberId: u.id,
+            memberName: u.name,
+            division: u.division,
+            position: u.position,
+            matchMethod: draft.matchMethod,
+          };
+        })
+        .filter(Boolean);
+
+      if (payload.length === 0) return;
+      const res = await fetch("/api/attendance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "save_mappings_batch",
+          mappings: payload,
+          actorId: currentUser?.id,
+          actorRole: currentUserRole,
+          actorName: currentUser?.name || "ผู้ดูแลระบบ",
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setDraftUserMappings({});
+        showToast(`บันทึกการจับคู่สำเร็จ ${data.updatedCount} รหัสสแกน และอัปเดตประวัติการสแกนแล้ว`);
+        await fetchAttendanceData();
+      } else {
+        showToast(`บันทึกไม่สำเร็จ: ${data.error}`);
+      }
+    } finally {
+      setSavingMapping(false);
+    }
+  };
+
+  const handleUnmapUid = async (uid: number) => {
+    if (savingMapping) return;
+    try {
+      setSavingMapping(true);
+      const res = await fetch("/api/attendance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "unmap_scanner_uid",
+          scannerUserId: uid,
+          actorId: currentUser?.id,
+          actorRole: currentUserRole,
+          actorName: currentUser?.name || "ผู้ดูแลระบบ",
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setDraftUserMappings((prev) => {
+          const copy = { ...prev };
+          delete copy[uid];
+          return copy;
+        });
+        showToast(`ยกเลิกการจับคู่รหัสสแกน #${uid} แล้ว`);
+        await fetchAttendanceData();
+      } else {
+        showToast(`ยกเลิกไม่สำเร็จ: ${data.error}`);
       }
     } finally {
       setSavingMapping(false);
@@ -1535,12 +1719,33 @@ export default function AttendancePage() {
             </div>
           </div>
 
-          {/* ปุ่มเลือกวันที่ด่วน */}
-          {availableDates.length > 0 && (
+          {/* ปุ่มตัวกรองของฉัน & เลือกวันที่ด่วน */}
+          {(myMappedScannerUid !== null || availableDates.length > 0) && (
             <div className="flex items-center gap-1.5 flex-wrap pt-1">
-              <span className="text-[11px] text-slate-400 mr-1">
-                เลือกวันที่ที่มีการสแกนด่วน:
-              </span>
+              {myMappedScannerUid !== null && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const targetUid = String(myMappedScannerUid);
+                    setSelectedScannerUid((prev) =>
+                      prev === targetUid ? "all" : targetUid
+                    );
+                    setPage(1);
+                  }}
+                  className={`px-3 py-1 rounded-lg text-[11px] font-semibold cursor-pointer transition ${
+                    selectedScannerUid === String(myMappedScannerUid)
+                      ? "bg-emerald-600 text-white shadow-xs"
+                      : "bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                  }`}
+                >
+                  👤 เวลาเข้า-ออกของฉัน (#{myMappedScannerUid})
+                </button>
+              )}
+              {availableDates.length > 0 && (
+                <>
+                  <span className="text-[11px] text-slate-400 mr-1">
+                    เลือกวันที่ที่มีการสแกนด่วน:
+                  </span>
               <button
                 onClick={() => {
                   setDateFrom("");
@@ -1580,6 +1785,8 @@ export default function AttendancePage() {
                   </button>
                 );
               })}
+                </>
+              )}
             </div>
           )}
         </div>
@@ -2048,142 +2255,436 @@ export default function AttendancePage() {
       )}
 
       {/* =====================================================================
-          MODAL 3: จับคู่รหัสเครื่องสแกน (User ID 1..64) กับรายชื่อบุคลากร
+          MODAL 3: จับคู่รหัสเครื่องสแกน (User ID 1..64) กับระบบผู้ใช้ Smart MSO
       ===================================================================== */}
-      {showMappingModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 text-xs">
-            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
-              <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  👥 จับคู่รหัสเครื่องสแกนลายนิ้วมือ (User ID 1 - 64) กับชื่อบุคลากร
-                </h3>
-                <p className="text-[11px] text-slate-500">
-                  เนื่องจากในตัวเครื่อง HIP CMi681S เก็บเฉพาะหมายเลข User ID (1-64)
-                  คุณสามารถผูกแต่ละหมายเลขเข้ากับชื่อ-นามสกุลจริงของบุคลากรได้ที่นี่
-                </p>
-              </div>
-              <button
-                onClick={() => setShowMappingModal(false)}
-                className="text-slate-400 hover:text-slate-600 text-lg cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
+      {showMappingModal && (() => {
+        const allUids = Array.from({ length: 64 }, (_, i) => i + 1);
+        const mappedCount = allUids.filter(
+          (uid) => mappings[uid]?.isMapped || Boolean(mappings[uid]?.userId)
+        ).length;
+        const activeScannedCount = allUids.filter(
+          (uid) => (scannerUidStats[uid]?.scanCount ?? 0) > 0
+        ).length;
+        const draftCount = Object.keys(draftUserMappings).length;
 
-            <form onSubmit={handleSaveMapping} className="space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    เลือกหมายเลข User ID ในเครื่องสแกน
-                  </label>
-                  <select
-                    value={editingMappingUid}
-                    onChange={(e) => handleSelectMappingUid(Number(e.target.value))}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-semibold"
-                  >
-                    {Array.from({ length: 64 }, (_, i) => i + 1).map((uid) => (
-                      <option key={uid} value={uid}>
-                        User ID #{uid} — {mappings[uid]?.memberName || `รหัส #${uid}`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+        const filteredUids = allUids.filter((uid) => {
+          const m = mappings[uid];
+          const stat = scannerUidStats[uid];
+          const isUidMapped = Boolean(m?.isMapped || m?.userId);
+          const hasScans = (stat?.scanCount ?? 0) > 0;
 
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    ดึงข้อมูลด่วนจากทำเนียบบุคลากร Smart MSO (ถ้ามี)
-                  </label>
-                  <select
-                    value=""
-                    onChange={(e) => {
-                      const found = members.find((m) => m.id === e.target.value);
-                      if (found) {
-                        setMappingForm({
-                          memberId: found.id,
-                          memberName: found.name,
-                          division: found.division,
-                          position: found.position,
-                        });
-                      }
-                    }}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-                  >
-                    <option value="">-- เลือกจากรายชื่อในระบบ หรือพิมพ์เองด้านล่าง --</option>
-                    {members.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name} ({m.division})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+          if (mappingFilterMode === "active_unmapped" && !(hasScans && !isUidMapped)) {
+            return false;
+          }
+          if (mappingFilterMode === "mapped" && !isUidMapped) {
+            return false;
+          }
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    ชื่อ-นามสกุลจริงที่ต้องการแสดงผล
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={mappingForm.memberName}
-                    onChange={(e) =>
-                      setMappingForm({ ...mappingForm, memberName: e.target.value })
-                    }
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    ตำแหน่ง
-                  </label>
-                  <input
-                    type="text"
-                    value={mappingForm.position}
-                    onChange={(e) =>
-                      setMappingForm({ ...mappingForm, position: e.target.value })
-                    }
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    กลุ่มงาน / ฝ่าย
-                  </label>
-                  <input
-                    type="text"
-                    value={mappingForm.division}
-                    onChange={(e) =>
-                      setMappingForm({ ...mappingForm, division: e.target.value })
-                    }
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-                  />
-                </div>
-              </div>
+          const q = mappingSearch.trim().toLowerCase();
+          if (!q) return true;
+          const draft = draftUserMappings[uid];
+          const draftUser = draft
+            ? effectiveUsersList.find((u) => u.id === draft.userId)
+            : undefined;
+          const haystack = [
+            String(uid),
+            `#${uid}`,
+            m?.memberName ?? "",
+            m?.memberId ?? "",
+            m?.division ?? "",
+            m?.position ?? "",
+            draftUser?.name ?? "",
+          ]
+            .join(" ")
+            .toLowerCase();
+          return haystack.includes(q);
+        });
 
-              <div className="flex justify-end gap-2 pt-2">
+        return (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-5xl w-full max-h-[92vh] flex flex-col p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 text-xs">
+              {/* Header */}
+              <div className="flex items-start justify-between border-b border-slate-200 dark:border-slate-800 pb-3 gap-3">
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    👥 จับคู่รหัสเครื่องสแกนลายนิ้วมือ (User ID 1 - 64) กับผู้ใช้ระบบ
+                  </h3>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    ผูกหมายเลข User ID ในเครื่อง HIP CMi681S เข้ากับบัญชีบุคลากรในระบบ (<code>public.users</code>) เพื่อแสดงชื่อจริง ตำแหน่ง ฝ่าย และตัวกรอง &ldquo;เวลาเข้า-ออกของฉัน&rdquo;
+                  </p>
+                </div>
                 <button
-                  type="button"
                   onClick={() => setShowMappingModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 font-semibold cursor-pointer"
+                  className="text-slate-400 hover:text-slate-600 text-lg cursor-pointer px-1"
+                  aria-label="ปิดหน้าต่าง"
                 >
-                  ปิดหน้าต่าง
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingMapping}
-                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold cursor-pointer"
-                >
-                  {savingMapping
-                    ? "⏳ กำลังบันทึก..."
-                    : `💾 บันทึกการจับคู่ User ID #${editingMappingUid}`}
+                  ✕
                 </button>
               </div>
-            </form>
+
+              {/* Summary Stats & Toolbar */}
+              <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 font-semibold">
+                    จับคู่แล้ว {mappedCount} / 64
+                  </span>
+                  <span className="px-2.5 py-1 rounded-lg bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-semibold">
+                    มีประวัติสแกน {activeScannedCount} รหัส
+                  </span>
+                  <span className="px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold">
+                    ผู้ใช้ระบบ {effectiveUsersList.length} คน
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleAutoMatchMappings}
+                    disabled={savingMapping}
+                    className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-white font-semibold cursor-pointer transition"
+                  >
+                    ✨ จับคู่อัตโนมัติจากชื่อ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveMappingsBatch}
+                    disabled={savingMapping || draftCount === 0}
+                    className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white font-semibold cursor-pointer transition"
+                  >
+                    {savingMapping
+                      ? "⏳ กำลังบันทึก..."
+                      : `💾 บันทึกที่เลือกทั้งหมด (${draftCount})`}
+                  </button>
+                </div>
+              </div>
+
+              {/* Filter Tabs + Search */}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setMappingFilterMode("all")}
+                    className={`px-3 py-1.5 rounded-lg font-semibold cursor-pointer transition ${
+                      mappingFilterMode === "all"
+                        ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
+                        : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                    }`}
+                  >
+                    ทั้งหมด (64)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMappingFilterMode("active_unmapped")}
+                    className={`px-3 py-1.5 rounded-lg font-semibold cursor-pointer transition ${
+                      mappingFilterMode === "active_unmapped"
+                        ? "bg-rose-600 text-white"
+                        : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                    }`}
+                  >
+                    มีสแกนแต่ยังไม่จับคู่
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMappingFilterMode("mapped")}
+                    className={`px-3 py-1.5 rounded-lg font-semibold cursor-pointer transition ${
+                      mappingFilterMode === "mapped"
+                        ? "bg-emerald-600 text-white"
+                        : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                    }`}
+                  >
+                    จับคู่แล้ว ({mappedCount})
+                  </button>
+                </div>
+
+                <input
+                  type="text"
+                  value={mappingSearch}
+                  onChange={(e) => setMappingSearch(e.target.value)}
+                  placeholder="🔍 ค้นหา #ID หรือชื่อบุคลากร..."
+                  className="w-full sm:w-64 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                />
+              </div>
+
+              {/* Scrollable 1-64 Mapping Table */}
+              <div className="flex-1 min-h-[220px] overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                <table className="w-full text-left border-collapse">
+                  <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] uppercase">
+                    <tr>
+                      <th className="py-2 px-3 w-16">#ID</th>
+                      <th className="py-2 px-3 w-36">ประวัติสแกน</th>
+                      <th className="py-2 px-3">ชื่อแสดงผลปัจจุบัน / สถานะ</th>
+                      <th className="py-2 px-3 w-64">เลือกผู้ใช้ระบบ (public.users)</th>
+                      <th className="py-2 px-3 w-36 text-right">จัดการ</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {filteredUids.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={5}
+                          className="py-8 text-center text-slate-400"
+                        >
+                          ไม่พบรหัสเครื่องสแกนที่ตรงกับเงื่อนไข
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredUids.map((uid) => {
+                        const m = mappings[uid];
+                        const stat = scannerUidStats[uid];
+                        const isUidMapped = Boolean(m?.isMapped || m?.userId);
+                        const draft = draftUserMappings[uid];
+                        const selectedUserId = draft?.userId ?? m?.userId ?? "";
+
+                        return (
+                          <tr
+                            key={uid}
+                            className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 ${
+                              draft
+                                ? "bg-indigo-50/60 dark:bg-indigo-950/20"
+                                : ""
+                            }`}
+                          >
+                            <td className="py-2 px-3 font-mono font-bold text-slate-800 dark:text-slate-100">
+                              #{uid}
+                            </td>
+                            <td className="py-2 px-3">
+                              {stat && stat.scanCount > 0 ? (
+                                <div className="leading-tight">
+                                  <span className="font-semibold text-blue-600 dark:text-blue-400">
+                                    {stat.scanCount.toLocaleString()} ครั้ง
+                                  </span>
+                                  {stat.lastScanAt && (
+                                    <div className="text-[10px] text-slate-400">
+                                      ล่าสุด {stat.lastScanAt.slice(0, 10)}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-slate-400 text-[11px]">
+                                  ยังไม่พบการสแกน
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2 px-3">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="font-semibold text-slate-800 dark:text-slate-100">
+                                  {m?.memberName || `รหัส #${uid}`}
+                                </span>
+                                {isUidMapped ? (
+                                  <span className="px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 text-[10px] font-semibold">
+                                    จับคู่แล้ว
+                                    {m?.matchMethod === "auto_name"
+                                      ? " (อัตโนมัติ)"
+                                      : ""}
+                                  </span>
+                                ) : (
+                                  <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px]">
+                                    ยังไม่จับคู่
+                                  </span>
+                                )}
+                                {draft && (
+                                  <span className="px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 text-[10px] font-semibold">
+                                    รอการบันทึก
+                                  </span>
+                                )}
+                              </div>
+                              {(m?.position || m?.division) && (
+                                <div className="text-[10px] text-slate-400 truncate max-w-xs">
+                                  {[m.position, m.division].filter(Boolean).join(" · ")}
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-2 px-3">
+                              <select
+                                value={selectedUserId}
+                                onChange={(e) => {
+                                  const nextUserId = e.target.value;
+                                  setDraftUserMappings((prev) => {
+                                    const next = { ...prev };
+                                    if (!nextUserId || nextUserId === (m?.userId ?? "")) {
+                                      delete next[uid];
+                                    } else {
+                                      next[uid] = {
+                                        userId: nextUserId,
+                                        matchMethod: "manual",
+                                      };
+                                    }
+                                    return next;
+                                  });
+                                }}
+                                className="w-full px-2 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                              >
+                                <option value="">-- ยังไม่ระบุผู้ใช้ระบบ --</option>
+                                {effectiveUsersList.map((u) => (
+                                  <option key={u.id} value={u.id}>
+                                    {u.name}
+                                    {u.division ? ` (${u.division})` : ""}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="py-2 px-3 text-right whitespace-nowrap space-x-1">
+                              <button
+                                type="button"
+                                onClick={() => handleSelectMappingUid(uid)}
+                                className="px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-[11px] font-medium cursor-pointer"
+                              >
+                                แก้ไขชื่อเอง
+                              </button>
+                              {isUidMapped && (
+                                <button
+                                  type="button"
+                                  disabled={savingMapping}
+                                  onClick={() => handleUnmapUid(uid)}
+                                  className="px-2 py-1 rounded-md bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-rose-600 dark:text-rose-400 text-[11px] font-medium cursor-pointer disabled:opacity-40"
+                                >
+                                  ยกเลิก
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Single-row Custom Override Form */}
+              <form
+                onSubmit={handleSaveMapping}
+                className="border-t border-slate-200 dark:border-slate-800 pt-3 space-y-2.5 bg-slate-50/70 dark:bg-slate-800/30 p-3 rounded-xl"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-700 dark:text-slate-200">
+                    ✏️ แก้ไขรายละเอียดรายรหัส (User ID #{editingMappingUid})
+                  </span>
+                  <span className="text-[11px] text-slate-400">
+                    ใช้กรณีต้องการกำหนดชื่อแสดงผล ตำแหน่ง หรือกลุ่มงานเอง
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+                  <div>
+                    <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                      รหัสเครื่องสแกน
+                    </label>
+                    <select
+                      value={editingMappingUid}
+                      onChange={(e) => handleSelectMappingUid(Number(e.target.value))}
+                      className="w-full px-2.5 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 font-semibold"
+                    >
+                      {allUids.map((uid) => (
+                        <option key={uid} value={uid}>
+                          #{uid} — {mappings[uid]?.memberName || `รหัส #${uid}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                      ผูกกับผู้ใช้ระบบ
+                    </label>
+                    <select
+                      value={mappingForm.userId}
+                      onChange={(e) => {
+                        const found = effectiveUsersList.find(
+                          (u) => u.id === e.target.value
+                        );
+                        if (found) {
+                          setMappingForm({
+                            userId: found.id,
+                            memberId: found.id,
+                            memberName: found.name,
+                            division: found.division,
+                            position: found.position,
+                          });
+                        } else {
+                          setMappingForm({
+                            ...mappingForm,
+                            userId: "",
+                          });
+                        }
+                      }}
+                      className="w-full px-2.5 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                    >
+                      <option value="">-- ไม่ผูกบัญชี (พิมพ์ชื่อเอง) --</option>
+                      {effectiveUsersList.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                      ชื่อ-นามสกุลแสดงผล
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={mappingForm.memberName}
+                      onChange={(e) =>
+                        setMappingForm({ ...mappingForm, memberName: e.target.value })
+                      }
+                      className="w-full px-2.5 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                      ตำแหน่ง
+                    </label>
+                    <input
+                      type="text"
+                      value={mappingForm.position}
+                      onChange={(e) =>
+                        setMappingForm({ ...mappingForm, position: e.target.value })
+                      }
+                      className="w-full px-2.5 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                      กลุ่มงาน / ฝ่าย
+                    </label>
+                    <input
+                      type="text"
+                      value={mappingForm.division}
+                      onChange={(e) =>
+                        setMappingForm({ ...mappingForm, division: e.target.value })
+                      }
+                      className="w-full px-2.5 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowMappingModal(false)}
+                    className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold cursor-pointer"
+                  >
+                    ปิดหน้าต่าง
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingMapping}
+                    className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold cursor-pointer"
+                  >
+                    {savingMapping
+                      ? "⏳ กำลังบันทึก..."
+                      : `💾 บันทึกรหัส #${editingMappingUid}`}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* =====================================================================
           MODAL 4: กำหนดสิทธิ์ Admin / User ที่สามารถแก้ไขเวลาเข้า-ออกงานได้

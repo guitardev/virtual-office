@@ -12,10 +12,12 @@ import {
   syncEditorsToSynologyMysql,
   getSynologyMysqlSetupSql,
   buildDefaultMappings,
+  computeLocalScannerUidStats,
   AttendanceLogItem,
   AuthorizedAttendanceEditor,
   AttendanceStoreData,
   DeviceOverviewMetadata,
+  ScannerUidStat,
 } from "@/lib/attendance-db";
 import {
   supabaseClient,
@@ -33,6 +35,9 @@ import {
   recordAttendanceSyncTelemetryToSupabase,
   enqueueRemoteAttendanceSyncRequest,
   fetchLatestRemoteAttendanceSyncRequest,
+  fetchSystemUsersFromSupabase,
+  fetchScannerUidStatsFromSupabase,
+  updateAttendanceLogsMappingOnSupabase,
   syncMappingsToSupabase,
   fetchMappingsFromSupabase,
   syncEditorsToSupabase,
@@ -192,19 +197,21 @@ export async function GET(req: NextRequest) {
     const isCloudServer = process.env.VERCEL === "1" && isScannerPrivateLan;
     const canSyncFromScanner = !isCloudServer;
 
-    // ตรวจสอบสถานะ MySQL บน Synology NAS, Supabase Cloud และ Telemetry ล่าสุดพร้อมกัน
+    // ตรวจสอบสถานะ MySQL บน Synology NAS, Supabase Cloud, Telemetry และรายชื่อผู้ใช้ระบบพร้อมกัน
     const [
       mysqlStatus,
       supabaseStatus,
       cloudTelemetry,
       latestCloudScanTs,
       remoteSyncRequest,
+      systemUsers,
     ] = await Promise.all([
       testAndInitSynologyMysql(store.mysqlConfig),
       checkSupabaseAttendanceReady(),
       fetchLatestAttendanceSyncTelemetryFromSupabase(),
       fetchLatestAttendanceTimestampFromSupabase(),
       fetchLatestRemoteAttendanceSyncRequest(),
+      fetchSystemUsersFromSupabase(),
     ]);
 
     // ตรวจสอบสถานะเครื่องสแกน HIP CMi681S (192.168.162.15:5005) หากไม่ได้อยู่บน Cloud Serverless และระบุ checkHardware=1
@@ -262,6 +269,7 @@ export async function GET(req: NextRequest) {
     let availableDates: string[] = [];
     let availableMonths: string[] = [];
     let mappings = store.mappings;
+    let scannerUidStats: Record<number, ScannerUidStat> = {};
     let authorizedEditors = await resolveEffectiveEditors(store);
     let dataSource: "local" | "supabase" = "local";
     let summaryStats: AttendanceSummaryStats = {
@@ -348,6 +356,7 @@ export async function GET(req: NextRequest) {
         .sort((a, b) => b.localeCompare(a))
         .slice(0, 60);
       availableMonths = collectAvailableMonths(activeLocalLogs);
+      scannerUidStats = computeLocalScannerUidStats(activeLocalLogs);
     } else if (supabaseStatus.ready) {
       // โหมด Cloud Fallback (ทำงานบน Vercel หรือเครื่องใหม่ที่ยังไม่มี Local JSON Cache ครบ)
       dataSource = "supabase";
@@ -361,7 +370,7 @@ export async function GET(req: NextRequest) {
         ioMode: ioMode && ioMode !== "all" ? Number(ioMode) : undefined,
         search: search || undefined,
       };
-      const [supaRes, supaDates, supaMonths, supaMappings] = await Promise.all([
+      const [supaRes, supaDates, supaMonths, supaMappings, supaUidStats] = await Promise.all([
         fetchAttendanceLogsFromSupabase({
           ...supaFilter,
           page,
@@ -370,6 +379,7 @@ export async function GET(req: NextRequest) {
         fetchAvailableDatesFromSupabase(),
         fetchAvailableMonthsFromSupabase(cloudTelemetry?.availableMonths),
         fetchMappingsFromSupabase(),
+        fetchScannerUidStatsFromSupabase(),
       ]);
 
       logsResult = supaRes.logs;
@@ -377,6 +387,9 @@ export async function GET(req: NextRequest) {
       totalStoredLogs = supabaseStatus.count;
       availableDates = supaDates;
       availableMonths = supaMonths;
+      if (supaUidStats) {
+        scannerUidStats = supaUidStats;
+      }
       if (supaMappings) {
         mappings = { ...buildDefaultMappings(), ...supaMappings };
       }
@@ -476,6 +489,8 @@ export async function GET(req: NextRequest) {
       availableMonths,
       remoteSyncRequest,
       mappings,
+      systemUsers,
+      scannerUidStats,
       authorizedEditors,
       summaryStats,
       logs: logsResult,
@@ -1037,7 +1052,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 6. บันทึกการจับคู่รหัสเครื่องสแกน (User ID 1..64) กับรายชื่อบุคลากร
+    // 6. บันทึกการจับคู่รหัสเครื่องสแกน (User ID 1..64) กับรายชื่อบุคลากร/ผู้ใช้ระบบ
     if (action === "save_mapping") {
       const allowed = await verifyEditorPermission(
         store,
@@ -1052,20 +1067,42 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const { scannerUserId, memberId, memberName, division, position } = body;
+      const {
+        scannerUserId,
+        userId,
+        memberId,
+        memberName,
+        division,
+        position,
+        matchMethod,
+      } = body;
       const uid = Number(scannerUserId);
+      const resolvedMemberId =
+        memberId || userId || `scanner_uid_${uid}`;
+      const isMapped =
+        Boolean(userId) || !String(resolvedMemberId).startsWith("scanner_uid_");
+
       store.mappings[uid] = {
         scannerUserId: uid,
-        memberId: memberId || `scanner_uid_${uid}`,
+        userId: userId ? String(userId) : null,
+        memberId: String(resolvedMemberId),
         memberName: memberName || `บุคลากร พมจ. (รหัสสแกน #${uid})`,
         division: division || "",
         position: position || "",
+        isMapped,
+        matchMethod:
+          matchMethod === "auto_name"
+            ? "auto_name"
+            : isMapped
+            ? "manual"
+            : "unmapped",
         updatedBy: actorName || "ผู้ดูแลระบบ",
         updatedAt: new Date().toISOString(),
       };
 
       for (const log of store.logs) {
         if (log.scannerUserId === uid) {
+          log.userId = store.mappings[uid].userId;
           log.memberId = store.mappings[uid].memberId;
           log.memberName = store.mappings[uid].memberName;
           log.division = store.mappings[uid].division;
@@ -1077,21 +1114,164 @@ export async function POST(req: NextRequest) {
         saveAttendanceStore(store);
       }
 
-      // อัปเดตชื่อใน Supabase Logs ที่ตรงกับ scanner_user_id และบน Synology NAS โดยตรง
-      const supaLogsUpdatePromise = supabaseClient
-        .from("attendance_logs")
-        .update({
-          member_id: store.mappings[uid].memberId,
-          member_name: store.mappings[uid].memberName,
-          division: store.mappings[uid].division,
-          position: store.mappings[uid].position,
-        })
-        .eq("scanner_user_id", uid);
+      const [mysqlSync, supabaseMapSync] = await Promise.all([
+        syncMappingToSynologyMysql(store.mysqlConfig, store.mappings[uid]),
+        syncMappingsToSupabase(store.mappings),
+        updateAttendanceLogsMappingOnSupabase(uid, store.mappings[uid]),
+      ]);
+
+      return NextResponse.json({
+        success: true,
+        mapping: store.mappings[uid],
+        mysqlSync,
+        supabaseMapSync,
+      });
+    }
+
+    // 6b. บันทึกการจับคู่รหัสเครื่องสแกนหลายรายการพร้อมกัน (Bulk Mapping)
+    if (action === "save_mappings_batch") {
+      const allowed = await verifyEditorPermission(
+        store,
+        actorId,
+        actorRole,
+        actorName
+      );
+      if (!allowed) {
+        return NextResponse.json(
+          { success: false, error: "คุณไม่มีสิทธิ์แก้ไขการจับคู่รหัสสแกน" },
+          { status: 403 }
+        );
+      }
+
+      const items = Array.isArray(body.mappings) ? body.mappings : [];
+      if (items.length === 0) {
+        return NextResponse.json(
+          { success: false, error: "ไม่มีรายการจับคู่สำหรับบันทึก" },
+          { status: 400 }
+        );
+      }
+
+      const updatedUids: number[] = [];
+      const nowIso = new Date().toISOString();
+      for (const raw of items) {
+        const uid = Number(raw.scannerUserId);
+        if (!uid || uid < 1 || uid > 64) continue;
+        const resolvedUserId = raw.userId ? String(raw.userId) : null;
+        const resolvedMemberId =
+          raw.memberId || resolvedUserId || `scanner_uid_${uid}`;
+        const isMapped =
+          Boolean(resolvedUserId) ||
+          !String(resolvedMemberId).startsWith("scanner_uid_");
+
+        store.mappings[uid] = {
+          scannerUserId: uid,
+          userId: resolvedUserId,
+          memberId: String(resolvedMemberId),
+          memberName: raw.memberName || `บุคลากร พมจ. (รหัสสแกน #${uid})`,
+          division: raw.division || "",
+          position: raw.position || "",
+          isMapped,
+          matchMethod:
+            raw.matchMethod === "auto_name"
+              ? "auto_name"
+              : isMapped
+              ? "manual"
+              : "unmapped",
+          updatedBy: actorName || "ผู้ดูแลระบบ",
+          updatedAt: nowIso,
+        };
+        updatedUids.push(uid);
+      }
+
+      const updatedUidSet = new Set(updatedUids);
+      for (const log of store.logs) {
+        if (updatedUidSet.has(log.scannerUserId)) {
+          const m = store.mappings[log.scannerUserId];
+          if (m) {
+            log.userId = m.userId;
+            log.memberId = m.memberId;
+            log.memberName = m.memberName;
+            log.division = m.division;
+            log.position = m.position;
+          }
+        }
+      }
+
+      if (store.logs.length > 0) {
+        saveAttendanceStore(store);
+      }
+
+      await Promise.all([
+        syncMappingsToSupabase(store.mappings),
+        ...updatedUids.map((uid) =>
+          syncMappingToSynologyMysql(store.mysqlConfig, store.mappings[uid])
+        ),
+        ...updatedUids.map((uid) =>
+          updateAttendanceLogsMappingOnSupabase(uid, store.mappings[uid])
+        ),
+      ]);
+
+      return NextResponse.json({
+        success: true,
+        updatedCount: updatedUids.length,
+        mappings: store.mappings,
+      });
+    }
+
+    // 6c. ยกเลิกการจับคู่รหัสเครื่องสแกน (รีเซ็ตกลับเป็นค่าเริ่มต้น)
+    if (action === "unmap_scanner_uid") {
+      const allowed = await verifyEditorPermission(
+        store,
+        actorId,
+        actorRole,
+        actorName
+      );
+      if (!allowed) {
+        return NextResponse.json(
+          { success: false, error: "คุณไม่มีสิทธิ์แก้ไขการจับคู่รหัสสแกน" },
+          { status: 403 }
+        );
+      }
+
+      const uid = Number(body.scannerUserId);
+      if (!uid || uid < 1 || uid > 64) {
+        return NextResponse.json(
+          { success: false, error: "scannerUserId ไม่ถูกต้อง" },
+          { status: 400 }
+        );
+      }
+
+      store.mappings[uid] = {
+        scannerUserId: uid,
+        userId: null,
+        memberId: `scanner_uid_${uid}`,
+        memberName: `บุคลากร พมจ. (รหัสสแกน #${uid})`,
+        division: "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
+        position: "เจ้าหน้าที่ปฏิบัติงาน",
+        isMapped: false,
+        matchMethod: "unmapped",
+        updatedBy: actorName || "ผู้ดูแลระบบ",
+        updatedAt: new Date().toISOString(),
+      };
+
+      for (const log of store.logs) {
+        if (log.scannerUserId === uid) {
+          log.userId = null;
+          log.memberId = store.mappings[uid].memberId;
+          log.memberName = store.mappings[uid].memberName;
+          log.division = store.mappings[uid].division;
+          log.position = store.mappings[uid].position;
+        }
+      }
+
+      if (store.logs.length > 0) {
+        saveAttendanceStore(store);
+      }
 
       const [mysqlSync, supabaseMapSync] = await Promise.all([
         syncMappingToSynologyMysql(store.mysqlConfig, store.mappings[uid]),
         syncMappingsToSupabase(store.mappings),
-        supaLogsUpdatePromise,
+        updateAttendanceLogsMappingOnSupabase(uid, store.mappings[uid]),
       ]);
 
       return NextResponse.json({

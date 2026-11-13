@@ -11,6 +11,7 @@ import type {
   AttendanceLogItem,
   ScannerUserMapping,
   AuthorizedAttendanceEditor,
+  ScannerUidStat,
 } from "./attendance-db";
 
 const supabaseUrl =
@@ -380,6 +381,74 @@ export async function batchPushLogsToSupabase(logs: AttendanceLogItem[]) {
   }
 }
 
+export interface SystemUserProfile {
+  id: string;
+  name: string;
+  nickname?: string | null;
+  division: string;
+  position: string;
+  role: string;
+  status: string;
+}
+
+/**
+ * ดึงรายชื่อบุคลากร/ผู้ใช้ระบบจากตาราง public.users บน Supabase
+ */
+export async function fetchSystemUsersFromSupabase(): Promise<SystemUserProfile[]> {
+  try {
+    const { data, error } = await supabaseClient
+      .from("users")
+      .select("id, name, nickname, division, position, role, status")
+      .eq("status", "active")
+      .order("name", { ascending: true });
+
+    if (error || !data) return [];
+    return data.map((row) => ({
+      id: String(row.id),
+      name: String(row.name || ""),
+      nickname: row.nickname ? String(row.nickname) : null,
+      division: String(row.division || ""),
+      position: String(row.position || ""),
+      role: String(row.role || "member"),
+      status: String(row.status || "active"),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * ดึงสถิติจำนวนครั้งที่สแกนและวัน-เวลาล่าสุดของแต่ละรหัสเครื่องสแกน (1..64) ผ่าน RPC
+ */
+export async function fetchScannerUidStatsFromSupabase(): Promise<
+  Record<number, ScannerUidStat> | null
+> {
+  try {
+    const { data, error } = await supabaseClient.rpc("get_attendance_scanner_stats");
+    if (error || !Array.isArray(data)) return null;
+
+    const result: Record<number, ScannerUidStat> = {};
+    for (const row of data as Array<{
+      scanner_user_id: number;
+      scan_count: number;
+      last_scan_at: string | null;
+    }>) {
+      const uid = Number(row.scanner_user_id);
+      if (!uid) continue;
+      result[uid] = {
+        scannerUserId: uid,
+        scanCount: Number(row.scan_count || 0),
+        lastScanAt: row.last_scan_at
+          ? formatIsoToThaiTimestamp(row.last_scan_at)
+          : null,
+      };
+    }
+    return result;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * ซิงก์การจับคู่รหัสเครื่องสแกน (User ID 1..64) ขึ้น Supabase
  */
@@ -387,26 +456,92 @@ export async function syncMappingsToSupabase(
   mappings: Record<number, ScannerUserMapping>
 ) {
   try {
-    const rows = Object.values(mappings).map((m) => ({
-      scanner_user_id: m.scannerUserId,
-      member_id: m.memberId,
-      member_name: m.memberName,
-      division: m.division || "",
-      position: m.position || "",
-      updated_by: m.updatedBy || "system",
-      updated_at: m.updatedAt || new Date().toISOString(),
-    }));
-    if (rows.length === 0) return { success: true, count: 0 };
+    const entries = Object.values(mappings);
+    if (entries.length === 0) return { success: true, count: 0 };
+
+    const extendedRows = entries.map((m) => {
+      const isMapped =
+        typeof m.isMapped === "boolean"
+          ? m.isMapped
+          : Boolean(m.userId) || !m.memberId.startsWith("scanner_uid_");
+      return {
+        scanner_user_id: m.scannerUserId,
+        user_id: m.userId || null,
+        member_id: m.memberId,
+        member_name: m.memberName,
+        division: m.division || "",
+        position: m.position || "",
+        is_mapped: isMapped,
+        match_method:
+          m.matchMethod || (isMapped ? "manual" : "unmapped"),
+        updated_by: m.updatedBy || "system",
+        updated_at: m.updatedAt || new Date().toISOString(),
+      };
+    });
 
     const { error } = await supabaseClient
       .from("attendance_user_mappings")
-      .upsert(rows, { onConflict: "scanner_user_id" });
+      .upsert(extendedRows, { onConflict: "scanner_user_id" });
 
-    if (error) throw error;
-    return { success: true, count: rows.length };
+    if (error) {
+      // Fallback gracefully if migration 20261113_link_attendance_to_users.sql has not been applied yet
+      const baseRows = entries.map((m) => ({
+        scanner_user_id: m.scannerUserId,
+        member_id: m.memberId,
+        member_name: m.memberName,
+        division: m.division || "",
+        position: m.position || "",
+        updated_by: m.updatedBy || "system",
+        updated_at: m.updatedAt || new Date().toISOString(),
+      }));
+      const retry = await supabaseClient
+        .from("attendance_user_mappings")
+        .upsert(baseRows, { onConflict: "scanner_user_id" });
+      if (retry.error) throw retry.error;
+    }
+
+    return { success: true, count: entries.length };
   } catch (err: unknown) {
     const e = err as { message?: string };
     return { success: false, count: 0, error: e.message };
+  }
+}
+
+/**
+ * อัปเดตข้อมูลผู้ใช้งานลงใน attendance_logs บน Supabase เมื่อมีการจับคู่หรือยกเลิกจับคู่รหัสสแกน
+ */
+export async function updateAttendanceLogsMappingOnSupabase(
+  scannerUserId: number,
+  mapping: ScannerUserMapping
+) {
+  try {
+    const { error } = await supabaseClient
+      .from("attendance_logs")
+      .update({
+        user_id: mapping.userId || null,
+        member_id: mapping.memberId,
+        member_name: mapping.memberName,
+        division: mapping.division || "",
+        position: mapping.position || "",
+      })
+      .eq("scanner_user_id", scannerUserId);
+
+    if (error) {
+      const retry = await supabaseClient
+        .from("attendance_logs")
+        .update({
+          member_id: mapping.memberId,
+          member_name: mapping.memberName,
+          division: mapping.division || "",
+          position: mapping.position || "",
+        })
+        .eq("scanner_user_id", scannerUserId);
+      if (retry.error) throw retry.error;
+    }
+    return { success: true };
+  } catch (err: unknown) {
+    const e = err as { message?: string };
+    return { success: false, error: e.message };
   }
 }
 
@@ -424,12 +559,28 @@ export async function fetchMappingsFromSupabase(): Promise<
 
     const map: Record<number, ScannerUserMapping> = {};
     for (const row of data) {
+      const memberId = String(row.member_id);
+      const userId = row.user_id ? String(row.user_id) : null;
+      const isMapped =
+        typeof row.is_mapped === "boolean"
+          ? row.is_mapped
+          : Boolean(userId) || !memberId.startsWith("scanner_uid_");
       map[Number(row.scanner_user_id)] = {
         scannerUserId: Number(row.scanner_user_id),
-        memberId: String(row.member_id),
+        userId,
+        memberId,
         memberName: String(row.member_name),
         division: String(row.division || ""),
         position: String(row.position || ""),
+        isMapped,
+        matchMethod:
+          row.match_method === "manual" ||
+          row.match_method === "auto_name" ||
+          row.match_method === "unmapped"
+            ? row.match_method
+            : isMapped
+            ? "manual"
+            : "unmapped",
         updatedBy: row.updated_by ? String(row.updated_by) : undefined,
         updatedAt: row.updated_at ? String(row.updated_at) : undefined,
       };

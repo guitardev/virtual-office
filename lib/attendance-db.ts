@@ -31,6 +31,7 @@ export interface AttendanceLogItem {
   id: string;
   recordUid: string; // unique key: e.g. "dev_1_18_2026-11-06 08:33:00" or "manual_..."
   scannerUserId: number;
+  userId?: string | null;
   memberId: string;
   memberName: string;
   division: string;
@@ -52,12 +53,49 @@ export interface AttendanceLogItem {
 
 export interface ScannerUserMapping {
   scannerUserId: number;
+  userId?: string | null;
   memberId: string;
   memberName: string;
   division: string;
   position: string;
+  isMapped?: boolean;
+  matchMethod?: "manual" | "auto_name" | "unmapped";
   updatedBy?: string;
   updatedAt?: string;
+}
+
+export interface ScannerUidStat {
+  scannerUserId: number;
+  scanCount: number;
+  lastScanAt: string | null;
+}
+
+export function computeLocalScannerUidStats(
+  logs: AttendanceLogItem[]
+): Record<number, ScannerUidStat> {
+  const stats: Record<number, ScannerUidStat> = {};
+  for (const log of logs) {
+    if (log.isDeleted) continue;
+    const uid = Number(log.scannerUserId);
+    if (!uid) continue;
+    const existing = stats[uid];
+    if (!existing) {
+      stats[uid] = {
+        scannerUserId: uid,
+        scanCount: 1,
+        lastScanAt: log.scanTimestamp || null,
+      };
+    } else {
+      existing.scanCount++;
+      if (
+        log.scanTimestamp &&
+        (!existing.lastScanAt || log.scanTimestamp > existing.lastScanAt)
+      ) {
+        existing.lastScanAt = log.scanTimestamp;
+      }
+    }
+  }
+  return stats;
 }
 
 export interface AuthorizedAttendanceEditor {
