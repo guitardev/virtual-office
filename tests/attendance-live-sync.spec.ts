@@ -25,9 +25,9 @@ test.describe("ระบบจัดการข้อมูลลงเวล�
     expect(typeof data.summaryStats?.checkOut).toBe("number");
     expect(
       data.summaryStats.checkInOnTime +
-        data.summaryStats.lateOrLeave +
-        data.summaryStats.midDay +
-        data.summaryStats.checkOut
+      data.summaryStats.lateOrLeave +
+      data.summaryStats.midDay +
+      data.summaryStats.checkOut
     ).toBe(data.filteredTotal);
     expect(Array.isArray(data.availableMonths)).toBe(true);
     expect(data.availableMonths).toContain("2026-11");
@@ -305,4 +305,5 @@ test.describe("ระบบจัดการข้อมูลลงเวล�
     expect(pollCount).toBeGreaterThanOrEqual(1);
   });
 });
+
 
