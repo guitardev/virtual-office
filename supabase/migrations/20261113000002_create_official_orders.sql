@@ -87,3 +87,4 @@ AS $$
   GROUP BY o.order_year_be
   ORDER BY o.order_year_be DESC;
 $$;
+
