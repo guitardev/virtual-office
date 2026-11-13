@@ -36,8 +36,30 @@ ALTER TABLE public.attendance_logs
 ALTER TABLE public.attendance_authorized_editors
   ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES public.users(id) ON DELETE SET NULL;
 
--- 3. Indexes (Partial & Composite for query performance)
-CREATE INDEX IF NOT EXISTS idx_attendance_mappings_user_id
+-- 3. Indexes (Partial, Unique & Composite for 1-to-1 integrity and query performance)
+-- Ensure no duplicate user_id exists before creating unique partial index (keep most recently updated row)
+WITH ranked_duplicates AS (
+  SELECT
+    scanner_user_id,
+    ROW_NUMBER() OVER (
+      PARTITION BY user_id
+      ORDER BY updated_at DESC NULLS LAST, scanner_user_id ASC
+    ) AS rn
+  FROM public.attendance_user_mappings
+  WHERE user_id IS NOT NULL
+)
+UPDATE public.attendance_user_mappings m
+SET
+  user_id = NULL,
+  member_id = 'scanner_uid_' || m.scanner_user_id,
+  is_mapped = false,
+  match_method = 'unmapped'
+FROM ranked_duplicates d
+WHERE m.scanner_user_id = d.scanner_user_id
+  AND d.rn > 1;
+
+DROP INDEX IF EXISTS public.idx_attendance_mappings_user_id;
+CREATE UNIQUE INDEX idx_attendance_mappings_user_id
   ON public.attendance_user_mappings (user_id)
   WHERE user_id IS NOT NULL;
 

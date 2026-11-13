@@ -662,30 +662,52 @@ export default function AttendancePage() {
       number,
       { userId: string; matchMethod: "manual" | "auto_name" }
     > = { ...draftUserMappings };
+
+    // Prevent duplicate 1-to-1 assignments by tracking all already-assigned userIds
+    const usedUserIds = new Set<string>();
+    for (let uid = 1; uid <= 64; uid++) {
+      const effectiveUidUser = nextDrafts[uid]?.userId || mappings[uid]?.userId;
+      if (effectiveUidUser) {
+        usedUserIds.add(effectiveUidUser);
+      }
+    }
+
     let matchedCount = 0;
 
     for (let uid = 1; uid <= 64; uid++) {
       const m = mappings[uid];
-      if (!m || m.userId) continue;
+      if (!m || m.userId || nextDrafts[uid]) continue;
       const rawName = (m.memberName || "").trim();
       if (!rawName || rawName.startsWith("บุคลากร พมจ.")) continue;
       const cleanName = stripHonorific(rawName);
-      if (!cleanName) continue;
+      if (cleanName.length < 2) continue;
 
-      const found = effectiveUsersList.find((u) => {
+      const availableUsers = effectiveUsersList.filter(
+        (u) => !usedUserIds.has(u.id)
+      );
+
+      // Priority 1: Exact full name, first name, or nickname match
+      let found = availableUsers.find((u) => {
         const uClean = stripHonorific(u.name);
         const uFirst = uClean.split(/\s+/)[0] || "";
         const uNick = (u.nickname || "").trim().toLowerCase();
         return (
           uClean === cleanName ||
           uFirst === cleanName ||
-          (uNick && uNick === cleanName) ||
-          uClean.includes(cleanName)
+          (uNick && uNick === cleanName)
         );
       });
 
+      // Priority 2: Substring match only when cleanName >= 3 chars
+      if (!found && cleanName.length >= 3) {
+        found = availableUsers.find((u) =>
+          stripHonorific(u.name).includes(cleanName)
+        );
+      }
+
       if (found) {
         nextDrafts[uid] = { userId: found.id, matchMethod: "auto_name" };
+        usedUserIds.add(found.id);
         matchedCount++;
       }
     }
@@ -693,7 +715,7 @@ export default function AttendancePage() {
     setDraftUserMappings(nextDrafts);
     if (matchedCount > 0) {
       showToast(
-        `พบคู่ที่ตรงกับผู้ใช้ระบบ ${matchedCount} รายการ — กด "บันทึกทั้งหมดที่เลือก" เพื่อยืนยัน`
+        `พบคู่ที่ตรงกับผู้ใช้ระบบ ${matchedCount} รายการ (ไม่ซ้ำซ้อน) — กด "บันทึกที่เลือกทั้งหมด" เพื่อยืนยัน`
       );
     } else {
       showToast("ไม่พบชื่อที่ตรงกับผู้ใช้ระบบเพิ่มเติม กรุณาเลือกจากรายการด้านล่าง");
@@ -2267,6 +2289,16 @@ export default function AttendancePage() {
         ).length;
         const draftCount = Object.keys(draftUserMappings).length;
 
+        // Track 1-to-1 userId -> scanner_uid assignments (saved + pending drafts)
+        const assignedUserToUid: Record<string, number> = {};
+        for (const uid of allUids) {
+          const effectiveUserId =
+            draftUserMappings[uid]?.userId ?? mappings[uid]?.userId;
+          if (effectiveUserId) {
+            assignedUserToUid[effectiveUserId] = uid;
+          }
+        }
+
         const filteredUids = allUids.filter((uid) => {
           const m = mappings[uid];
           const stat = scannerUidStats[uid];
@@ -2345,6 +2377,16 @@ export default function AttendancePage() {
                   >
                     ✨ จับคู่อัตโนมัติจากชื่อ
                   </button>
+                  {draftCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setDraftUserMappings({})}
+                      disabled={savingMapping}
+                      className="px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-semibold cursor-pointer transition"
+                    >
+                      ล้างที่เลือกไว้
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={handleSaveMappingsBatch}
@@ -2499,6 +2541,15 @@ export default function AttendancePage() {
                                 value={selectedUserId}
                                 onChange={(e) => {
                                   const nextUserId = e.target.value;
+                                  const conflictUid = nextUserId
+                                    ? assignedUserToUid[nextUserId]
+                                    : undefined;
+                                  if (conflictUid !== undefined && conflictUid !== uid) {
+                                    showToast(
+                                      `ผู้ใช้ระบบนี้ถูกเลือก/จับคู่กับรหัส #${conflictUid} อยู่แล้ว`
+                                    );
+                                    return;
+                                  }
                                   setDraftUserMappings((prev) => {
                                     const next = { ...prev };
                                     if (!nextUserId || nextUserId === (m?.userId ?? "")) {
@@ -2515,12 +2566,24 @@ export default function AttendancePage() {
                                 className="w-full px-2 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
                               >
                                 <option value="">-- ยังไม่ระบุผู้ใช้ระบบ --</option>
-                                {effectiveUsersList.map((u) => (
-                                  <option key={u.id} value={u.id}>
-                                    {u.name}
-                                    {u.division ? ` (${u.division})` : ""}
-                                  </option>
-                                ))}
+                                {effectiveUsersList.map((u) => {
+                                  const takenByUid = assignedUserToUid[u.id];
+                                  const isTakenElsewhere =
+                                    takenByUid !== undefined && takenByUid !== uid;
+                                  return (
+                                    <option
+                                      key={u.id}
+                                      value={u.id}
+                                      disabled={isTakenElsewhere}
+                                    >
+                                      {u.name}
+                                      {u.division ? ` (${u.division})` : ""}
+                                      {isTakenElsewhere
+                                        ? ` — ผูกกับ #${takenByUid} แล้ว`
+                                        : ""}
+                                    </option>
+                                  );
+                                })}
                               </select>
                             </td>
                             <td className="py-2 px-3 text-right whitespace-nowrap space-x-1">
@@ -2610,11 +2673,24 @@ export default function AttendancePage() {
                       className="w-full px-2.5 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
                     >
                       <option value="">-- ไม่ผูกบัญชี (พิมพ์ชื่อเอง) --</option>
-                      {effectiveUsersList.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.name}
-                        </option>
-                      ))}
+                      {effectiveUsersList.map((u) => {
+                        const takenByUid = assignedUserToUid[u.id];
+                        const isTakenElsewhere =
+                          takenByUid !== undefined &&
+                          takenByUid !== editingMappingUid;
+                        return (
+                          <option
+                            key={u.id}
+                            value={u.id}
+                            disabled={isTakenElsewhere}
+                          >
+                            {u.name}
+                            {isTakenElsewhere
+                              ? ` (ผูกกับ #${takenByUid} แล้ว)`
+                              : ""}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
 

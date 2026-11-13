@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS public.attendance_logs (
 
 -- 2. ตารางการจับคู่รหัสเครื่องสแกน (User ID) กับบุคลากร (attendance_user_mappings)
 CREATE TABLE IF NOT EXISTS public.attendance_user_mappings (
-    scanner_user_id INTEGER PRIMARY KEY,
+    scanner_user_id INTEGER PRIMARY KEY CHECK (scanner_user_id BETWEEN 1 AND 64),
     user_id TEXT REFERENCES public.users(id) ON DELETE SET NULL,
     member_id TEXT NOT NULL,
     member_name TEXT NOT NULL,
@@ -60,7 +60,7 @@ CREATE INDEX IF NOT EXISTS idx_attendance_scan_time ON public.attendance_logs (s
 CREATE INDEX IF NOT EXISTS idx_attendance_user_id ON public.attendance_logs (scanner_user_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_member_id ON public.attendance_logs (member_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_is_deleted ON public.attendance_logs (is_deleted);
-CREATE INDEX IF NOT EXISTS idx_attendance_mappings_user_id ON public.attendance_user_mappings (user_id) WHERE user_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_attendance_mappings_user_id ON public.attendance_user_mappings (user_id) WHERE user_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_attendance_logs_user_id_ts ON public.attendance_logs (user_id, scan_timestamp DESC) WHERE is_deleted = false AND user_id IS NOT NULL;
 
 -- 5. เปิดสิทธิ์ Row Level Security (RLS)

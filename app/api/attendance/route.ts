@@ -1077,16 +1077,48 @@ export async function POST(req: NextRequest) {
         matchMethod,
       } = body;
       const uid = Number(scannerUserId);
+      if (!Number.isInteger(uid) || uid < 1 || uid > 64) {
+        return NextResponse.json(
+          { success: false, error: "รหัสเครื่องสแกน (scannerUserId) ต้องเป็นตัวเลข 1 ถึง 64 เท่านั้น" },
+          { status: 400 }
+        );
+      }
+
+      // Hydrate mappings from Supabase so conflict checks & local store reflect live cloud state
+      const cloudMappings = await fetchMappingsFromSupabase();
+      if (cloudMappings) {
+        store.mappings = { ...store.mappings, ...cloudMappings };
+      }
+
+      const normalizedUserId = userId ? String(userId).trim() : null;
+      if (normalizedUserId) {
+        const conflict = Object.values(store.mappings).find(
+          (m) => m.scannerUserId !== uid && m.userId === normalizedUserId
+        );
+        if (conflict) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: `ผู้ใช้ระบบนี้ถูกจับคู่กับรหัสสแกน #${conflict.scannerUserId} (${conflict.memberName}) อยู่แล้ว กรุณายกเลิกรหัสเดิมก่อนเพื่อป้องกันข้อมูลซ้ำซ้อน`,
+            },
+            { status: 409 }
+          );
+        }
+      }
+
       const resolvedMemberId =
-        memberId || userId || `scanner_uid_${uid}`;
+        memberId || normalizedUserId || `scanner_uid_${uid}`;
       const isMapped =
-        Boolean(userId) || !String(resolvedMemberId).startsWith("scanner_uid_");
+        Boolean(normalizedUserId) ||
+        !String(resolvedMemberId).startsWith("scanner_uid_");
 
       store.mappings[uid] = {
         scannerUserId: uid,
-        userId: userId ? String(userId) : null,
+        userId: normalizedUserId,
         memberId: String(resolvedMemberId),
-        memberName: memberName || `บุคลากร พมจ. (รหัสสแกน #${uid})`,
+        memberName:
+          String(memberName || "").trim() ||
+          `บุคลากร พมจ. (รหัสสแกน #${uid})`,
         division: division || "",
         position: position || "",
         isMapped,
@@ -1116,9 +1148,16 @@ export async function POST(req: NextRequest) {
 
       const [mysqlSync, supabaseMapSync] = await Promise.all([
         syncMappingToSynologyMysql(store.mysqlConfig, store.mappings[uid]),
-        syncMappingsToSupabase(store.mappings),
+        syncMappingsToSupabase([store.mappings[uid]]),
         updateAttendanceLogsMappingOnSupabase(uid, store.mappings[uid]),
       ]);
+
+      if (!supabaseMapSync.success && supabaseMapSync.code === "DUPLICATE_USER_MAPPING") {
+        return NextResponse.json(
+          { success: false, error: supabaseMapSync.error },
+          { status: 409 }
+        );
+      }
 
       return NextResponse.json({
         success: true,
@@ -1151,12 +1190,64 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      const cloudMappings = await fetchMappingsFromSupabase();
+      if (cloudMappings) {
+        store.mappings = { ...store.mappings, ...cloudMappings };
+      }
+
+      // Deduplicate by scannerUserId (last wins) & validate 1..64
+      const dedupedByUid = new Map<number, Record<string, unknown>>();
+      for (const raw of items) {
+        const uid = Number(raw?.scannerUserId);
+        if (!Number.isInteger(uid) || uid < 1 || uid > 64) continue;
+        dedupedByUid.set(uid, raw as Record<string, unknown>);
+      }
+
+      if (dedupedByUid.size === 0) {
+        return NextResponse.json(
+          { success: false, error: "ไม่พบรหัสเครื่องสแกนที่ถูกต้อง (1-64)" },
+          { status: 400 }
+        );
+      }
+
+      // Enforce 1-to-1 uniqueness of userId within batch and against other existing mappings
+      const seenUserIdsInBatch = new Map<string, number>();
+      for (const [uid, raw] of dedupedByUid.entries()) {
+        const normalizedUserId = raw.userId ? String(raw.userId).trim() : null;
+        if (!normalizedUserId) continue;
+
+        const batchDupUid = seenUserIdsInBatch.get(normalizedUserId);
+        if (batchDupUid !== undefined) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: `พบการเลือกผู้ใช้ระบบซ้ำกันระหว่างรหัสสแกน #${batchDupUid} และ #${uid}`,
+            },
+            { status: 409 }
+          );
+        }
+        seenUserIdsInBatch.set(normalizedUserId, uid);
+
+        const existingConflict = Object.values(store.mappings).find(
+          (m) =>
+            !dedupedByUid.has(m.scannerUserId) &&
+            m.userId === normalizedUserId
+        );
+        if (existingConflict) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: `ผู้ใช้ระบบที่เลือกสำหรับ #${uid} ถูกจับคู่กับรหัสสแกน #${existingConflict.scannerUserId} (${existingConflict.memberName}) อยู่แล้ว`,
+            },
+            { status: 409 }
+          );
+        }
+      }
+
       const updatedUids: number[] = [];
       const nowIso = new Date().toISOString();
-      for (const raw of items) {
-        const uid = Number(raw.scannerUserId);
-        if (!uid || uid < 1 || uid > 64) continue;
-        const resolvedUserId = raw.userId ? String(raw.userId) : null;
+      for (const [uid, raw] of dedupedByUid.entries()) {
+        const resolvedUserId = raw.userId ? String(raw.userId).trim() : null;
         const resolvedMemberId =
           raw.memberId || resolvedUserId || `scanner_uid_${uid}`;
         const isMapped =
@@ -1167,9 +1258,11 @@ export async function POST(req: NextRequest) {
           scannerUserId: uid,
           userId: resolvedUserId,
           memberId: String(resolvedMemberId),
-          memberName: raw.memberName || `บุคลากร พมจ. (รหัสสแกน #${uid})`,
-          division: raw.division || "",
-          position: raw.position || "",
+          memberName:
+            String(raw.memberName || "").trim() ||
+            `บุคลากร พมจ. (รหัสสแกน #${uid})`,
+          division: String(raw.division || ""),
+          position: String(raw.position || ""),
           isMapped,
           matchMethod:
             raw.matchMethod === "auto_name"
@@ -1201,8 +1294,9 @@ export async function POST(req: NextRequest) {
         saveAttendanceStore(store);
       }
 
-      await Promise.all([
-        syncMappingsToSupabase(store.mappings),
+      const updatedEntries = updatedUids.map((uid) => store.mappings[uid]);
+      const [supabaseMapSync] = await Promise.all([
+        syncMappingsToSupabase(updatedEntries),
         ...updatedUids.map((uid) =>
           syncMappingToSynologyMysql(store.mysqlConfig, store.mappings[uid])
         ),
@@ -1211,9 +1305,17 @@ export async function POST(req: NextRequest) {
         ),
       ]);
 
+      if (!supabaseMapSync.success && supabaseMapSync.code === "DUPLICATE_USER_MAPPING") {
+        return NextResponse.json(
+          { success: false, error: supabaseMapSync.error },
+          { status: 409 }
+        );
+      }
+
       return NextResponse.json({
         success: true,
         updatedCount: updatedUids.length,
+        supabaseMapSync,
         mappings: store.mappings,
       });
     }
@@ -1234,11 +1336,16 @@ export async function POST(req: NextRequest) {
       }
 
       const uid = Number(body.scannerUserId);
-      if (!uid || uid < 1 || uid > 64) {
+      if (!Number.isInteger(uid) || uid < 1 || uid > 64) {
         return NextResponse.json(
           { success: false, error: "scannerUserId ไม่ถูกต้อง" },
           { status: 400 }
         );
+      }
+
+      const cloudMappings = await fetchMappingsFromSupabase();
+      if (cloudMappings) {
+        store.mappings = { ...store.mappings, ...cloudMappings };
       }
 
       store.mappings[uid] = {
@@ -1270,7 +1377,7 @@ export async function POST(req: NextRequest) {
 
       const [mysqlSync, supabaseMapSync] = await Promise.all([
         syncMappingToSynologyMysql(store.mysqlConfig, store.mappings[uid]),
-        syncMappingsToSupabase(store.mappings),
+        syncMappingsToSupabase([store.mappings[uid]]),
         updateAttendanceLogsMappingOnSupabase(uid, store.mappings[uid]),
       ]);
 

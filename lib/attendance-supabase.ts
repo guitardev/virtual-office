@@ -453,10 +453,10 @@ export async function fetchScannerUidStatsFromSupabase(): Promise<
  * ซิงก์การจับคู่รหัสเครื่องสแกน (User ID 1..64) ขึ้น Supabase
  */
 export async function syncMappingsToSupabase(
-  mappings: Record<number, ScannerUserMapping>
+  mappings: Record<number, ScannerUserMapping> | ScannerUserMapping[]
 ) {
   try {
-    const entries = Object.values(mappings);
+    const entries = Array.isArray(mappings) ? mappings : Object.values(mappings);
     if (entries.length === 0) return { success: true, count: 0 };
 
     const extendedRows = entries.map((m) => {
@@ -484,6 +484,24 @@ export async function syncMappingsToSupabase(
       .upsert(extendedRows, { onConflict: "scanner_user_id" });
 
     if (error) {
+      if (error.code === "23505") {
+        return {
+          success: false,
+          count: 0,
+          code: "DUPLICATE_USER_MAPPING",
+          error: "ผู้ใช้ระบบนี้ถูกจับคู่กับรหัสสแกนอื่นอยู่แล้ว (ห้ามจับคู่ซ้ำซ้อน)",
+        };
+      }
+
+      const isMissingColumnError =
+        error.code === "42703" ||
+        error.code === "PGRST204" ||
+        /column|schema cache/i.test(error.message || "");
+
+      if (!isMissingColumnError) {
+        throw error;
+      }
+
       // Fallback gracefully if migration 20261113_link_attendance_to_users.sql has not been applied yet
       const baseRows = entries.map((m) => ({
         scanner_user_id: m.scannerUserId,
