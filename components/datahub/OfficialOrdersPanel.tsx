@@ -182,6 +182,34 @@ export function OfficialOrdersPanel({
     setShowFormModal(true);
   };
 
+  const buildOrderFileUrl = (
+    item: OfficialOrderItem,
+    mode: "open" | "download"
+  ): string => {
+    const rawSid = getUserNasSid();
+    const realSid =
+      rawSid && !rawSid.startsWith("mock_") && rawSid !== "system_chat_session"
+        ? rawSid
+        : null;
+
+    if (item.nasPath) {
+      const sp = new URLSearchParams();
+      sp.set("path", item.nasPath);
+      if (item.fileName) sp.set("name", item.fileName);
+      sp.set("mode", mode);
+      sp.set("strict", "1");
+      if (realSid) sp.set("sid", realSid);
+      return `/api/nas/download?${sp.toString()}`;
+    }
+
+    if (!item.fileUrl) return "";
+    const url = new URL(item.fileUrl, "http://localhost");
+    url.searchParams.set("mode", mode);
+    url.searchParams.set("strict", "1");
+    if (realSid) url.searchParams.set("sid", realSid);
+    return `${url.pathname}${url.search}`;
+  };
+
   const handleUploadPdfToNas = async (file: File) => {
     if (file.size > MAX_SERVERLESS_UPLOAD_BYTES) {
       showToast(
@@ -198,7 +226,9 @@ export function OfficialOrdersPanel({
       const fd = new FormData();
       fd.append("folder_path", targetFolder);
       const sid = getUserNasSid();
-      if (sid) fd.append("sid", sid);
+      if (sid && !sid.startsWith("mock_") && sid !== "system_chat_session") {
+        fd.append("sid", sid);
+      }
       // File MUST be appended last for Synology FileStation Upload
       fd.append("file", file, file.name);
 
@@ -214,10 +244,10 @@ export function OfficialOrdersPanel({
         return;
       }
 
-      const uploadedPath = `${targetFolder}/${file.name}`;
+      const uploadedPath = data.file?.path || `${targetFolder}/${file.name}`;
       const viewUrl = `/api/nas/download?path=${encodeURIComponent(
         uploadedPath
-      )}&name=${encodeURIComponent(file.name)}&mode=open`;
+      )}&name=${encodeURIComponent(file.name)}&mode=open&strict=1`;
 
       setFormNasPath(uploadedPath);
       setFormFileUrl(viewUrl);
@@ -567,7 +597,7 @@ export function OfficialOrdersPanel({
                       </span>
                     </td>
                     <td className="py-3 px-4 align-top text-right whitespace-nowrap space-x-1">
-                      {item.fileUrl ? (
+                      {item.fileUrl || item.nasPath ? (
                         <>
                           <button
                             type="button"
@@ -578,7 +608,7 @@ export function OfficialOrdersPanel({
                             👁️ ดูไฟล์
                           </button>
                           <a
-                            href={item.fileUrl.replace("mode=open", "mode=download")}
+                            href={buildOrderFileUrl(item, "download")}
                             target="_blank"
                             rel="noreferrer"
                             className="inline-block px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-[11px]"
@@ -923,7 +953,7 @@ export function OfficialOrdersPanel({
       )}
 
       {/* PDF Preview Modal */}
-      {previewOrder && previewOrder.fileUrl && (
+      {previewOrder && (previewOrder.fileUrl || previewOrder.nasPath) && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-5xl w-full h-[88vh] flex flex-col overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800">
             <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 dark:border-slate-800">
@@ -948,7 +978,7 @@ export function OfficialOrdersPanel({
               </button>
             </div>
             <iframe
-              src={previewOrder.fileUrl}
+              src={buildOrderFileUrl(previewOrder, "open")}
               className="flex-1 w-full border-0"
               title={previewOrder.title}
             />

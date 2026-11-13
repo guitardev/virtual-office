@@ -83,6 +83,7 @@ export async function GET(req: NextRequest) {
     const filePath = searchParams.get("path") || searchParams.get("file_path");
     const sid = searchParams.get("sid");
     const rawMode = searchParams.get("mode");
+    const strictMode = searchParams.get("strict") === "1";
     const nasUrl =
       searchParams.get("url") ||
       process.env.SYNOLOGY_NAS_URL ||
@@ -114,6 +115,16 @@ export async function GET(req: NextRequest) {
 
     // In mock or simulated test environments (or when no real NAS session could be acquired)
     if (!effectiveSid || effectiveSid.startsWith("mock_") || effectiveSid === "system_chat_session") {
+      if (strictMode) {
+        return NextResponse.json(
+          {
+            success: false,
+            requireAuth: true,
+            error: "ไม่พบเซสชัน Synology NAS สำหรับเปิดไฟล์จริง กรุณาเข้าสู่ระบบด้วยบัญชี Synology NAS ก่อนเปิดดูเอกสาร",
+          },
+          { status: 401 }
+        );
+      }
       if (isImage) {
         // Return valid SVG image for preview in <img> tags so preview never breaks
         const svgContent = generateMockImageSvg(fileName);
@@ -155,6 +166,15 @@ export async function GET(req: NextRequest) {
       });
     } catch (fetchErr: any) {
       console.warn("Synology NAS download connection failed, serving fallback:", fetchErr?.message);
+      if (strictMode) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ Synology NAS เพื่อดึงไฟล์จริงได้ในขณะนี้",
+          },
+          { status: 502 }
+        );
+      }
       if (isImage) {
         return new NextResponse(generateMockImageSvg(fileName), {
           status: 200,
@@ -208,6 +228,25 @@ export async function GET(req: NextRequest) {
 
     // If still an API error or NAS error after retry
     if (!nasRes.ok || (returnedContentType.includes("application/json") && !fileName.endsWith(".json"))) {
+      if (strictMode) {
+        const errJson = returnedContentType.includes("application/json")
+          ? await nasRes.clone().json().catch(() => null)
+          : null;
+        const errCode = errJson?.error?.code;
+        return NextResponse.json(
+          {
+            success: false,
+            code: errCode || nasRes.status,
+            error:
+              errCode === 408 || errCode === 1804 || errCode === 1805
+                ? `ไม่พบไฟล์ "${fileName}" บน Synology NAS (อาจยังไม่ได้อัปโหลดจริง หรือไฟล์ถูกย้ายตำแหน่ง: ${filePath})`
+                : errCode === 119
+                ? "เซสชัน Synology NAS หมดอายุ กรุณาเข้าสู่ระบบ NAS ใหม่อีกครั้ง"
+                : `ไม่สามารถดึงไฟล์ "${fileName}" จาก Synology NAS ได้ (รหัส ${errCode || nasRes.status})`,
+          },
+          { status: errCode === 119 ? 401 : 404 }
+        );
+      }
       if (isImage) {
         return new NextResponse(generateMockImageSvg(fileName), {
           status: 200,
