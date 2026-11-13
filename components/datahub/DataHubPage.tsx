@@ -10,6 +10,7 @@ import {
   exportSocialStatsToCsv,
 } from "@/lib/social-statistics";
 import { SocialStatisticsReportModal } from "./SocialStatisticsReportModal";
+import { OfficialOrdersPanel } from "./OfficialOrdersPanel";
 import { isRealMember, isSystemServiceAccount } from "@/lib/supabase";
 
 interface DataHubPageProps {
@@ -154,8 +155,8 @@ export const MISSION_GROUPS: MissionGroup[] = [
 ];
 
 export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPageProps) {
-  // Main Tab Navigation: stats, divisions, personnel, documents
-  const [activeMainTab, setActiveMainTab] = useState<"stats" | "divisions" | "personnel" | "documents">("stats");
+  // Main Tab Navigation: stats, divisions, personnel, documents, orders
+  const [activeMainTab, setActiveMainTab] = useState<"stats" | "divisions" | "personnel" | "documents" | "orders">("stats");
 
   // Social Statistics Filters & Export State
   const [fiscalYear, setFiscalYear] = useState<string>("2569");
@@ -448,6 +449,19 @@ export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPag
             >
               <span>📄</span>
               <span>คลังแบบฟอร์มและระเบียบราชการ</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveMainTab("orders")}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                activeMainTab === "orders"
+                  ? "bg-indigo-600 text-white shadow-md border border-indigo-400/40"
+                  : "bg-white/10 hover:bg-white/20 text-slate-200"
+              }`}
+            >
+              <span>📜</span>
+              <span>คลังคำสั่ง / ประกาศ</span>
             </button>
           </div>
 
@@ -1439,6 +1453,11 @@ export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPag
             </div>
           )}
         </div>
+      )}
+
+      {/* ─── 5B. TAB 5: OFFICIAL ORDERS & ANNOUNCEMENTS REPOSITORY ─── */}
+      {activeMainTab === "orders" && (
+        <OfficialOrdersPanel currentUser={currentUser} showToast={showToast} />
       )}
 
       {/* ─── 6. OFFICIAL PRINTABLE REPORT MODAL ─── */}
