@@ -29,6 +29,25 @@ const DIVISION_OPTIONS = [
   "ศูนย์บริการคนพิการจังหวัดกำแพงเพชร",
 ];
 
+const THAI_FULL_MONTHS = [
+  "มกราคม",
+  "กุมภาพันธ์",
+  "มีนาคม",
+  "เมษายน",
+  "พฤษภาคม",
+  "มิถุนายน",
+  "กรกฎาคม",
+  "สิงหาคม",
+  "กันยายน",
+  "ตุลาคม",
+  "พฤศจิกายน",
+  "ธันวาคม",
+];
+
+function getDaysInMonth(adYear: number, month1To12: number): number {
+  return new Date(adYear, month1To12, 0).getDate();
+}
+
 export function OfficialOrdersPanel({
   currentUser,
   showToast,
@@ -670,15 +689,97 @@ export function OfficialOrdersPanel({
 
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    วันที่ลงนาม *
+                    วันที่ลงนาม (พ.ศ.) *
                   </label>
-                  <input
-                    type="date"
-                    required
-                    value={formIssuedDate}
-                    onChange={(e) => setFormIssuedDate(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-                  />
+                  {(() => {
+                    const [adYStr, mStr, dStr] = (
+                      /^\d{4}-\d{2}-\d{2}$/.test(formIssuedDate)
+                        ? formIssuedDate
+                        : new Date().toISOString().slice(0, 10)
+                    ).split("-");
+                    const adY = Number(adYStr);
+                    const beY = adY + 543;
+                    const monthNum = Number(mStr);
+                    const dayNum = Number(dStr);
+                    const maxDays = getDaysInMonth(adY, monthNum);
+                    const currentBeYear = new Date().getFullYear() + 543;
+                    const yearOptions = Array.from(
+                      { length: 20 },
+                      (_, idx) => currentBeYear + 2 - idx
+                    );
+
+                    const updateBeDate = (
+                      nextBeY: number,
+                      nextMonth: number,
+                      nextDay: number
+                    ) => {
+                      const nextAdY = nextBeY - 543;
+                      const clampedDay = Math.min(
+                        nextDay,
+                        getDaysInMonth(nextAdY, nextMonth)
+                      );
+                      setFormIssuedDate(
+                        `${nextAdY}-${String(nextMonth).padStart(2, "0")}-${String(
+                          clampedDay
+                        ).padStart(2, "0")}`
+                      );
+                    };
+
+                    return (
+                      <div className="space-y-1">
+                        <div className="grid grid-cols-3 gap-1.5">
+                          <select
+                            aria-label="วันที่ (พ.ศ.)"
+                            value={dayNum}
+                            onChange={(e) =>
+                              updateBeDate(beY, monthNum, Number(e.target.value))
+                            }
+                            className="px-2 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs"
+                          >
+                            {Array.from(
+                              { length: maxDays },
+                              (_, i) => i + 1
+                            ).map((d) => (
+                              <option key={d} value={d}>
+                                {d}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            aria-label="เดือน"
+                            value={monthNum}
+                            onChange={(e) =>
+                              updateBeDate(beY, Number(e.target.value), dayNum)
+                            }
+                            className="px-2 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs"
+                          >
+                            {THAI_FULL_MONTHS.map((mName, idx) => (
+                              <option key={mName} value={idx + 1}>
+                                {mName}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            aria-label="ปี พ.ศ."
+                            value={beY}
+                            onChange={(e) =>
+                              updateBeDate(Number(e.target.value), monthNum, dayNum)
+                            }
+                            className="px-2 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-semibold"
+                          >
+                            {yearOptions.map((y) => (
+                              <option key={y} value={y}>
+                                {y}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="text-[10px] text-indigo-600 dark:text-indigo-400">
+                          วันที่ราชการ: {formatThaiOrderDate(formIssuedDate)}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -830,6 +931,9 @@ export function OfficialOrdersPanel({
                 <span className="font-bold text-sm text-slate-900 dark:text-white">
                   {ORDER_CATEGORY_LABELS[previewOrder.docCategory]} ที่{" "}
                   {previewOrder.docNumberRaw}
+                </span>
+                <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold ml-2">
+                  ลงวันที่ {formatThaiOrderDate(previewOrder.issuedDate)}
                 </span>
                 <span className="text-xs text-slate-500 ml-2">
                   {previewOrder.title}
