@@ -448,7 +448,7 @@ export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPag
               }`}
             >
               <span>📄</span>
-              <span>คลังแบบฟอร์มและระเบียบราชการ</span>
+              <span>คลังแบบฟอร์มและคู่มือปฏิบัติงาน</span>
             </button>
 
             <button
@@ -461,7 +461,7 @@ export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPag
               }`}
             >
               <span>📜</span>
-              <span>คลังคำสั่ง / ประกาศ</span>
+              <span>คำสั่ง / ประกาศ / ระเบียบ</span>
             </button>
           </div>
 
@@ -1379,22 +1379,31 @@ export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPag
             <div>
               <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-2">
                 <span>📄</span>
-                <span>สารบบเอกสาร แบบฟอร์มคำขอ และระเบียบราชการ</span>
+                <span>สารบบแบบฟอร์มคำขอ และคู่มือปฏิบัติงาน</span>
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                ดาวน์โหลดแบบฟอร์มมาตรฐาน ระเบียบแนวปฏิบัติราชการ พมจ.กำแพงเพชร
+                ดาวน์โหลดแบบฟอร์มมาตรฐาน คู่มือ และแผนปฏิบัติราชการของ 4 กลุ่มภารกิจ พมจ.กำแพงเพชร
               </p>
             </div>
 
-            <div className="relative w-full sm:w-64">
-              <input
-                type="text"
-                placeholder="ค้นหาเอกสาร..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-              />
-              <span className="absolute left-2.5 top-2 text-xs text-slate-400">🔍</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setActiveMainTab("orders")}
+                className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold cursor-pointer transition-colors"
+              >
+                📜 ค้นหาคำสั่ง / ประกาศ / ระเบียบ →
+              </button>
+              <div className="relative w-full sm:w-64">
+                <input
+                  type="text"
+                  placeholder="ค้นหาแบบฟอร์ม / คู่มือ..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                />
+                <span className="absolute left-2.5 top-2 text-xs text-slate-400">🔍</span>
+              </div>
             </div>
           </div>
 
