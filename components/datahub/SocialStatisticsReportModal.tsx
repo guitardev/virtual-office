@@ -30,6 +30,8 @@ interface SocialStatisticsReportModalProps {
 type ReportScope = "full" | "mso" | "districts";
 
 const fmtInt = (n: number) => Number(n || 0).toLocaleString("th-TH");
+const fmtOrNA = (n: number | null | undefined) =>
+  n == null ? "NA" : Number(n).toLocaleString("th-TH");
 const fmtPct = (num: number, den: number) =>
   den > 0 ? ((num / den) * 100).toFixed(1) : "0.0";
 
@@ -690,9 +692,11 @@ export function SocialStatisticsReportModal({
                     <tbody>
                       {stats.map((row) => {
                         const helpPct =
-                          row.vulnerableHouseholds > 0
-                            ? ((row.helpedHouseholds / row.vulnerableHouseholds) * 100).toFixed(1)
-                            : "0.0";
+                          row.vulnerableHouseholds != null &&
+                          row.vulnerableHouseholds > 0 &&
+                          row.helpedHouseholds != null
+                            ? `${((row.helpedHouseholds / row.vulnerableHouseholds) * 100).toFixed(1)}%`
+                            : null;
                         const isHighlighted = selectedDistrictName === row.districtName;
                         return (
                           <tr
@@ -702,29 +706,31 @@ export function SocialStatisticsReportModal({
                             <td className="border border-slate-300 px-2.5 py-1.5 text-slate-900">
                               {row.districtName}
                             </td>
-                            <td className="border border-slate-300 px-2 py-1.5 text-right num tabular-nums">
-                              {fmtInt(row.population)}
+                            <td className="border border-slate-300 px-2 py-1.5 text-right num tabular-nums text-slate-500">
+                              {fmtOrNA(row.population)}
                             </td>
-                            <td className="border border-slate-300 px-2 py-1.5 text-right num font-bold tabular-nums">
-                              {fmtInt(row.vulnerableHouseholds)}
+                            <td className="border border-slate-300 px-2 py-1.5 text-right num font-bold tabular-nums text-slate-700">
+                              {fmtOrNA(row.vulnerableHouseholds)}
                             </td>
                             <td className="border border-slate-300 px-2 py-1.5 text-right num tabular-nums text-emerald-700 font-semibold">
-                              {fmtInt(row.helpedHouseholds)} ({helpPct}%)
+                              {row.helpedHouseholds != null
+                                ? `${fmtOrNA(row.helpedHouseholds)}${helpPct ? ` (${helpPct})` : ""}`
+                                : "NA"}
                             </td>
                             <td className="border border-slate-300 px-2 py-1.5 text-right num tabular-nums text-amber-700">
-                              {fmtInt(row.inProgressHouseholds)}
+                              {fmtOrNA(row.inProgressHouseholds)}
                             </td>
                             <td className="border border-slate-300 px-2 py-1.5 text-right num tabular-nums">
-                              {fmtInt(row.disabilityRegistered)}
+                              {fmtOrNA(row.disabilityRegistered)}
                             </td>
                             <td className="border border-slate-300 px-2 py-1.5 text-right num tabular-nums">
-                              {fmtInt(row.elderlyDependent)}
+                              {fmtOrNA(row.elderlyDependent)}
                             </td>
                             <td className="border border-slate-300 px-2 py-1.5 text-right num tabular-nums">
-                              {fmtInt(row.childSupportBeneficiaries)}
+                              {fmtOrNA(row.childSupportBeneficiaries)}
                             </td>
                             <td className="border border-slate-300 px-2 py-1.5 text-right num tabular-nums text-rose-700">
-                              {fmtInt(row.emergencyCases1300)}
+                              {fmtOrNA(row.emergencyCases1300)}
                             </td>
                           </tr>
                         );
@@ -734,28 +740,30 @@ export function SocialStatisticsReportModal({
                       <tr data-total-row="true" className="total-row bg-sky-50 font-bold text-slate-900">
                         <td className="border border-slate-300 px-2.5 py-1.5">รวมทั้งจังหวัด (11 อำเภอ)</td>
                         <td className="border border-slate-300 px-2 py-1.5 text-right num tabular-nums">
-                          {fmtInt(totals.population)}
+                          {fmtOrNA(totals.population)}
                         </td>
                         <td className="border border-slate-300 px-2 py-1.5 text-right num tabular-nums">
-                          {fmtInt(totals.vulnerableHouseholds)}
+                          {fmtOrNA(totals.vulnerableHouseholds)}
                         </td>
                         <td className="border border-slate-300 px-2 py-1.5 text-right num tabular-nums text-emerald-800">
-                          {fmtInt(totals.helpedHouseholds)} ({fmtPct(totals.helpedHouseholds, totals.vulnerableHouseholds)}%)
+                          {totals.helpedHouseholds != null && totals.vulnerableHouseholds != null
+                            ? `${fmtOrNA(totals.helpedHouseholds)} (${fmtPct(totals.helpedHouseholds, totals.vulnerableHouseholds)}%)`
+                            : "NA"}
                         </td>
                         <td className="border border-slate-300 px-2 py-1.5 text-right num tabular-nums text-amber-800">
-                          {fmtInt(totals.inProgressHouseholds)}
+                          {fmtOrNA(totals.inProgressHouseholds)}
                         </td>
                         <td className="border border-slate-300 px-2 py-1.5 text-right num tabular-nums">
-                          {fmtInt(totals.disabilityRegistered)}
+                          {fmtOrNA(totals.disabilityRegistered)}
                         </td>
                         <td className="border border-slate-300 px-2 py-1.5 text-right num tabular-nums">
-                          {fmtInt(totals.elderlyDependent)}
+                          {fmtOrNA(totals.elderlyDependent)}
                         </td>
                         <td className="border border-slate-300 px-2 py-1.5 text-right num tabular-nums">
-                          {fmtInt(totals.childSupportBeneficiaries)}
+                          {fmtOrNA(totals.childSupportBeneficiaries)}
                         </td>
                         <td className="border border-slate-300 px-2 py-1.5 text-right num tabular-nums text-rose-800">
-                          {fmtInt(totals.emergencyCases1300)}
+                          {fmtOrNA(totals.emergencyCases1300)}
                         </td>
                       </tr>
                     </tfoot>

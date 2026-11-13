@@ -723,7 +723,7 @@ export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPag
                   <span>ตารางสถิติจำแนกรายอำเภอในจังหวัดกำแพงเพชร ({statsList.length} อำเภอ)</span>
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  คลิกที่ชื่ออำเภอเพื่อดูรายละเอียดเฉพาะพื้นที่
+                  แสดงเฉพาะข้อมูลที่มีอยู่จริง (หากยังไม่มีข้อมูลจำแนกรายอำเภอในฐาน MSO-Logbook ระบบจะแสดง <span className="font-bold text-slate-700">NA</span>)
                 </p>
               </div>
 
@@ -755,10 +755,14 @@ export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPag
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {statsList.map((d) => {
+                    const fmtNumOrNA = (v: number | null) =>
+                      v == null ? "NA" : v.toLocaleString("th-TH");
                     const pct =
-                      d.vulnerableHouseholds > 0
+                      d.vulnerableHouseholds != null &&
+                      d.vulnerableHouseholds > 0 &&
+                      d.helpedHouseholds != null
                         ? ((d.helpedHouseholds / d.vulnerableHouseholds) * 100).toFixed(1)
-                        : "0.0";
+                        : null;
                     const isSelected = districtFilter === d.districtId;
 
                     return (
@@ -781,38 +785,44 @@ export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPag
                           )}
                         </td>
                         <td className="py-2.5 px-2 text-center text-slate-600">
-                          {d.subdistrictCount}
+                          {fmtNumOrNA(d.subdistrictCount)}
                         </td>
-                        <td className="py-2.5 px-3 text-right text-slate-600 font-mono">
-                          {d.population.toLocaleString()}
+                        <td className="py-2.5 px-3 text-right text-slate-500 font-mono">
+                          {fmtNumOrNA(d.population)}
                         </td>
-                        <td className="py-2.5 px-3 text-right font-bold text-slate-900 font-mono">
-                          {d.vulnerableHouseholds.toLocaleString()}
+                        <td className="py-2.5 px-3 text-right font-bold text-slate-700 font-mono">
+                          {fmtNumOrNA(d.vulnerableHouseholds)}
                         </td>
                         <td className="py-2.5 px-3 text-right text-emerald-700 font-bold font-mono">
-                          {d.helpedHouseholds.toLocaleString()}
+                          {fmtNumOrNA(d.helpedHouseholds)}
                         </td>
                         <td className="py-2.5 px-3 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
-                            <div className="w-16 bg-slate-100 rounded-full h-2 overflow-hidden">
-                              <div
-                                className="bg-emerald-500 h-2 rounded-full"
-                                style={{ width: `${Math.min(100, Number(pct))}%` }}
-                              />
+                          {pct != null ? (
+                            <div className="flex items-center justify-center gap-1.5">
+                              <div className="w-16 bg-slate-100 rounded-full h-2 overflow-hidden">
+                                <div
+                                  className="bg-emerald-500 h-2 rounded-full"
+                                  style={{ width: `${Math.min(100, Number(pct))}%` }}
+                                />
+                              </div>
+                              <span className="font-bold text-[11px] text-emerald-700">
+                                {pct}%
+                              </span>
                             </div>
-                            <span className="font-bold text-[11px] text-emerald-700">
-                              {pct}%
-                            </span>
-                          </div>
+                          ) : (
+                            <span className="font-mono text-slate-400">NA</span>
+                          )}
                         </td>
                         <td className="py-2.5 px-3 text-right text-blue-700 font-mono">
-                          {d.disabilityRegistered.toLocaleString()}
+                          {fmtNumOrNA(d.disabilityRegistered)}
                         </td>
                         <td className="py-2.5 px-3 text-right text-amber-700 font-mono">
-                          {d.childSupportBeneficiaries.toLocaleString()}
+                          {fmtNumOrNA(d.childSupportBeneficiaries)}
                         </td>
-                        <td className="py-2.5 px-3 text-right text-slate-800 font-mono">
-                          {(d.budgetDisbursedThb / 1000000).toFixed(2)} ลบ.
+                        <td className="py-2.5 px-3 text-right text-slate-500 font-mono">
+                          {d.budgetDisbursedThb != null
+                            ? `${(d.budgetDisbursedThb / 1000000).toFixed(2)} ลบ.`
+                            : "NA"}
                         </td>
                       </tr>
                     );
