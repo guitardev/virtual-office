@@ -782,6 +782,188 @@ export async function fetchLatestAttendanceSyncTelemetryFromSupabase(): Promise<
   }
 }
 
+export interface RemoteAttendanceSyncRequest {
+  id: string;
+  requestId: string;
+  status: "pending" | "running" | "success" | "error";
+  state: "pending" | "running" | "completed" | "failed";
+  limitLatest: number;
+  requestedBy: string;
+  requestedAt: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  workerHost?: string | null;
+  error?: string | null;
+  result?: {
+    deviceTotalCount?: number;
+    pulledCount?: number;
+    addedCount?: number;
+    updatedCount?: number;
+    nasActiveAfter?: number | null;
+    supabaseActiveAfter?: number | null;
+    elapsedMs?: number;
+  } | null;
+}
+
+const REMOTE_SYNC_REQUEST_ACTOR_ID = "hip_cmi681s_sync_request";
+
+function mapAuditRowToRemoteSyncRequest(row: {
+  id: string;
+  timestamp?: string;
+  actor_name?: string;
+  status?: string;
+  metadata?: Record<string, unknown> | null;
+}): RemoteAttendanceSyncRequest {
+  const meta = row.metadata || {};
+  const rawStatus = String(row.status || "pending");
+  const status: RemoteAttendanceSyncRequest["status"] =
+    rawStatus === "running" || rawStatus === "success" || rawStatus === "error"
+      ? rawStatus
+      : "pending";
+  const rawState = String(meta.state || "");
+  const state: RemoteAttendanceSyncRequest["state"] =
+    rawState === "running" || rawState === "completed" || rawState === "failed"
+      ? rawState
+      : status === "success"
+      ? "completed"
+      : status === "error"
+      ? "failed"
+      : status === "running"
+      ? "running"
+      : "pending";
+
+  return {
+    id: String(row.id),
+    requestId:
+      typeof meta.requestId === "string" ? meta.requestId : String(row.id),
+    status,
+    state,
+    limitLatest:
+      typeof meta.limitLatest === "number" ? meta.limitLatest : 1500,
+    requestedBy:
+      typeof meta.requestedBy === "string"
+        ? meta.requestedBy
+        : row.actor_name || "ผู้ดูแลระบบ",
+    requestedAt:
+      (typeof meta.requestedAt === "string" ? meta.requestedAt : null) ||
+      row.timestamp ||
+      new Date().toISOString(),
+    startedAt: typeof meta.startedAt === "string" ? meta.startedAt : null,
+    completedAt: typeof meta.completedAt === "string" ? meta.completedAt : null,
+    workerHost: typeof meta.workerHost === "string" ? meta.workerHost : null,
+    error: typeof meta.error === "string" ? meta.error : null,
+    result:
+      meta.result && typeof meta.result === "object"
+        ? (meta.result as RemoteAttendanceSyncRequest["result"])
+        : null,
+  };
+}
+
+/**
+ * ดึงคำสั่งซิงก์ระยะไกล (Remote Sync Request) ล่าสุดจาก Supabase (audit_logs)
+ */
+export async function fetchLatestRemoteAttendanceSyncRequest(): Promise<RemoteAttendanceSyncRequest | null> {
+  try {
+    const { data, error } = await supabaseClient
+      .from("audit_logs")
+      .select("id, timestamp, actor_name, status, metadata")
+      .eq("actor_id", REMOTE_SYNC_REQUEST_ACTOR_ID)
+      .order("timestamp", { ascending: false })
+      .limit(1);
+
+    if (error || !data || data.length === 0) return null;
+    return mapAuditRowToRemoteSyncRequest(
+      data[0] as {
+        id: string;
+        timestamp?: string;
+        actor_name?: string;
+        status?: string;
+        metadata?: Record<string, unknown> | null;
+      }
+    );
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * ส่งคำสั่งซิงก์เครื่องสแกนจากระยะไกล (Cloud/Vercel) เข้าคิวใน Supabase
+ * เพื่อให้เครื่อง LAN ที่รัน worker มารับไปดึงจากเครื่องสแกนจริง
+ */
+export async function enqueueRemoteAttendanceSyncRequest(opts: {
+  limitLatest: number;
+  actorId?: string;
+  actorName?: string;
+}): Promise<{
+  success: boolean;
+  request?: RemoteAttendanceSyncRequest;
+  deduplicated?: boolean;
+  error?: string;
+}> {
+  try {
+    const latest = await fetchLatestRemoteAttendanceSyncRequest();
+    if (latest && (latest.state === "pending" || latest.state === "running")) {
+      const reqTime = new Date(latest.requestedAt).getTime();
+      if (!Number.isNaN(reqTime) && Date.now() - reqTime < 3 * 60 * 1000) {
+        return { success: true, request: latest, deduplicated: true };
+      }
+    }
+
+    const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const requestedAt = new Date().toISOString();
+    const limitLatest = typeof opts.limitLatest === "number" ? opts.limitLatest : 1500;
+    const requestedBy = opts.actorName || "ผู้ดูแลระบบ (Cloud)";
+
+    const { data, error } = await supabaseClient
+      .from("audit_logs")
+      .insert({
+        actor_id: REMOTE_SYNC_REQUEST_ACTOR_ID,
+        actor_name: requestedBy,
+        action: "ส่งคำสั่งซิงก์เครื่องสแกนจากระยะไกล (Cloud Queue)",
+        target: `ขอซิงก์ ${
+          limitLatest <= 0
+            ? "ทั้งหมด"
+            : `${limitLatest.toLocaleString()} รายการล่าสุด`
+        }`,
+        status: "pending",
+        metadata: {
+          type: "attendance_remote_sync_request",
+          requestId,
+          limitLatest,
+          requestedBy,
+          requestedById: opts.actorId || "",
+          requestedAt,
+          state: "pending",
+        },
+      })
+      .select("id, timestamp, actor_name, status, metadata")
+      .single();
+
+    if (error || !data) {
+      return {
+        success: false,
+        error: error?.message || "ไม่สามารถส่งคำสั่งซิงก์ระยะไกลเข้าคิวได้",
+      };
+    }
+
+    return {
+      success: true,
+      request: mapAuditRowToRemoteSyncRequest(
+        data as {
+          id: string;
+          timestamp?: string;
+          actor_name?: string;
+          status?: string;
+          metadata?: Record<string, unknown> | null;
+        }
+      ),
+    };
+  } catch (err: unknown) {
+    const e = err as { message?: string };
+    return { success: false, error: e.message || "Enqueue failed" };
+  }
+}
+
 /**
  * ดึงวัน-เวลาที่สแกนล่าสุดในฐานข้อมูล Supabase
  */

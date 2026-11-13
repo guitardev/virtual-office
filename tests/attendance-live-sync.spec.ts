@@ -158,10 +158,62 @@ test.describe("ระบบจัดการข้อมูลลงเวล�
     await expect(page.locator("tbody tr").first()).toContainText("ปีงบ 2570");
   });
 
-  test("3. จำลองโหมด Cloud Server (Vercel) ต้องแสดงยอด Telemetry ล่าสุด ตัวเลือกปีงบประมาณ และปิดปุ่มซิงก์เครื่อง LAN อย่างถูกต้อง", async ({
+  test("3. จำลองโหมด Cloud Server (Vercel) ต้องแสดงยอด Telemetry ล่าสุด ตัวเลือกปีงบประมาณ และสั่งซิงก์ระยะไกล (Remote Queue) ได้", async ({
     page,
   }) => {
+    let pollCount = 0;
     await page.route("**/api/attendance*", async (route) => {
+      const req = route.request();
+      const url = req.url();
+      if (req.method() === "POST") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            queued: true,
+            deduplicated: false,
+            remoteSyncRequest: {
+              id: "req-row-1",
+              requestId: "req_test_1",
+              status: "pending",
+              state: "pending",
+              limitLatest: 1500,
+              requestedBy: "นายเสกพล ดิษฐโชติ",
+              requestedAt: "2026-11-13T01:50:00.000Z",
+            },
+          }),
+        });
+        return;
+      }
+
+      if (url.includes("checkRemoteSync=1")) {
+        pollCount++;
+        const completed = pollCount >= 1;
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            remoteSyncRequest: {
+              id: "req-row-1",
+              requestId: "req_test_1",
+              status: completed ? "success" : "running",
+              state: completed ? "completed" : "running",
+              limitLatest: 1500,
+              requestedBy: "นายเสกพล ดิษฐโชติ",
+              requestedAt: "2026-11-13T01:50:00.000Z",
+              completedAt: completed ? "2026-11-13T01:50:05.000Z" : null,
+              workerHost: "OFFICE-LAN-PC",
+              result: completed
+                ? { pulledCount: 1500, addedCount: 2, deviceTotalCount: 30422 }
+                : null,
+            },
+          }),
+        });
+        return;
+      }
+
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -239,8 +291,18 @@ test.describe("ระบบจัดการข้อมูลลงเวล�
     const monthSelect = page.getByLabel("เดือน (ปฏิทินปีงบประมาณ)");
     await expect(monthSelect).toContainText("พ.ย. 2569 (เดือน 2/12 • ปีงบ 2570)");
 
-    const syncButton = page.locator("button:has-text('ซิงก์ข้อมูลจาก')").first();
-    await expect(syncButton).toBeDisabled();
+    const remoteSyncButton = page.locator("button:has-text('สั่งซิงก์จากเครื่องสแกน (Remote)')").first();
+    await expect(remoteSyncButton).toBeVisible();
+    await expect(remoteSyncButton).toBeEnabled();
+
+    await remoteSyncButton.click();
+    await expect(
+      page.locator("text=ส่งคำสั่งซิงก์เข้าคิว Supabase แล้ว")
+    ).toBeVisible({ timeout: 5000 });
+
+    // รอจน polling เสร็จสิ้นและปุ่มกลับมาพร้อมใช้งานอีกครั้ง
+    await expect(remoteSyncButton).toBeEnabled({ timeout: 10000 });
+    expect(pollCount).toBeGreaterThanOrEqual(1);
   });
 });
 

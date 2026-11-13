@@ -5,9 +5,13 @@
 # หรือกำหนดเวลาเอง:
 #   powershell -ExecutionPolicy Bypass -File scripts\install-attendance-sync-task.ps1 -Times "08:32","16:32"
 
+# หรือติดตั้งตัวรับคำสั่งซิงก์ระยะไกลจาก Vercel/Cloud (รันค้างพื้นหลังอัตโนมัติเมื่อเปิดเครื่อง):
+#   powershell -ExecutionPolicy Bypass -File scripts\install-attendance-sync-task.ps1 -WatchWorker
+
 param(
   [string[]]$Times = @("08:32", "16:32"),
-  [string]$TaskName = "SmartMSO-Attendance-AutoSync"
+  [string]$TaskName = "SmartMSO-Attendance-AutoSync",
+  [switch]$WatchWorker
 )
 
 $ErrorActionPreference = "Stop"
@@ -18,6 +22,37 @@ $PowerShellPath = (Get-Command powershell.exe).Source
 
 if (-not (Test-Path $ScriptPath)) {
   throw "ไม่พบไฟล์ $ScriptPath"
+}
+
+if ($WatchWorker) {
+  $WorkerTaskName = "$TaskName-RemoteWorker"
+  $WorkerArgs = "'$($ScriptPath.Replace("'", "''"))' --schedule --watch --log --run-now"
+  $PsWorkerCmd = "& '$($NodePath.Replace("'", "''"))' $WorkerArgs"
+  $WorkerAction = New-ScheduledTaskAction `
+    -Execute $PowerShellPath `
+    -Argument "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -Command `"$PsWorkerCmd`"" `
+    -WorkingDirectory $ProjectRoot
+  $LogonTrigger = New-ScheduledTaskTrigger -AtLogOn
+  $WorkerSettings = New-ScheduledTaskSettingsSet `
+    -AllowStartIfOnBatteries `
+    -DontStopIfGoingOnBatteries `
+    -StartWhenAvailable `
+    -ExecutionTimeLimit (New-TimeSpan -Days 365) `
+    -RestartCount 3 `
+    -RestartInterval (New-TimeSpan -Minutes 1) `
+    -MultipleInstances IgnoreNew
+
+  Register-ScheduledTask `
+    -TaskName $WorkerTaskName `
+    -Action $WorkerAction `
+    -Trigger $LogonTrigger `
+    -Settings $WorkerSettings `
+    -Description "รัน Remote Sync Worker สำหรับรับคำสั่งซิงก์จาก Vercel/Cloud และซิงก์ตามเวลาอัตโนมัติ" `
+    -Force | Out-Null
+
+  Write-Host "✅ ติดตั้ง Remote Sync Worker '$WorkerTaskName' (ทำงานเมื่อ Logon) เรียบร้อยแล้ว" -ForegroundColor Green
+  Write-Host "   เริ่มรันทันทีด้วย: Start-ScheduledTask -TaskName '$WorkerTaskName'" -ForegroundColor Cyan
+  exit 0
 }
 
 $Triggers = @()

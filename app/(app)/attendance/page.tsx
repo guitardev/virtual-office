@@ -51,6 +51,29 @@ interface SupabaseStatusInfo {
   error?: string;
 }
 
+interface RemoteSyncRequestInfo {
+  id: string;
+  requestId: string;
+  status: "pending" | "running" | "success" | "error";
+  state: "pending" | "running" | "completed" | "failed";
+  limitLatest: number;
+  requestedBy: string;
+  requestedAt: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  workerHost?: string | null;
+  error?: string | null;
+  result?: {
+    deviceTotalCount?: number;
+    pulledCount?: number;
+    addedCount?: number;
+    updatedCount?: number;
+    nasActiveAfter?: number | null;
+    supabaseActiveAfter?: number | null;
+    elapsedMs?: number;
+  } | null;
+}
+
 function getTodayThaiDate(): string {
   const th = new Date(Date.now() + 7 * 3600000);
   return th.toISOString().slice(0, 10);
@@ -78,6 +101,9 @@ export default function AttendancePage() {
   const [dataSource, setDataSource] = useState<"local" | "supabase">("local");
   const [isCloudServer, setIsCloudServer] = useState<boolean>(false);
   const [canSyncFromScanner, setCanSyncFromScanner] = useState<boolean>(true);
+  const [remoteSyncRequest, setRemoteSyncRequest] =
+    useState<RemoteSyncRequestInfo | null>(null);
+  const [remoteSyncTimedOut, setRemoteSyncTimedOut] = useState<boolean>(false);
 
   // Pagination & Stats
   const [page, setPage] = useState<number>(1);
@@ -221,6 +247,9 @@ export default function AttendancePage() {
           setLastMysqlSyncedAt(data.lastMysqlSyncedAt || null);
           setAvailableDates(data.availableDates || []);
           setAvailableMonths(data.availableMonths || []);
+          if (data.remoteSyncRequest !== undefined) {
+            setRemoteSyncRequest(data.remoteSyncRequest || null);
+          }
           if (data.dataSource) setDataSource(data.dataSource);
           if (typeof data.isCloudServer === "boolean") setIsCloudServer(data.isCloudServer);
           if (typeof data.canSyncFromScanner === "boolean") {
@@ -295,13 +324,64 @@ export default function AttendancePage() {
     fetchAttendanceData();
   }, [fetchAttendanceData]);
 
+  const isRemoteSyncActive = Boolean(
+    remoteSyncRequest &&
+      (remoteSyncRequest.state === "pending" ||
+        remoteSyncRequest.state === "running")
+  );
+
+  // Polling สถานะ Remote Sync Queue เมื่อสั่งซิงก์จากหน้าเว็บ Cloud/Vercel
+  useEffect(() => {
+    if (!isRemoteSyncActive || !remoteSyncRequest) return;
+    let cancelled = false;
+    const startedPollAt = Date.now();
+
+    const interval = setInterval(async () => {
+      if (cancelled) return;
+      if (Date.now() - startedPollAt > 60000) {
+        setRemoteSyncTimedOut(true);
+        clearInterval(interval);
+        return;
+      }
+      try {
+        const res = await fetch("/api/attendance?checkRemoteSync=1");
+        const data = await res.json();
+        if (cancelled || !data.success || !data.remoteSyncRequest) return;
+        const latest: RemoteSyncRequestInfo = data.remoteSyncRequest;
+        setRemoteSyncRequest(latest);
+        if (latest.state === "completed") {
+          clearInterval(interval);
+          setRemoteSyncTimedOut(false);
+          const added = latest.result?.addedCount ?? 0;
+          const pulled = latest.result?.pulledCount ?? 0;
+          showToast(
+            `ซิงก์จากเครื่องสำนักงานสำเร็จ! ดึง ${pulled.toLocaleString()} รายการ (เพิ่มใหม่ ${added.toLocaleString()} รายการ)`
+          );
+          await fetchAttendanceData({ customPage: 1 });
+        } else if (latest.state === "failed") {
+          clearInterval(interval);
+          setRemoteSyncTimedOut(false);
+          showToast(`ซิงก์ระยะไกลไม่สำเร็จ: ${latest.error || "ไม่ทราบสาเหตุ"}`);
+        }
+      } catch {}
+    }, 2500);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [isRemoteSyncActive, remoteSyncRequest?.requestId, fetchAttendanceData, showToast]);
+
   // ซิงก์ข้อมูลจากเครื่องสแกนลายนิ้วมือ HIP CMi681S
   const handleSyncFromDevice = async (limit = syncLimit, silent = false) => {
     try {
       setSyncing(true);
+      setRemoteSyncTimedOut(false);
       if (!silent) {
         showToast(
-          `กำลังเชื่อมต่อเครื่องสแกน HIP CMi681S (${mysqlConfig.scannerIp}:${mysqlConfig.scannerPort})...`
+          isCloudServer || !canSyncFromScanner
+            ? "กำลังส่งคำสั่งซิงก์ไปยังเครื่องสำนักงาน (Remote Queue)..."
+            : `กำลังเชื่อมต่อเครื่องสแกน HIP CMi681S (${mysqlConfig.scannerIp}:${mysqlConfig.scannerPort})...`
         );
       }
       const res = await fetch("/api/attendance", {
@@ -316,7 +396,16 @@ export default function AttendancePage() {
         }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (data.success && data.queued) {
+        if (data.remoteSyncRequest) {
+          setRemoteSyncRequest(data.remoteSyncRequest);
+        }
+        showToast(
+          data.deduplicated
+            ? "มีคำสั่งซิงก์รออยู่ในคิวแล้ว กำลังรอเครื่องสำนักงานดำเนินการ..."
+            : "ส่งคำสั่งซิงก์เข้าคิวแล้ว กำลังรอเครื่องสำนักงานดึงข้อมูลจากเครื่องสแกน..."
+        );
+      } else if (data.success) {
         addAuditLog(
           currentUser?.name || "ผู้ดูแลระบบ",
           "ซิงก์ข้อมูลเวลาปฏิบัติราชการจากเครื่องสแกน HIP CMi681S",
@@ -850,25 +939,26 @@ export default function AttendancePage() {
                 </select>
                 <button
                   onClick={() => handleSyncFromDevice(syncLimit)}
-                  disabled={
-                    syncing ||
-                    isCloudServer ||
-                    !canSyncFromScanner ||
-                    !canEditAttendance
-                  }
+                  disabled={syncing || isRemoteSyncActive || !canEditAttendance}
                   title={
-                    isCloudServer || !canSyncFromScanner
-                      ? "การดึงข้อมูลจากเครื่องสแกนใช้ได้เฉพาะเครือข่ายภายในสำนักงาน (LAN) หรือสคริปต์ Auto-Sync"
-                      : !canEditAttendance
+                    !canEditAttendance
                       ? "เฉพาะผู้ดูแลระบบหรือผู้ได้รับสิทธิ์แก้ไขเวลาจึงสามารถซิงก์จากเครื่องสแกนได้"
+                      : isCloudServer || !canSyncFromScanner
+                      ? "ส่งคำสั่งซิงก์ระยะไกลผ่าน Supabase Queue ให้เครื่องสำนักงานดึงข้อมูลจากเครื่องสแกน"
                       : `ซิงก์ข้อมูลจาก ${mysqlConfig.scannerIp}`
                   }
                   className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold flex items-center gap-2 transition cursor-pointer"
                 >
-                  <span>{syncing ? "⏳" : "🔄"}</span>
+                  <span>{syncing || isRemoteSyncActive ? "⏳" : isCloudServer || !canSyncFromScanner ? "☁️" : "🔄"}</span>
                   <span>
                     {syncing
-                      ? "กำลังซิงก์จากเครื่องสแกน..."
+                      ? "กำลังส่งคำสั่งซิงก์..."
+                      : isRemoteSyncActive
+                      ? remoteSyncRequest?.state === "running"
+                        ? "เครื่องสำนักงานกำลังซิงก์..."
+                        : "รอเครื่องสำนักงานรับคำสั่ง..."
+                      : isCloudServer || !canSyncFromScanner
+                      ? "สั่งซิงก์จากเครื่องสแกน (Remote)"
                       : `ซิงก์ข้อมูลจาก ${mysqlConfig.scannerIp}`}
                   </span>
                 </button>
@@ -886,6 +976,37 @@ export default function AttendancePage() {
             </div>
           </div>
         </div>
+
+        {/* แบนเนอร์สถานะ Remote Sync Queue (เมื่อสั่งซิงก์จาก Cloud/Vercel) */}
+        {(isRemoteSyncActive || remoteSyncTimedOut) && (
+          <div
+            className={`mt-4 rounded-2xl p-3.5 border text-xs flex flex-wrap items-center justify-between gap-3 ${
+              remoteSyncTimedOut
+                ? "bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200"
+                : "bg-sky-50 dark:bg-sky-950/40 border-sky-200 dark:border-sky-800 text-sky-900 dark:text-sky-200"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <span>{remoteSyncTimedOut ? "⚠️" : "⏳"}</span>
+              <span>
+                {remoteSyncTimedOut
+                  ? "คำสั่งซิงก์ยังรออยู่ในคิว (เกิน 60 วินาที) — กรุณาตรวจสอบว่าเครื่องในสำนักงานรันคำสั่ง npm run sync:attendance:worker อยู่"
+                  : remoteSyncRequest?.state === "running"
+                  ? `เครื่องสำนักงาน (${remoteSyncRequest.workerHost || "LAN Worker"}) กำลังดึงข้อมูลจากเครื่องสแกนและอัปเดตทั้ง 3 ฐานข้อมูล...`
+                  : "ส่งคำสั่งซิงก์เข้าคิว Supabase แล้ว กำลังรอเครื่องสำนักงานมารับงาน (ตรวจสอบทุก 5 วินาที)..."}
+              </span>
+            </div>
+            {remoteSyncTimedOut && (
+              <button
+                type="button"
+                onClick={() => fetchAttendanceData({ customPage: 1 })}
+                className="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-semibold cursor-pointer"
+              >
+                🔄 รีเฟรชตรวจสอบอีกครั้ง
+              </button>
+            )}
+          </div>
+        )}
 
         {/* การ์ดสถานะ 4 บล็อก */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mt-4">

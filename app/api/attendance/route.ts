@@ -31,6 +31,8 @@ import {
   fetchLatestAttendanceSyncTelemetryFromSupabase,
   fetchLatestAttendanceTimestampFromSupabase,
   recordAttendanceSyncTelemetryToSupabase,
+  enqueueRemoteAttendanceSyncRequest,
+  fetchLatestRemoteAttendanceSyncRequest,
   syncMappingsToSupabase,
   fetchMappingsFromSupabase,
   syncEditorsToSupabase,
@@ -161,6 +163,15 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    // Endpoint เบาพิเศษสำหรับ polling สถานะ Remote Sync Queue จาก Cloud/Vercel
+    if (searchParams.get("checkRemoteSync") === "1") {
+      const remoteSyncRequest = await fetchLatestRemoteAttendanceSyncRequest();
+      return NextResponse.json({
+        success: true,
+        remoteSyncRequest,
+      });
+    }
+
     const dateFrom = searchParams.get("dateFrom") || "";
     const dateTo = searchParams.get("dateTo") || "";
     const scannerUserId = searchParams.get("scannerUserId") || "";
@@ -182,13 +193,19 @@ export async function GET(req: NextRequest) {
     const canSyncFromScanner = !isCloudServer;
 
     // ตรวจสอบสถานะ MySQL บน Synology NAS, Supabase Cloud และ Telemetry ล่าสุดพร้อมกัน
-    const [mysqlStatus, supabaseStatus, cloudTelemetry, latestCloudScanTs] =
-      await Promise.all([
-        testAndInitSynologyMysql(store.mysqlConfig),
-        checkSupabaseAttendanceReady(),
-        fetchLatestAttendanceSyncTelemetryFromSupabase(),
-        fetchLatestAttendanceTimestampFromSupabase(),
-      ]);
+    const [
+      mysqlStatus,
+      supabaseStatus,
+      cloudTelemetry,
+      latestCloudScanTs,
+      remoteSyncRequest,
+    ] = await Promise.all([
+      testAndInitSynologyMysql(store.mysqlConfig),
+      checkSupabaseAttendanceReady(),
+      fetchLatestAttendanceSyncTelemetryFromSupabase(),
+      fetchLatestAttendanceTimestampFromSupabase(),
+      fetchLatestRemoteAttendanceSyncRequest(),
+    ]);
 
     // ตรวจสอบสถานะเครื่องสแกน HIP CMi681S (192.168.162.15:5005) หากไม่ได้อยู่บน Cloud Serverless และระบุ checkHardware=1
     let scannerOverview: unknown = null;
@@ -457,6 +474,7 @@ export async function GET(req: NextRequest) {
       totalStoredLogs,
       availableDates,
       availableMonths,
+      remoteSyncRequest,
       mappings,
       authorizedEditors,
       summaryStats,
@@ -494,23 +512,37 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      const requestedLimit =
+        typeof body.limitLatest === "number" ? body.limitLatest : 1500;
+
       const scannerIp = store.mysqlConfig.scannerIp || "192.168.162.15";
       const isScannerPrivateLan = /^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[0-1])\.|127\.)/.test(
         scannerIp
       );
-      if (process.env.VERCEL === "1" && isScannerPrivateLan) {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "เซิร์ฟเวอร์ Cloud (Vercel) ไม่สามารถเชื่อม IP เครื่องสแกนภายในวง LAN ได้โดยตรง กรุณากดซิงก์จากเครื่องในสำนักงาน หรือรันคำสั่ง npm run sync:attendance",
-          },
-          { status: 400 }
-        );
+      if ((process.env.VERCEL === "1" && isScannerPrivateLan) || body.remoteQueue === true) {
+        const queued = await enqueueRemoteAttendanceSyncRequest({
+          limitLatest: requestedLimit,
+          actorId,
+          actorName,
+        });
+        if (!queued.success || !queued.request) {
+          return NextResponse.json(
+            {
+              success: false,
+              error:
+                queued.error ||
+                "ไม่สามารถส่งคำสั่งซิงก์ระยะไกลไปยังเครื่องสำนักงานได้",
+            },
+            { status: 500 }
+          );
+        }
+        return NextResponse.json({
+          success: true,
+          queued: true,
+          deduplicated: Boolean(queued.deduplicated),
+          remoteSyncRequest: queued.request,
+        });
       }
-
-      const requestedLimit =
-        typeof body.limitLatest === "number" ? body.limitLatest : 1500;
 
       // ผสานข้อมูลที่ถูกแก้ไข/ลบ/เพิ่ม Manual และ Mapping บน Supabase Cloud เข้ามาก่อนเสมอเพื่อไม่ให้ถูกเขียนทับ
       const [cloudOverrides, cloudMappings, cloudEditors, preSupaStatus, latestCloudTs] =

@@ -15,6 +15,7 @@
 
 import fs from "node:fs";
 import net from "node:net";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import mysql from "mysql2/promise";
@@ -36,8 +37,13 @@ const CHECK_ONLY = args.has("--check-only");
 const QUIET = args.has("--quiet");
 const WRITE_LOG = args.has("--log");
 const DAEMON_SCHEDULE = args.has("--schedule");
+const WATCH_REMOTE = args.has("--watch");
 const RUN_NOW = args.has("--run-now");
 const RECLASSIFY = args.has("--reclassify");
+const pollArg = process.argv.find((a) => a.startsWith("--poll-ms="));
+const POLL_INTERVAL_MS = pollArg
+  ? Math.max(2000, Number(pollArg.split("=")[1]) || 5000)
+  : 5000;
 const limitArg = process.argv.find((a) => a.startsWith("--limit="));
 const REQUESTED_LIMIT = limitArg ? Number(limitArg.split("=")[1]) : 1500;
 const timesArg = process.argv.find((a) => a.startsWith("--times="));
@@ -686,7 +692,7 @@ function modeCountsMatch(a, b) {
   );
 }
 
-async function runSyncOnce() {
+async function runSyncOnce(overrideLimit) {
   const t0 = Date.now();
   const store = loadStore();
   const cfg = store.mysqlConfig;
@@ -821,13 +827,15 @@ async function runSyncOnce() {
     }
 
     // 4. Pull device records (auto-widen if gap exceeds requested limit)
+    const activeLimit =
+      typeof overrideLimit === "number" ? overrideLimit : REQUESTED_LIMIT;
     const localGap = deviceTotal - store.logs.filter((l) => !l.isDeleted).length;
     const effectiveLimit =
       FORCE_ALL ||
-      REQUESTED_LIMIT <= 0 ||
-      localGap > Math.max(0, REQUESTED_LIMIT - 100)
+      activeLimit <= 0 ||
+      localGap > Math.max(0, activeLimit - 100)
         ? undefined
-        : REQUESTED_LIMIT;
+        : activeLimit;
 
     const logClient = new HipScannerClient({
       ip: cfg.scannerIp,
@@ -1385,11 +1393,117 @@ async function runReclassifyOnce() {
   }
 }
 
-async function waitUntilOrAbort(targetTimeMs, isAborted) {
+async function processPendingRemoteSyncRequest(supabase) {
+  if (!supabase) return false;
+  const { data, error } = await supabase
+    .from("audit_logs")
+    .select("id, timestamp, actor_name, status, metadata")
+    .eq("actor_id", "hip_cmi681s_sync_request")
+    .eq("status", "pending")
+    .order("timestamp", { ascending: true })
+    .limit(1);
+
+  if (error || !data || data.length === 0) return false;
+  const row = data[0];
+  const meta =
+    row.metadata && typeof row.metadata === "object" ? row.metadata : {};
+  const workerHost = os.hostname();
+  const reqTimeMs = row.timestamp ? new Date(row.timestamp).getTime() : Date.now();
+
+  if (!Number.isNaN(reqTimeMs) && Date.now() - reqTimeMs > 15 * 60 * 1000) {
+    await supabase
+      .from("audit_logs")
+      .update({
+        status: "error",
+        metadata: {
+          ...meta,
+          state: "failed",
+          completedAt: new Date().toISOString(),
+          workerHost,
+          error: "คำสั่งหมดเวลา (เกิน 15 นาที)",
+        },
+      })
+      .eq("id", row.id);
+    return true;
+  }
+
+  const requestedLimit =
+    typeof meta.limitLatest === "number" ? meta.limitLatest : 1500;
+  log(
+    `☁️ ได้รับคำสั่งซิงก์ระยะไกลจาก ${row.actor_name || "Cloud"} (limit=${requestedLimit || "all"})...`
+  );
+
+  await supabase
+    .from("audit_logs")
+    .update({
+      status: "running",
+      metadata: {
+        ...meta,
+        state: "running",
+        startedAt: new Date().toISOString(),
+        workerHost,
+      },
+    })
+    .eq("id", row.id);
+
+  try {
+    const syncRes = await runSyncOnce(requestedLimit);
+    await supabase
+      .from("audit_logs")
+      .update({
+        status: "success",
+        metadata: {
+          ...meta,
+          state: "completed",
+          completedAt: new Date().toISOString(),
+          workerHost,
+          result: {
+            deviceTotalCount: syncRes?.deviceTotalCount,
+            pulledCount: syncRes?.pulledCount,
+            addedCount: syncRes?.addedCount,
+            updatedCount: syncRes?.updatedCount,
+            nasActiveAfter: syncRes?.nasActiveAfter,
+            supabaseActiveAfter: syncRes?.supabaseActiveAfter,
+            elapsedMs: syncRes?.elapsedMs,
+          },
+        },
+      })
+      .eq("id", row.id);
+    appendSyncLog(
+      `[REMOTE_SYNC_OK] id=${row.id} by="${row.actor_name || "-"}" added=${syncRes?.addedCount || 0}`
+    );
+  } catch (err) {
+    const msg = err?.message || String(err);
+    await supabase
+      .from("audit_logs")
+      .update({
+        status: "error",
+        metadata: {
+          ...meta,
+          state: "failed",
+          completedAt: new Date().toISOString(),
+          workerHost,
+          error: msg,
+        },
+      })
+      .eq("id", row.id);
+    appendSyncLog(`[REMOTE_SYNC_ERR] id=${row.id} error=${msg}`);
+    console.error("❌ Remote sync request failed:", err);
+  }
+  return true;
+}
+
+async function waitUntilOrAbort(targetTimeMs, isAborted, onTick) {
   while (!isAborted()) {
+    if (onTick) {
+      await onTick().catch((err) => {
+        console.error("⚠️ Remote queue poll error:", err?.message || err);
+      });
+    }
     const remaining = targetTimeMs - Date.now();
     if (remaining <= 0) return true;
-    const sleepMs = Math.min(remaining, 30000);
+    const maxSleep = onTick ? POLL_INTERVAL_MS : 30000;
+    const sleepMs = Math.min(remaining, maxSleep);
     await new Promise((resolve) => setTimeout(resolve, sleepMs));
   }
   return false;
@@ -1400,23 +1514,51 @@ async function main() {
     await runReclassifyOnce();
     return;
   }
-  if (!DAEMON_SCHEDULE) {
+  if (!DAEMON_SCHEDULE && !WATCH_REMOTE) {
     await runSyncOnce();
     return;
   }
 
-  const scheduleTimes = parseScheduleTimes(REQUESTED_TIMES_RAW);
+  const supabase = createSupabaseClientFromEnv();
   let aborted = false;
   const onSignal = () => {
     aborted = true;
-    log("\n🛑 กำลังปิดโหมด Auto-Sync (--schedule)...");
+    log("\n🛑 กำลังปิดโหมด Auto-Sync / Remote Worker...");
   };
   process.on("SIGINT", onSignal);
   process.on("SIGTERM", onSignal);
 
+  if (WATCH_REMOTE && !DAEMON_SCHEDULE) {
+    console.log(
+      `☁️ Smart MSO Remote Sync Worker พร้อมรับคำสั่งจาก Cloud ทุก ${Math.round(
+        POLL_INTERVAL_MS / 1000
+      )} วินาที (Host: ${os.hostname()})`
+    );
+    appendSyncLog(`[WATCH_START] host=${os.hostname()} pollMs=${POLL_INTERVAL_MS}`);
+    if (RUN_NOW) {
+      await runSyncOnce().catch((err) => {
+        appendSyncLog(`[ERR] immediate run failed: ${err?.message || err}`);
+      });
+    }
+    while (!aborted) {
+      await processPendingRemoteSyncRequest(supabase).catch((err) => {
+        console.error("⚠️ Remote queue poll error:", err?.message || err);
+      });
+      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    }
+    return;
+  }
+
+  const scheduleTimes = parseScheduleTimes(REQUESTED_TIMES_RAW);
   const slotsText = scheduleTimes.map((s) => `${s.label} น.`).join(" และ ");
-  console.log(`⏰ Smart MSO Attendance Auto-Sync Scheduler พร้อมทำงานทุกวันเวลา ${slotsText}`);
-  appendSyncLog(`[SCHEDULER_START] times=${scheduleTimes.map((s) => s.label).join(",")}`);
+  console.log(
+    `⏰ Smart MSO Attendance Auto-Sync Scheduler พร้อมทำงานทุกวันเวลา ${slotsText}${
+      WATCH_REMOTE ? ` + ☁️ Remote Worker (${Math.round(POLL_INTERVAL_MS / 1000)}s)` : ""
+    }`
+  );
+  appendSyncLog(
+    `[SCHEDULER_START] times=${scheduleTimes.map((s) => s.label).join(",")} watch=${WATCH_REMOTE}`
+  );
 
   if (RUN_NOW) {
     try {
@@ -1428,11 +1570,19 @@ async function main() {
     }
   }
 
+  const onTick = WATCH_REMOTE
+    ? () => processPendingRemoteSyncRequest(supabase)
+    : undefined;
+
   while (!aborted) {
     const nextRun = getNextScheduledRun(scheduleTimes);
     const nextThai = formatIsoToThaiTimestamp(nextRun.target.toISOString());
     console.log(`⏳ รอรอบดึงข้อมูลถัดไป: ${nextThai} น. (รอบ ${nextRun.label} น.)`);
-    const ready = await waitUntilOrAbort(nextRun.target.getTime(), () => aborted);
+    const ready = await waitUntilOrAbort(
+      nextRun.target.getTime(),
+      () => aborted,
+      onTick
+    );
     if (!ready || aborted) break;
 
     try {
