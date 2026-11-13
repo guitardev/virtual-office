@@ -12,6 +12,11 @@ import {
 import { SocialStatisticsReportModal } from "./SocialStatisticsReportModal";
 import { OfficialOrdersPanel } from "./OfficialOrdersPanel";
 import { isRealMember, isSystemServiceAccount } from "@/lib/supabase";
+import {
+  KPP_MSO_LOGBOOK,
+  MSO_VULNERABILITY_LEVELS,
+  getKppDimensionSummaries,
+} from "@/lib/mso-logbook-kpp";
 
 interface DataHubPageProps {
   currentUser: Member;
@@ -180,11 +185,12 @@ export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPag
     return calculateProvinceTotals(statsList);
   }, [statsList]);
 
-  const overallSuccessRate = useMemo(() => {
-    return provinceTotals.vulnerableHouseholds > 0
-      ? ((provinceTotals.helpedHouseholds / provinceTotals.vulnerableHouseholds) * 100).toFixed(1)
-      : "0.0";
-  }, [provinceTotals]);
+  const msoDimensions = useMemo(() => getKppDimensionSummaries(), []);
+  const msoNoplanTotal = useMemo(
+    () => msoDimensions.reduce((sum, d) => sum + d.noplan, 0),
+    [msoDimensions]
+  );
+  const msoLevel2Plus3 = KPP_MSO_LOGBOOK.main.lvls[2] + KPP_MSO_LOGBOOK.main.lvls[3];
 
   // Sanitized Contact Helpers (avoid showing placeholder "-", @nas.local synthetic accounts)
   const getDisplayNickname = (staff: Member): string | null => {
@@ -544,170 +550,164 @@ export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPag
             </div>
           </div>
 
-          {/* 5 Big KPI Metric Cards */}
+          {/* 5 Big MSO-Logbook KPI Metric Cards (Kamphaeng Phet Real Baseline) */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
             <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs space-y-1">
               <div className="flex items-center justify-between text-slate-500 text-xs">
                 <span className="font-bold">ครัวเรือนเปราะบาง</span>
                 <span className="text-base">👨‍👩‍👧</span>
               </div>
-              <div className="text-2xl font-extrabold text-slate-900 font-heading">
-                {provinceTotals.vulnerableHouseholds.toLocaleString()}
+              <div className="text-2xl font-extrabold text-slate-900 font-heading tabular-nums">
+                {KPP_MSO_LOGBOOK.main.hh.toLocaleString("th-TH")}
               </div>
-              <div className="text-[10px] text-slate-500 font-medium">เป้าหมาย TPMAP ระดับพื้นที่</div>
-            </div>
-
-            <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs space-y-1">
-              <div className="flex items-center justify-between text-emerald-800 text-xs">
-                <span className="font-bold">ช่วยเหลือและพัฒนาแล้ว</span>
-                <span className="text-base">✅</span>
-              </div>
-              <div className="text-2xl font-extrabold text-emerald-700 font-heading">
-                {provinceTotals.helpedHouseholds.toLocaleString()}
-              </div>
-              <div className="text-[10px] text-emerald-700 font-bold flex items-center gap-1">
-                <span>✓</span>
-                <span>สำเร็จ {overallSuccessRate}% ของเป้าหมาย</span>
+              <div className="text-[10px] text-slate-500 font-medium">
+                {((KPP_MSO_LOGBOOK.main.hh / KPP_MSO_LOGBOOK.main.households) * 100).toFixed(1)}% จาก {KPP_MSO_LOGBOOK.main.households.toLocaleString("th-TH")} ครัวเรือน
               </div>
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs space-y-1">
-              <div className="flex items-center justify-between text-blue-800 text-xs">
-                <span className="font-bold">คนพิการมีบัตร</span>
-                <span className="text-base">♿</span>
+              <div className="flex items-center justify-between text-sky-800 text-xs">
+                <span className="font-bold">บุคคลเปราะบาง</span>
+                <span className="text-base">👥</span>
               </div>
-              <div className="text-2xl font-extrabold text-blue-700 font-heading">
-                {provinceTotals.disabilityRegistered.toLocaleString()}
+              <div className="text-2xl font-extrabold text-sky-700 font-heading tabular-nums">
+                {KPP_MSO_LOGBOOK.main.people.toLocaleString("th-TH")}
               </div>
-              <div className="text-[10px] text-blue-600 font-medium">ออกบัตรและเชื่อมโยงสิทธิ์ครบ</div>
-            </div>
-
-            <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs space-y-1">
-              <div className="flex items-center justify-between text-amber-800 text-xs">
-                <span className="font-bold">เงินอุดหนุนเด็กแรกเกิด</span>
-                <span className="text-base">👶</span>
+              <div className="text-[10px] text-sky-700 font-bold">
+                พบปัญหาจริง {KPP_MSO_LOGBOOK.main.peopleWithProblems.toLocaleString("th-TH")} คน
               </div>
-              <div className="text-2xl font-extrabold text-amber-700 font-heading">
-                {provinceTotals.childSupportBeneficiaries.toLocaleString()}
-              </div>
-              <div className="text-[10px] text-amber-700 font-medium">ได้รับ 600 บาท/เดือน ต่อเนื่อง</div>
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs space-y-1">
               <div className="flex items-center justify-between text-rose-800 text-xs">
-                <span className="font-bold">เคส ศรส. 1300</span>
+                <span className="font-bold">ปัญหา 9 มิติรวม</span>
+                <span className="text-base">📋</span>
+              </div>
+              <div className="text-2xl font-extrabold text-rose-700 font-heading tabular-nums">
+                {KPP_MSO_LOGBOOK.main.problems.toLocaleString("th-TH")}
+              </div>
+              <div className="text-[10px] text-rose-600 font-bold">
+                ยังไม่มีแผน {msoNoplanTotal.toLocaleString("th-TH")} ครั้ง ({((msoNoplanTotal / KPP_MSO_LOGBOOK.main.problems) * 100).toFixed(1)}%)
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-amber-800 text-xs">
+                <span className="font-bold">ระดับ 2–3 (เร่งด่วน)</span>
                 <span className="text-base">🚨</span>
               </div>
-              <div className="text-2xl font-extrabold text-rose-700 font-heading">
-                {provinceTotals.emergencyCases1300.toLocaleString()}
+              <div className="text-2xl font-extrabold text-amber-700 font-heading tabular-nums">
+                {msoLevel2Plus3.toLocaleString("th-TH")}
               </div>
-              <div className="text-[10px] text-rose-600 font-medium">ช่วยเหลือเร่งด่วนและคุ้มครอง</div>
+              <div className="text-[10px] text-amber-700 font-medium">
+                ลำบาก {KPP_MSO_LOGBOOK.main.lvls[2].toLocaleString("th-TH")} • วิกฤต {KPP_MSO_LOGBOOK.main.lvls[3].toLocaleString("th-TH")} ครัวเรือน
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-emerald-800 text-xs">
+                <span className="font-bold">อุดหนุนเด็กแรกเกิด</span>
+                <span className="text-base">👶</span>
+              </div>
+              <div className="text-2xl font-extrabold text-emerald-700 font-heading tabular-nums">
+                {KPP_MSO_LOGBOOK.welfare.subsidy.received.toLocaleString("th-TH")}
+              </div>
+              <div className="text-[10px] text-emerald-700 font-bold">
+                ได้รับแล้ว {((KPP_MSO_LOGBOOK.welfare.subsidy.received / KPP_MSO_LOGBOOK.welfare.subsidy.eligible) * 100).toFixed(1)}% ของผู้มีสิทธิ
+              </div>
             </div>
           </div>
 
-          {/* Poverty 5 Dimensions Breakdown */}
+          {/* MSO-Logbook 9 Dimensions & Vulnerability Levels */}
           <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-xs space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h3 className="font-extrabold text-sm sm:text-base text-slate-900 flex items-center gap-2">
                   <span>🎯</span>
-                  <span>การจำแนกสภาพปัญหา 5 มิติความยากจน (TPMAP Poverty Dimensions)</span>
+                  <span>ปัญหาความเดือดร้อน 9 มิติ (ฐานข้อมูล MSO-Logbook {KPP_MSO_LOGBOOK.main.region} จังหวัดกำแพงเพชร)</span>
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  ข้อมูลการตกเกณฑ์ความจำเป็นพื้นฐาน (จปฐ.) ในพื้นที่จังหวัดกำแพงเพชร
+                  จำแนกตาม 9 มิติความเดือดร้อน พร้อมสัดส่วนปัญหาที่ยังไม่มีแผนช่วยเหลือ (สีแดง) และประเด็นหลักที่พบสูงสุด
                 </p>
               </div>
-              <span className="text-xs font-bold text-slate-400">
-                รวม {statsList.length} อำเภอ
-              </span>
+              <button
+                type="button"
+                onClick={() => setShowReportModal(true)}
+                className="px-3 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-800 text-xs font-bold border border-sky-200 transition-colors cursor-pointer"
+              >
+                📄 ดูรายงานฉบับเต็ม & ส่งออก Word (.docx)
+              </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 pt-1">
-              {[
-                {
-                  label: "มิติสุขภาพ",
-                  value: provinceTotals.povertyDimensions.health,
-                  desc: "ผู้ป่วยติดเตียง/คนพิการ",
-                  color: "bg-rose-500",
-                  text: "text-rose-700",
-                  bg: "bg-rose-50",
-                  border: "border-rose-200",
-                  icon: "🩺",
-                },
-                {
-                  label: "มิติความเป็นอยู่",
-                  value: provinceTotals.povertyDimensions.living,
-                  desc: "บ้านทรุดโทรม/ขาดน้ำดื่ม",
-                  color: "bg-amber-500",
-                  text: "text-amber-700",
-                  bg: "bg-amber-50",
-                  border: "border-amber-200",
-                  icon: "🏠",
-                },
-                {
-                  label: "มิติการศึกษา",
-                  value: provinceTotals.povertyDimensions.education,
-                  desc: "เด็กหลุดระบบการศึกษา",
-                  color: "bg-blue-500",
-                  text: "text-blue-700",
-                  bg: "bg-blue-50",
-                  border: "border-blue-200",
-                  icon: "📚",
-                },
-                {
-                  label: "มิติรายได้",
-                  value: provinceTotals.povertyDimensions.income,
-                  desc: "รายได้ต่ำกว่า 40,000 บ./ปี",
-                  color: "bg-emerald-500",
-                  text: "text-emerald-700",
-                  bg: "bg-emerald-50",
-                  border: "border-emerald-200",
-                  icon: "💰",
-                },
-                {
-                  label: "มิติเข้าถึงบริการรัฐ",
-                  value: provinceTotals.povertyDimensions.access,
-                  desc: "ขาดสวัสดิการภาครัฐ",
-                  color: "bg-purple-500",
-                  text: "text-purple-700",
-                  bg: "bg-purple-50",
-                  border: "border-purple-200",
-                  icon: "🪪",
-                },
-              ].map((dim) => {
-                const totalDim =
-                  provinceTotals.povertyDimensions.health +
-                  provinceTotals.povertyDimensions.living +
-                  provinceTotals.povertyDimensions.education +
-                  provinceTotals.povertyDimensions.income +
-                  provinceTotals.povertyDimensions.access;
-                const pct = totalDim > 0 ? ((dim.value / totalDim) * 100).toFixed(1) : "0";
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
+              {msoDimensions.map((dim, idx) => {
+                const plannedOrDone = Math.max(0, dim.total - dim.noplan);
+                const plannedPct = dim.total > 0 ? ((plannedOrDone / dim.total) * 100).toFixed(1) : "0.0";
+                const topIssue = dim.topIssues[0];
 
                 return (
                   <div
-                    key={dim.label}
-                    className={`p-3.5 rounded-2xl border ${dim.border} ${dim.bg} space-y-2`}
+                    key={dim.dimension}
+                    className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50/60 hover:bg-white hover:border-sky-200 transition-colors space-y-2"
                   >
-                    <div className="flex items-center justify-between text-xs font-bold">
-                      <span className="flex items-center gap-1">
-                        <span>{dim.icon}</span>
-                        <span>{dim.label}</span>
+                    <div className="flex items-start justify-between gap-2 text-xs font-bold">
+                      <span className="text-slate-900 leading-snug">
+                        {idx + 1}. {dim.dimension}
                       </span>
-                      <span className={dim.text}>{pct}%</span>
+                      <span className="shrink-0 px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 text-[11px] tabular-nums">
+                        {dim.sharePct.toFixed(1)}%
+                      </span>
                     </div>
 
-                    <div className="text-xl font-extrabold text-slate-900 font-heading">
-                      {dim.value.toLocaleString()}
+                    <div className="flex items-baseline justify-between gap-2">
+                      <div className="text-xl font-extrabold text-slate-900 font-heading tabular-nums">
+                        {dim.total.toLocaleString("th-TH")}{" "}
+                        <span className="text-[11px] font-medium text-slate-500">ครั้ง</span>
+                      </div>
+                      <div className="text-[11px] font-semibold text-rose-700 tabular-nums">
+                        ยังไม่มีแผน {dim.noplan.toLocaleString("th-TH")} ({dim.noplanPct.toFixed(0)}%)
+                      </div>
                     </div>
 
-                    <div className="w-full bg-white/80 rounded-full h-1.5 overflow-hidden">
+                    <div className="w-full bg-rose-200/80 rounded-full h-1.5 overflow-hidden" title={`มีแผน/ติดตาม/ปิดเคส ${plannedPct}%`}>
                       <div
-                        className={`${dim.color} h-1.5 rounded-full transition-all duration-500`}
-                        style={{ width: `${pct}%` }}
+                        className="bg-teal-600 h-1.5 rounded-full transition-all duration-500"
+                        style={{ width: `${plannedPct}%` }}
                       />
                     </div>
 
-                    <div className="text-[10px] text-slate-500 truncate">{dim.desc}</div>
+                    <div className="text-[10px] text-slate-500 truncate">
+                      {topIssue
+                        ? `พบมากสุด: ${topIssue.name} (${topIssue.total.toLocaleString("th-TH")} ครั้ง)`
+                        : `ติดตาม ${dim.tracked.toLocaleString("th-TH")} • ปิดเคส ${dim.closed.toLocaleString("th-TH")}`}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Compact Vulnerability Levels 0-3 Bar */}
+            <div className="pt-2 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              {MSO_VULNERABILITY_LEVELS.map((lvl, idx) => {
+                const count = KPP_MSO_LOGBOOK.main.lvls[idx] || 0;
+                const pct = ((count / KPP_MSO_LOGBOOK.main.hh) * 100).toFixed(1);
+                const toneClass =
+                  lvl.tone === "emerald"
+                    ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                    : lvl.tone === "sky"
+                    ? "bg-sky-50 border-sky-200 text-sky-800"
+                    : lvl.tone === "amber"
+                    ? "bg-amber-50 border-amber-200 text-amber-800"
+                    : "bg-rose-50 border-rose-200 text-rose-800";
+                return (
+                  <div key={lvl.level} className={`rounded-xl border px-3 py-2 ${toneClass}`}>
+                    <div className="text-[10px] font-bold truncate">{lvl.label}</div>
+                    <div className="flex items-baseline justify-between mt-0.5">
+                      <span className="text-sm font-extrabold tabular-nums">
+                        {count.toLocaleString("th-TH")} ครัวเรือน
+                      </span>
+                      <span className="text-[10px] font-bold tabular-nums">{pct}%</span>
+                    </div>
                   </div>
                 );
               })}
