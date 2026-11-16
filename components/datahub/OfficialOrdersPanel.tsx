@@ -202,6 +202,9 @@ export function OfficialOrdersPanel({
     }
 
     if (!item.fileUrl) return "";
+    if (/^https?:\/\//i.test(item.fileUrl)) {
+      return item.fileUrl;
+    }
     const url = new URL(item.fileUrl, "http://localhost");
     url.searchParams.set("mode", mode);
     url.searchParams.set("strict", "1");
@@ -884,11 +887,11 @@ export function OfficialOrdersPanel({
                 />
               </div>
 
-              {/* PDF Upload to Synology NAS */}
+              {/* PDF Upload to Synology NAS / Cloud Storage or External URL */}
               <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-dashed border-slate-300 dark:border-slate-700 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="font-semibold text-slate-700 dark:text-slate-200">
-                    📎 ไฟล์หนังสือคำสั่ง/ประกาศ (PDF บน Synology NAS, ไม่เกิน 4 MB)
+                    📎 ไฟล์หนังสือคำสั่ง/ประกาศ (PDF บน NAS / Cloud สูงสุด 50 MB)
                   </span>
                   {formFileName && (
                     <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
@@ -908,9 +911,27 @@ export function OfficialOrdersPanel({
                 />
                 {uploadingFile && (
                   <div className="text-[11px] text-indigo-600">
-                    ⏳ กำลังอัปโหลดไฟล์ไปยัง Synology NAS...
+                    ⏳ กำลังอัปโหลดไฟล์...
                   </div>
                 )}
+                <div className="pt-1">
+                  <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">
+                    หรือวางลิงก์ไฟล์ภายนอก (Google Drive / URL) กรณีไม่แนบไฟล์
+                  </label>
+                  <input
+                    type="url"
+                    value={formFileUrl}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormFileUrl(val);
+                      if (/^https?:\/\//i.test(val.trim())) {
+                        setFormNasPath("");
+                      }
+                    }}
+                    placeholder="https://..."
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                  />
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
