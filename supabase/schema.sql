@@ -392,6 +392,7 @@ create table audit_logs (
 alter table audit_logs enable row level security;
 create policy "Allow all read audit_logs" on audit_logs for select using (true);
 create policy "Allow all write audit_logs" on audit_logs for insert with check (true);
+create policy "Allow remote sync request updates on audit_logs" on audit_logs for update using (actor_id = 'hip_cmi681s_sync_request') with check (actor_id = 'hip_cmi681s_sync_request');
 
 -- ===============================
 -- 13. Enable Realtime Publications

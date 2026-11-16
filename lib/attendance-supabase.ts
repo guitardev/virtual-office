@@ -984,21 +984,28 @@ function mapAuditRowToRemoteSyncRequest(row: {
   metadata?: Record<string, unknown> | null;
 }): RemoteAttendanceSyncRequest {
   const meta = row.metadata || {};
-  const rawStatus = String(row.status || "pending");
-  const status: RemoteAttendanceSyncRequest["status"] =
-    rawStatus === "running" || rawStatus === "success" || rawStatus === "error"
-      ? rawStatus
-      : "pending";
+  const rawStatus = String(row.status || "");
   const rawState = String(meta.state || "");
   const state: RemoteAttendanceSyncRequest["state"] =
-    rawState === "running" || rawState === "completed" || rawState === "failed"
+    rawState === "pending" ||
+    rawState === "running" ||
+    rawState === "completed" ||
+    rawState === "failed"
       ? rawState
-      : status === "success"
-      ? "completed"
-      : status === "error"
-      ? "failed"
-      : status === "running"
+      : rawStatus === "running"
       ? "running"
+      : rawStatus === "error" || rawStatus === "denied"
+      ? "failed"
+      : rawStatus === "success"
+      ? "completed"
+      : "pending";
+  const status: RemoteAttendanceSyncRequest["status"] =
+    state === "running"
+      ? "running"
+      : state === "completed"
+      ? "success"
+      : state === "failed"
+      ? "error"
       : "pending";
 
   return {
@@ -1094,7 +1101,7 @@ export async function enqueueRemoteAttendanceSyncRequest(opts: {
             ? "ทั้งหมด"
             : `${limitLatest.toLocaleString()} รายการล่าสุด`
         }`,
-        status: "pending",
+        status: "success",
         metadata: {
           type: "attendance_remote_sync_request",
           requestId,

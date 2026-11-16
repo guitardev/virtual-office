@@ -1399,7 +1399,7 @@ async function processPendingRemoteSyncRequest(supabase) {
     .from("audit_logs")
     .select("id, timestamp, actor_name, status, metadata")
     .eq("actor_id", "hip_cmi681s_sync_request")
-    .eq("status", "pending")
+    .eq("metadata->>state", "pending")
     .order("timestamp", { ascending: true })
     .limit(1);
 
@@ -1414,7 +1414,7 @@ async function processPendingRemoteSyncRequest(supabase) {
     await supabase
       .from("audit_logs")
       .update({
-        status: "error",
+        status: "denied",
         metadata: {
           ...meta,
           state: "failed",
@@ -1436,7 +1436,7 @@ async function processPendingRemoteSyncRequest(supabase) {
   await supabase
     .from("audit_logs")
     .update({
-      status: "running",
+      status: "success",
       metadata: {
         ...meta,
         state: "running",
@@ -1477,7 +1477,7 @@ async function processPendingRemoteSyncRequest(supabase) {
     await supabase
       .from("audit_logs")
       .update({
-        status: "error",
+        status: "denied",
         metadata: {
           ...meta,
           state: "failed",
