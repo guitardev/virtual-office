@@ -2,14 +2,14 @@
 /**
  * Smart MSO - Attendance Auto-Sync Script (HIP CMi681S -> Local JSON + Synology NAS MariaDB + Supabase Cloud)
  * ----------------------------------------------------------------------------------------------------------
- * รันจากเครื่องในวง LAN เพื่อซิงก์เวลาเข้า-ออกงานอัตโนมัติ (รองรับ Windows Task Scheduler วันละ 2 รอบ: 08:32 น. และ 16:32 น.):
+ * รันจากเครื่องในวง LAN เพื่อซิงก์เวลาเข้า-ออกงานอัตโนมัติ (รองรับ Windows Task Scheduler วันละ 3 รอบ: 09:00 น., 12:05 น. และ 19:30 น.):
  *   node scripts/sync-attendance.mjs             # ซิงก์แบบอัจฉริยะ (ดึงเฉพาะส่วนเพิ่ม + ซ่อมช่องว่างอัตโนมัติ)
  *   node scripts/sync-attendance.mjs --all       # ซิงก์และ Reconcile เต็มชุดทุกรายการ
  *   node scripts/sync-attendance.mjs --check-only # ตรวจสอบยอดทั้ง 4 แหล่งโดยไม่เขียนทับข้อมูล
  *   node scripts/sync-attendance.mjs --quiet     # แสดงผลเฉพาะ JSON สรุป (เหมาะสำหรับ Task Scheduler)
  *   node scripts/sync-attendance.mjs --log       # บันทึก log ย่อลงไฟล์ data/attendance-sync.log
- *   node scripts/sync-attendance.mjs --schedule  # โหมดเฝ้าเวลาใน Terminal (ดึงอัตโนมัติทุกวัน 08:32 และ 16:32 น.)
- *   node scripts/sync-attendance.mjs --schedule --times=08:32,16:32 --log --run-now
+ *   node scripts/sync-attendance.mjs --schedule  # โหมดเฝ้าเวลาใน Terminal (ดึงอัตโนมัติทุกวัน 09:00, 12:05 และ 19:30 น.)
+ *   node scripts/sync-attendance.mjs --schedule --times=09:00,12:05,19:30 --log --run-now
  *   node scripts/sync-attendance.mjs --reclassify # จำแนกประเภทเวลา (1..4) ย้อนหลังตามระเบียบเวลาราชการทั้ง Local, NAS และ Supabase
  */
 
@@ -30,7 +30,7 @@ const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = path.resolve(__dirname, "..");
 process.chdir(PROJECT_ROOT);
 
-const DEFAULT_SCHEDULE_TIMES = ["08:32", "16:32"];
+const DEFAULT_SCHEDULE_TIMES = ["09:00", "12:05", "19:30"];
 const args = new Set(process.argv.slice(2));
 const FORCE_ALL = args.has("--all");
 const CHECK_ONLY = args.has("--check-only");
