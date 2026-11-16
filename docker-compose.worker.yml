@@ -1,6 +1,6 @@
 services:
   attendance-worker:
-    image: node:20-alpine
+    image: node:22-alpine
     container_name: smart-mso-attendance-worker
     working_dir: /app
     network_mode: host

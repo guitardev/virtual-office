@@ -23,45 +23,59 @@ Copy-Item "docker-compose.worker.yml" $TempStage
 if (Test-Path ".env.local") { Copy-Item ".env.local" $TempStage }
 elseif (Test-Path ".env") { Copy-Item ".env" (Join-Path $TempStage ".env.local") }
 
+$StartScript = @'
+#!/bin/sh
+set -e
+export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+for p in /var/packages/Node.js*/target/usr/local/bin /var/packages/ContainerManager/target/usr/bin /var/packages/Docker/target/usr/bin; do
+  [ -d "$p" ] && export PATH="$p:$PATH"
+done
+
+cd "$(dirname "$0")"
+
+if command -v docker >/dev/null 2>&1; then
+  DOCKER_BIN="$(command -v docker)"
+  echo "Using Docker: $DOCKER_BIN"
+  if "$DOCKER_BIN" ps >/dev/null 2>&1; then
+    "$DOCKER_BIN" compose -f docker-compose.worker.yml up -d --force-recreate || {
+      "$DOCKER_BIN" rm -f smart-mso-attendance-worker 2>/dev/null || true
+      "$DOCKER_BIN" run -d --name smart-mso-attendance-worker --network host --restart unless-stopped -e TZ=Asia/Bangkok -v "$(pwd):/app" -w /app node:22-alpine sh -c "[ -d node_modules ] || npm install --omit=dev; node scripts/sync-attendance.mjs --schedule --watch --log --run-now"
+    }
+    sleep 5
+    "$DOCKER_BIN" logs --tail 35 smart-mso-attendance-worker
+  else
+    echo "Docker socket requires sudo (enter sudo password if prompted)..."
+    sudo -E env "PATH=$PATH" "$DOCKER_BIN" compose -f docker-compose.worker.yml up -d --force-recreate || {
+      sudo "$DOCKER_BIN" rm -f smart-mso-attendance-worker 2>/dev/null || true
+      sudo "$DOCKER_BIN" run -d --name smart-mso-attendance-worker --network host --restart unless-stopped -e TZ=Asia/Bangkok -v "$(pwd):/app" -w /app node:22-alpine sh -c "[ -d node_modules ] || npm install --omit=dev; node scripts/sync-attendance.mjs --schedule --watch --log --run-now"
+    }
+    sleep 5
+    sudo "$DOCKER_BIN" logs --tail 35 smart-mso-attendance-worker
+  fi
+elif command -v node >/dev/null 2>&1; then
+  echo "Using Node: $(command -v node) $(node -v)"
+  [ -d node_modules ] || npm install --omit=dev
+  node scripts/sync-attendance.mjs --check-only
+  pkill -f "scripts/sync-attendance.mjs" 2>/dev/null || true
+  TZ=Asia/Bangkok nohup node scripts/sync-attendance.mjs --schedule --watch --log --run-now > data/worker-stdout.log 2>&1 &
+  sleep 3
+  tail -n 30 data/worker-stdout.log
+else
+  echo "ERROR: Neither docker nor node found in PATH on NAS."
+  ls -1 /var/packages 2>/dev/null || true
+  exit 1
+fi
+'@
+$StartScriptLf = $StartScript -replace "`r`n", "`n"
+[System.IO.File]::WriteAllText((Join-Path $TempStage "start-worker.sh"), $StartScriptLf, (New-Object System.Text.UTF8Encoding($false)))
+
 Write-Host "==> 2. Uploading bundle to ${Target} (enter SSH password if prompted)..." -ForegroundColor Cyan
 $TarFile = Join-Path $env:TEMP "smart-mso-worker.tar.gz"
 if (Test-Path $TarFile) { Remove-Item $TarFile -Force }
 tar -czf $TarFile -C $TempStage .
 
-scp -P $SshPort $TarFile "${Target}:/tmp/smart-mso-worker.tar.gz"
+scp -O -P $SshPort $TarFile "${Target}:/tmp/smart-mso-worker.tar.gz"
 if ($LASTEXITCODE -ne 0) { throw "SCP upload failed" }
 
 Write-Host "==> 3. Extracting, starting & verifying worker on NAS..." -ForegroundColor Cyan
-$RemoteCmd = @"
-set -e
-mkdir -p '$RemoteDir'
-tar -xzf /tmp/smart-mso-worker.tar.gz -C '$RemoteDir'
-rm -f /tmp/smart-mso-worker.tar.gz
-cd '$RemoteDir'
-if command -v docker >/dev/null 2>&1; then
-  echo 'Using Docker...'
-  if docker compose version >/dev/null 2>&1; then
-    docker compose -f docker-compose.worker.yml up -d --force-recreate
-  elif command -v docker-compose >/dev/null 2>&1; then
-    docker-compose -f docker-compose.worker.yml up -d --force-recreate
-  else
-    docker rm -f smart-mso-attendance-worker 2>/dev/null || true
-    docker run -d --name smart-mso-attendance-worker --network host --restart unless-stopped -e TZ=Asia/Bangkok -v '$RemoteDir':/app -w /app node:20-alpine sh -c "[ -d node_modules ] || npm install --omit=dev; node scripts/sync-attendance.mjs --schedule --watch --log --run-now"
-  fi
-  sleep 4
-  docker logs --tail 30 smart-mso-attendance-worker
-elif command -v node >/dev/null 2>&1; then
-  echo 'Using system Node...'
-  [ -d node_modules ] || npm install --omit=dev
-  node scripts/sync-attendance.mjs --check-only
-  pkill -f 'scripts/sync-attendance.mjs' 2>/dev/null || true
-  TZ=Asia/Bangkok nohup node scripts/sync-attendance.mjs --schedule --watch --log --run-now > data/worker-stdout.log 2>&1 &
-  sleep 3
-  tail -n 30 data/worker-stdout.log
-else
-  echo 'ERROR: Neither docker nor node found on NAS. Please install Container Manager or Node.js in Package Center.'
-  exit 1
-fi
-"@
-
-ssh -p $SshPort $Target $RemoteCmd
+ssh -t -p $SshPort $Target "mkdir -p '$RemoteDir' && tar -xzf /tmp/smart-mso-worker.tar.gz -C '$RemoteDir' && rm -f /tmp/smart-mso-worker.tar.gz && sh '$RemoteDir/start-worker.sh'"
