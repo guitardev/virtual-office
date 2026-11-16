@@ -11,6 +11,7 @@ import {
 } from "@/lib/social-statistics";
 import { SocialStatisticsReportModal } from "./SocialStatisticsReportModal";
 import { OfficialOrdersPanel } from "./OfficialOrdersPanel";
+import { DataHubDocsPanel } from "./DataHubDocsPanel";
 import { isRealMember, isSystemServiceAccount } from "@/lib/supabase";
 import {
   KPP_MSO_LOGBOOK,
@@ -58,12 +59,7 @@ export const MISSION_GROUPS: MissionGroup[] = [
       { label: "การเบิกจ่ายงบประมาณ", value: "88.4%", change: "ตามเป้าหมาย Q4", icon: "💰" },
       { label: "ห้องประชุมและสถานที่", value: "6 ห้อง", change: "พร้อมใช้งาน 100%", icon: "🏢" },
     ],
-    documents: [
-      { id: "doc_1", title: "แบบฟอร์มขอใช้รถยนต์ราชการ (กพพ. 01)", category: "ยานพาหนะ", type: "DOCX", size: "145 KB", date: "4 พ.ย. 2569" },
-      { id: "doc_2", title: "ระเบียบการเบิกจ่ายเงินค่าใช้จ่ายในการเดินทางไปราชการ", category: "การเงิน", type: "PDF", size: "2.4 MB", date: "15 ต.ค. 2569" },
-      { id: "doc_3", title: "แบบคำขอหนังสือรับรองเงินเดือนและสิทธิการรักษาพยาบาล", category: "บุคคล", type: "PDF", size: "320 KB", date: "1 ต.ค. 2569" },
-      { id: "doc_4", title: "แผนผังการบริหารอาคารและมาตรการประหยัดพลังงาน พ.ศ. 2569", category: "อาคาร", type: "PDF", size: "1.8 MB", date: "20 ส.ค. 2569" },
-    ],
+    documents: [],
     systems: [
       { name: "ระบบ e-GP (กรมบัญชีกลาง)", desc: "ระบบการจัดซื้อจัดจ้างภาครัฐด้วยอิเล็กทรอนิกส์", url: "https://www.gprocurement.go.th", badge: "จัดซื้อจัดจ้าง", icon: "💼" },
       { name: "ระบบ GFMIS Web Online", desc: "ระบบบริหารการเงินการคลังภาครัฐแบบอิเล็กทรอนิกส์", url: "https://gfmis.mof.go.th", badge: "การเงิน/งบประมาณ", icon: "💳" },
@@ -87,12 +83,7 @@ export const MISSION_GROUPS: MissionGroup[] = [
       { label: "รายงานสถานการณ์ทางสังคม", value: "4 ไตรมาส", change: "เผยแพร่ครบถ้วน", icon: "📑" },
       { label: "ดัชนีความมั่นคงของมนุษย์ (HSI)", value: "0.784", change: "+0.03 ระดับสูง", icon: "📈" },
     ],
-    documents: [
-      { id: "doc_5", title: "แผนปฏิบัติการด้านการพัฒนาสังคมจังหวัดกำแพงเพชร พ.ศ. 2569-2570", category: "แผนงาน", type: "PDF", size: "8.6 MB", date: "28 ต.ค. 2569" },
-      { id: "doc_6", title: "รายงานสถานการณ์ทางสังคมจังหวัดกำแพงเพชร ประจำปี 2569", category: "สถิติ/วิชาการ", type: "PDF", size: "12.4 MB", date: "15 ต.ค. 2569" },
-      { id: "doc_7", title: "คู่มือตัวชี้วัดการประเมินผลการปฏิบัติราชการ (คำรับรองฯ)", category: "KPI", type: "PDF", size: "3.2 MB", date: "1 ต.ค. 2569" },
-      { id: "doc_8", title: "แบบฟอร์มรายงานผลการดำเนินงานรายไตรมาส (e-Report)", category: "แบบฟอร์ม", type: "XLSX", size: "480 KB", date: "18 ก.ย. 2569" },
-    ],
+    documents: [],
     systems: [
       { name: "ระบบ TPMAP (ศจพ.)", desc: "ระบบบริหารจัดการข้อมูลการพัฒนาคนแบบชี้เป้า", url: "https://www.tpmap.in.th", badge: "ยากจนชี้เป้า", icon: "🎯" },
       { name: "ศูนย์ข้อมูลสารสนเทศ พม. (MSOC)", desc: "สถิติและข้อมูลสารสนเทศด้านการพัฒนาสังคมแห่งชาติ", url: "https://msoc.m-society.go.th", badge: "คลังสถิติ", icon: "📈" },
@@ -116,12 +107,7 @@ export const MISSION_GROUPS: MissionGroup[] = [
       { label: "สภาเด็กและเยาวชน", value: "11 อำเภอ", change: "มีกิจกรรมต่อเนื่อง", icon: "🌱" },
       { label: "ครอบครัวเปราะบางเป้าหมาย", value: "1,420 ครัวเรือน", change: "ช่วยเหลือแล้ว 92%", icon: "👨‍👩‍👧" },
     ],
-    documents: [
-      { id: "doc_9", title: "แนวทางการพิจารณาเงินสงเคราะห์ผู้มีรายได้น้อยและครอบครัวเปราะบาง", category: "ระเบียบ", type: "PDF", size: "1.9 MB", date: "30 ต.ค. 2569" },
-      { id: "doc_10", title: "แบบคำขอรับการช่วยเหลือเงินสงเคราะห์ครอบครัว (แบบ พม. 01)", category: "แบบฟอร์ม", type: "DOCX", size: "210 KB", date: "22 ต.ค. 2569" },
-      { id: "doc_11", title: "คู่มือการดำเนินงานสภาเด็กและเยาวชนจังหวัดกำแพงเพชร", category: "คู่มือ", type: "PDF", size: "4.1 MB", date: "10 ก.ย. 2569" },
-      { id: "doc_12", title: "สารบบเครือข่ายศูนย์ช่วยเหลือสังคมตำบล 84 ตำบล", category: "เครือข่าย", type: "XLSX", size: "850 KB", date: "15 ส.ค. 2569" },
-    ],
+    documents: [],
     systems: [
       { name: "ระบบ e-Social (ระบบเงินสงเคราะห์)", desc: "ระบบจ่ายเงินสงเคราะห์และสวัสดิการสังคมอิเล็กทรอนิกส์", url: "https://esocial.m-society.go.th", badge: "เงินสงเคราะห์", icon: "💳" },
       { name: "ระบบสมุดพกครอบครัวอิเล็กทรอนิกส์ (MSO-Logbook)", desc: "ระบบบันทึกและติดตามสภาพปัญหารายครัวเรือน", url: "https://logbook.m-society.go.th", badge: "ครอบครัวเปราะบาง", icon: "📖" },
@@ -145,12 +131,7 @@ export const MISSION_GROUPS: MissionGroup[] = [
       { label: "กายอุปกรณ์และผู้ช่วย", value: "620 ชุด", change: "ส่งมอบแล้ว 100%", icon: "🦽" },
       { label: "ศูนย์บริการคนพิการชุมชน", value: "32 แห่ง", change: "ครอบคลุม 11 อำเภอ", icon: "🏛️" },
     ],
-    documents: [
-      { id: "doc_13", title: "คู่มือสิทธิและสวัสดิการคนพิการจังหวัดกำแพงเพชร ฉบับปรับปรุง 2569", category: "คู่มือ", type: "PDF", size: "5.4 MB", date: "1 พ.ย. 2569" },
-      { id: "doc_14", title: "แบบคำขอกู้ยืมเงินทุนประกอบอาชีพสำหรับคนพิการและผู้ดูแล", category: "กองทุน พก.", type: "DOCX", size: "380 KB", date: "24 ต.ค. 2569" },
-      { id: "doc_15", title: "แบบประเมินความต้องการกายอุปกรณ์และเครื่องช่วยความพิการ", category: "กายอุปกรณ์", type: "PDF", size: "420 KB", date: "12 ต.ค. 2569" },
-      { id: "doc_16", title: "เกณฑ์การขอรับบริการผู้ช่วยคนพิการ (Personal Assistant)", category: "ระเบียบ", type: "PDF", size: "1.2 MB", date: "5 ก.ย. 2569" },
-    ],
+    documents: [],
     systems: [
       { name: "ระบบ DEP Information System (พก.)", desc: "ฐานข้อมูลสารสนเทศคนพิการระดับชาติ กรมส่งเสริมและพัฒนาคุณภาพชีวิตคนพิการ", url: "https://dep.go.th", badge: "ฐานข้อมูลคนพิการ", icon: "♿" },
       { name: "ระบบกู้ยืมเงินกองทุน พก. ออนไลน์", desc: "ยื่นคำขอกู้ยืมเงินประกอบอาชีพสำหรับคนพิการและผู้ดูแล", url: "https://efund.dep.go.th", badge: "กองทุนกู้ยืม", icon: "💰" },
@@ -335,26 +316,6 @@ export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPag
       return true;
     });
   }, [directoryMembers, personnelSearch, personnelDivisionFilter]);
-
-  // Combined documents for search
-  const filteredDocuments = useMemo(() => {
-    const list =
-      selectedGroup === "all"
-        ? MISSION_GROUPS.flatMap((g) =>
-            g.documents.map((d) => ({ ...d, groupName: g.name, groupIcon: g.icon }))
-          )
-        : activeGroup?.documents.map((d) => ({
-            ...d,
-            groupName: activeGroup.name,
-            groupIcon: activeGroup.icon,
-          })) || [];
-
-    if (!searchQuery.trim()) return list;
-    const q = searchQuery.toLowerCase();
-    return list.filter(
-      (d) => d.title.toLowerCase().includes(q) || d.category.toLowerCase().includes(q)
-    );
-  }, [selectedGroup, activeGroup, searchQuery]);
 
   const selectedDistrictObj = useMemo(() => {
     return KAMPHAENG_PHET_DISTRICTS.find((d) => d.districtId === districtFilter);
@@ -1382,96 +1343,13 @@ export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPag
         </div>
       )}
 
-      {/* ─── 5. TAB 4: DOCUMENTS & FORMS SECTION ─── */}
+      {/* ─── 5. TAB 4: DOCUMENTS & FORMS SECTION (REAL SUPABASE + SYNOLOGY NAS) ─── */}
       {activeMainTab === "documents" && (
-        <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-            <div>
-              <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-2">
-                <span>📄</span>
-                <span>สารบบแบบฟอร์มคำขอ และคู่มือปฏิบัติงาน</span>
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                ดาวน์โหลดแบบฟอร์มมาตรฐาน คู่มือ และแผนปฏิบัติราชการของ 4 กลุ่มภารกิจ พมจ.กำแพงเพชร
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={() => setActiveMainTab("orders")}
-                className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold cursor-pointer transition-colors"
-              >
-                📜 ค้นหาคำสั่ง / ประกาศ / ระเบียบ →
-              </button>
-              <div className="relative w-full sm:w-64">
-                <input
-                  type="text"
-                  placeholder="ค้นหาแบบฟอร์ม / คู่มือ..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                />
-                <span className="absolute left-2.5 top-2 text-xs text-slate-400">🔍</span>
-              </div>
-            </div>
-          </div>
-
-          {filteredDocuments.length === 0 ? (
-            <div className="py-12 text-center text-slate-400 text-xs">
-              ไม่พบเอกสารที่ค้นหา
-            </div>
-          ) : (
-            <div className="divide-y divide-slate-100">
-              {filteredDocuments.map((doc) => {
-                const badgeClass =
-                  doc.type === "PDF"
-                    ? "bg-rose-50 text-rose-700 border-rose-200"
-                    : doc.type === "DOCX"
-                    ? "bg-blue-50 text-blue-700 border-blue-200"
-                    : "bg-emerald-50 text-emerald-700 border-emerald-200";
-
-                return (
-                  <div
-                    key={doc.id}
-                    className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/80 px-2 rounded-xl transition-colors"
-                  >
-                    <div className="flex items-start gap-3 min-w-0">
-                      <span
-                        className={`px-2 py-1 rounded-lg text-[10px] font-extrabold border ${badgeClass} shrink-0`}
-                      >
-                        {doc.type}
-                      </span>
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold text-slate-800 truncate">
-                          {doc.title}
-                        </div>
-                        <div className="text-[10px] text-slate-400 flex items-center gap-2 mt-0.5">
-                          <span className="text-indigo-600 font-bold">{doc.category}</span>
-                          <span>•</span>
-                          <span>ขนาด {doc.size}</span>
-                          <span>•</span>
-                          <span>อัปเดต {doc.date}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => showToast(`📥 กำลังเริ่มดาวน์โหลด: ${doc.title}`)}
-                        className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5"
-                      >
-                        <span>📥</span>
-                        <span>ดาวน์โหลด</span>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        <DataHubDocsPanel
+          currentUser={currentUser}
+          showToast={showToast}
+          onGoToOrders={() => setActiveMainTab("orders")}
+        />
       )}
 
       {/* ─── 5B. TAB 5: OFFICIAL ORDERS & ANNOUNCEMENTS REPOSITORY ─── */}

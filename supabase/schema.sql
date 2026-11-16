@@ -495,3 +495,29 @@ on conflict (id) do update set
   equipment = excluded.equipment,
   status = excluded.status,
   notes = excluded.notes;
+
+-- ===============================
+-- 14. Data Hub Documents (คลังแบบฟอร์ม คู่มือปฏิบัติงาน และเอกสารเผยแพร่)
+-- ===============================
+create table if not exists datahub_documents (
+  id uuid primary key default gen_random_uuid(),
+  doc_type text not null default 'form' check (doc_type in ('form', 'manual', 'guideline', 'plan', 'other')),
+  title text not null,
+  division text not null default '',
+  description text default '',
+  keywords text[] default '{}',
+  nas_path text,
+  file_url text,
+  file_name text,
+  file_size bigint default 0,
+  file_ext text default '',
+  updated_date date default current_date,
+  created_by text,
+  created_by_name text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+alter table datahub_documents enable row level security;
+create policy "Allow all read datahub_documents" on datahub_documents for select using (true);
+create policy "Allow all write datahub_documents" on datahub_documents for all using (true) with check (true);
