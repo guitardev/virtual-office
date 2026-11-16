@@ -22,9 +22,26 @@ export interface SmartUploadResult {
   storage: "nas" | "supabase";
 }
 
-function sanitizeFilename(name: string): string {
-  const cleaned = name.replace(/[^\w.\-\u0E00-\u0E7F]+/g, "_");
-  return cleaned || `file_${Date.now()}`;
+function buildSafeStorageObjectKey(nasFolder: string, originalFileName: string): string {
+  const safeFolder = nasFolder
+    .replace(/^\/+/, "")
+    .replace(/\/+$/, "")
+    .replace(/[^a-zA-Z0-9/_-]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "") || "uploads";
+
+  const dotIdx = originalFileName.lastIndexOf(".");
+  const rawExt = dotIdx > 0 ? originalFileName.slice(dotIdx + 1) : "";
+  const safeExt = rawExt.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+  const baseAscii = (dotIdx > 0 ? originalFileName.slice(0, dotIdx) : originalFileName)
+    .replace(/[^a-zA-Z0-9._-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 40);
+  const rand = Math.random().toString(36).slice(2, 8);
+  const filePart = `${Date.now()}_${rand}${baseAscii ? `_${baseAscii}` : ""}${
+    safeExt ? `.${safeExt}` : ""
+  }`;
+  return `${safeFolder}/${filePart}`;
 }
 
 export async function uploadSmartFile(
@@ -94,8 +111,7 @@ export async function uploadSmartFile(
     );
   }
 
-  const folderClean = nasFolder.replace(/^\/+/, "").replace(/\/+$/, "");
-  const objectKey = `${folderClean}/${Date.now()}_${sanitizeFilename(file.name)}`;
+  const objectKey = buildSafeStorageObjectKey(nasFolder, file.name);
 
   const { error: uploadError } = await supabase.storage
     .from(DATAHUB_STORAGE_BUCKET)
