@@ -12,6 +12,15 @@ import {
 import { SocialStatisticsReportModal } from "./SocialStatisticsReportModal";
 import { OfficialOrdersPanel } from "./OfficialOrdersPanel";
 import { DataHubDocsPanel } from "./DataHubDocsPanel";
+import {
+  SOCIAL_SUB_TABS,
+  SocialSubTabKey,
+  ChildrenSubTabView,
+  WomenSubTabView,
+  ElderlySubTabView,
+  DisabledSubTabView,
+  HomelessSubTabView,
+} from "./SocialSituationSubTabs";
 import { isRealMember, isSystemServiceAccount } from "@/lib/supabase";
 import {
   KPP_MSO_LOGBOOK,
@@ -143,6 +152,7 @@ export const MISSION_GROUPS: MissionGroup[] = [
 export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPageProps) {
   // Main Tab Navigation: stats, divisions, personnel, documents, orders
   const [activeMainTab, setActiveMainTab] = useState<"stats" | "divisions" | "personnel" | "documents" | "orders">("stats");
+  const [activeSocialSubTab, setActiveSocialSubTab] = useState<SocialSubTabKey>("population");
 
   // Social Statistics Filters & Export State
   const [fiscalYear, setFiscalYear] = useState<string>("2569");
@@ -376,7 +386,7 @@ export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPag
               }`}
             >
               <span>📊</span>
-              <span>สถานการณ์กลุ่มเปราะบาง 11 อำเภอ</span>
+              <span>สถานการณ์ทางสังคมจังหวัดกำแพงเพชร</span>
             </button>
 
             <button
@@ -511,6 +521,79 @@ export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPag
             </div>
           </div>
 
+          {/* Sub-Tabs for สถานการณ์ทางสังคมจังหวัดกำแพงเพชร */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-2 shadow-2xs flex items-center gap-1.5 overflow-x-auto">
+            {SOCIAL_SUB_TABS.map((tab) => {
+              const isActive = activeSocialSubTab === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setActiveSocialSubTab(tab.key)}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${
+                    isActive
+                      ? "bg-indigo-600 text-white shadow-xs"
+                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                  }`}
+                >
+                  <span>{tab.icon}</span>
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {activeSocialSubTab === "children" && <ChildrenSubTabView />}
+          {activeSocialSubTab === "women" && <WomenSubTabView />}
+          {activeSocialSubTab === "elderly" && <ElderlySubTabView />}
+          {activeSocialSubTab === "disabled" && <DisabledSubTabView />}
+          {activeSocialSubTab === "homeless" && <HomelessSubTabView />}
+
+          {activeSocialSubTab === "population" && (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs space-y-1">
+                  <div className="text-xs font-bold text-slate-500">ประชากรจังหวัดกำแพงเพชร</div>
+                  <div className="text-2xl font-extrabold text-slate-900 font-heading tabular-nums">
+                    {KPP_MSO_LOGBOOK.main.population.toLocaleString("th-TH")}
+                  </div>
+                  <div className="text-[10px] text-slate-500">
+                    พื้นที่รับผิดชอบ {KPP_MSO_LOGBOOK.main.region}
+                  </div>
+                </div>
+                <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs space-y-1">
+                  <div className="text-xs font-bold text-sky-800">ครัวเรือนทั้งหมดในจังหวัด</div>
+                  <div className="text-2xl font-extrabold text-sky-700 font-heading tabular-nums">
+                    {KPP_MSO_LOGBOOK.main.households.toLocaleString("th-TH")}
+                  </div>
+                  <div className="text-[10px] text-sky-700">
+                    ครัวเรือนเปราะบาง {KPP_MSO_LOGBOOK.main.hh.toLocaleString("th-TH")} ครัวเรือน
+                  </div>
+                </div>
+                <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs space-y-1">
+                  <div className="text-xs font-bold text-indigo-800">เขตการปกครอง</div>
+                  <div className="text-2xl font-extrabold text-indigo-700 font-heading tabular-nums">
+                    11 อำเภอ
+                  </div>
+                  <div className="text-[10px] text-indigo-700">
+                    รวม 78 ตำบลในจังหวัดกำแพงเพชร
+                  </div>
+                </div>
+                <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs space-y-1">
+                  <div className="text-xs font-bold text-slate-500">อัตราเกิด / ตาย / ย้ายถิ่น</div>
+                  <div className="text-2xl font-extrabold text-slate-400 font-heading tabular-nums">
+                    NA
+                  </div>
+                  <div className="text-[10px] text-slate-500">
+                    รอเชื่อมตัวชี้วัดรายปี (SOSYS)
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {activeSocialSubTab === "vulnerable" && (
+            <>
           {/* 5 Big MSO-Logbook KPI Metric Cards (Kamphaeng Phet Real Baseline) */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
             <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs space-y-1">
@@ -674,7 +757,11 @@ export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPag
               })}
             </div>
           </div>
+            </>
+          )}
 
+          {activeSocialSubTab === "population" && (
+          <>
           {/* Interactive District Table */}
           <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-xs space-y-3">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
@@ -792,6 +879,8 @@ export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPag
               </table>
             </div>
           </div>
+          </>
+          )}
         </div>
       )}
 
