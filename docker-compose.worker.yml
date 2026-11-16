@@ -1,0 +1,15 @@
+services:
+  attendance-worker:
+    image: node:20-alpine
+    container_name: smart-mso-attendance-worker
+    working_dir: /app
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Bangkok
+    volumes:
+      - ./:/app
+    command: >
+      sh -c "[ -d node_modules ] || npm install --omit=dev;
+      node scripts/sync-attendance.mjs --schedule --watch --log --run-now"
+
