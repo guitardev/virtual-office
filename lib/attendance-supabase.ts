@@ -779,6 +779,8 @@ export interface AttendanceSyncTelemetry {
   lastSyncedAt: string | null;
   lastMysqlSyncedAt?: string | null;
   deviceTotalRecords: number;
+  nasTotalRecords?: number | null;
+  localTotalRecords?: number | null;
   registeredUsersCount?: number;
   fingerprintsCount?: number;
   passwordsCount?: number;
@@ -910,6 +912,10 @@ export async function fetchLatestAttendanceSyncTelemetryFromSupabase(): Promise<
       lastMysqlSyncedAt:
         typeof meta.lastMysqlSyncedAt === "string" ? meta.lastMysqlSyncedAt : null,
       deviceTotalRecords: Number(meta.deviceTotalRecords || 0),
+      nasTotalRecords:
+        typeof meta.nasTotalRecords === "number" ? meta.nasTotalRecords : null,
+      localTotalRecords:
+        typeof meta.localTotalRecords === "number" ? meta.localTotalRecords : null,
       registeredUsersCount:
         typeof meta.registeredUsersCount === "number"
           ? meta.registeredUsersCount

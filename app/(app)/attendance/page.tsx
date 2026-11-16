@@ -102,6 +102,8 @@ export default function AttendancePage() {
   const [filteredTotal, setFilteredTotal] = useState<number>(0);
   const [totalStoredLogs, setTotalStoredLogs] = useState<number>(0);
   const [deviceTotalRecords, setDeviceTotalRecords] = useState<number>(0);
+  const [nasTotalRecords, setNasTotalRecords] = useState<number | null>(null);
+  const [localTotalRecords, setLocalTotalRecords] = useState<number | null>(null);
   const [deviceOverview, setDeviceOverview] = useState<DeviceOverviewMetadata | null>(null);
   const [scannerOverview, setScannerOverview] = useState<ScannerOverviewResponse | null>(null);
   const [latestScanTimestamp, setLatestScanTimestamp] = useState<string | null>(null);
@@ -262,6 +264,12 @@ export default function AttendancePage() {
             typeof data.deviceTotalRecords === "number"
               ? data.deviceTotalRecords
               : data.totalStoredLogs || 0
+          );
+          setNasTotalRecords(
+            typeof data.nasTotalRecords === "number" ? data.nasTotalRecords : null
+          );
+          setLocalTotalRecords(
+            typeof data.localTotalRecords === "number" ? data.localTotalRecords : null
           );
           if (data.deviceOverview) setDeviceOverview(data.deviceOverview);
           if (data.scannerOverview !== undefined) setScannerOverview(data.scannerOverview);
@@ -1353,24 +1361,25 @@ export default function AttendancePage() {
                 </button>
               )}
             </div>
-            <div className="mt-1 text-xs text-slate-500 flex items-center justify-between gap-2">
-              <span className="truncate">
-                NAS:{" "}
-                <strong className="text-slate-700 dark:text-slate-300">
-                  {mysqlStatus?.connected && typeof mysqlStatus.rowCount === "number"
-                    ? `${mysqlStatus.rowCount.toLocaleString()} รายการ`
-                    : mysqlStatus?.errorCode === "CLOUD_LAN_UNREACHABLE"
-                    ? "โหมด Cloud"
-                    : "ยังไม่ซิงก์"}
-                </strong>
-              </span>
-              {supabaseStatus?.ready ? (
-                <span className="text-[11px] font-semibold text-sky-600 dark:text-sky-400">
-                  ☁️ Supabase: {supabaseStatus.count.toLocaleString()} รายการ
-                </span>
-              ) : (
-                <span className="text-[11px] text-rose-500">☁️ Cloud ไม่พร้อม</span>
-              )}
+            <div className="mt-2 grid grid-cols-3 gap-1.5 text-[11px]">
+              <div className="rounded-lg bg-slate-50 dark:bg-slate-800/70 px-2 py-1.5 border border-slate-200/70 dark:border-slate-700/70">
+                <div className="text-[10px] text-slate-500 truncate">🗄️ NAS MySQL</div>
+                <div className="font-bold text-slate-800 dark:text-slate-100 tabular-nums">
+                  {nasTotalRecords != null ? nasTotalRecords.toLocaleString() : "NA"}
+                </div>
+              </div>
+              <div className="rounded-lg bg-sky-50/70 dark:bg-sky-950/30 px-2 py-1.5 border border-sky-200/70 dark:border-sky-800/50">
+                <div className="text-[10px] text-sky-700 dark:text-sky-300 truncate">☁️ Supabase</div>
+                <div className="font-bold text-sky-800 dark:text-sky-200 tabular-nums">
+                  {supabaseStatus?.ready ? supabaseStatus.count.toLocaleString() : "NA"}
+                </div>
+              </div>
+              <div className="rounded-lg bg-teal-50/70 dark:bg-teal-950/30 px-2 py-1.5 border border-teal-200/70 dark:border-teal-800/50">
+                <div className="text-[10px] text-teal-700 dark:text-teal-300 truncate">💾 Local JSON</div>
+                <div className="font-bold text-teal-800 dark:text-teal-200 tabular-nums">
+                  {localTotalRecords != null ? localTotalRecords.toLocaleString() : "NA"}
+                </div>
+              </div>
             </div>
           </div>
 

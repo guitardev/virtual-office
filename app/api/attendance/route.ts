@@ -440,6 +440,22 @@ export async function GET(req: NextRequest) {
             totalStoredLogs || 0
           ));
 
+    const effectiveNasTotalRecords =
+      mysqlStatus?.connected && typeof mysqlStatus.rowCount === "number"
+        ? mysqlStatus.rowCount
+        : typeof remoteSyncRequest?.result?.nasActiveAfter === "number"
+        ? remoteSyncRequest.result.nasActiveAfter
+        : typeof cloudTelemetry?.nasTotalRecords === "number"
+        ? cloudTelemetry.nasTotalRecords
+        : null;
+
+    const effectiveLocalTotalRecords =
+      totalStoredLogs > 0
+        ? totalStoredLogs
+        : typeof cloudTelemetry?.localTotalRecords === "number"
+        ? cloudTelemetry.localTotalRecords
+        : null;
+
     const latestLocalScanTs =
       activeLocalLogs.length > 0 ? activeLocalLogs[0].scanTimestamp : null;
     const latestScanTimestamp =
@@ -484,6 +500,8 @@ export async function GET(req: NextRequest) {
       lastMysqlSyncedAt: effectiveLastMysqlSyncedAt,
       latestScanTimestamp,
       deviceTotalRecords: effectiveDeviceTotalRecords,
+      nasTotalRecords: effectiveNasTotalRecords,
+      localTotalRecords: effectiveLocalTotalRecords,
       totalStoredLogs,
       availableDates,
       availableMonths,

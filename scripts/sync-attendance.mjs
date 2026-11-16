@@ -1083,6 +1083,9 @@ async function runSyncOnce(overrideLimit) {
             lastSyncedAt: store.lastSyncedAt,
             lastMysqlSyncedAt: store.lastMysqlSyncedAt,
             deviceTotalRecords: pulled.totalCount,
+            nasTotalRecords: typeof nasAfter === "number" ? nasAfter : null,
+            localTotalRecords:
+              typeof activeLocalAfter === "number" ? activeLocalAfter : null,
             registeredUsersCount: overview.status.registeredUsersCount,
             fingerprintsCount: overview.status.fingerprintsCount,
             passwordsCount: overview.status.passwordsCount,
