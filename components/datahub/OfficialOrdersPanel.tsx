@@ -13,14 +13,13 @@ import {
   OfficialOrderYearCount,
   parseOrderNumberParts,
 } from "@/lib/official-orders";
-import { getUserNasSid, safeParseJsonResponse } from "@/lib/synology";
+import { getUserNasSid } from "@/lib/synology";
+import { uploadSmartFile } from "@/lib/smart-upload";
 
 interface OfficialOrdersPanelProps {
   currentUser: Member;
   showToast: (msg: string) => void;
 }
-
-const MAX_SERVERLESS_UPLOAD_BYTES = 4 * 1024 * 1024; // 4.0 MB Vercel limit
 
 const DIVISION_OPTIONS = [
   "ฝ่ายบริหารทั่วไป",
@@ -211,51 +210,34 @@ export function OfficialOrdersPanel({
   };
 
   const handleUploadPdfToNas = async (file: File) => {
-    if (file.size > MAX_SERVERLESS_UPLOAD_BYTES) {
-      showToast(
-        "ไฟล์มีขนาดเกิน 4.0 MB (ข้อจำกัดของ Cloud Server) กรุณาย่อไฟล์ PDF ก่อนอัปโหลด"
-      );
-      return;
-    }
-
     const parsed = parseOrderNumberParts(formDocNumber, formIssuedDate);
     const targetFolder = buildOrderNasFolder(parsed.orderYearBe, formCategory);
 
     try {
       setUploadingFile(true);
-      const fd = new FormData();
-      fd.append("folder_path", targetFolder);
-      const sid = getUserNasSid();
-      if (sid && !sid.startsWith("mock_") && sid !== "system_chat_session") {
-        fd.append("sid", sid);
+      const uploaded = await uploadSmartFile(file, targetFolder);
+      if (uploaded.nasPath) {
+        const viewUrl = `/api/nas/download?path=${encodeURIComponent(
+          uploaded.nasPath
+        )}&name=${encodeURIComponent(file.name)}&mode=open&strict=1`;
+        setFormNasPath(uploaded.nasPath);
+        setFormFileUrl(viewUrl);
+      } else {
+        setFormNasPath("");
+        setFormFileUrl(uploaded.fileUrl || "");
       }
-      // File MUST be appended last for Synology FileStation Upload
-      fd.append("file", file, file.name);
-
-      const res = await fetch("/api/nas/upload", {
-        method: "POST",
-        body: fd,
-      });
-      const data = await safeParseJsonResponse(res);
-      if (!res.ok || !data?.success) {
-        showToast(
-          data?.error || "อัปโหลดไฟล์ไปยัง Synology NAS ไม่สำเร็จ"
-        );
-        return;
-      }
-
-      const uploadedPath = data.file?.path || `${targetFolder}/${file.name}`;
-      const viewUrl = `/api/nas/download?path=${encodeURIComponent(
-        uploadedPath
-      )}&name=${encodeURIComponent(file.name)}&mode=open&strict=1`;
-
-      setFormNasPath(uploadedPath);
-      setFormFileUrl(viewUrl);
       setFormFileName(file.name);
       setFormFileSize(file.size);
-      showToast(`อัปโหลดไฟล์ "${file.name}" ไปยัง NAS สำเร็จ`);
-    } catch {
-      showToast("เกิดข้อผิดพลาดระหว่างอัปโหลดไฟล์ไปยัง NAS");
+      showToast(
+        uploaded.storage === "nas"
+          ? `อัปโหลดไฟล์ "${file.name}" ไปยัง NAS สำเร็จ`
+          : `อัปโหลดไฟล์ขนาดใหญ่ "${file.name}" ไปยัง Cloud Storage สำเร็จ`
+      );
+    } catch (err: unknown) {
+      const msg =
+        (err as { message?: string })?.message ||
+        "เกิดข้อผิดพลาดระหว่างอัปโหลดไฟล์";
+      showToast(msg);
     } finally {
       setUploadingFile(false);
     }

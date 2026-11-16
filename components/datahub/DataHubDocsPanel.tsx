@@ -12,15 +12,14 @@ import {
   formatFileSize,
 } from "@/lib/datahub-docs";
 import { formatThaiOrderDate } from "@/lib/official-orders";
-import { getUserNasSid, safeParseJsonResponse } from "@/lib/synology";
+import { getUserNasSid } from "@/lib/synology";
+import { uploadSmartFile } from "@/lib/smart-upload";
 
 interface DataHubDocsPanelProps {
   currentUser: Member;
   showToast: (msg: string) => void;
   onGoToOrders?: () => void;
 }
-
-const MAX_SERVERLESS_UPLOAD_BYTES = 4 * 1024 * 1024;
 
 const DIVISION_OPTIONS = [
   "ฝ่ายบริหารทั่วไป",
@@ -135,48 +134,22 @@ export function DataHubDocsPanel({
 
   const uploadToNasIfSelected = async (): Promise<{
     nasPath: string | null;
+    fileUrl: string | null;
     fileName: string | null;
     fileSize: number;
     fileExt: string;
   } | null> => {
     if (!selectedFile) return null;
-    if (selectedFile.size > MAX_SERVERLESS_UPLOAD_BYTES) {
-      throw new Error(
-        "ไฟล์มีขนาดเกิน 4 MB (ขีดจำกัดการอัปโหลดผ่านเว็บ) กรุณาบีบอัดไฟล์หรือใส่ลิงก์ภายนอกแทน"
-      );
-    }
-
     setUploadingFile(true);
     try {
       const targetFolder = buildDataHubDocNasFolder(formDocType);
-      const fd = new FormData();
-      fd.append("file", selectedFile);
-      fd.append("path", targetFolder);
-      fd.append("folder", targetFolder);
-
-      const sid = getUserNasSid();
-      const headers: Record<string, string> = {};
-      if (sid) headers["x-nas-sid"] = sid;
-
-      const res = await fetch("/api/nas/upload", {
-        method: "POST",
-        headers,
-        body: fd,
-      });
-      const parsed = await safeParseJsonResponse(res);
-      if (!res.ok || !parsed?.success) {
-        throw new Error(
-          String(parsed?.error || "อัปโหลดไฟล์ขึ้น Synology NAS ไม่สำเร็จ")
-        );
-      }
-
-      const uploadedPath =
-        (parsed.path as string) || `${targetFolder}/${selectedFile.name}`;
+      const uploaded = await uploadSmartFile(selectedFile, targetFolder);
       return {
-        nasPath: uploadedPath,
-        fileName: selectedFile.name,
-        fileSize: selectedFile.size,
-        fileExt: extractFileExtension(selectedFile.name, null),
+        nasPath: uploaded.nasPath,
+        fileUrl: uploaded.fileUrl,
+        fileName: uploaded.fileName,
+        fileSize: uploaded.fileSize,
+        fileExt: extractFileExtension(uploaded.fileName, uploaded.fileUrl),
       };
     } finally {
       setUploadingFile(false);
@@ -210,6 +183,7 @@ export function DataHubDocsPanel({
 
       if (uploaded) {
         payload.nasPath = uploaded.nasPath;
+        payload.fileUrl = uploaded.fileUrl || payload.fileUrl;
         payload.fileName = uploaded.fileName;
         payload.fileSize = uploaded.fileSize;
         payload.fileExt = uploaded.fileExt;
@@ -624,7 +598,7 @@ export function DataHubDocsPanel({
 
               <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-2">
                 <label className="block font-bold text-slate-700">
-                  📎 แนบไฟล์ขึ้น Synology NAS (ไม่เกิน 4 MB)
+                  📎 แนบไฟล์ (Synology NAS / Cloud Storage สูงสุด 50 MB)
                 </label>
                 <input
                   type="file"
