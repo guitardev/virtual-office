@@ -14,10 +14,11 @@ interface DailyAttendanceReportProps {
 
 const REPORT_UID_MIN = 2;
 const REPORT_UID_MAX = 42;
+const EXCLUDED_REPORT_UIDS = new Set<number>([3]);
 const REPORT_UIDS = Array.from(
   { length: REPORT_UID_MAX - REPORT_UID_MIN + 1 },
   (_, i) => REPORT_UID_MIN + i
-);
+).filter((uid) => !EXCLUDED_REPORT_UIDS.has(uid));
 
 type DailyStatusKey =
   | "complete"
@@ -104,7 +105,7 @@ export function DailyAttendanceReport({
     for (const item of dayLogs) {
       if (item.isDeleted) continue;
       const uid = Number(item.scannerUserId);
-      if (uid < REPORT_UID_MIN || uid > REPORT_UID_MAX) continue;
+      if (uid < REPORT_UID_MIN || uid > REPORT_UID_MAX || EXCLUDED_REPORT_UIDS.has(uid)) continue;
       const list = byUid.get(uid) || [];
       list.push(item);
       byUid.set(uid, list);
@@ -281,7 +282,7 @@ export function DailyAttendanceReport({
           <div>
             <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
               <span>📊</span>
-              <span>รายงานการลงเวลาปฏิบัติราชการประจำวัน (ID #2 – #42)</span>
+              <span>รายงานการลงเวลาปฏิบัติราชการประจำวัน (ID #2 – #42 ยกเว้น #3)</span>
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
               ประจำวันที่ {thaiDateLabel} • รายชื่อบุคลากรครบทั้ง {REPORT_UIDS.length} รหัส
@@ -361,7 +362,7 @@ export function DailyAttendanceReport({
         {/* 5 Daily KPIs */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-1">
           <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/60 px-3 py-2">
-            <div className="text-[10px] font-semibold text-slate-500">รายชื่อทั้งหมด (ID 2–42)</div>
+            <div className="text-[10px] font-semibold text-slate-500">รายชื่อทั้งหมด (ID 2–42 ยกเว้น #3)</div>
             <div className="text-lg font-extrabold text-slate-900 dark:text-white tabular-nums">
               {stats.total} คน
             </div>
@@ -411,7 +412,7 @@ export function DailyAttendanceReport({
             }
             className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium"
           >
-            <option value="all">แสดงครบทุก ID (2–42)</option>
+            <option value="all">แสดงครบทุก ID (2–42 ยกเว้น #3)</option>
             <option value="present">เฉพาะผู้มีสแกนวันนี้</option>
             <option value="late">เฉพาะมาสาย / อาจลาช่วงเช้า</option>
             <option value="absent">เฉพาะยังไม่พบข้อมูลสแกน</option>
