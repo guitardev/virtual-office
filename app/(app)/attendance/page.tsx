@@ -18,6 +18,7 @@ import {
   getFiscalYearDateRange,
   groupMonthsByFiscalYear,
 } from "@/lib/attendance-rules";
+import { DailyAttendanceReport } from "@/components/attendance/DailyAttendanceReport";
 
 interface ScannerOverviewResponse {
   info?: {
@@ -159,7 +160,8 @@ export default function AttendancePage() {
     AuthorizedAttendanceEditor[]
   >([]);
 
-  // ตัวกรองตาราง
+  // ตัวกรองตาราง & มุมมอง
+  const [activeView, setActiveView] = useState<"logs" | "daily">("logs");
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<string>("");
@@ -1527,6 +1529,41 @@ export default function AttendancePage() {
             </div>
           )}
 
+        {/* สลับมุมมอง: รายการสแกนทั้งหมด / รายงานประจำวัน (ID 2-42) */}
+        <div className="mt-4 flex flex-wrap items-center gap-2 print:hidden">
+          <button
+            type="button"
+            onClick={() => setActiveView("logs")}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer border ${
+              activeView === "logs"
+                ? "bg-slate-900 text-white border-slate-900 shadow-sm dark:bg-white dark:text-slate-900"
+                : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-50"
+            }`}
+          >
+            📋 รายการบันทึกเวลาทั้งหมด
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveView("daily")}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer border ${
+              activeView === "daily"
+                ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-50"
+            }`}
+          >
+            📊 รายงานประจำวัน (ID 2–42)
+          </button>
+        </div>
+
+        {activeView === "daily" ? (
+          <DailyAttendanceReport
+            mappings={mappings}
+            availableDates={availableDates}
+            defaultDate={getTodayThaiDate()}
+            showToast={showToast}
+          />
+        ) : (
+          <>
         {/* แถบตัวกรองและค้นหา (Filter Bar) */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 mt-4 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
           {/* แถวตัวกรองปฏิทินปีงบประมาณไทย (ต.ค.–ก.ย.) */}
@@ -2068,6 +2105,8 @@ export default function AttendancePage() {
             </div>
           )}
         </div>
+          </>
+        )}
       </div>
 
       {/* =====================================================================
