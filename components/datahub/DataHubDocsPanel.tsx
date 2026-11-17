@@ -598,7 +598,7 @@ export function DataHubDocsPanel({
 
               <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-2">
                 <label className="block font-bold text-slate-700">
-                  📎 แนบไฟล์ (Synology NAS / Cloud Storage สูงสุด 50 MB)
+                  📎 แนบไฟล์ (Synology NAS / Cloudflare R2 สูงสุด 100 MB)
                 </label>
                 <input
                   type="file"

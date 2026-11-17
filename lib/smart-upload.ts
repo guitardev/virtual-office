@@ -2,7 +2,7 @@ import { supabase } from "@/lib/supabase";
 import { getUserNasSid, safeParseJsonResponse } from "@/lib/synology";
 
 export const MAX_SERVERLESS_UPLOAD_BYTES = 4 * 1024 * 1024; // 4 MB (Vercel Serverless limit)
-export const MAX_LARGE_UPLOAD_BYTES = 50 * 1024 * 1024; // 50 MB (Supabase Storage direct upload)
+export const MAX_LARGE_UPLOAD_BYTES = 100 * 1024 * 1024; // 100 MB (Cloudflare R2 direct upload)
 export const DATAHUB_STORAGE_BUCKET = "datahub-files";
 
 export const STORAGE_BUCKET_MIGRATION_SQL = `INSERT INTO storage.buckets (id, name, public, file_size_limit)
@@ -19,21 +19,27 @@ export interface SmartUploadResult {
   fileUrl: string | null;
   fileName: string;
   fileSize: number;
-  storage: "nas" | "supabase";
+  storage: "nas" | "r2" | "supabase";
 }
 
-function buildSafeStorageObjectKey(nasFolder: string, originalFileName: string): string {
-  const safeFolder = nasFolder
-    .replace(/^\/+/, "")
-    .replace(/\/+$/, "")
-    .replace(/[^a-zA-Z0-9/_-]+/g, "_")
-    .replace(/_+/g, "_")
-    .replace(/^_+|_+$/g, "") || "uploads";
+function buildSafeStorageObjectKey(
+  nasFolder: string,
+  originalFileName: string
+): string {
+  const safeFolder =
+    nasFolder
+      .replace(/^\/+/, "")
+      .replace(/\/+$/, "")
+      .replace(/[^a-zA-Z0-9/_-]+/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_+|_+$/g, "") || "uploads";
 
   const dotIdx = originalFileName.lastIndexOf(".");
   const rawExt = dotIdx > 0 ? originalFileName.slice(dotIdx + 1) : "";
   const safeExt = rawExt.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
-  const baseAscii = (dotIdx > 0 ? originalFileName.slice(0, dotIdx) : originalFileName)
+  const baseAscii = (
+    dotIdx > 0 ? originalFileName.slice(0, dotIdx) : originalFileName
+  )
     .replace(/[^a-zA-Z0-9._-]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, 40);
@@ -44,19 +50,70 @@ function buildSafeStorageObjectKey(nasFolder: string, originalFileName: string):
   return `${safeFolder}/${filePart}`;
 }
 
+async function tryUploadToR2(
+  file: File,
+  objectKey: string
+): Promise<SmartUploadResult | null> {
+  const presignRes = await fetch("/api/r2/presign", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      objectKey,
+      contentType: file.type || "application/octet-stream",
+      fileSize: file.size,
+    }),
+  });
+
+  const presignData = await safeParseJsonResponse(presignRes);
+  if (presignRes.status === 503 && presignData?.configured === false) {
+    // R2 not configured in this environment — allow fallback to Supabase Storage
+    return null;
+  }
+
+  if (!presignRes.ok || !presignData?.success || !presignData?.presignedUrl) {
+    throw new Error(
+      String(presignData?.error || "ไม่สามารถสร้างลิงก์อัปโหลด Cloudflare R2 ได้")
+    );
+  }
+
+  const putRes = await fetch(String(presignData.presignedUrl), {
+    method: "PUT",
+    headers: {
+      "Content-Type": file.type || "application/octet-stream",
+    },
+    body: file,
+  });
+
+  if (!putRes.ok) {
+    throw new Error(
+      `อัปโหลดไฟล์ขึ้น Cloudflare R2 ไม่สำเร็จ (HTTP ${putRes.status}) — กรุณาตรวจสอบการตั้งค่า CORS Policy บน Bucket`
+    );
+  }
+
+  return {
+    nasPath: null,
+    fileUrl: String(presignData.publicUrl),
+    fileName: file.name,
+    fileSize: file.size,
+    storage: "r2",
+  };
+}
+
 export async function uploadSmartFile(
   file: File,
   nasFolder: string
 ): Promise<SmartUploadResult> {
   if (file.size > MAX_LARGE_UPLOAD_BYTES) {
-    throw new Error("ไฟล์มีขนาดเกิน 50 MB กรุณาบีบอัดไฟล์หรือใส่ลิงก์ภายนอกแทน");
+    throw new Error(
+      "ไฟล์มีขนาดเกิน 100 MB กรุณาบีบอัดไฟล์หรือใส่ลิงก์ภายนอกแทน"
+    );
   }
 
   const isVercelHost =
     typeof window !== "undefined" &&
     /\.vercel\.app$/i.test(window.location.hostname);
 
-  // 1. Try Synology NAS via /api/nas/upload when <= 4 MB or running self-hosted (not Vercel)
+  // 1. Try Synology NAS via /api/nas/upload when <= 4 MB or running self-hosted
   if (file.size <= MAX_SERVERLESS_UPLOAD_BYTES || !isVercelHost) {
     try {
       const fd = new FormData();
@@ -89,7 +146,6 @@ export async function uploadSmartFile(
             storage: "nas",
           };
         }
-        // If NAS upload failed for small file, only fall back to Supabase Storage when > 4 MB
         if (file.size <= MAX_SERVERLESS_UPLOAD_BYTES) {
           throw new Error(
             String(parsed?.error || "อัปโหลดไฟล์ขึ้น Synology NAS ไม่สำเร็จ")
@@ -100,18 +156,24 @@ export async function uploadSmartFile(
       if (file.size <= MAX_SERVERLESS_UPLOAD_BYTES) {
         throw err;
       }
-      // For > 4 MB files, fall through to Supabase Storage direct browser upload
+      // For > 4 MB files, fall through to Cloudflare R2 / Supabase Storage
     }
   }
 
-  // 2. Direct browser upload to Supabase Storage (bypasses Vercel 4.5 MB limit, up to 50 MB)
-  if (!supabase) {
-    throw new Error(
-      "ไฟล์มีขนาดเกิน 4 MB และยังไม่ได้ตั้งค่า Supabase Storage สำหรับอัปโหลดไฟล์ขนาดใหญ่"
-    );
+  const objectKey = buildSafeStorageObjectKey(nasFolder, file.name);
+
+  // 2. Try Cloudflare R2 direct browser upload (10 GB free, 0 egress, up to 100 MB)
+  const r2Result = await tryUploadToR2(file, objectKey);
+  if (r2Result) {
+    return r2Result;
   }
 
-  const objectKey = buildSafeStorageObjectKey(nasFolder, file.name);
+  // 3. Fallback to Supabase Storage if R2 is not configured
+  if (!supabase) {
+    throw new Error(
+      "ไฟล์มีขนาดเกิน 4 MB และยังไม่ได้ตั้งค่า Cloudflare R2 หรือ Supabase Storage"
+    );
+  }
 
   const { error: uploadError } = await supabase.storage
     .from(DATAHUB_STORAGE_BUCKET)

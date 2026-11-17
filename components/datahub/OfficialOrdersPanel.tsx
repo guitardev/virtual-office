@@ -234,6 +234,8 @@ export function OfficialOrdersPanel({
       showToast(
         uploaded.storage === "nas"
           ? `อัปโหลดไฟล์ "${file.name}" ไปยัง NAS สำเร็จ`
+          : uploaded.storage === "r2"
+          ? `อัปโหลดไฟล์ขนาดใหญ่ "${file.name}" ไปยัง Cloudflare R2 สำเร็จ`
           : `อัปโหลดไฟล์ขนาดใหญ่ "${file.name}" ไปยัง Cloud Storage สำเร็จ`
       );
     } catch (err: unknown) {
@@ -891,7 +893,7 @@ export function OfficialOrdersPanel({
               <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-dashed border-slate-300 dark:border-slate-700 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="font-semibold text-slate-700 dark:text-slate-200">
-                    📎 ไฟล์หนังสือคำสั่ง/ประกาศ (PDF บน NAS / Cloud สูงสุด 50 MB)
+                    📎 ไฟล์หนังสือคำสั่ง/ประกาศ (PDF บน NAS / Cloudflare R2 สูงสุด 100 MB)
                   </span>
                   {formFileName && (
                     <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
