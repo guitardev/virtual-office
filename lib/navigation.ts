@@ -34,6 +34,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: "meetings", label: "การประชุม", icon: "📹" },
       { id: "chat", label: "แชททีม", icon: "💬" },
       { id: "carbooking", label: "รถราชการ", icon: "🚗" },
+      { id: "leave", label: "ระบบใบลา", icon: "📝" },
     ],
   },
   {
@@ -78,6 +79,7 @@ export const MODULE_TO_ROUTE: Record<ModuleId, string> = {
   meetings: "/meetings",
   circular: "/circular",
   carbooking: "/carbooking",
+  leave: "/leave",
   attendance: "/attendance",
   datahub: "/data-hub",
   files: "/files",
@@ -99,6 +101,7 @@ export const ROUTE_TO_MODULE: Record<string, ModuleId> = {
   "/meetings": "meetings",
   "/circular": "circular",
   "/carbooking": "carbooking",
+  "/leave": "leave",
   "/attendance": "attendance",
   "/data-hub": "datahub",
   "/files": "files",

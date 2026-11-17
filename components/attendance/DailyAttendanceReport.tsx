@@ -437,8 +437,17 @@ export function DailyAttendanceReport({
                 </td>
                 <td className="border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-left">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-slate-700 dark:text-slate-200">
-                      {row.note?.noteText || ""}
+                    <span className="text-slate-700 dark:text-slate-200 flex items-center gap-1.5 flex-wrap">
+                      <span>{row.note?.noteText || ""}</span>
+                      {row.note?.refType === "leave_request" && (
+                        <span
+                          data-docx-ignore="true"
+                          data-pdf-ignore="true"
+                          className="print:hidden inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-semibold"
+                        >
+                          🔗 จากระบบใบลา
+                        </span>
+                      )}
                     </span>
                     {canEdit && (
                       <button

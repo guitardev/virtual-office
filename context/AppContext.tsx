@@ -1871,6 +1871,7 @@ function AppProviderInner({ children }: { children: React.ReactNode }) {
       task: taskCount,
       meetings: meetingCount,
       carbooking: unreadCarBookingCount > 0 ? unreadCarBookingCount : carCount,
+      leave: 0,
       attendance: 0,
       circular: unreadCircularCount,
       files: 0,
