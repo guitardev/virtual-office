@@ -172,25 +172,8 @@ export function buildDefaultMappings(): Record<number, ScannerUserMapping> {
 }
 
 export function buildDefaultEditors(): AuthorizedAttendanceEditor[] {
-  // ค่าเริ่มต้น: ให้หัวหน้าฝ่ายบริหารทั่วไป (syno_เสกพล) และเจ้าหน้าที่กลุ่มนโยบายและวิชาการ (syno_ขวัญนภา) มีสิทธิ์แก้ไขเวลาได้นอกเหนือจาก Admin
-  return [
-    {
-      memberId: "syno_เสกพล",
-      memberName: "นายเสกพล ดิษฐโชติ",
-      division: "ฝ่ายบริหารทั่วไป",
-      role: "manager",
-      grantedBy: "ระบบเริ่มต้น (Default)",
-      grantedAt: new Date().toISOString(),
-    },
-    {
-      memberId: "syno_ขวัญนภา",
-      memberName: "นางสาวขวัญนภา ศิริสมบัติ",
-      division: "กลุ่มนโยบายและวิชาการ",
-      role: "member",
-      grantedBy: "ระบบเริ่มต้น (Default)",
-      grantedAt: new Date().toISOString(),
-    },
-  ];
+  // ไม่มีรายชื่อเริ่มต้นแบบ hardcode — ให้ Admin กำหนดผู้มีสิทธิ์ผ่านตาราง attendance_authorized_editors เท่านั้น
+  return [];
 }
 
 export function loadAttendanceStore(): AttendanceStoreData {
