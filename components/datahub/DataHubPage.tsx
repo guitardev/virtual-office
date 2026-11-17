@@ -274,15 +274,15 @@ export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPag
     return activeGroup?.staff || [];
   }, [activeGroup]);
 
-  // Division Filter Chips for Personnel Tab
+  // Division Filter Chips for Personnel Tab (exact official division names)
   const personnelDivisionFilters = useMemo(() => {
     const base = [
       { id: "all", label: "ทั้งหมด" },
-      { id: "ผู้บริหาร", label: "ผู้บริหาร" },
-      { id: "ฝ่ายบริหารทั่วไป", label: "บริหารทั่วไป" },
-      { id: "กลุ่มนโยบายและวิชาการ", label: "นโยบายและวิชาการ" },
-      { id: "กลุ่มการพัฒนาสังคมและสวัสดิการ", label: "สังคมและสวัสดิการ" },
-      { id: "ศูนย์บริการคนพิการ", label: "ศูนย์คนพิการ" },
+      { id: "ผู้บริหาร", label: "ผู้บริหาร พมจ." },
+      { id: "ฝ่ายบริหารทั่วไป", label: "ฝ่ายบริหารทั่วไป" },
+      { id: "กลุ่มนโยบายและวิชาการ", label: "กลุ่มนโยบายและวิชาการ" },
+      { id: "กลุ่มการพัฒนาสังคมและสวัสดิการ", label: "กลุ่มการพัฒนาสังคมและสวัสดิการ" },
+      { id: "ศูนย์บริการคนพิการจังหวัดกำแพงเพชร", label: "ศูนย์บริการคนพิการจังหวัดกำแพงเพชร" },
     ];
     if (directoryMembers.some((m) => m.division === "รอกำหนดกลุ่มงาน")) {
       base.push({ id: "รอกำหนดกลุ่มงาน", label: "รอกำหนดกลุ่มงาน" });
@@ -1372,7 +1372,7 @@ export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPag
                           <div className="text-[11px] font-semibold text-indigo-700 mt-0.5">
                             {staff.position}
                           </div>
-                          <div className="text-[10px] text-slate-500 mt-0.5 truncate">
+                          <div className="text-[10px] text-slate-500 mt-0.5 leading-snug">
                             {staff.division}
                           </div>
                         </div>
