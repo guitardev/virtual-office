@@ -225,14 +225,17 @@ export function DailyAttendanceReport({
         null;
 
       const checkOutCandidates = scans.filter((s) => s.ioMode === 2);
+      const afternoonScans = scans.filter(
+        (s) =>
+          s.id !== checkInScan?.id &&
+          (extractHHMM(s.scanTimestamp) || "") >= "12:00"
+      );
       const checkOutScan =
         checkOutCandidates.length > 0
           ? checkOutCandidates[checkOutCandidates.length - 1]
-          : scans.find(
-              (s) =>
-                s.id !== checkInScan?.id &&
-                (extractHHMM(s.scanTimestamp) || "") >= "12:00"
-            ) || null;
+          : afternoonScans.length > 0
+          ? afternoonScans[afternoonScans.length - 1]
+          : null;
 
       return {
         uid,
