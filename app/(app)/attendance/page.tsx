@@ -142,7 +142,7 @@ export default function AttendancePage() {
     user: "smartmso",
     password: "",
     database: "smart_mso_attendance",
-    cloudflareBridgeUrl: "https://db.smso.site/attendance-bridge.php",
+    cloudflareBridgeUrl: "",
     cloudflareBridgeSecret: "",
     scannerIp: "192.168.162.15",
     scannerPort: 5005,

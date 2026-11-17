@@ -146,9 +146,7 @@ export function getEnvMysqlDefaults(): NasMysqlConfig {
     user: process.env.NAS_MYSQL_USER || "smartmso",
     password: process.env.NAS_MYSQL_PASSWORD || "",
     database: process.env.NAS_MYSQL_DATABASE || "smart_mso_attendance",
-    cloudflareBridgeUrl:
-      process.env.NAS_MYSQL_BRIDGE_URL ||
-      "https://db.smso.site/attendance-bridge.php",
+    cloudflareBridgeUrl: process.env.NAS_MYSQL_BRIDGE_URL || "",
     cloudflareBridgeSecret: process.env.NAS_MYSQL_BRIDGE_SECRET || "",
     scannerIp: process.env.HIP_SCANNER_IP || "192.168.162.15",
     scannerPort: Number(process.env.HIP_SCANNER_PORT || 5005),
