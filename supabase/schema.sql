@@ -521,3 +521,26 @@ create table if not exists datahub_documents (
 alter table datahub_documents enable row level security;
 create policy "Allow all read datahub_documents" on datahub_documents for select using (true);
 create policy "Allow all write datahub_documents" on datahub_documents for all using (true) with check (true);
+
+-- ===============================
+-- 15. Attendance Daily Notes (หมายเหตุการลงเวลาประจำวัน / รองรับเชื่อมระบบใบลา-ไปราชการ)
+-- ===============================
+create table if not exists attendance_daily_notes (
+  id uuid primary key default gen_random_uuid(),
+  work_date date not null,
+  scanner_user_id integer not null,
+  user_id text references users(id) on delete set null,
+  note_type text not null default 'general' check (note_type in ('general', 'sick_leave', 'personal_leave', 'vacation_leave', 'official_trip', 'wfh', 'other')),
+  note_text text not null default '',
+  ref_type text,
+  ref_id text,
+  updated_by text,
+  updated_by_name text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique (work_date, scanner_user_id)
+);
+
+alter table attendance_daily_notes enable row level security;
+create policy "Allow all read attendance_daily_notes" on attendance_daily_notes for select using (true);
+create policy "Allow all write attendance_daily_notes" on attendance_daily_notes for all using (true) with check (true);

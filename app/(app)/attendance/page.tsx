@@ -1561,6 +1561,9 @@ export default function AttendancePage() {
             availableDates={availableDates}
             defaultDate={getTodayThaiDate()}
             showToast={showToast}
+            canEdit={canEditAttendance}
+            currentUserId={currentUser?.id}
+            currentUserName={currentUser?.name}
           />
         ) : (
           <>

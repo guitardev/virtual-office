@@ -58,6 +58,7 @@ export interface ScannerUserMapping {
   memberName: string;
   division: string;
   position: string;
+  personnelType?: string | null;
   isMapped?: boolean;
   matchMethod?: "manual" | "auto_name" | "unmapped";
   updatedBy?: string;

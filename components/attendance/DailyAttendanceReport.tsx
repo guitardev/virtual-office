@@ -6,12 +6,37 @@ import { getThaiFiscalPeriod } from "@/lib/attendance-rules";
 import { toThaiDate } from "@/lib/thai-numerals";
 import { downloadElementAsDocx } from "@/lib/word-export";
 import { exportElementToA4Pdf } from "@/lib/a4-pdf-export";
+import { downloadDailyAttendanceXlsx } from "@/lib/attendance-xlsx-export";
+
+type DailyNoteType =
+  | "general"
+  | "sick_leave"
+  | "personal_leave"
+  | "vacation_leave"
+  | "official_trip"
+  | "wfh"
+  | "other";
+
+interface DailyNoteRecord {
+  id: string;
+  workDate: string;
+  scannerUserId: number;
+  userId: string | null;
+  noteType: DailyNoteType;
+  noteText: string;
+  refType: string | null;
+  refId: string | null;
+  updatedByName?: string | null;
+}
 
 interface DailyAttendanceReportProps {
   mappings: Record<number, ScannerUserMapping>;
   availableDates: string[];
   defaultDate: string;
   showToast: (msg: string) => void;
+  canEdit?: boolean;
+  currentUserId?: string;
+  currentUserName?: string;
 }
 
 const REPORT_UID_MIN = 2;
@@ -22,37 +47,74 @@ const REPORT_UIDS = Array.from(
   (_, i) => REPORT_UID_MIN + i
 ).filter((uid) => !EXCLUDED_REPORT_UIDS.has(uid));
 
-type DailyStatusKey =
-  | "complete"
-  | "checked_in"
-  | "late_complete"
-  | "late_only"
-  | "midday_only"
-  | "absent";
+const NOTE_TYPE_OPTIONS: Array<{ value: DailyNoteType; label: string; autoText: string }> = [
+  { value: "general", label: "📝 ทั่วไป / กำหนดเอง", autoText: "" },
+  { value: "sick_leave", label: "🤒 ลาป่วย", autoText: "ลาป่วย" },
+  { value: "personal_leave", label: "📋 ลากิจส่วนตัว", autoText: "ลากิจ" },
+  { value: "vacation_leave", label: "🌴 ลาพักผ่อน", autoText: "ลาพักผ่อน" },
+  { value: "official_trip", label: "🚗 ไปราชการ", autoText: "ไปราชการ" },
+  { value: "wfh", label: "💻 ปฏิบัติงานนอกสถานที่ (WFH)", autoText: "ปฏิบัติงานนอกสถานที่" },
+  { value: "other", label: "📌 อื่นๆ", autoText: "" },
+];
+
+const DAILY_NOTES_MIGRATION_SQL = `CREATE TABLE IF NOT EXISTS public.attendance_daily_notes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  work_date date NOT NULL,
+  scanner_user_id integer NOT NULL,
+  user_id text REFERENCES public.users(id) ON DELETE SET NULL,
+  note_type text NOT NULL DEFAULT 'general' CHECK (note_type IN ('general', 'sick_leave', 'personal_leave', 'vacation_leave', 'official_trip', 'wfh', 'other')),
+  note_text text NOT NULL DEFAULT '',
+  ref_type text,
+  ref_id text,
+  updated_by text,
+  updated_by_name text,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  UNIQUE (work_date, scanner_user_id)
+);
+
+ALTER TABLE public.attendance_daily_notes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all read attendance_daily_notes" ON public.attendance_daily_notes FOR SELECT USING (true);
+CREATE POLICY "Allow all write attendance_daily_notes" ON public.attendance_daily_notes FOR ALL USING (true) WITH CHECK (true);`;
+
+type StaffGroupKey = "civil_or_emp" | "fund_or_contract";
 
 interface DailyPersonRow {
   uid: number;
+  userId: string | null;
   memberName: string;
-  division: string;
-  position: string;
-  isMapped: boolean;
-  checkInTime: string | null;
+  personnelType: string;
+  groupKey: StaffGroupKey;
+  checkInHHMM: string | null;
+  checkOutHHMM: string | null;
   checkInIoMode: number | null;
-  checkOutTime: string | null;
   scanCount: number;
-  middayCount: number;
-  statusKey: DailyStatusKey;
-  statusLabel: string;
+  note: DailyNoteRecord | null;
 }
 
-function extractTimePart(scanTimestamp: string): string {
+function extractHHMM(scanTimestamp: string): string | null {
   const parts = String(scanTimestamp || "").trim().split(/\s+/);
-  return parts[1] || parts[0] || "-";
+  const timePart = parts[1] || parts[0] || "";
+  const m = timePart.match(/^(\d{2}:\d{2})/);
+  return m ? m[1] : null;
 }
 
-function csvCell(val: unknown): string {
-  const s = String(val ?? "").replace(/"/g, '""');
-  return `"${s}"`;
+function classifyGroup(personnelType?: string | null): StaffGroupKey {
+  const t = String(personnelType || "").trim();
+  if (t === "ข้าราชการ" || t === "พนักงานราชการ") {
+    return "civil_or_emp";
+  }
+  return "fund_or_contract";
+}
+
+function sortByCheckIn(a: DailyPersonRow, b: DailyPersonRow): number {
+  if (a.checkInHHMM && b.checkInHHMM) {
+    const cmp = a.checkInHHMM.localeCompare(b.checkInHHMM);
+    return cmp !== 0 ? cmp : a.uid - b.uid;
+  }
+  if (a.checkInHHMM && !b.checkInHHMM) return -1;
+  if (!a.checkInHHMM && b.checkInHHMM) return 1;
+  return a.uid - b.uid;
 }
 
 export function DailyAttendanceReport({
@@ -60,17 +122,29 @@ export function DailyAttendanceReport({
   availableDates,
   defaultDate,
   showToast,
+  canEdit = false,
+  currentUserId,
+  currentUserName,
 }: DailyAttendanceReportProps) {
   const [reportDate, setReportDate] = useState<string>(defaultDate);
-  const reportRef = useRef<HTMLDivElement | null>(null);
   const [dayLogs, setDayLogs] = useState<AttendanceLogItem[]>([]);
+  const [notesByUid, setNotesByUid] = useState<Record<number, DailyNoteRecord>>({});
+  const [needsMigration, setNeedsMigration] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
+  const [groupFilter, setGroupFilter] = useState<"both" | StaffGroupKey>("both");
   const [searchText, setSearchText] = useState<string>("");
-  const [statusFilter, setStatusFilter] = useState<
-    "all" | "present" | "late" | "absent" | "mapped"
-  >("all");
 
-  const fetchDailyLogs = useCallback(
+  // Note Modal State
+  const [editingRow, setEditingRow] = useState<DailyPersonRow | null>(null);
+  const [noteType, setNoteType] = useState<DailyNoteType>("general");
+  const [noteText, setNoteText] = useState<string>("");
+  const [refType, setRefType] = useState<string>("");
+  const [refId, setRefId] = useState<string>("");
+  const [savingNote, setSavingNote] = useState<boolean>(false);
+
+  const reportRef = useRef<HTMLDivElement | null>(null);
+
+  const fetchDailyData = useCallback(
     async (targetDate: string) => {
       if (!targetDate) return;
       setLoading(true);
@@ -81,14 +155,28 @@ export function DailyAttendanceReport({
           page: "1",
           pageSize: "1000",
         });
-        const res = await fetch(`/api/attendance?${params.toString()}`, {
-          cache: "no-store",
-        });
-        const data = await res.json();
-        if (data?.success && Array.isArray(data.logs)) {
-          setDayLogs(data.logs);
+        const [attRes, notesRes] = await Promise.all([
+          fetch(`/api/attendance?${params.toString()}`, { cache: "no-store" }),
+          fetch(`/api/attendance/daily-notes?date=${encodeURIComponent(targetDate)}`, {
+            cache: "no-store",
+          }),
+        ]);
+
+        const attData = await attRes.json();
+        if (attData?.success && Array.isArray(attData.logs)) {
+          setDayLogs(attData.logs);
         } else {
           setDayLogs([]);
+        }
+
+        const notesData = await notesRes.json();
+        if (notesData?.success) {
+          setNeedsMigration(Boolean(notesData.needsMigration));
+          const map: Record<number, DailyNoteRecord> = {};
+          for (const n of notesData.notes || []) {
+            map[Number(n.scannerUserId)] = n;
+          }
+          setNotesByUid(map);
         }
       } catch {
         showToast("โหลดรายงานประจำวันไม่สำเร็จ");
@@ -100,15 +188,21 @@ export function DailyAttendanceReport({
   );
 
   useEffect(() => {
-    fetchDailyLogs(reportDate);
-  }, [reportDate, fetchDailyLogs]);
+    fetchDailyData(reportDate);
+  }, [reportDate, fetchDailyData]);
 
-  const rows: DailyPersonRow[] = useMemo(() => {
+  const allRows: DailyPersonRow[] = useMemo(() => {
     const byUid = new Map<number, AttendanceLogItem[]>();
     for (const item of dayLogs) {
       if (item.isDeleted) continue;
       const uid = Number(item.scannerUserId);
-      if (uid < REPORT_UID_MIN || uid > REPORT_UID_MAX || EXCLUDED_REPORT_UIDS.has(uid)) continue;
+      if (
+        uid < REPORT_UID_MIN ||
+        uid > REPORT_UID_MAX ||
+        EXCLUDED_REPORT_UIDS.has(uid)
+      ) {
+        continue;
+      }
       const list = byUid.get(uid) || [];
       list.push(item);
       byUid.set(uid, list);
@@ -118,11 +212,8 @@ export function DailyAttendanceReport({
       const mapping = mappings[uid];
       const memberName =
         mapping?.memberName || `บุคลากร พมจ. (รหัสสแกน #${uid})`;
-      const division =
-        mapping?.division ||
-        "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร";
-      const position = mapping?.position || "-";
-      const isMapped = Boolean(mapping?.isMapped);
+      const personnelType = mapping?.personnelType || "";
+      const groupKey = classifyGroup(personnelType);
 
       const scans = (byUid.get(uid) || [])
         .slice()
@@ -130,7 +221,7 @@ export function DailyAttendanceReport({
 
       const checkInScan =
         scans.find((s) => s.ioMode === 1 || s.ioMode === 3) ||
-        scans.find((s) => extractTimePart(s.scanTimestamp) < "12:00:00") ||
+        scans.find((s) => (extractHHMM(s.scanTimestamp) || "") < "12:00") ||
         null;
 
       const checkOutCandidates = scans.filter((s) => s.ioMode === 2);
@@ -140,159 +231,261 @@ export function DailyAttendanceReport({
           : scans.find(
               (s) =>
                 s.id !== checkInScan?.id &&
-                extractTimePart(s.scanTimestamp) >= "12:00:00"
+                (extractHHMM(s.scanTimestamp) || "") >= "12:00"
             ) || null;
-
-      const middayCount = scans.filter((s) => s.ioMode === 4).length;
-
-      const checkInTime = checkInScan
-        ? extractTimePart(checkInScan.scanTimestamp)
-        : null;
-      const checkOutTime = checkOutScan
-        ? extractTimePart(checkOutScan.scanTimestamp)
-        : null;
-      const checkInIoMode = checkInScan ? checkInScan.ioMode : null;
-
-      let statusKey: DailyStatusKey = "absent";
-      let statusLabel = "ยังไม่พบข้อมูลสแกน";
-
-      if (scans.length === 0) {
-        statusKey = "absent";
-        statusLabel = "ยังไม่พบข้อมูลสแกน";
-      } else if (checkInScan && checkOutScan) {
-        if (checkInIoMode === 3) {
-          statusKey = "late_complete";
-          statusLabel = "สาย / เข้า-ออกครบ";
-        } else {
-          statusKey = "complete";
-          statusLabel = "เข้า-ออกครบ";
-        }
-      } else if (checkInScan) {
-        if (checkInIoMode === 3) {
-          statusKey = "late_only";
-          statusLabel = "สาย / อาจลาช่วงเช้า";
-        } else {
-          statusKey = "checked_in";
-          statusLabel = "เข้างานแล้ว (รอออก)";
-        }
-      } else if (checkOutScan) {
-        statusKey = "checked_in";
-        statusLabel = "สแกนออกงาน (ไม่พบสแกนเข้า)";
-      } else {
-        statusKey = "midday_only";
-        statusLabel = "สแกนระหว่างวันเท่านั้น";
-      }
 
       return {
         uid,
+        userId: mapping?.userId || null,
         memberName,
-        division,
-        position,
-        isMapped,
-        checkInTime,
-        checkInIoMode,
-        checkOutTime,
+        personnelType,
+        groupKey,
+        checkInHHMM: checkInScan ? extractHHMM(checkInScan.scanTimestamp) : null,
+        checkOutHHMM: checkOutScan ? extractHHMM(checkOutScan.scanTimestamp) : null,
+        checkInIoMode: checkInScan ? checkInScan.ioMode : null,
         scanCount: scans.length,
-        middayCount,
-        statusKey,
-        statusLabel,
+        note: notesByUid[uid] || null,
       };
     });
-  }, [dayLogs, mappings]);
+  }, [dayLogs, mappings, notesByUid]);
 
-  const stats = useMemo(() => {
-    const total = rows.length;
-    const onTime = rows.filter(
-      (r) => r.statusKey === "complete" || r.statusKey === "checked_in"
-    ).length;
-    const late = rows.filter(
-      (r) => r.statusKey === "late_complete" || r.statusKey === "late_only"
-    ).length;
-    const checkedOut = rows.filter((r) => r.checkOutTime !== null).length;
-    const absent = rows.filter((r) => r.statusKey === "absent").length;
-    return { total, onTime, late, checkedOut, absent };
-  }, [rows]);
-
-  const filteredRows = useMemo(() => {
+  const { group1Rows, group2Rows } = useMemo(() => {
     const q = searchText.trim().toLowerCase();
-    return rows.filter((r) => {
-      if (statusFilter === "present" && r.statusKey === "absent") return false;
-      if (
-        statusFilter === "late" &&
-        r.statusKey !== "late_complete" &&
-        r.statusKey !== "late_only"
-      ) {
-        return false;
-      }
-      if (statusFilter === "absent" && r.statusKey !== "absent") return false;
-      if (statusFilter === "mapped" && !r.isMapped) return false;
+    const matchSearch = (r: DailyPersonRow) =>
+      !q ||
+      String(r.uid).includes(q) ||
+      r.memberName.toLowerCase().includes(q) ||
+      (r.note?.noteText || "").toLowerCase().includes(q);
 
-      if (!q) return true;
-      return (
-        String(r.uid).includes(q) ||
-        r.memberName.toLowerCase().includes(q) ||
-        r.division.toLowerCase().includes(q) ||
-        r.position.toLowerCase().includes(q)
-      );
-    });
-  }, [rows, searchText, statusFilter]);
-
-  const handleExportDailyCsv = () => {
-    const headers = [
-      "ID",
-      "ชื่อ-นามสกุล",
-      "ตำแหน่ง",
-      "กลุ่มงาน",
-      "วันที่",
-      "เวลาเข้างาน",
-      "เวลาออกงาน",
-      "จำนวนสแกน",
-      "สถานะประจำวัน",
-    ];
-    const body = filteredRows.map((r) =>
-      [
-        String(r.uid),
-        csvCell(r.memberName),
-        csvCell(r.position),
-        csvCell(r.division),
-        csvCell(reportDate),
-        csvCell(r.checkInTime || "-"),
-        csvCell(r.checkOutTime || "-"),
-        String(r.scanCount),
-        csvCell(r.statusLabel),
-      ].join(",")
-    );
-    const csv = "\uFEFF" + [headers.join(","), ...body].join("\r\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `รายงานลงเวลาประจำวัน_ID2-42_${reportDate}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showToast(`ส่งออกรายงานประจำวัน ${reportDate} (ID 2-42) เรียบร้อยแล้ว`);
-  };
+    const g1 = allRows
+      .filter((r) => r.groupKey === "civil_or_emp" && matchSearch(r))
+      .sort(sortByCheckIn);
+    const g2 = allRows
+      .filter((r) => r.groupKey === "fund_or_contract" && matchSearch(r))
+      .sort(sortByCheckIn);
+    return { group1Rows: g1, group2Rows: g2 };
+  }, [allRows, searchText]);
 
   const thaiDateLabel = toThaiDate(reportDate);
 
+  const openNoteModal = (row: DailyPersonRow) => {
+    setEditingRow(row);
+    setNoteType(row.note?.noteType || "general");
+    setNoteText(row.note?.noteText || "");
+    setRefType(row.note?.refType || "");
+    setRefId(row.note?.refId || "");
+  };
+
+  const handleSaveNote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingRow) return;
+    setSavingNote(true);
+    try {
+      const res = await fetch("/api/attendance/daily-notes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workDate: reportDate,
+          scannerUserId: editingRow.uid,
+          userId: editingRow.userId,
+          noteType,
+          noteText: noteText.trim(),
+          refType: refType.trim() || null,
+          refId: refId.trim() || null,
+          updatedBy: currentUserId || null,
+          updatedByName: currentUserName || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.success) {
+        if (data?.needsMigration) setNeedsMigration(true);
+        throw new Error(data?.error || "บันทึกหมายเหตุไม่สำเร็จ");
+      }
+      showToast("✅ บันทึกหมายเหตุประจำวันเรียบร้อยแล้ว");
+      setEditingRow(null);
+      await fetchDailyData(reportDate);
+    } catch (err: unknown) {
+      const msg =
+        (err as { message?: string })?.message || "บันทึกหมายเหตุไม่สำเร็จ";
+      showToast(`❌ ${msg}`);
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
+  const handleExportXlsx = async () => {
+    await downloadDailyAttendanceXlsx(
+      [
+        {
+          sheetName: "ขรก.-พรก.",
+          subtitle:
+            "ตารางบันทึกเวลา เข้า - ออก ปฏิบัติราชการ ข้าราชการ/พนักงานราชการ",
+          dateLabel: thaiDateLabel,
+          rows: group1Rows.map((r, idx) => ({
+            orderNo: idx + 1,
+            name: r.memberName,
+            checkInDisplay: r.checkInHHMM || "-----",
+            checkOutDisplay: r.checkOutHHMM || "-----",
+            noteDisplay: r.note?.noteText || "",
+          })),
+        },
+        {
+          sheetName: "พนง.กองทุน+จ้างเหมา",
+          subtitle:
+            "ตารางบันทึกเวลา เข้า - ออก ปฏิบัติราชการ พนง.กองทุน/พนง.จ้างเหมา",
+          dateLabel: thaiDateLabel,
+          rows: group2Rows.map((r, idx) => ({
+            orderNo: idx + 1,
+            name: r.memberName,
+            checkInDisplay: r.checkInHHMM || "-----",
+            checkOutDisplay: r.checkOutHHMM || "-----",
+            noteDisplay: r.note?.noteText || "",
+          })),
+        },
+      ],
+      `บันทึกเวลา_${thaiDateLabel}.xlsx`
+    );
+    showToast("📊 ส่งออกไฟล์ Excel 2 ชีท (.xlsx) เรียบร้อยแล้ว");
+  };
+
+  const renderGroupSheet = (
+    title: string,
+    rows: DailyPersonRow[],
+    pageBreakBefore = false
+  ) => (
+    <div
+      className={`bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-8 shadow-sm space-y-4 ${
+        pageBreakBefore ? "break-before-page" : ""
+      }`}
+    >
+      {/* Official Header matching Excel Template */}
+      <div className="text-center space-y-0.5 text-slate-900 dark:text-white">
+        <h3 className="text-sm sm:text-base font-bold">
+          สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร
+        </h3>
+        <h4 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200">
+          {title}
+        </h4>
+        <div className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+          วันที่ {thaiDateLabel}
+        </div>
+      </div>
+
+      {/* 5-Column Official Table */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs border-collapse border border-slate-300 dark:border-slate-700">
+          <thead>
+            <tr className="bg-sky-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200">
+              <th className="border border-slate-300 dark:border-slate-700 px-2 py-2 text-center w-16">
+                ลำดับที่
+              </th>
+              <th className="border border-slate-300 dark:border-slate-700 px-3 py-2 text-left">
+                ชื่อ - สกุล
+              </th>
+              <th className="border border-slate-300 dark:border-slate-700 px-3 py-2 text-center w-24">
+                เข้า
+              </th>
+              <th className="border border-slate-300 dark:border-slate-700 px-3 py-2 text-center w-24">
+                ออก
+              </th>
+              <th className="border border-slate-300 dark:border-slate-700 px-3 py-2 text-left w-56">
+                หมายเหตุ
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, idx) => (
+              <tr
+                key={row.uid}
+                className="even:bg-slate-50/60 dark:even:bg-slate-800/30 hover:bg-indigo-50/40"
+              >
+                <td className="border border-slate-300 dark:border-slate-700 px-2 py-1.5 text-center tabular-nums">
+                  {idx + 1}
+                </td>
+                <td className="border border-slate-300 dark:border-slate-700 px-3 py-1.5 font-medium text-slate-900 dark:text-slate-100">
+                  <span>{row.memberName}</span>
+                  <span
+                    data-docx-ignore="true"
+                    data-pdf-ignore="true"
+                    className="ml-1.5 text-[10px] font-mono text-slate-400 print:hidden"
+                  >
+                    (#{row.uid})
+                  </span>
+                </td>
+                <td
+                  className={`border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-center font-mono font-semibold ${
+                    row.checkInHHMM
+                      ? row.checkInIoMode === 3
+                        ? "text-rose-700 dark:text-rose-400"
+                        : "text-slate-900 dark:text-slate-100"
+                      : "text-slate-400"
+                  }`}
+                >
+                  {row.checkInHHMM || "-----"}
+                </td>
+                <td
+                  className={`border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-center font-mono font-semibold ${
+                    row.checkOutHHMM
+                      ? "text-slate-900 dark:text-slate-100"
+                      : "text-slate-400"
+                  }`}
+                >
+                  {row.checkOutHHMM || "-----"}
+                </td>
+                <td className="border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-left">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-slate-700 dark:text-slate-200">
+                      {row.note?.noteText || ""}
+                    </span>
+                    {canEdit && (
+                      <button
+                        type="button"
+                        data-docx-ignore="true"
+                        data-pdf-ignore="true"
+                        onClick={() => openNoteModal(row)}
+                        className="print:hidden shrink-0 px-2 py-0.5 rounded bg-slate-100 hover:bg-indigo-100 text-slate-600 hover:text-indigo-700 text-[10px] font-semibold cursor-pointer"
+                        title="ระบุ/แก้ไขหมายเหตุ (ลา/ไปราชการ)"
+                      >
+                        {row.note?.noteText ? "✏️ แก้ไข" : "+ หมายเหตุ"}
+                      </button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Official Inspector Signature Block */}
+      <div className="pt-6 text-center text-xs text-slate-800 dark:text-slate-200 space-y-1">
+        <p className="text-center">
+          ผู้ตรวจ..................................................................................
+        </p>
+        <p className="text-center font-semibold">(นางสาวมะลิวัน  สิทธิโยธี)</p>
+        <p className="text-center">
+          พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร
+        </p>
+      </div>
+    </div>
+  );
+
   return (
-    <div ref={reportRef} className="space-y-4 mt-4">
-      {/* Header & Controls */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 print:border-none print:shadow-none print:p-0">
+    <div className="space-y-4 mt-4">
+      {/* Control Toolbar (Hidden on PDF/Docx Export) */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 print:hidden">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
               <span>📊</span>
-              <span>รายงานการลงเวลาปฏิบัติราชการประจำวัน (ID #2 – #42 ยกเว้น #3, #16)</span>
+              <span>รายงานบันทึกเวลาเข้า - ออก ประจำวัน (แยก 2 ชุด • ครบ 39 คน)</span>
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              ประจำวันที่ {thaiDateLabel} • รายชื่อบุคลากรครบทั้ง {REPORT_UIDS.length} รหัส
+              วันที่ {thaiDateLabel} • ข้าราชการ/พนักงานราชการ {group1Rows.length} คน • พนง.กองทุน/จ้างเหมา {group2Rows.length} คน
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 print:hidden">
+          <div className="flex flex-wrap items-center gap-2">
             <input
               type="date"
               aria-label="เลือกวันที่รายงานประจำวัน"
@@ -304,18 +497,18 @@ export function DailyAttendanceReport({
             />
             <button
               type="button"
-              onClick={() => fetchDailyLogs(reportDate)}
+              onClick={() => fetchDailyData(reportDate)}
               disabled={loading}
               className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer disabled:opacity-50"
             >
-              {loading ? "⏳ กำลังโหลด..." : "🔄 รีเฟรช"}
+              {loading ? "⏳ โหลด..." : "🔄 รีเฟรช"}
             </button>
             <button
               type="button"
-              onClick={handleExportDailyCsv}
-              className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold cursor-pointer"
+              onClick={handleExportXlsx}
+              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer shadow-xs"
             >
-              📥 CSV ประจำวัน
+              📊 Excel 2 ชีท (.xlsx)
             </button>
             <button
               type="button"
@@ -323,11 +516,11 @@ export function DailyAttendanceReport({
                 if (!reportRef.current) return;
                 downloadElementAsDocx(
                   reportRef.current,
-                  `รายงานลงเวลาปฏิบัติราชการประจำวัน_${reportDate}`,
-                  `รายงานลงเวลาประจำวัน_ID2-42_${reportDate}.docx`
+                  `บันทึกเวลา_${thaiDateLabel}`,
+                  `บันทึกเวลา_${reportDate}.docx`
                 );
               }}
-              className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold cursor-pointer"
+              className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold cursor-pointer"
             >
               📝 Word (.docx)
             </button>
@@ -337,25 +530,91 @@ export function DailyAttendanceReport({
                 if (!reportRef.current) return;
                 exportElementToA4Pdf(
                   reportRef.current,
-                  `รายงานลงเวลาประจำวัน_ID2-42_${reportDate}`
+                  `บันทึกเวลา_${thaiDateLabel}`
                 );
               }}
-              className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold cursor-pointer"
+              className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer"
             >
               📄 PDF (A4)
             </button>
           </div>
         </div>
 
+        {/* Migration Notice if attendance_daily_notes doesn't exist yet */}
+        {needsMigration && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 flex flex-wrap items-center justify-between gap-2 text-xs text-amber-900">
+            <div>
+              <strong>⚠️ ยังไม่ได้สร้างตาราง <code>attendance_daily_notes</code> ใน Supabase</strong> — กรุณารัน SQL เพื่อเปิดใช้การบันทึกหมายเหตุ (ลา/ไปราชการ)
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                await navigator.clipboard.writeText(DAILY_NOTES_MIGRATION_SQL);
+                showToast("📋 คัดลอก SQL สร้างตาราง attendance_daily_notes แล้ว");
+              }}
+              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold cursor-pointer"
+            >
+              📋 คัดลอก SQL
+            </button>
+          </div>
+        )}
+
+        {/* Quick Dates + Group Switcher + Search */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setGroupFilter("both")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer ${
+                groupFilter === "both"
+                  ? "bg-slate-900 text-white"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              แสดงทั้ง 2 ชุด (39 คน)
+            </button>
+            <button
+              type="button"
+              onClick={() => setGroupFilter("civil_or_emp")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer ${
+                groupFilter === "civil_or_emp"
+                  ? "bg-indigo-600 text-white"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              1. ขรก./พรก. ({group1Rows.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setGroupFilter("fund_or_contract")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer ${
+                groupFilter === "fund_or_contract"
+                  ? "bg-teal-600 text-white"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              2. พนง.กองทุน/จ้างเหมา ({group2Rows.length})
+            </button>
+          </div>
+
+          <input
+            type="text"
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            placeholder="ค้นหาชื่อ, รหัสสแกน, หมายเหตุ..."
+            className="w-full sm:w-64 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs"
+          />
+        </div>
+
         {/* Quick Date Pills */}
-        <div className="flex flex-wrap items-center gap-1.5 print:hidden">
+        <div className="flex flex-wrap items-center gap-1.5">
           <button
             type="button"
             onClick={() => setReportDate(defaultDate)}
             className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold cursor-pointer ${
               reportDate === defaultDate
                 ? "bg-indigo-600 text-white"
-                : "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                : "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-600"
             }`}
           >
             วันนี้ ({getThaiFiscalPeriod(defaultDate).dateShortBE})
@@ -363,198 +622,154 @@ export function DailyAttendanceReport({
           {availableDates
             .filter((d) => d !== defaultDate)
             .slice(0, 6)
-            .map((d) => {
-              const p = getThaiFiscalPeriod(d);
-              return (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => setReportDate(d)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] cursor-pointer ${
-                    reportDate === d
-                      ? "bg-indigo-600 text-white font-semibold"
-                      : "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
-                  }`}
+            .map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setReportDate(d)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] cursor-pointer ${
+                  reportDate === d
+                    ? "bg-indigo-600 text-white font-semibold"
+                    : "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-600"
+                }`}
+              >
+                {getThaiFiscalPeriod(d).dateShortBE}
+              </button>
+            ))}
+        </div>
+      </div>
+
+      {/* Printable / Exportable Sheets */}
+      <div ref={reportRef} className="space-y-6">
+        {(groupFilter === "both" || groupFilter === "civil_or_emp") &&
+          renderGroupSheet(
+            "ตารางบันทึกเวลา เข้า - ออก ปฏิบัติราชการ ข้าราชการ/พนักงานราชการ",
+            group1Rows,
+            false
+          )}
+
+        {(groupFilter === "both" || groupFilter === "fund_or_contract") &&
+          renderGroupSheet(
+            "ตารางบันทึกเวลา เข้า - ออก ปฏิบัติราชการ พนง.กองทุน/พนง.จ้างเหมา",
+            group2Rows,
+            groupFilter === "both"
+          )}
+      </div>
+
+      {/* Daily Note Modal (Ready for future Leave / Official Trip linkage) */}
+      {editingRow && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4 border border-slate-200 dark:border-slate-700">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div>
+                <h4 className="font-bold text-slate-900 dark:text-white text-sm">
+                  ✏️ หมายเหตุประจำวัน — {editingRow.memberName}
+                </h4>
+                <p className="text-[11px] text-slate-500">
+                  วันที่ {thaiDateLabel} • รหัส #{editingRow.uid}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingRow(null)}
+                className="text-slate-400 hover:text-slate-700 font-bold text-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveNote} className="space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">
+                  ประเภทหมายเหตุ (รองรับเชื่อมใบลา/ไปราชการ)
+                </label>
+                <select
+                  aria-label="ประเภทหมายเหตุ"
+                  value={noteType}
+                  onChange={(e) => {
+                    const nextType = e.target.value as DailyNoteType;
+                    setNoteType(nextType);
+                    const found = NOTE_TYPE_OPTIONS.find(
+                      (o) => o.value === nextType
+                    );
+                    if (found?.autoText && !noteText.trim()) {
+                      setNoteText(found.autoText);
+                    }
+                  }}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
                 >
-                  {p.dateShortBE}
-                </button>
-              );
-            })}
-        </div>
+                  {NOTE_TYPE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-        {/* 5 Daily KPIs */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-1">
-          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/60 px-3 py-2">
-            <div className="text-[10px] font-semibold text-slate-500">รายชื่อทั้งหมด (ID 2–42 ยกเว้น #3, #16)</div>
-            <div className="text-lg font-extrabold text-slate-900 dark:text-white tabular-nums">
-              {stats.total} คน
-            </div>
-          </div>
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 dark:bg-emerald-950/30 px-3 py-2">
-            <div className="text-[10px] font-semibold text-emerald-700">เข้าตรงเวลา</div>
-            <div className="text-lg font-extrabold text-emerald-800 dark:text-emerald-300 tabular-nums">
-              {stats.onTime} คน
-            </div>
-          </div>
-          <div className="rounded-xl border border-rose-200 bg-rose-50/70 dark:bg-rose-950/30 px-3 py-2">
-            <div className="text-[10px] font-semibold text-rose-700">สาย / ลาช่วงเช้า</div>
-            <div className="text-lg font-extrabold text-rose-800 dark:text-rose-300 tabular-nums">
-              {stats.late} คน
-            </div>
-          </div>
-          <div className="rounded-xl border border-sky-200 bg-sky-50/70 dark:bg-sky-950/30 px-3 py-2">
-            <div className="text-[10px] font-semibold text-sky-700">สแกนออกงานแล้ว</div>
-            <div className="text-lg font-extrabold text-sky-800 dark:text-sky-300 tabular-nums">
-              {stats.checkedOut} คน
-            </div>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-slate-100/80 dark:bg-slate-800 px-3 py-2">
-            <div className="text-[10px] font-semibold text-slate-600">ยังไม่พบข้อมูลสแกน</div>
-            <div className="text-lg font-extrabold text-slate-700 dark:text-slate-300 tabular-nums">
-              {stats.absent} คน
-            </div>
-          </div>
-        </div>
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">
+                  ข้อความในช่อง &ldquo;หมายเหตุ&rdquo; ของรายงาน
+                </label>
+                <input
+                  type="text"
+                  value={noteText}
+                  onChange={(e) => setNoteText(e.target.value)}
+                  placeholder="เช่น ลาป่วย, ลากิจ, ไปราชการ อ.คลองลาน (เว้นว่างเพื่อลบ)"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700"
+                />
+              </div>
 
-        {/* Filter & Search */}
-        <div className="flex flex-wrap items-center gap-2 pt-1 print:hidden">
-          <input
-            type="text"
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            placeholder="ค้นหา ID, ชื่อ-นามสกุล, กลุ่มงาน..."
-            className="flex-1 min-w-[200px] px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs"
-          />
-          <select
-            aria-label="กรองตามสถานะประจำวัน"
-            value={statusFilter}
-            onChange={(e) =>
-              setStatusFilter(
-                e.target.value as "all" | "present" | "late" | "absent" | "mapped"
-              )
-            }
-            className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium"
-          >
-            <option value="all">แสดงครบทุก ID (2–42 ยกเว้น #3, #16)</option>
-            <option value="present">เฉพาะผู้มีสแกนวันนี้</option>
-            <option value="late">เฉพาะมาสาย / อาจลาช่วงเช้า</option>
-            <option value="absent">เฉพาะยังไม่พบข้อมูลสแกน</option>
-            <option value="mapped">เฉพาะที่จับคู่ชื่อแล้ว</option>
-          </select>
-        </div>
-      </div>
-
-      {/* 41-Row Daily Report Table */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden print:border-slate-300">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="bg-slate-50 dark:bg-slate-800/70 text-[11px] font-semibold text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
-                <th className="py-2.5 px-3 w-16 text-center">ID</th>
-                <th className="py-2.5 px-3">ชื่อ-นามสกุล / ตำแหน่ง / กลุ่มงาน</th>
-                <th className="py-2.5 px-3 text-center">เวลาเข้างาน</th>
-                <th className="py-2.5 px-3 text-center">เวลาออกงาน</th>
-                <th className="py-2.5 px-3 text-center">สแกน (ครั้ง)</th>
-                <th className="py-2.5 px-3 text-center">สถานะประจำวัน</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {filteredRows.map((row) => {
-                const badgeClass =
-                  row.statusKey === "complete"
-                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
-                    : row.statusKey === "checked_in"
-                    ? "bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
-                    : row.statusKey === "late_complete" || row.statusKey === "late_only"
-                    ? "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300"
-                    : row.statusKey === "midday_only"
-                    ? "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
-                    : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400";
-
-                const statusIcon =
-                  row.statusKey === "complete"
-                    ? "✅"
-                    : row.statusKey === "checked_in"
-                    ? "🟢"
-                    : row.statusKey === "late_complete" || row.statusKey === "late_only"
-                    ? "⚠️"
-                    : row.statusKey === "midday_only"
-                    ? "🕒"
-                    : "⬜";
-
-                return (
-                  <tr
-                    key={row.uid}
-                    className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/40 ${
-                      row.statusKey === "absent" ? "opacity-80" : ""
-                    }`}
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                    อ้างอิงระบบ (ถ้ามี)
+                  </label>
+                  <select
+                    aria-label="ระบบอ้างอิง"
+                    value={refType}
+                    onChange={(e) => setRefType(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-[11px]"
                   >
-                    <td className="py-2 px-3 text-center font-mono font-bold text-slate-700 dark:text-slate-200">
-                      #{row.uid}
-                    </td>
-                    <td className="py-2 px-3">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-bold text-slate-900 dark:text-white">
-                          {row.memberName}
-                        </span>
-                        {!row.isMapped && (
-                          <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-semibold">
-                            ยังไม่จับคู่ชื่อ
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-[11px] text-slate-500 truncate max-w-md">
-                        {row.position !== "-" ? `${row.position} • ` : ""}
-                        {row.division}
-                      </div>
-                    </td>
-                    <td className="py-2 px-3 text-center font-mono font-semibold">
-                      {row.checkInTime ? (
-                        <span
-                          className={
-                            row.checkInIoMode === 3
-                              ? "text-rose-700 dark:text-rose-400"
-                              : "text-emerald-700 dark:text-emerald-400"
-                          }
-                        >
-                          {row.checkInTime}
-                        </span>
-                      ) : (
-                        <span className="text-slate-400">-</span>
-                      )}
-                    </td>
-                    <td className="py-2 px-3 text-center font-mono font-semibold">
-                      {row.checkOutTime ? (
-                        <span className="text-sky-700 dark:text-sky-400">
-                          {row.checkOutTime}
-                        </span>
-                      ) : (
-                        <span className="text-slate-400">-</span>
-                      )}
-                    </td>
-                    <td className="py-2 px-3 text-center font-mono text-slate-600 dark:text-slate-300">
-                      {row.scanCount > 0 ? row.scanCount : "-"}
-                      {row.middayCount > 0 && (
-                        <span className="ml-1 text-[10px] text-amber-600">
-                          (ระหว่างวัน {row.middayCount})
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-2 px-3 text-center">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${badgeClass}`}
-                      >
-                        <span>{statusIcon}</span>
-                        <span>{row.statusLabel}</span>
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                    <option value="">ไม่ระบุ</option>
+                    <option value="leave_request">ระบบใบลา</option>
+                    <option value="official_trip">คำสั่งไปราชการ</option>
+                    <option value="car_booking">ใบขอใช้รถราชการ</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                    เลขที่อ้างอิง (Ref ID)
+                  </label>
+                  <input
+                    type="text"
+                    value={refId}
+                    onChange={(e) => setRefId(e.target.value)}
+                    placeholder="เช่น LV-2569-01"
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-[11px]"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingRow(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingNote}
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold cursor-pointer disabled:opacity-50"
+                >
+                  {savingNote ? "⏳ กำลังบันทึก..." : "💾 บันทึกหมายเหตุ"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

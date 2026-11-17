@@ -482,6 +482,22 @@ export async function GET(req: NextRequest) {
           }
         : null);
 
+    const userById = new Map(systemUsers.map((u) => [u.id, u]));
+    const enrichedMappings = Object.fromEntries(
+      Object.entries(mappings).map(([uid, m]) => {
+        const linkedUser =
+          (m.userId ? userById.get(m.userId) : undefined) ||
+          (m.memberId ? userById.get(m.memberId) : undefined);
+        return [
+          uid,
+          {
+            ...m,
+            personnelType: m.personnelType ?? linkedUser?.personnelType ?? null,
+          },
+        ];
+      })
+    );
+
     return NextResponse.json({
       success: true,
       dataSource,
@@ -506,7 +522,7 @@ export async function GET(req: NextRequest) {
       availableDates,
       availableMonths,
       remoteSyncRequest,
-      mappings,
+      mappings: enrichedMappings,
       systemUsers,
       scannerUidStats,
       authorizedEditors,

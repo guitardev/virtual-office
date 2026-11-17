@@ -387,6 +387,7 @@ export interface SystemUserProfile {
   nickname?: string | null;
   division: string;
   position: string;
+  personnelType?: string | null;
   role: string;
   status: string;
 }
@@ -398,7 +399,7 @@ export async function fetchSystemUsersFromSupabase(): Promise<SystemUserProfile[
   try {
     const { data, error } = await supabaseClient
       .from("users")
-      .select("id, name, nickname, division, position, role, status")
+      .select("id, name, nickname, division, position, personnel_type, role, status")
       .eq("status", "active")
       .order("name", { ascending: true });
 
@@ -409,6 +410,7 @@ export async function fetchSystemUsersFromSupabase(): Promise<SystemUserProfile[
       nickname: row.nickname ? String(row.nickname) : null,
       division: String(row.division || ""),
       position: String(row.position || ""),
+      personnelType: row.personnel_type ? String(row.personnel_type) : null,
       role: String(row.role || "member"),
       status: String(row.status || "active"),
     }));
