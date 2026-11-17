@@ -62,6 +62,8 @@ export async function exportElementToA4Pdf(
     html, body {
       background: #ffffff !important;
       color: #0f172a !important;
+      font-family: 'TH Sarabun New', 'Sarabun', 'TH Sarabun PSK', sans-serif !important;
+      font-size: 16pt;
       margin: 0 !important;
       padding: 0 !important;
       width: 100% !important;

@@ -33,7 +33,7 @@ interface ParaOptions extends RunOptions {
 
 function makeRun(text: string, options: RunOptions = {}): string {
   if (!text) return "";
-  const opts = { size: 22, color: "24354B", ...options };
+  const opts = { size: 32, color: "24354B", ...options };
   const rpr = `<w:rPr>${R_FONTS}${opts.bold ? "<w:b/><w:bCs/>" : ""}${
     opts.italic ? "<w:i/>" : ""
   }<w:sz w:val="${opts.size}"/><w:szCs w:val="${opts.size}"/><w:color w:val="${opts.color}"/></w:rPr>`;
@@ -66,7 +66,7 @@ function makePara(body: string | Node, options: ParaOptions = {}): string {
     after: 110,
     before: 0,
     indent: 0,
-    size: 22,
+    size: 32,
     bold: false,
     italic: false,
     color: "24354B",
@@ -124,7 +124,7 @@ function makeTable(el: HTMLElement): string {
           const isNumeric =
             cell.classList.contains("num") || cell.classList.contains("text-right");
           const textOpts: ParaOptions = {
-            size: cols >= 7 ? 16 : cols >= 6 ? 17 : 19,
+            size: cols >= 7 ? 26 : cols >= 6 ? 28 : 30,
             bold: isHeader || isTotal,
             color: isHeader ? "193857" : "26394D",
             align: isNumeric ? "right" : cell.classList.contains("text-center") ? "center" : "left",
@@ -185,10 +185,10 @@ function nodeToWordXml(node: Node): string {
   if (el.hasAttribute("data-summary-grid")) return makeSummaryGrid(el);
 
   const headingMap: Record<string, ParaOptions> = {
-    H1: { size: 32, bold: true, color: "142F52", align: "center", before: 100, after: 70, keepNext: true, heading: 1 },
-    H2: { size: 27, bold: true, color: "335C81", align: "center", after: 110, keepNext: true, heading: 2 },
-    H3: { size: 25, bold: true, color: "142F52", before: 160, after: 110, keepNext: true, heading: 2, shade: "EDF3F9" },
-    H4: { size: 23, bold: true, color: "142F52", before: 120, after: 80, keepNext: true, heading: 3 },
+    H1: { size: 36, bold: true, color: "142F52", align: "center", before: 100, after: 70, keepNext: true, heading: 1 },
+    H2: { size: 34, bold: true, color: "335C81", align: "center", after: 110, keepNext: true, heading: 2 },
+    H3: { size: 32, bold: true, color: "142F52", before: 160, after: 110, keepNext: true, heading: 2, shade: "EDF3F9" },
+    H4: { size: 32, bold: true, color: "142F52", before: 120, after: 80, keepNext: true, heading: 3 },
   };
   if (headingMap[tag]) return makePara(el, headingMap[tag]);
 
@@ -196,24 +196,24 @@ function nodeToWordXml(node: Node): string {
     const isCentered = el.classList.contains("text-center");
     const isCaption = el.hasAttribute("data-caption");
     if (isCaption) {
-      return makePara(el, { size: 19, bold: true, color: "193E62", before: 70, after: 40, keepNext: true });
+      return makePara(el, { size: 30, bold: true, color: "193E62", before: 70, after: 40, keepNext: true });
     }
     return makePara(el, {
-      size: 22,
+      size: 32,
       indent: isCentered ? 0 : 420,
       align: isCentered ? "center" : "both",
       after: 120,
     });
   }
   if (el.hasAttribute("data-eyebrow")) {
-    return makePara(el, { size: 18, color: "315E88", bold: true, align: "center", after: 35 });
+    return makePara(el, { size: 28, color: "315E88", bold: true, align: "center", after: 35 });
   }
   if (el.hasAttribute("data-date")) {
-    return makePara(el, { size: 18, color: "4C657A", align: "center", after: 100 });
+    return makePara(el, { size: 28, color: "4C657A", align: "center", after: 100 });
   }
   if (tag === "BR") return makePara("");
   if (tag === "LI") {
-    return makePara(`• ${el.textContent?.trim() || ""}`, { size: 22, indent: 360, after: 60 });
+    return makePara(`• ${el.textContent?.trim() || ""}`, { size: 32, indent: 360, after: 60 });
   }
 
   const blockTags = new Set(["DIV", "SECTION", "HEADER", "FOOTER", "ARTICLE", "MAIN", "UL", "OL", "TABLE", "H1", "H2", "H3", "H4", "P"]);
@@ -226,7 +226,7 @@ function nodeToWordXml(node: Node): string {
       : el.classList.contains("text-right")
       ? "right"
       : "left";
-    return makePara(el, { size: 22, align, after: 70 });
+    return makePara(el, { size: 32, align, after: 70 });
   }
 
   return Array.from(el.children).map(nodeToWordXml).join("");
@@ -312,7 +312,7 @@ export function buildDocxBlob(root: HTMLElement, title: string): Blob {
   const body = Array.from(root.children).map(nodeToWordXml).join("");
   const section = `<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="720" w:right="690" w:bottom="700" w:left="690" w:header="360" w:footer="360"/><w:cols w:space="720"/><w:docGrid w:linePitch="360"/></w:sectPr>`;
   const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="${W_NS}"><w:body>${body}${section}</w:body></w:document>`;
-  const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="${W_NS}"><w:docDefaults><w:rPrDefault><w:rPr>${R_FONTS}<w:sz w:val="22"/><w:szCs w:val="22"/><w:lang w:val="th-TH" w:eastAsia="th-TH"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="120" w:line="350" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style></w:styles>`;
+  const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="${W_NS}"><w:docDefaults><w:rPrDefault><w:rPr>${R_FONTS}<w:sz w:val="32"/><w:szCs w:val="32"/><w:lang w:val="th-TH" w:eastAsia="th-TH"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="120" w:line="350" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style></w:styles>`;
 
   const bytes = zipStore({
     "[Content_Types].xml": types,

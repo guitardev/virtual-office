@@ -206,9 +206,9 @@ export async function downloadDailyAttendanceXlsx(
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <fonts count="3">
-    <font><sz val="14"/><name val="TH Sarabun New"/></font>
-    <font><b/><sz val="15"/><name val="TH Sarabun New"/></font>
-    <font><b/><sz val="14"/><name val="TH Sarabun New"/></font>
+    <font><sz val="16"/><name val="TH Sarabun New"/></font>
+    <font><b/><sz val="16"/><name val="TH Sarabun New"/></font>
+    <font><b/><sz val="16"/><name val="TH Sarabun New"/></font>
   </fonts>
   <fills count="3">
     <fill><patternFill patternType="none"/></fill>
