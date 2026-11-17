@@ -127,14 +127,14 @@ function buildWorksheetXml(spec: DailyReportSheetSpec): string {
     <mergeCell ref="A2:E2"/>
     <mergeCell ref="A3:E3"/>
   </mergeCells>
+  <pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/>
   <pageSetup paperSize="9" orientation="portrait"/>
 </worksheet>`;
 }
 
-export async function downloadDailyAttendanceXlsx(
-  sheets: DailyReportSheetSpec[],
-  filename: string
-): Promise<void> {
+export async function buildDailyAttendanceXlsxBlob(
+  sheets: DailyReportSheetSpec[]
+): Promise<Blob> {
   const zip = new JSZip();
 
   const sheetOverrides = sheets
@@ -152,7 +152,7 @@ export async function downloadDailyAttendanceXlsx(
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="xml" ContentType="application/xml"/>
-  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.workbook.main+xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
   <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
   ${sheetOverrides}
 </Types>`
@@ -216,8 +216,8 @@ export async function downloadDailyAttendanceXlsx(
     <fill><patternFill patternType="solid"><fgColor rgb="FFE8F1FA"/></patternFill></fill>
   </fills>
   <borders count="2">
-    <border/>
-    <border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/></border>
+    <border><left/><right/><top/><bottom/><diagonal/></border>
+    <border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/><diagonal/></border>
   </borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
   <cellXfs count="6">
@@ -228,6 +228,9 @@ export async function downloadDailyAttendanceXlsx(
     <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
   </cellXfs>
+  <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+  <dxfs count="0"/>
+  <tableStyles count="0" defaultTableStyle="TableStyleMedium2" defaultPivotStyle="PivotStyleLight16"/>
 </styleSheet>`
   );
 
@@ -235,7 +238,18 @@ export async function downloadDailyAttendanceXlsx(
     zip.file(`xl/worksheets/sheet${i + 1}.xml`, buildWorksheetXml(s));
   });
 
-  const blob = await zip.generateAsync({ type: "blob" });
+  return await zip.generateAsync({
+    type: "blob",
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    compression: "DEFLATE",
+  });
+}
+
+export async function downloadDailyAttendanceXlsx(
+  sheets: DailyReportSheetSpec[],
+  filename: string
+): Promise<void> {
+  const blob = await buildDailyAttendanceXlsxBlob(sheets);
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
