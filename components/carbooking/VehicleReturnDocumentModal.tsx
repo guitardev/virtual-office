@@ -1,9 +1,11 @@
 "use client";
 
-import React from "react";
+import React, { useRef } from "react";
 import { CarBookingRequest } from "@/lib/types";
 import { GarudaEmblem } from "@/components/circular/GarudaEmblem";
 import { toThaiDigits } from "@/lib/thai-numerals";
+import { downloadElementAsDocx } from "@/lib/word-export";
+import { exportElementToA4Pdf } from "@/lib/a4-pdf-export";
 
 interface VehicleReturnDocumentModalProps {
   booking: CarBookingRequest;
@@ -15,9 +17,24 @@ export function VehicleReturnDocumentModal({
   onClose,
 }: VehicleReturnDocumentModalProps) {
   const report = booking.returnReport;
+  const docRef = useRef<HTMLDivElement | null>(null);
 
-  const handlePrint = () => {
-    window.print();
+  const handleExportWord = () => {
+    if (!docRef.current) return;
+    const safeNo = (booking.requestNo || "return").replace(/[^a-zA-Z0-9ก-๙_-]/g, "_");
+    downloadElementAsDocx(
+      docRef.current,
+      `ใบรายงานผลการใช้และส่งคืนรถยนต์_${booking.requestNo}`,
+      `ใบส่งคืนรถ_${safeNo}.docx`
+    );
+  };
+
+  const handleExportPdf = async () => {
+    if (!docRef.current) return;
+    await exportElementToA4Pdf(
+      docRef.current,
+      `ใบรายงานผลการใช้และส่งคืนรถยนต์_${booking.requestNo}`
+    );
   };
 
   if (!report) return null;
@@ -39,11 +56,19 @@ export function VehicleReturnDocumentModal({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={handlePrint}
+              onClick={handleExportWord}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+            >
+              <span>📝</span>
+              <span>Word (.docx)</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleExportPdf}
               className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0D9488] hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
             >
-              <span>🖨️</span>
-              <span>พิมพ์ / ส่งออก PDF</span>
+              <span>📄</span>
+              <span>PDF (A4)</span>
             </button>
             <button
               type="button"
@@ -56,7 +81,10 @@ export function VehicleReturnDocumentModal({
         </div>
 
         {/* Official Document Sheet - Scrollable */}
-        <div className="p-6 sm:p-10 text-slate-900 font-body print:p-6 print:text-black leading-relaxed overflow-y-auto flex-1 min-h-0 print:overflow-visible print:h-auto">
+        <div
+          ref={docRef}
+          className="p-6 sm:p-10 text-slate-900 font-body print:p-6 print:text-black leading-relaxed overflow-y-auto flex-1 min-h-0 print:overflow-visible print:h-auto"
+        >
           {/* Garuda / Header */}
           <div className="text-center space-y-1 mb-6">
             <div className="flex justify-center mb-1">

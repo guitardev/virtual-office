@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import QRCode from "qrcode";
 import { Member } from "@/lib/types";
+import { exportElementToA4Pdf } from "@/lib/a4-pdf-export";
 import {
   generatePromptPayPayload,
   generateVCardPayload,
@@ -472,9 +473,11 @@ export function QRCodeToolPage({ currentUser, showToast }: QRCodeToolPageProps) 
     }
   };
 
-  // 4. Print A4 Signage
-  const handlePrintSignage = () => {
-    window.print();
+  // 4. Export A4 Signage PDF
+  const handlePrintSignage = async () => {
+    const el = document.getElementById("printable-a4-signage");
+    if (!el) return;
+    await exportElementToA4Pdf(el, signageTitle || "QR_Code_A4_Signage");
   };
 
   return (
@@ -1266,8 +1269,8 @@ export function QRCodeToolPage({ currentUser, showToast }: QRCodeToolPageProps) 
                   onClick={handlePrintSignage}
                   className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
                 >
-                  <span>🖨️</span>
-                  <span>สั่งพิมพ์ออกกระดาษ A4</span>
+                  <span>📄</span>
+                  <span>สร้าง PDF (A4)</span>
                 </button>
                 <button
                   type="button"

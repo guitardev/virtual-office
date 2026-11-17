@@ -1,9 +1,11 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AttendanceLogItem, ScannerUserMapping } from "@/lib/attendance-db";
 import { getThaiFiscalPeriod } from "@/lib/attendance-rules";
 import { toThaiDate } from "@/lib/thai-numerals";
+import { downloadElementAsDocx } from "@/lib/word-export";
+import { exportElementToA4Pdf } from "@/lib/a4-pdf-export";
 
 interface DailyAttendanceReportProps {
   mappings: Record<number, ScannerUserMapping>;
@@ -60,6 +62,7 @@ export function DailyAttendanceReport({
   showToast,
 }: DailyAttendanceReportProps) {
   const [reportDate, setReportDate] = useState<string>(defaultDate);
+  const reportRef = useRef<HTMLDivElement | null>(null);
   const [dayLogs, setDayLogs] = useState<AttendanceLogItem[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [searchText, setSearchText] = useState<string>("");
@@ -275,7 +278,7 @@ export function DailyAttendanceReport({
   const thaiDateLabel = toThaiDate(reportDate);
 
   return (
-    <div className="space-y-4 mt-4">
+    <div ref={reportRef} className="space-y-4 mt-4">
       {/* Header & Controls */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 print:border-none print:shadow-none print:p-0">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -316,10 +319,30 @@ export function DailyAttendanceReport({
             </button>
             <button
               type="button"
-              onClick={() => window.print()}
+              onClick={() => {
+                if (!reportRef.current) return;
+                downloadElementAsDocx(
+                  reportRef.current,
+                  `รายงานลงเวลาปฏิบัติราชการประจำวัน_${reportDate}`,
+                  `รายงานลงเวลาประจำวัน_ID2-42_${reportDate}.docx`
+                );
+              }}
+              className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold cursor-pointer"
+            >
+              📝 Word (.docx)
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (!reportRef.current) return;
+                exportElementToA4Pdf(
+                  reportRef.current,
+                  `รายงานลงเวลาประจำวัน_ID2-42_${reportDate}`
+                );
+              }}
               className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold cursor-pointer"
             >
-              🖨️ พิมพ์รายงาน
+              📄 PDF (A4)
             </button>
           </div>
         </div>

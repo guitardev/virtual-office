@@ -5,6 +5,8 @@ import { CircularDocument, OfficialDocumentType } from "@/lib/types";
 import { GarudaEmblem } from "./GarudaEmblem";
 import { DocumentVerificationQR } from "./DocumentVerificationQR";
 import { toThaiDigits, toThaiDate, toThaiDateTime } from "@/lib/thai-numerals";
+import { downloadElementAsDocx } from "@/lib/word-export";
+import { exportElementToA4Pdf } from "@/lib/a4-pdf-export";
 
 interface OfficialCircularSheetProps {
   document: CircularDocument;
@@ -228,8 +230,25 @@ export function OfficialCircularSheet({
   const thaiSignDate = toThaiDate(doc.createdAt);
   const thaiCreatedAt = toThaiDateTime(doc.createdAt);
 
-  const handlePrint = () => {
-    window.print();
+  const sheetRef = useRef<HTMLDivElement | null>(null);
+
+  const handleExportWord = () => {
+    if (!sheetRef.current) return;
+    const safeNo = (doc.docNumber || "circular").replace(/[^a-zA-Z0-9ก-๙_-]/g, "_");
+    downloadElementAsDocx(
+      sheetRef.current,
+      `${doc.title || doc.docNumber}`,
+      `หนังสือราชการ_${safeNo}.docx`
+    );
+  };
+
+  const handleExportPdf = async () => {
+    if (!sheetRef.current) return;
+    await exportElementToA4Pdf(
+      sheetRef.current,
+      `${doc.docNumber || "circular"}_${doc.title || "document"}`,
+      { marginMm: 0 }
+    );
   };
 
   return (
@@ -432,11 +451,19 @@ export function OfficialCircularSheet({
 
             <button
               type="button"
-              onClick={handlePrint}
+              onClick={handleExportWord}
+              className="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold transition-all cursor-pointer flex items-center gap-1"
+            >
+              <span>📝</span>
+              <span>Word (.docx)</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleExportPdf}
               className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-bold shadow-xs hover:shadow transition-all cursor-pointer flex items-center gap-1.5 active:scale-98"
             >
-              <span>🖨️</span>
-              <span>พิมพ์ / บันทึก PDF</span>
+              <span>📄</span>
+              <span>PDF (A4)</span>
             </button>
           </div>
         </div>
@@ -490,6 +517,7 @@ export function OfficialCircularSheet({
 
           {/* ─── OFFICIAL DOCUMENT PAPER (EXACT A4 ONLY: 210mm x 297mm) ─── */}
           <div
+            ref={sheetRef}
             style={{
               fontFamily: "'Sarabun', 'TH Sarabun New', 'TH Sarabun PSK', sans-serif",
               width: "210mm",

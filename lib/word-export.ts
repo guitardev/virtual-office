@@ -212,6 +212,22 @@ function nodeToWordXml(node: Node): string {
     return makePara(el, { size: 18, color: "4C657A", align: "center", after: 100 });
   }
   if (tag === "BR") return makePara("");
+  if (tag === "LI") {
+    return makePara(`• ${el.textContent?.trim() || ""}`, { size: 22, indent: 360, after: 60 });
+  }
+
+  const blockTags = new Set(["DIV", "SECTION", "HEADER", "FOOTER", "ARTICLE", "MAIN", "UL", "OL", "TABLE", "H1", "H2", "H3", "H4", "P"]);
+  const hasBlockChild = Array.from(el.children).some((c) => blockTags.has(c.tagName));
+  if (!hasBlockChild) {
+    const txt = el.textContent?.trim() || "";
+    if (!txt) return "";
+    const align: ParaOptions["align"] = el.classList.contains("text-center")
+      ? "center"
+      : el.classList.contains("text-right")
+      ? "right"
+      : "left";
+    return makePara(el, { size: 22, align, after: 70 });
+  }
 
   return Array.from(el.children).map(nodeToWordXml).join("");
 }

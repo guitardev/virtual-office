@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useRef } from "react";
 import { CircularDocument, Member } from "@/lib/types";
 import { GarudaEmblem } from "./GarudaEmblem";
 import { DocumentVerificationQR } from "./DocumentVerificationQR";
 import { toThaiDigits, toThaiDate, toThaiDateTime } from "@/lib/thai-numerals";
+import { downloadElementAsDocx } from "@/lib/word-export";
+import { exportElementToA4Pdf } from "@/lib/a4-pdf-export";
 
 interface CirculationPrintSlipProps {
   document: CircularDocument;
@@ -24,8 +26,24 @@ export function CirculationPrintSlip({
   inPage = true,
 }: CirculationPrintSlipProps) {
 
-  const handlePrint = () => {
-    window.print();
+  const slipRef = useRef<HTMLDivElement | null>(null);
+
+  const handleExportWord = () => {
+    if (!slipRef.current) return;
+    const safeNo = (doc.docNumber || "slip").replace(/[^a-zA-Z0-9ก-๙_-]/g, "_");
+    downloadElementAsDocx(
+      slipRef.current,
+      `ใบสรุปผลการเวียนหนังสือ_${doc.docNumber}`,
+      `ใบสรุปผลเวียนหนังสือ_${safeNo}.docx`
+    );
+  };
+
+  const handleExportPdf = async () => {
+    if (!slipRef.current) return;
+    await exportElementToA4Pdf(
+      slipRef.current,
+      `ใบสรุปผลการเวียนหนังสือ_${doc.docNumber}`
+    );
   };
 
   const adminIdSet = useMemo(() => {
@@ -45,7 +63,7 @@ export function CirculationPrintSlip({
 
   // ส่วนของใบสรุปผลการเวียนและบัญชีลงนาม (Routing & Acknowledgment Slip)
   const slipContent = (
-    <div className="gov-a4-sheet official-slip-sheet space-y-6 bg-white border border-slate-200 rounded-xl shadow-xs print:shadow-none print:border-none">
+    <div ref={slipRef} className="gov-a4-sheet official-slip-sheet space-y-6 bg-white border border-slate-200 rounded-xl shadow-xs print:shadow-none print:border-none">
       {/* Government Emblem / Garuda Header */}
       <div className="text-center space-y-2 mb-6 border-b-2 border-slate-900 pb-5 print:border-black">
         <div className="flex justify-center mb-1">
@@ -254,10 +272,17 @@ export function CirculationPrintSlip({
       <div className="flex items-center gap-2">
         <button
           type="button"
-          onClick={handlePrint}
+          onClick={handleExportWord}
+          className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-bold rounded-xl border border-white/20 cursor-pointer transition-all flex items-center gap-1.5"
+        >
+          <span>📝 Word (.docx)</span>
+        </button>
+        <button
+          type="button"
+          onClick={handleExportPdf}
           className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow cursor-pointer transition-all flex items-center gap-2"
         >
-          <span>🖨️ สั่งพิมพ์ใบสรุปผล (Print / PDF)</span>
+          <span>📄 PDF (A4)</span>
         </button>
         <button
           type="button"
@@ -297,10 +322,17 @@ export function CirculationPrintSlip({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={handlePrint}
+              onClick={handleExportWord}
+              className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-lg border border-white/20 cursor-pointer transition-all flex items-center gap-1"
+            >
+              <span>📝 Word (.docx)</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleExportPdf}
               className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer transition-all flex items-center gap-1.5"
             >
-              <span>🖨️ สั่งพิมพ์ใบสรุปผล</span>
+              <span>📄 PDF (A4)</span>
             </button>
             <button
               type="button"

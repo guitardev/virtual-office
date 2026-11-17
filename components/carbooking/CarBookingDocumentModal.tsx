@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { CarBookingRequest } from "@/lib/types";
+import { exportElementToA4Pdf } from "@/lib/a4-pdf-export";
 import { toThaiDigits } from "@/lib/thai-numerals";
 
 interface CarBookingDocumentModalProps {
@@ -14,6 +15,7 @@ export function CarBookingDocumentModal({
   onClose,
 }: CarBookingDocumentModalProps) {
   const [isDownloading, setIsDownloading] = useState(false);
+  const sheetRef = useRef<HTMLDivElement | null>(null);
 
   const THAI_MONTHS_MAP: Record<string, string> = {
     "ม.ค.": "มกราคม",
@@ -274,8 +276,22 @@ export function CarBookingDocumentModal({
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 disabled:bg-blue-400 text-white rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition-all cursor-pointer"
               title="ดาวน์โหลดเป็นไฟล์ Microsoft Word (.docx) เพื่อนำไปปรับแก้และพิมพ์เอกสาร"
             >
-              <span>📥</span>
-              <span>{isDownloading ? "กำลังสร้างไฟล์ Word..." : "ดาวน์โหลดไฟล์ Word (.docx)"}</span>
+              <span>📝</span>
+              <span>{isDownloading ? "กำลังสร้างไฟล์ Word..." : "Word (.docx)"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (!sheetRef.current) return;
+                exportElementToA4Pdf(
+                  sheetRef.current,
+                  `Form_ขอใช้รถ_${booking.requestNo || "form"}`
+                );
+              }}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer"
+            >
+              <span>📄</span>
+              <span>PDF (A4)</span>
             </button>
             <button
               type="button"
@@ -298,7 +314,7 @@ export function CarBookingDocumentModal({
         </div>
 
         {/* Scrollable Document Preview / A4 Sheet */}
-        <div className="overflow-y-auto flex-1 min-h-0 bg-slate-200/50 p-4 sm:p-8 print:p-0 print:bg-white print:overflow-visible">
+        <div ref={sheetRef} className="overflow-y-auto flex-1 min-h-0 bg-slate-200/50 p-4 sm:p-8 print:p-0 print:bg-white print:overflow-visible">
           
           {/* Status Alert Banner (On-screen only, hidden when printing) */}
           {booking.licensePlate && booking.licensePlate !== "-" && (

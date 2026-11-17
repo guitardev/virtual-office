@@ -14,6 +14,7 @@ import {
   getKppDimensionSummaries,
 } from "@/lib/mso-logbook-kpp";
 import { downloadElementAsDocx } from "@/lib/word-export";
+import { exportElementToA4Pdf } from "@/lib/a4-pdf-export";
 import { toThaiDate } from "@/lib/thai-numerals";
 import { Member } from "@/lib/types";
 
@@ -84,8 +85,12 @@ export function SocialStatisticsReportModal({
   const level2Plus3 = main.lvls[2] + main.lvls[3];
   const top3Dims = dimSummaries.slice(0, 3);
 
-  const handlePrint = () => {
-    window.print();
+  const handlePrint = async () => {
+    if (!reportRef.current) return;
+    await exportElementToA4Pdf(
+      reportRef.current,
+      `รายงานสถานการณ์กลุ่มเปราะบาง_กำแพงเพชร_${fiscalYear}`
+    );
   };
 
   const handleExportExcel = () => {
@@ -207,7 +212,7 @@ export function SocialStatisticsReportModal({
               onClick={handlePrint}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-colors shadow-sm"
             >
-              🖨️ พิมพ์ / PDF
+              📄 PDF (A4)
             </button>
 
             <button
