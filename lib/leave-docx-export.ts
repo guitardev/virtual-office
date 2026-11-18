@@ -124,7 +124,7 @@ function buildVacationLeaveBody(leave: LeaveRequestItem): string {
           "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์ จังหวัดกำแพงเพชร"
         }`
       ),
-      { leftIndent: 3600, after: 20 }
+      { leftIndent: 4820, after: 20 }
     )
   );
   parts.push(
@@ -134,7 +134,7 @@ function buildVacationLeaveBody(leave: LeaveRequestItem): string {
           writtenParts.month || "............"
         } พ.ศ. ${writtenParts.yearBE || "......"}`
       ),
-      { leftIndent: 4100, after: 100 }
+      { leftIndent: 4600, firstLine: 220, after: 100 }
     )
   );
 
@@ -221,14 +221,7 @@ function buildVacationLeaveBody(leave: LeaveRequestItem): string {
     makePara(makeRun(`ตำแหน่ง ${leave.applicantPosition || "-"}`), {
       leftIndent: 4500,
       align: "center",
-      after: 20,
-    })
-  );
-  parts.push(
-    makePara(makeRun(`วันที่ ${formatThaiDateFull(leave.writtenDate)}`), {
-      leftIndent: 4500,
-      align: "center",
-      after: 160,
+      after: 180,
     })
   );
 
@@ -384,22 +377,22 @@ function buildVacationLeaveBody(leave: LeaveRequestItem): string {
         `(ลงชื่อ) ${
           leave.supervisorReviewedAt && leave.supervisorName
             ? leave.supervisorName
-            : "........................................"
+            : "..............................................."
         }`
       ),
-      { after: 20 }
+      { align: "center", after: 20 }
     ),
     makePara(
       makeRun(
         `(${leave.supervisorName || "........................................"})`
       ),
-      { leftIndent: 700, after: 20 }
+      { align: "center", after: 20 }
     ),
     makePara(
       makeRun(
         `(ตำแหน่ง) ${leave.supervisorPosition || "...................................."}`
       ),
-      { after: 20 }
+      { align: "center", after: 20 }
     ),
     makePara(
       makeRun(
@@ -409,7 +402,7 @@ function buildVacationLeaveBody(leave: LeaveRequestItem): string {
             : "........ / ........ / ........"
         }`
       ),
-      { after: 200 }
+      { align: "center", after: 200 }
     ),
     makePara(
       makeRun("คำสั่ง   ", { bold: true }) +
@@ -418,32 +411,32 @@ function buildVacationLeaveBody(leave: LeaveRequestItem): string {
             leave.orderDecision === "rejected"
           )} ไม่อนุญาต`
         ),
-      { after: 60 }
+      { align: "center", after: 60 }
     ),
     leave.orderComment
-      ? makePara(makeRun(leave.orderComment), { after: 80 })
+      ? makePara(makeRun(leave.orderComment), { align: "center", after: 80 })
       : makePara(makeRun(""), { after: 80 }),
     makePara(
       makeRun(
         `(ลงชื่อ) ${
           leave.orderedAt && leave.approverName
             ? leave.approverName
-            : "........................................"
+            : "................................................."
         }`
       ),
-      { after: 20 }
+      { align: "center", after: 20 }
     ),
     makePara(
       makeRun(
         `(${leave.approverName || "........................................"})`
       ),
-      { leftIndent: 700, after: 20 }
+      { align: "center", after: 20 }
     ),
     makePara(
       makeRun(
         `(ตำแหน่ง) ${leave.approverPosition || "...................................."}`
       ),
-      { after: 20 }
+      { align: "center", after: 20 }
     ),
     makePara(
       makeRun(
@@ -453,7 +446,7 @@ function buildVacationLeaveBody(leave: LeaveRequestItem): string {
             : "........ / ........ / ........"
         }`
       ),
-      { after: 0 }
+      { align: "center", after: 0 }
     ),
   ].join("");
 
@@ -505,7 +498,7 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem): string {
           "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"
         }`
       ),
-      { leftIndent: 3600, after: 20 }
+      { leftIndent: 4820, after: 20 }
     )
   );
   parts.push(
@@ -515,7 +508,7 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem): string {
           writtenParts.month || "............"
         } พ.ศ. ${writtenParts.yearBE || "......"}`
       ),
-      { leftIndent: 4100, after: 100 }
+      { leftIndent: 4600, firstLine: 220, after: 100 }
     )
   );
 
@@ -548,11 +541,9 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem): string {
   parts.push(
     makePara(
       makeRun(
-        `สังกัด ${
-          leave.applicantDivision
-            ? `${leave.applicantDivision} (สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร)`
-            : "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"
-        }`
+        `กลุ่ม/ฝ่าย ${
+          leave.applicantDivision || "-"
+        } สังกัด สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร`
       ),
       { after: 60 }
     )
@@ -646,13 +637,6 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem): string {
   );
 
   parts.push(
-    makePara(makeRun("ขอแสดงความนับถือ"), {
-      leftIndent: 4500,
-      align: "center",
-      after: 120,
-    })
-  );
-  parts.push(
     makePara(makeRun("(ลงชื่อ)......................................................"), {
       leftIndent: 4500,
       align: "center",
@@ -670,14 +654,7 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem): string {
     makePara(makeRun(`ตำแหน่ง ${leave.applicantPosition || "-"}`), {
       leftIndent: 4500,
       align: "center",
-      after: 20,
-    })
-  );
-  parts.push(
-    makePara(makeRun(`วันที่ ${formatThaiDateFull(leave.writtenDate)}`), {
-      leftIndent: 4500,
-      align: "center",
-      after: 120,
+      after: 140,
     })
   );
 
@@ -824,22 +801,22 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem): string {
         `(ลงชื่อ) ${
           leave.supervisorReviewedAt && leave.supervisorName
             ? leave.supervisorName
-            : "........................................"
+            : "..............................................."
         }`
       ),
-      { after: 20 }
+      { align: "center", after: 20 }
     ),
     makePara(
       makeRun(
         `(${leave.supervisorName || "........................................"})`
       ),
-      { leftIndent: 700, after: 20 }
+      { align: "center", after: 20 }
     ),
     makePara(
       makeRun(
         `ตำแหน่ง ${leave.supervisorPosition || "...................................."}`
       ),
-      { after: 20 }
+      { align: "center", after: 20 }
     ),
     makePara(
       makeRun(
@@ -847,7 +824,7 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem): string {
           supParts.month || "............"
         } พ.ศ. ${supParts.yearBE || "......"}`
       ),
-      { after: 160 }
+      { align: "center", after: 160 }
     ),
     makePara(
       makeRun("คำสั่ง   ", { bold: true }) +
@@ -856,32 +833,32 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem): string {
             leave.orderDecision === "rejected"
           )} ไม่อนุญาต`
         ),
-      { after: 60 }
+      { align: "center", after: 60 }
     ),
     leave.orderComment
-      ? makePara(makeRun(leave.orderComment), { after: 80 })
+      ? makePara(makeRun(leave.orderComment), { align: "center", after: 80 })
       : makePara(makeRun(""), { after: 80 }),
     makePara(
       makeRun(
         `(ลงชื่อ) ${
           leave.orderedAt && leave.approverName
             ? leave.approverName
-            : "........................................"
+            : "................................................."
         }`
       ),
-      { after: 20 }
+      { align: "center", after: 20 }
     ),
     makePara(
       makeRun(
         `(${leave.approverName || "........................................"})`
       ),
-      { leftIndent: 700, after: 20 }
+      { align: "center", after: 20 }
     ),
     makePara(
       makeRun(
         `ตำแหน่ง ${leave.approverPosition || "...................................."}`
       ),
-      { after: 20 }
+      { align: "center", after: 20 }
     ),
     makePara(
       makeRun(
@@ -889,7 +866,7 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem): string {
           ordParts.month || "............"
         } พ.ศ. ${ordParts.yearBE || "......"}`
       ),
-      { after: 0 }
+      { align: "center", after: 0 }
     ),
   ].join("");
 
