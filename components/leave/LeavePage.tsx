@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useAppContext } from "@/context/AppContext";
-import { exportElementToA4Pdf } from "@/lib/a4-pdf-export";
+import { downloadLeaveDocx } from "@/lib/leave-docx-export";
+import { downloadLeavePdf } from "@/lib/leave-pdf-export";
 import {
   formatThaiDateFull,
   formatThaiDateShort,
@@ -17,7 +18,6 @@ import {
   LeaveRequestItem,
   LeaveType,
 } from "@/lib/leave-utils";
-import LeaveFormPrintView from "./LeaveFormPrintView";
 import PreloadSkeleton from "@/components/ui/PreloadSkeleton";
 
 const LEAVE_MIGRATION_SQL = `-- รันคำสั่งนี้ใน Supabase SQL Editor เพื่อสร้างตารางระบบใบลา
@@ -179,6 +179,8 @@ export default function LeavePage() {
   const [vacationAccumulatedDays, setVacationAccumulatedDays] = useState<number>(0);
   const [vacationAnnualDays, setVacationAnnualDays] = useState<number>(10);
   const [actingPersonUserId, setActingPersonUserId] = useState("");
+  const [supervisorUserId, setSupervisorUserId] = useState("");
+  const [approverUserId, setApproverUserId] = useState("syno_มะลิวัน");
   const [submitting, setSubmitting] = useState(false);
 
   // Review / Modal state
@@ -207,9 +209,7 @@ export default function LeavePage() {
     vacationDaysCarried: 0,
   });
 
-  // Print preview modal
-  const [previewLeave, setPreviewLeave] = useState<LeaveRequestItem | null>(null);
-  const printRef = useRef<HTMLDivElement | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   const isAdmin = currentUserRole === "admin";
   const isManager = currentUserRole === "manager";
@@ -227,8 +227,66 @@ export default function LeavePage() {
   }, [currentUser, isAdmin, authorizedEditorIds, myLeaveRole]);
 
   const isSupervisor = isAdmin || isManager || Boolean(myLeaveRole?.canSupervisor);
-  const isApprover = isAdmin || Boolean(myLeaveRole?.canApprove);
+  const isApprover =
+    isAdmin ||
+    currentUser?.id === "syno_มะลิวัน" ||
+    Boolean(myLeaveRole?.canApprove);
   const canReviewAny = isVerifier || isSupervisor || isApprover;
+
+  const supervisorCandidates = useMemo(() => {
+    const customSupIds = new Set(
+      leaveRoles.filter((r) => r.canSupervisor).map((r) => r.userId)
+    );
+    return members.filter(
+      (m) =>
+        m.status === "active" &&
+        (m.role === "manager" || customSupIds.has(m.id))
+    );
+  }, [members, leaveRoles]);
+
+  const approverCandidates = useMemo(() => {
+    const customAppIds = new Set(
+      leaveRoles.filter((r) => r.canApprove).map((r) => r.userId)
+    );
+    return members.filter(
+      (m) =>
+        m.status === "active" &&
+        (m.id === "syno_มะลิวัน" ||
+          m.role === "admin" ||
+          customAppIds.has(m.id))
+    );
+  }, [members, leaveRoles]);
+
+  useEffect(() => {
+    if (!currentUser || supervisorCandidates.length === 0) return;
+    if (supervisorUserId) return;
+    const myDiv = (currentUser.division || "").trim();
+    const divMatch =
+      supervisorCandidates.find(
+        (m) =>
+          m.id !== currentUser.id &&
+          m.id !== "syno_มะลิวัน" &&
+          (m.division || "").trim() === myDiv &&
+          myDiv !== ""
+      ) ||
+      supervisorCandidates.find(
+        (m) => m.id !== currentUser.id && (m.division || "").trim() === myDiv && myDiv !== ""
+      ) ||
+      supervisorCandidates.find((m) => m.id !== currentUser.id) ||
+      supervisorCandidates[0];
+    if (divMatch) {
+      setSupervisorUserId(divMatch.id);
+    }
+  }, [currentUser, supervisorCandidates, supervisorUserId]);
+
+  useEffect(() => {
+    if (approverCandidates.length === 0) return;
+    const hasCurrent = approverCandidates.some((m) => m.id === approverUserId);
+    if (!hasCurrent) {
+      const maliwan = approverCandidates.find((m) => m.id === "syno_มะลิวัน");
+      setApproverUserId(maliwan ? maliwan.id : approverCandidates[0].id);
+    }
+  }, [approverCandidates, approverUserId]);
 
   const loadLeaveData = useCallback(async () => {
     setLoading(true);
@@ -390,6 +448,8 @@ export default function LeavePage() {
     }
 
     const actingMember = members.find((m) => m.id === actingPersonUserId);
+    const supervisorMember = members.find((m) => m.id === supervisorUserId);
+    const approverMember = members.find((m) => m.id === approverUserId);
     setSubmitting(true);
     try {
       const res = await fetch("/api/leave", {
@@ -420,6 +480,14 @@ export default function LeavePage() {
           actingPersonUserId: actingMember?.id || null,
           actingPersonName: actingMember?.name || "",
           actingPersonPosition: actingMember?.position || "",
+          supervisorUserId: supervisorMember?.id || null,
+          supervisorName: supervisorMember?.name || "",
+          supervisorPosition: supervisorMember?.position || "",
+          approverUserId: approverMember?.id || "syno_มะลิวัน",
+          approverName: approverMember?.name || "นางสาวมะลิวัน สิทธิโยธี",
+          approverPosition:
+            approverMember?.position ||
+            "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
         }),
       });
       const data = await res.json();
@@ -631,13 +699,28 @@ export default function LeavePage() {
     });
   }, [requests, reviewFilter, isVerifier, isSupervisor, isApprover]);
 
-  const handleExportPdf = async () => {
-    if (!printRef.current || !previewLeave) return;
-    await exportElementToA4Pdf(
-      printRef.current,
-      `${previewLeave.requestNo}_${previewLeave.applicantName}`,
-      { orientation: "portrait", marginMm: 10 }
-    );
+  const handleDownloadDocx = async (leave: LeaveRequestItem) => {
+    setDownloadingId(`${leave.id}:docx`);
+    try {
+      await downloadLeaveDocx(leave);
+      showToast(`📝 ดาวน์โหลด ${leave.requestNo}.docx เรียบร้อยแล้ว`);
+    } catch {
+      showToast("❌ ดาวน์โหลดไฟล์ Word ไม่สำเร็จ");
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  const handleDownloadPdf = async (leave: LeaveRequestItem) => {
+    setDownloadingId(`${leave.id}:pdf`);
+    try {
+      await downloadLeavePdf(leave);
+      showToast(`📄 ดาวน์โหลด ${leave.requestNo}.pdf เรียบร้อยแล้ว`);
+    } catch {
+      showToast("❌ ดาวน์โหลดไฟล์ PDF ไม่สำเร็จ");
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
   const isCurrentUserMapped = currentUser
@@ -1153,6 +1236,66 @@ export default function LeavePage() {
             </div>
           </div>
 
+          {/* สายการพิจารณา (ผู้บังคับบัญชา & ผู้มีอำนาจอนุญาต) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-indigo-50/40 p-4 rounded-xl border border-indigo-100">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                ผู้บังคับบัญชา (ค่าเริ่มต้น: Manager ในสังกัด)
+              </label>
+              <select
+                value={supervisorUserId}
+                onChange={(e) => setSupervisorUserId(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
+              >
+                <option value="">-- เลือกผู้บังคับบัญชา --</option>
+                {supervisorCandidates.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} {m.division ? `(${m.division})` : ""}
+                  </option>
+                ))}
+              </select>
+              {(() => {
+                const sup = supervisorCandidates.find(
+                  (m) => m.id === supervisorUserId
+                );
+                return sup ? (
+                  <div className="text-[11px] text-slate-500 mt-1">
+                    ตำแหน่ง: {sup.position || "-"}
+                  </div>
+                ) : null;
+              })()}
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                ผู้มีอำนาจสั่งอนุญาต (ค่าเริ่มต้น: syno_มะลิวัน)
+              </label>
+              <select
+                value={approverUserId}
+                onChange={(e) => setApproverUserId(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
+              >
+                {approverCandidates.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+              {(() => {
+                const app = approverCandidates.find(
+                  (m) => m.id === approverUserId
+                );
+                return (
+                  <div className="text-[11px] text-slate-500 mt-1">
+                    ตำแหน่ง:{" "}
+                    {app?.position ||
+                      "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+
           <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
             <button
               type="submit"
@@ -1229,20 +1372,24 @@ export default function LeavePage() {
                     <div className="text-xs text-slate-500 flex flex-wrap gap-x-4 gap-y-1 pt-1">
                       <span>
                         1. ผู้ตรวจสอบ:{" "}
-                        {item.verifierName
+                        {item.verifiedAt
                           ? `✓ ${item.verifierName}`
                           : "รอดำเนินการ"}
                       </span>
                       <span>
                         2. ผู้บังคับบัญชา:{" "}
-                        {item.supervisorName
+                        {item.supervisorReviewedAt
                           ? `✓ ${item.supervisorName}`
+                          : item.supervisorName
+                          ? `⏳ รอ ${item.supervisorName}`
                           : "รอดำเนินการ"}
                       </span>
                       <span>
                         3. คำสั่ง:{" "}
-                        {item.approverName
+                        {item.orderedAt
                           ? `${item.orderDecision === "approved" ? "✓ อนุญาต" : "✗ ไม่อนุญาต"} (${item.approverName})`
+                          : item.approverName
+                          ? `⏳ รอ ${item.approverName}`
                           : "รอดำเนินการ"}
                       </span>
                     </div>
@@ -1251,10 +1398,23 @@ export default function LeavePage() {
                   <div className="flex items-center gap-2 flex-wrap shrink-0">
                     <button
                       type="button"
-                      onClick={() => setPreviewLeave(item)}
-                      className="px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                      disabled={downloadingId === `${item.id}:docx`}
+                      onClick={() => handleDownloadDocx(item)}
+                      className="px-3 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold disabled:opacity-50 cursor-pointer"
                     >
-                      🖨️ ดูแบบฟอร์ม / PDF
+                      {downloadingId === `${item.id}:docx`
+                        ? "⏳..."
+                        : "📝 Word (.docx)"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={downloadingId === `${item.id}:pdf`}
+                      onClick={() => handleDownloadPdf(item)}
+                      className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold disabled:opacity-50 cursor-pointer"
+                    >
+                      {downloadingId === `${item.id}:pdf`
+                        ? "⏳..."
+                        : "📄 PDF (.pdf)"}
                     </button>
                     {item.status !== "approved" && item.status !== "cancelled" && (
                       <button
@@ -1334,6 +1494,14 @@ export default function LeavePage() {
                       >
                         {statusMeta.label}
                       </span>
+                      {((item.status === "pending_supervisor" &&
+                        item.supervisorUserId === currentUser?.id) ||
+                        (item.status === "pending_approver" &&
+                          item.approverUserId === currentUser?.id)) && (
+                        <span className="text-xs px-2.5 py-0.5 rounded-full border bg-indigo-50 text-indigo-700 border-indigo-200 font-semibold">
+                          📌 มอบหมายถึงคุณ
+                        </span>
+                      )}
                     </div>
                     <div className="font-bold text-slate-900">
                       {item.applicantName}{" "}
@@ -1347,6 +1515,22 @@ export default function LeavePage() {
                       วันทำการ)
                       {item.reason ? ` • ${item.reason}` : ""}
                     </div>
+                    {(item.supervisorName || item.approverName) && (
+                      <div className="text-xs text-slate-500 flex flex-wrap gap-x-3 gap-y-0.5">
+                        {item.supervisorName && (
+                          <span>
+                            ผู้บังคับบัญชา: {item.supervisorName}
+                            {item.supervisorReviewedAt ? " ✓" : ""}
+                          </span>
+                        )}
+                        {item.approverName && (
+                          <span>
+                            ผู้อนุญาต: {item.approverName}
+                            {item.orderedAt ? " ✓" : ""}
+                          </span>
+                        )}
+                      </div>
+                    )}
                     {item.syncNote && (
                       <div className="text-xs text-slate-500">
                         ⏱️ Attendance: {item.syncNote}
@@ -1357,10 +1541,23 @@ export default function LeavePage() {
                   <div className="flex items-center gap-2 flex-wrap shrink-0">
                     <button
                       type="button"
-                      onClick={() => setPreviewLeave(item)}
-                      className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                      disabled={downloadingId === `${item.id}:docx`}
+                      onClick={() => handleDownloadDocx(item)}
+                      className="px-3 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold disabled:opacity-50 cursor-pointer"
                     >
-                      🖨️ แบบฟอร์ม
+                      {downloadingId === `${item.id}:docx`
+                        ? "⏳..."
+                        : "📝 Word (.docx)"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={downloadingId === `${item.id}:pdf`}
+                      onClick={() => handleDownloadPdf(item)}
+                      className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold disabled:opacity-50 cursor-pointer"
+                    >
+                      {downloadingId === `${item.id}:pdf`
+                        ? "⏳..."
+                        : "📄 PDF (.pdf)"}
                     </button>
 
                     {item.status === "pending_verifier" && isVerifier && (
@@ -1969,38 +2166,6 @@ export default function LeavePage() {
         </div>
       )}
 
-      {/* Modal: ดูแบบฟอร์ม A4 และ Export PDF */}
-      {previewLeave && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4">
-          <div className="bg-slate-100 rounded-2xl max-w-[900px] w-full max-h-[92vh] flex flex-col overflow-hidden shadow-2xl">
-            <div className="bg-white px-5 py-3 border-b border-slate-200 flex items-center justify-between">
-              <div className="font-bold text-slate-900 text-sm">
-                แบบฟอร์ม {previewLeave.requestNo} —{" "}
-                {LEAVE_TYPE_META[previewLeave.leaveType].label}
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleExportPdf}
-                  className="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold cursor-pointer"
-                >
-                  🖨️ พิมพ์ / บันทึกเป็น PDF (A4)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPreviewLeave(null)}
-                  className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
-                >
-                  ปิด
-                </button>
-              </div>
-            </div>
-            <div className="overflow-auto p-6">
-              <LeaveFormPrintView leave={previewLeave} printRef={printRef} />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

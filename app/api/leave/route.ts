@@ -365,6 +365,12 @@ export async function POST(req: NextRequest) {
       actingPersonUserId,
       actingPersonName,
       actingPersonPosition,
+      supervisorUserId,
+      supervisorName,
+      supervisorPosition,
+      approverUserId,
+      approverName,
+      approverPosition,
       attachmentUrl,
       attachmentName,
     } = body || {};
@@ -428,6 +434,30 @@ export async function POST(req: NextRequest) {
         ? totalWorkingDays
         : Math.max(1, getWorkingDatesBetween(startDate, endDate).length);
 
+    // หากไม่ระบุผู้มีอำนาจอนุญาต ให้ใช้ syno_มะลิวัน เป็นค่าเริ่มต้น
+    let resolvedApproverId = approverUserId || "syno_มะลิวัน";
+    let resolvedApproverName = approverName || "";
+    let resolvedApproverPosition = approverPosition || "";
+
+    if (!resolvedApproverName || !resolvedApproverPosition) {
+      const { data: defApprover } = await requireSupabase()
+        .from("users")
+        .select("id, name, position")
+        .eq("id", resolvedApproverId)
+        .maybeSingle();
+      if (defApprover) {
+        resolvedApproverId = defApprover.id;
+        resolvedApproverName = resolvedApproverName || defApprover.name || "";
+        resolvedApproverPosition =
+          resolvedApproverPosition || defApprover.position || "";
+      } else {
+        resolvedApproverName = resolvedApproverName || "นางสาวมะลิวัน สิทธิโยธี";
+        resolvedApproverPosition =
+          resolvedApproverPosition ||
+          "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร";
+      }
+    }
+
     const payload = {
       request_no: requestNo,
       leave_type: leaveType,
@@ -469,6 +499,12 @@ export async function POST(req: NextRequest) {
       prev_personal_days: prevPersonalDays,
       prev_maternity_days: prevMaternityDays,
       prev_vacation_days: prevVacationDays,
+      supervisor_user_id: supervisorUserId || null,
+      supervisor_name: supervisorName || null,
+      supervisor_position: supervisorPosition || null,
+      approver_user_id: resolvedApproverId || null,
+      approver_name: resolvedApproverName || null,
+      approver_position: resolvedApproverPosition || null,
       status: "pending_verifier",
       attachment_url: attachmentUrl || null,
       attachment_name: attachmentName || null,
@@ -554,7 +590,11 @@ export async function PATCH(req: NextRequest) {
     ]);
     const canVerify = isAdmin || isEditor || customLeaveRole.canVerify;
     const canSupervisor = isAdmin || isManager || customLeaveRole.canSupervisor;
-    const canApprove = isAdmin || customLeaveRole.canApprove;
+    const canApprove =
+      isAdmin ||
+      actorId === "syno_มะลิวัน" ||
+      customLeaveRole.canApprove ||
+      (Boolean(existing.approverUserId) && existing.approverUserId === actorId);
 
     if (action === "verify") {
       if (!canVerify) {
