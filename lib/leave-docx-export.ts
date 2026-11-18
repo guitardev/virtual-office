@@ -214,7 +214,21 @@ function buildVacationLeaveBody(leave: LeaveRequestItem): string {
     makePara(makeRun(`(${leave.applicantName})`), {
       leftIndent: 4500,
       align: "center",
-      after: 180,
+      after: 20,
+    })
+  );
+  parts.push(
+    makePara(makeRun(`ตำแหน่ง ${leave.applicantPosition || "-"}`), {
+      leftIndent: 4500,
+      align: "center",
+      after: 20,
+    })
+  );
+  parts.push(
+    makePara(makeRun(`วันที่ ${formatThaiDateFull(leave.writtenDate)}`), {
+      leftIndent: 4500,
+      align: "center",
+      after: 160,
     })
   );
 
@@ -649,7 +663,21 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem): string {
     makePara(makeRun(`(${leave.applicantName})`), {
       leftIndent: 4500,
       align: "center",
-      after: 140,
+      after: 20,
+    })
+  );
+  parts.push(
+    makePara(makeRun(`ตำแหน่ง ${leave.applicantPosition || "-"}`), {
+      leftIndent: 4500,
+      align: "center",
+      after: 20,
+    })
+  );
+  parts.push(
+    makePara(makeRun(`วันที่ ${formatThaiDateFull(leave.writtenDate)}`), {
+      leftIndent: 4500,
+      align: "center",
+      after: 120,
     })
   );
 

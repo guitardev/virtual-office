@@ -162,6 +162,7 @@ export default function LeavePage() {
     "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"
   );
   const [writtenDate, setWrittenDate] = useState(() => getTodayIsoDate());
+  const [applicantPosition, setApplicantPosition] = useState("");
   const [subject, setSubject] = useState("ขออนุญาตลาป่วย");
   const [toRecipient, setToRecipient] = useState(
     "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"
@@ -337,6 +338,9 @@ export default function LeavePage() {
   // Pre-fill contact phone & balance for current user
   useEffect(() => {
     if (!currentUser) return;
+    if (!applicantPosition && currentUser.position) {
+      setApplicantPosition(currentUser.position);
+    }
     if (!contactPhone && currentUser.phone) {
       setContactPhone(currentUser.phone);
     }
@@ -488,7 +492,7 @@ export default function LeavePage() {
           toRecipient,
           applicantUserId: currentUser.id,
           applicantName: currentUser.name,
-          applicantPosition: currentUser.position || "",
+          applicantPosition: applicantPosition.trim() || currentUser.position || "",
           applicantDivision: currentUser.division || "",
           reason,
           startDate,
@@ -985,7 +989,7 @@ export default function LeavePage() {
           )}
 
           {/* ข้อมูลหัวเอกสารและผู้ขอลา */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200 items-center">
             <div>
               <div className="text-xs text-slate-500">ผู้ขอลา</div>
               <div className="font-semibold text-slate-900">
@@ -993,10 +997,16 @@ export default function LeavePage() {
               </div>
             </div>
             <div>
-              <div className="text-xs text-slate-500">ตำแหน่ง</div>
-              <div className="font-semibold text-slate-900">
-                {currentUser?.position || "-"}
-              </div>
+              <label className="block text-xs text-slate-500 mb-1">
+                ตำแหน่งผู้ขอลา
+              </label>
+              <input
+                type="text"
+                value={applicantPosition}
+                onChange={(e) => setApplicantPosition(e.target.value)}
+                placeholder="ระบุตำแหน่ง"
+                className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm font-medium text-slate-900"
+              />
             </div>
             <div>
               <div className="text-xs text-slate-500">กลุ่ม/ฝ่าย</div>
@@ -1020,7 +1030,10 @@ export default function LeavePage() {
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1">
-                วันที่เขียนใบลา
+                วันที่ยื่นใบลา (วัน/เดือน/ปี):{" "}
+                <span className="text-indigo-700 font-bold">
+                  {formatThaiDateFull(writtenDate)}
+                </span>
               </label>
               <input
                 type="date"
@@ -1423,6 +1436,10 @@ export default function LeavePage() {
                       {formatThaiDateFull(item.startDate)} –{" "}
                       {formatThaiDateFull(item.endDate)} ({item.totalWorkingDays}{" "}
                       วันทำการ)
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      ตำแหน่ง: {item.applicantPosition || "-"} • ยื่นเมื่อ{" "}
+                      {formatThaiDateShort(item.writtenDate)}
                     </div>
                     {item.reason && (
                       <div className="text-xs text-slate-600">

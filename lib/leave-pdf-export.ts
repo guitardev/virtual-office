@@ -237,7 +237,11 @@ function drawVacationForm(
   );
   y += 38;
   ctx.fillText(`(${leave.applicantName})`, sigCenterX, y);
-  y += 85;
+  y += 36;
+  ctx.fillText(`ตำแหน่ง ${leave.applicantPosition || "-"}`, sigCenterX, y);
+  y += 36;
+  ctx.fillText(`วันที่ ${formatThaiDateFull(leave.writtenDate)}`, sigCenterX, y);
+  y += 65;
 
   // 2-Column bottom section within CONTENT_W
   const leftX = MARGIN_LEFT;
@@ -735,7 +739,11 @@ function drawGeneralForm(
   );
   y += 36;
   ctx.fillText(`(${leave.applicantName})`, sigCenterX, y);
-  y += 75;
+  y += 34;
+  ctx.fillText(`ตำแหน่ง ${leave.applicantPosition || "-"}`, sigCenterX, y);
+  y += 34;
+  ctx.fillText(`วันที่ ${formatThaiDateFull(leave.writtenDate)}`, sigCenterX, y);
+  y += 60;
 
   // Left: Stats table + Verifier
   const leftX = MARGIN_LEFT;
