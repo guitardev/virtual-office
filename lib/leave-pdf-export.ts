@@ -394,34 +394,38 @@ function drawVacationForm(
     rightMaxW,
     42
   );
+  const rightCenterX = rightX + rightMaxW / 2;
   ry += 22;
   ry = drawWrappedText(
     ctx,
     `(ลงชื่อ) ${
       leave.supervisorReviewedAt && leave.supervisorName
         ? leave.supervisorName
-        : "........................................"
+        : "..............................................."
     }`,
-    rightX,
+    rightCenterX,
     ry,
     rightMaxW,
-    42
+    42,
+    "center"
   );
   ry = drawWrappedText(
     ctx,
     `(${leave.supervisorName || "........................................"})`,
-    rightX + 70,
+    rightCenterX,
     ry,
-    rightMaxW - 70,
-    42
+    rightMaxW,
+    42,
+    "center"
   );
   ry = drawWrappedText(
     ctx,
     `(ตำแหน่ง) ${leave.supervisorPosition || "...................................."}`,
-    rightX,
+    rightCenterX,
     ry,
     rightMaxW,
-    42
+    42,
+    "center"
   );
   ry = drawWrappedText(
     ctx,
@@ -430,19 +434,21 @@ function drawVacationForm(
         ? formatThaiDateSlash(leave.supervisorReviewedAt)
         : "........ / ........ / ........"
     }`,
-    rightX,
+    rightCenterX,
     ry,
     rightMaxW,
-    42
+    42,
+    "center"
   );
 
   ry += 55;
   ctx.font = `700 29px ${fontFamily}`;
   ctx.textAlign = "left";
-  ctx.fillText("คำสั่ง", rightX, ry);
+  const orderStartX = rightCenterX - 185;
+  ctx.fillText("คำสั่ง", orderStartX, ry);
   const cx = drawCheckbox(
     ctx,
-    rightX + 90,
+    orderStartX + 90,
     ry,
     leave.orderDecision === "approved",
     "อนุญาต",
@@ -459,7 +465,7 @@ function drawVacationForm(
   ry += 46;
   ctx.font = `400 28px ${fontFamily}`;
   if (leave.orderComment) {
-    ry = drawWrappedText(ctx, leave.orderComment, rightX, ry, rightMaxW, 42);
+    ry = drawWrappedText(ctx, leave.orderComment, rightCenterX, ry, rightMaxW, 42, "center");
   }
   ry += 22;
   ry = drawWrappedText(
@@ -467,28 +473,31 @@ function drawVacationForm(
     `(ลงชื่อ) ${
       leave.orderedAt && leave.approverName
         ? leave.approverName
-        : "........................................"
+        : "................................................."
     }`,
-    rightX,
+    rightCenterX,
     ry,
     rightMaxW,
-    42
+    42,
+    "center"
   );
   ry = drawWrappedText(
     ctx,
     `(${leave.approverName || "........................................"})`,
-    rightX + 70,
+    rightCenterX,
     ry,
-    rightMaxW - 70,
-    42
+    rightMaxW,
+    42,
+    "center"
   );
   ry = drawWrappedText(
     ctx,
     `(ตำแหน่ง) ${leave.approverPosition || "...................................."}`,
-    rightX,
+    rightCenterX,
     ry,
     rightMaxW,
-    42
+    42,
+    "center"
   );
   drawWrappedText(
     ctx,
@@ -497,10 +506,11 @@ function drawVacationForm(
         ? formatThaiDateSlash(leave.orderedAt)
         : "........ / ........ / ........"
     }`,
-    rightX,
+    rightCenterX,
     ry,
     rightMaxW,
-    42
+    42,
+    "center"
   );
 }
 
@@ -865,53 +875,59 @@ function drawGeneralForm(
     rightMaxW,
     40
   );
+  const rightCenterX = rightX + rightMaxW / 2;
   ry += 20;
   ry = drawWrappedText(
     ctx,
     `(ลงชื่อ) ${
       leave.supervisorReviewedAt && leave.supervisorName
         ? leave.supervisorName
-        : "........................................"
+        : "..............................................."
     }`,
-    rightX,
+    rightCenterX,
     ry,
     rightMaxW,
-    40
+    40,
+    "center"
   );
   ry = drawWrappedText(
     ctx,
     `(${leave.supervisorName || "........................................"})`,
-    rightX + 70,
+    rightCenterX,
     ry,
-    rightMaxW - 70,
-    40
+    rightMaxW,
+    40,
+    "center"
   );
   ry = drawWrappedText(
     ctx,
     `ตำแหน่ง ${leave.supervisorPosition || "...................................."}`,
-    rightX,
+    rightCenterX,
     ry,
     rightMaxW,
-    40
+    40,
+    "center"
   );
   ry = drawWrappedText(
     ctx,
     `วันที่ ${supParts.day || "...."} เดือน ${
       supParts.month || "............"
     } พ.ศ. ${supParts.yearBE || "......"}`,
-    rightX,
+    rightCenterX,
     ry,
     rightMaxW,
-    40
+    40,
+    "center"
   );
 
   ry += 48;
   ctx.font = `700 29px ${fontFamily}`;
   ctx.textAlign = "left";
-  ctx.fillText("คำสั่ง", rightX, ry);
+  const orderStartX = rightCenterX - 185;
+  ctx.fillText("คำสั่ง", orderStartX, ry);
   cx = drawCheckbox(
     ctx,
-    rightX + 90,
+    orderStartX + 90,
     ry,
     leave.orderDecision === "approved",
     "อนุญาต",
@@ -928,7 +944,7 @@ function drawGeneralForm(
   ry += 44;
   ctx.font = `400 28px ${fontFamily}`;
   if (leave.orderComment) {
-    ry = drawWrappedText(ctx, leave.orderComment, rightX, ry, rightMaxW, 40);
+    ry = drawWrappedText(ctx, leave.orderComment, rightCenterX, ry, rightMaxW, 40, "center");
   }
   ry += 20;
   ry = drawWrappedText(
@@ -936,38 +952,42 @@ function drawGeneralForm(
     `(ลงชื่อ) ${
       leave.orderedAt && leave.approverName
         ? leave.approverName
-        : "........................................"
+        : "................................................."
     }`,
-    rightX,
+    rightCenterX,
     ry,
     rightMaxW,
-    40
+    40,
+    "center"
   );
   ry = drawWrappedText(
     ctx,
     `(${leave.approverName || "........................................"})`,
-    rightX + 70,
+    rightCenterX,
     ry,
-    rightMaxW - 70,
-    40
+    rightMaxW,
+    40,
+    "center"
   );
   ry = drawWrappedText(
     ctx,
     `ตำแหน่ง ${leave.approverPosition || "...................................."}`,
-    rightX,
+    rightCenterX,
     ry,
     rightMaxW,
-    40
+    40,
+    "center"
   );
   ry = drawWrappedText(
     ctx,
     `วันที่ ${ordParts.day || "...."} เดือน ${
       ordParts.month || "............"
     } พ.ศ. ${ordParts.yearBE || "......"}`,
-    rightX,
+    rightCenterX,
     ry,
     rightMaxW,
-    40
+    40,
+    "center"
   );
 
   // Footer note

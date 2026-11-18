@@ -228,7 +228,7 @@ function buildVacationLeaveBody(leave: LeaveRequestItem): string {
   // สถิติการลา 3 คอลัมน์
   const statsTable = `<w:tbl>
     <w:tblPr>
-      <w:tblW w:w="4500" w:type="dxa"/>
+      <w:tblW w:w="4380" w:type="dxa"/>
       <w:tblLayout w:type="fixed"/>
       <w:tblBorders>
         <w:top w:val="single" w:sz="4" w:space="0" w:color="000000"/>
@@ -239,14 +239,14 @@ function buildVacationLeaveBody(leave: LeaveRequestItem): string {
         <w:insideV w:val="single" w:sz="4" w:space="0" w:color="000000"/>
       </w:tblBorders>
     </w:tblPr>
-    <w:tblGrid><w:gridCol w:w="1500"/><w:gridCol w:w="1500"/><w:gridCol w:w="1500"/></w:tblGrid>
+    <w:tblGrid><w:gridCol w:w="1460"/><w:gridCol w:w="1460"/><w:gridCol w:w="1460"/></w:tblGrid>
     <w:tr>
       ${makeTableCell(
         makePara(makeRun("ลามาแล้ว\n(วันทำการ)", { bold: true, size: 26 }), {
           align: "center",
           after: 0,
         }),
-        1500,
+        1460,
         { borders: true, vAlign: "center" }
       )}
       ${makeTableCell(
@@ -254,7 +254,7 @@ function buildVacationLeaveBody(leave: LeaveRequestItem): string {
           align: "center",
           after: 0,
         }),
-        1500,
+        1460,
         { borders: true, vAlign: "center" }
       )}
       ${makeTableCell(
@@ -262,7 +262,7 @@ function buildVacationLeaveBody(leave: LeaveRequestItem): string {
           align: "center",
           after: 0,
         }),
-        1500,
+        1460,
         { borders: true, vAlign: "center" }
       )}
     </w:tr>
@@ -272,7 +272,7 @@ function buildVacationLeaveBody(leave: LeaveRequestItem): string {
           align: "center",
           after: 0,
         }),
-        1500,
+        1460,
         { borders: true, vAlign: "center" }
       )}
       ${makeTableCell(
@@ -280,7 +280,7 @@ function buildVacationLeaveBody(leave: LeaveRequestItem): string {
           align: "center",
           after: 0,
         }),
-        1500,
+        1460,
         { borders: true, vAlign: "center" }
       )}
       ${makeTableCell(
@@ -288,7 +288,7 @@ function buildVacationLeaveBody(leave: LeaveRequestItem): string {
           makeRun(String(totalUsed), { bold: true, size: 28 }),
           { align: "center", after: 0 }
         ),
-        1500,
+        1460,
         { borders: true, vAlign: "center" }
       )}
     </w:tr>
@@ -663,7 +663,7 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem): string {
     prev: number,
     cur: number
   ) => `<w:tr>
-    ${makeTableCell(makePara(makeRun(label, { size: 26 }), { after: 0 }), 1200, {
+    ${makeTableCell(makePara(makeRun(label, { size: 26 }), { after: 0 }), 1100, {
       borders: true,
       vAlign: "center",
     })}
@@ -695,7 +695,7 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem): string {
 
   const statsTable = `<w:tbl>
     <w:tblPr>
-      <w:tblW w:w="4500" w:type="dxa"/>
+      <w:tblW w:w="4400" w:type="dxa"/>
       <w:tblLayout w:type="fixed"/>
       <w:tblBorders>
         <w:top w:val="single" w:sz="4" w:space="0" w:color="000000"/>
@@ -706,14 +706,14 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem): string {
         <w:insideV w:val="single" w:sz="4" w:space="0" w:color="000000"/>
       </w:tblBorders>
     </w:tblPr>
-    <w:tblGrid><w:gridCol w:w="1200"/><w:gridCol w:w="1100"/><w:gridCol w:w="1100"/><w:gridCol w:w="1100"/></w:tblGrid>
+    <w:tblGrid><w:gridCol w:w="1100"/><w:gridCol w:w="1100"/><w:gridCol w:w="1100"/><w:gridCol w:w="1100"/></w:tblGrid>
     <w:tr>
       ${makeTableCell(
         makePara(makeRun("ประเภทลา", { bold: true, size: 26 }), {
           align: "center",
           after: 0,
         }),
-        1200,
+        1100,
         { borders: true, vAlign: "center" }
       )}
       ${makeTableCell(
