@@ -459,8 +459,15 @@ export default function LeavePage() {
       showToast("⚠️ วันที่สิ้นสุดต้องไม่น้อยกว่าวันที่เริ่มต้น");
       return;
     }
-    if (leaveType === "personal_leave" && !reason.trim()) {
-      showToast("⚠️ กรุณาระบุเหตุผลการลากิจส่วนตัว");
+    if (
+      (leaveType === "sick_leave" || leaveType === "personal_leave") &&
+      !reason.trim()
+    ) {
+      showToast(
+        leaveType === "sick_leave"
+          ? "⚠️ กรุณาระบุอาการป่วย / เหตุผลการลาป่วย"
+          : "⚠️ กรุณาระบุเหตุผลการลากิจส่วนตัว"
+      );
       return;
     }
 
@@ -1108,7 +1115,8 @@ export default function LeavePage() {
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">
                   เนื่องจาก / เหตุผลการลา{" "}
-                  {leaveType === "personal_leave" && (
+                  {(leaveType === "sick_leave" ||
+                    leaveType === "personal_leave") && (
                     <span className="text-rose-500">*</span>
                   )}
                 </label>
@@ -1116,6 +1124,9 @@ export default function LeavePage() {
                   type="text"
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
+                  required={
+                    leaveType === "sick_leave" || leaveType === "personal_leave"
+                  }
                   placeholder="ระบุอาการป่วย หรือเหตุผลในการลากิจส่วนตัว"
                   className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
                 />

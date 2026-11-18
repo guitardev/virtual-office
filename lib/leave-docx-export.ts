@@ -124,7 +124,7 @@ function buildVacationLeaveBody(leave: LeaveRequestItem): string {
           "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์ จังหวัดกำแพงเพชร"
         }`
       ),
-      { leftIndent: 4300, after: 20 }
+      { leftIndent: 3600, after: 20 }
     )
   );
   parts.push(
@@ -134,7 +134,7 @@ function buildVacationLeaveBody(leave: LeaveRequestItem): string {
           writtenParts.month || "............"
         } พ.ศ. ${writtenParts.yearBE || "......"}`
       ),
-      { leftIndent: 4800, after: 100 }
+      { leftIndent: 4100, after: 100 }
     )
   );
 
@@ -205,14 +205,14 @@ function buildVacationLeaveBody(leave: LeaveRequestItem): string {
 
   parts.push(
     makePara(makeRun("(ลงชื่อ)......................................................"), {
-      leftIndent: 5200,
+      leftIndent: 4500,
       align: "center",
       after: 20,
     })
   );
   parts.push(
     makePara(makeRun(`(${leave.applicantName})`), {
-      leftIndent: 5200,
+      leftIndent: 4500,
       align: "center",
       after: 180,
     })
@@ -445,17 +445,17 @@ function buildVacationLeaveBody(leave: LeaveRequestItem): string {
 
   parts.push(`<w:tbl>
     <w:tblPr>
-      <w:tblW w:w="10200" w:type="dxa"/>
+      <w:tblW w:w="9355" w:type="dxa"/>
       <w:tblLayout w:type="fixed"/>
       <w:tblBorders>
         <w:top w:val="none"/><w:left w:val="none"/><w:bottom w:val="none"/><w:right w:val="none"/><w:insideH w:val="none"/><w:insideV w:val="none"/>
       </w:tblBorders>
     </w:tblPr>
-    <w:tblGrid><w:gridCol w:w="5000"/><w:gridCol w:w="400"/><w:gridCol w:w="4800"/></w:tblGrid>
+    <w:tblGrid><w:gridCol w:w="4600"/><w:gridCol w:w="355"/><w:gridCol w:w="4400"/></w:tblGrid>
     <w:tr>
-      ${makeTableCell(leftColXml, 5000)}
-      ${makeTableCell(makePara(makeRun("")), 400)}
-      ${makeTableCell(rightColXml, 4800)}
+      ${makeTableCell(leftColXml, 4600)}
+      ${makeTableCell(makePara(makeRun("")), 355)}
+      ${makeTableCell(rightColXml, 4400)}
     </w:tr>
   </w:tbl>`);
 
@@ -491,7 +491,7 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem): string {
           "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"
         }`
       ),
-      { leftIndent: 4300, after: 20 }
+      { leftIndent: 3600, after: 20 }
     )
   );
   parts.push(
@@ -501,7 +501,7 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem): string {
           writtenParts.month || "............"
         } พ.ศ. ${writtenParts.yearBE || "......"}`
       ),
-      { leftIndent: 4800, after: 100 }
+      { leftIndent: 4100, after: 100 }
     )
   );
 
@@ -633,21 +633,21 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem): string {
 
   parts.push(
     makePara(makeRun("ขอแสดงความนับถือ"), {
-      leftIndent: 5200,
+      leftIndent: 4500,
       align: "center",
       after: 120,
     })
   );
   parts.push(
     makePara(makeRun("(ลงชื่อ)......................................................"), {
-      leftIndent: 5200,
+      leftIndent: 4500,
       align: "center",
       after: 20,
     })
   );
   parts.push(
     makePara(makeRun(`(${leave.applicantName})`), {
-      leftIndent: 5200,
+      leftIndent: 4500,
       align: "center",
       after: 140,
     })
@@ -867,17 +867,17 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem): string {
 
   parts.push(`<w:tbl>
     <w:tblPr>
-      <w:tblW w:w="10200" w:type="dxa"/>
+      <w:tblW w:w="9355" w:type="dxa"/>
       <w:tblLayout w:type="fixed"/>
       <w:tblBorders>
         <w:top w:val="none"/><w:left w:val="none"/><w:bottom w:val="none"/><w:right w:val="none"/><w:insideH w:val="none"/><w:insideV w:val="none"/>
       </w:tblBorders>
     </w:tblPr>
-    <w:tblGrid><w:gridCol w:w="5000"/><w:gridCol w:w="400"/><w:gridCol w:w="4800"/></w:tblGrid>
+    <w:tblGrid><w:gridCol w:w="4600"/><w:gridCol w:w="355"/><w:gridCol w:w="4400"/></w:tblGrid>
     <w:tr>
-      ${makeTableCell(leftColXml, 5000)}
-      ${makeTableCell(makePara(makeRun("")), 400)}
-      ${makeTableCell(rightColXml, 4800)}
+      ${makeTableCell(leftColXml, 4600)}
+      ${makeTableCell(makePara(makeRun("")), 355)}
+      ${makeTableCell(rightColXml, 4400)}
     </w:tr>
   </w:tbl>`);
 
@@ -911,7 +911,7 @@ export async function downloadLeaveDocx(leave: LeaveRequestItem): Promise<void> 
       ? buildVacationLeaveBody(leave)
       : buildGeneralLeaveBody(leave);
 
-  const section = `<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="720" w:right="850" w:bottom="720" w:left="850" w:header="360" w:footer="360"/><w:cols w:space="720"/><w:docGrid w:linePitch="360"/></w:sectPr>`;
+  const section = `<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="720" w:right="1134" w:bottom="720" w:left="1417" w:header="360" w:footer="360"/><w:cols w:space="720"/><w:docGrid w:linePitch="360"/></w:sectPr>`;
   const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="${W_NS}"><w:body>${body}${section}</w:body></w:document>`;
   const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="${W_NS}"><w:docDefaults><w:rPrDefault><w:rPr>${R_FONTS}<w:sz w:val="30"/><w:szCs w:val="30"/><w:lang w:val="th-TH" w:eastAsia="th-TH"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="40" w:line="250" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style></w:styles>`;
 

@@ -385,6 +385,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (
+      (leaveType === "sick_leave" || leaveType === "personal_leave") &&
+      !String(reason || "").trim()
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            leaveType === "sick_leave"
+              ? "กรุณาระบุอาการป่วย / เหตุผลการลาป่วย"
+              : "กรุณาระบุเหตุผลการลากิจส่วนตัว",
+        },
+        { status: 400 }
+      );
+    }
+
     const fiscalYear = getFiscalYear(startDate);
     const meta = LEAVE_TYPE_META[leaveType as LeaveType];
     if (!meta) {

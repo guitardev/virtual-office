@@ -6,10 +6,14 @@ import {
   LeaveRequestItem,
 } from "./leave-utils";
 
-// A4 Portrait at ~200 DPI: 210mm x 297mm -> 1654 x 2339 px
+// A4 Portrait at ~200 DPI: 21.0 cm x 29.7 cm -> 1654 x 2339 px
 const PAGE_W = 1654;
 const PAGE_H = 2339;
-const MARGIN_X = 115;
+// กั้นหน้า 2.5 cm = 197 px, กั้นหลัง 2.0 cm = 158 px
+const MARGIN_LEFT = 197;
+const MARGIN_RIGHT = 158;
+const RIGHT_LIMIT = PAGE_W - MARGIN_RIGHT; // 1496 px
+const CONTENT_W = RIGHT_LIMIT - MARGIN_LEFT; // 1299 px
 
 function getFontFamily(): string {
   if (typeof window !== "undefined") {
@@ -17,6 +21,65 @@ function getFontFamily(): string {
     if (computed) return computed;
   }
   return "'TH Sarabun New', 'Sarabun', sans-serif";
+}
+
+function segmentThaiWords(text: string): string[] {
+  if (typeof Intl !== "undefined" && "Segmenter" in Intl) {
+    const seg = new Intl.Segmenter("th", { granularity: "word" });
+    return Array.from(seg.segment(text), (s) => s.segment);
+  }
+  return Array.from(text);
+}
+
+function wrapTextLines(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number
+): string[] {
+  if (!text) return [""];
+  const paragraphs = text.split("\n");
+  const lines: string[] = [];
+
+  for (const para of paragraphs) {
+    if (!para) {
+      lines.push("");
+      continue;
+    }
+    const tokens = segmentThaiWords(para);
+    let current = "";
+    for (const token of tokens) {
+      const candidate = current + token;
+      if (current && ctx.measureText(candidate).width > maxWidth) {
+        lines.push(current.trimEnd());
+        current = token.trimStart();
+      } else {
+        current = candidate;
+      }
+    }
+    if (current) {
+      lines.push(current);
+    }
+  }
+  return lines.length > 0 ? lines : [""];
+}
+
+function drawWrappedText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight = 40,
+  align: CanvasTextAlign = "left"
+): number {
+  ctx.textAlign = align;
+  const lines = wrapTextLines(ctx, text, maxWidth);
+  let curY = y;
+  for (const line of lines) {
+    ctx.fillText(line, x, curY);
+    curY += lineHeight;
+  }
+  return curY;
 }
 
 function drawCheckbox(
@@ -39,10 +102,10 @@ function drawCheckbox(
     ctx.stroke();
   }
   ctx.fillStyle = "#000000";
-  ctx.font = `400 26px ${fontFamily}`;
+  ctx.font = `400 25px ${fontFamily}`;
   ctx.textAlign = "left";
   ctx.fillText(label, x + size + 10, y);
-  return x + size + 10 + ctx.measureText(label).width + 28;
+  return x + size + 10 + ctx.measureText(label).width + 24;
 }
 
 function drawVacationForm(
@@ -59,104 +122,137 @@ function drawVacationForm(
   const totalUsed =
     Number(leave.prevVacationDays || 0) + Number(leave.totalWorkingDays || 0);
 
-  let y = 130;
+  let y = 125;
   ctx.fillStyle = "#000000";
   ctx.textBaseline = "alphabetic";
 
-  ctx.font = `700 38px ${fontFamily}`;
+  ctx.font = `700 36px ${fontFamily}`;
   ctx.textAlign = "center";
   ctx.fillText("ใบลาพักผ่อน", PAGE_W / 2, y);
-  y += 70;
+  y += 65;
 
-  ctx.font = `400 26px ${fontFamily}`;
-  ctx.textAlign = "left";
-  ctx.fillText(
+  ctx.font = `400 25px ${fontFamily}`;
+  y = drawWrappedText(
+    ctx,
     `เขียนที่ ${
       leave.writtenAt ||
       "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์ จังหวัดกำแพงเพชร"
     }`,
-    760,
-    y
+    740,
+    y,
+    RIGHT_LIMIT - 740,
+    38
   );
-  y += 42;
-  ctx.fillText(
+  y = drawWrappedText(
+    ctx,
     `วันที่ ${writtenParts.day || "...."} เดือน ${
       writtenParts.month || "............"
     } พ.ศ. ${writtenParts.yearBE || "......"}`,
-    840,
-    y
+    820,
+    y + 2,
+    RIGHT_LIMIT - 820,
+    38
   );
-  y += 65;
+  y += 24;
 
-  ctx.font = `700 26px ${fontFamily}`;
-  ctx.fillText("เรื่อง", MARGIN_X, y);
-  ctx.font = `400 26px ${fontFamily}`;
-  ctx.fillText(leave.subject || "ขอลาพักผ่อน", MARGIN_X + 75, y);
-  y += 45;
+  ctx.font = `700 25px ${fontFamily}`;
+  ctx.textAlign = "left";
+  ctx.fillText("เรื่อง", MARGIN_LEFT, y);
+  ctx.font = `400 25px ${fontFamily}`;
+  y = drawWrappedText(
+    ctx,
+    leave.subject || "ขอลาพักผ่อน",
+    MARGIN_LEFT + 72,
+    y,
+    CONTENT_W - 72,
+    38
+  );
 
-  ctx.font = `700 26px ${fontFamily}`;
-  ctx.fillText("เรียน", MARGIN_X, y);
-  ctx.font = `400 26px ${fontFamily}`;
-  ctx.fillText(
+  ctx.font = `700 25px ${fontFamily}`;
+  ctx.textAlign = "left";
+  ctx.fillText("เรียน", MARGIN_LEFT, y + 4);
+  ctx.font = `400 25px ${fontFamily}`;
+  y = drawWrappedText(
+    ctx,
     leave.toRecipient || "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
-    MARGIN_X + 75,
-    y
+    MARGIN_LEFT + 72,
+    y + 4,
+    CONTENT_W - 72,
+    38
   );
-  y += 65;
+  y += 20;
 
-  ctx.fillText(
+  y = drawWrappedText(
+    ctx,
     `ข้าพเจ้า ${leave.applicantName}   ตำแหน่ง ${leave.applicantPosition || "-"}`,
-    MARGIN_X + 110,
-    y
+    MARGIN_LEFT + 95,
+    y,
+    CONTENT_W - 95,
+    40
   );
-  y += 44;
-  ctx.fillText(
+  y = drawWrappedText(
+    ctx,
     `กลุ่ม/ฝ่าย ${
       leave.applicantDivision || "-"
     }   สังกัด สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร`,
-    MARGIN_X,
-    y
+    MARGIN_LEFT,
+    y,
+    CONTENT_W,
+    40
   );
-  y += 44;
-  ctx.fillText(
+  y = drawWrappedText(
+    ctx,
     `มีวันลาพักผ่อนสะสม ${leave.vacationAccumulatedDays} วันทำการ  มีสิทธิลาพักผ่อนประจำปีอีก ${leave.vacationAnnualDays} วันทำการ  รวมเป็น ${totalEntitled} วันทำการ`,
-    MARGIN_X,
-    y
+    MARGIN_LEFT,
+    y,
+    CONTENT_W,
+    40
   );
-  y += 44;
-  ctx.fillText(
+  y = drawWrappedText(
+    ctx,
     `ขอลาพักผ่อนตั้งแต่วันที่ ${startParts.day} เดือน ${startParts.month} พ.ศ. ${startParts.yearBE} ถึงวันที่ ${endParts.day} เดือน ${endParts.month} พ.ศ. ${endParts.yearBE} มีกำหนด ${leave.totalWorkingDays} วัน`,
-    MARGIN_X,
-    y
+    MARGIN_LEFT,
+    y,
+    CONTENT_W,
+    40
   );
-  y += 44;
-  ctx.fillText(
+  y = drawWrappedText(
+    ctx,
     `ในระหว่างลาจะติดต่อข้าพเจ้าได้ที่ ${
       leave.contactInfo || "-"
     }   หมายเลขโทรศัพท์ ${leave.contactPhone || "-"}`,
-    MARGIN_X,
-    y
+    MARGIN_LEFT,
+    y,
+    CONTENT_W,
+    40
   );
-  y += 110;
+  y += 55;
 
+  const sigCenterX = RIGHT_LIMIT - 280;
   ctx.textAlign = "center";
   ctx.fillText(
     "(ลงชื่อ)......................................................",
-    1180,
+    sigCenterX,
     y
   );
-  y += 40;
-  ctx.fillText(`(${leave.applicantName})`, 1180, y);
-  y += 95;
+  y += 38;
+  ctx.fillText(`(${leave.applicantName})`, sigCenterX, y);
+  y += 85;
 
-  // Left: Stats table + Verifier + Acting person
-  const leftX = MARGIN_X;
-  const colW = 210;
-  ctx.font = `700 26px ${fontFamily}`;
+  // 2-Column bottom section within CONTENT_W
+  const leftX = MARGIN_LEFT;
+  const leftMaxW = 610;
+  const colW = 200;
+  ctx.font = `700 25px ${fontFamily}`;
+  ctx.textAlign = "center";
   ctx.fillText("สถิติการลาในปีงบประมาณนี้", leftX + colW * 1.5, y);
-  y += 22;
+  y += 20;
 
-  const headers = ["ลามาแล้ว (วันทำการ)", "ลาครั้งนี้ (วันทำการ)", "รวมเป็น (วันทำการ)"];
+  const headers = [
+    "ลามาแล้ว (วันทำการ)",
+    "ลาครั้งนี้ (วันทำการ)",
+    "รวมเป็น (วันทำการ)",
+  ];
   const vals = [
     String(leave.prevVacationDays),
     String(leave.totalWorkingDays),
@@ -167,132 +263,173 @@ function drawVacationForm(
   for (let i = 0; i < 3; i++) {
     ctx.strokeStyle = "#000000";
     ctx.lineWidth = 1.5;
-    ctx.strokeRect(leftX + i * colW, row1Y, colW, 56);
-    ctx.font = `700 22px ${fontFamily}`;
+    ctx.strokeRect(leftX + i * colW, row1Y, colW, 54);
+    ctx.font = `700 21px ${fontFamily}`;
     ctx.textAlign = "center";
-    ctx.fillText(headers[i], leftX + i * colW + colW / 2, row1Y + 35);
+    ctx.fillText(headers[i], leftX + i * colW + colW / 2, row1Y + 34);
 
-    ctx.strokeRect(leftX + i * colW, row1Y + 56, colW, 48);
-    ctx.font = i === 2 ? `700 24px ${fontFamily}` : `400 24px ${fontFamily}`;
-    ctx.fillText(vals[i], leftX + i * colW + colW / 2, row1Y + 88);
+    ctx.strokeRect(leftX + i * colW, row1Y + 54, colW, 46);
+    ctx.font = i === 2 ? `700 23px ${fontFamily}` : `400 23px ${fontFamily}`;
+    ctx.fillText(vals[i], leftX + i * colW + colW / 2, row1Y + 84);
   }
 
-  let ly = row1Y + 170;
-  ctx.textAlign = "left";
-  ctx.font = `400 25px ${fontFamily}`;
-  ctx.fillText(
+  let ly = row1Y + 160;
+  ctx.font = `400 24px ${fontFamily}`;
+  ly = drawWrappedText(
+    ctx,
     `(ลงชื่อ) ${
       leave.verifiedAt && leave.verifierName
         ? leave.verifierName
         : "................................."
     } ผู้ตรวจสอบ`,
     leftX,
-    ly
+    ly,
+    leftMaxW,
+    36
   );
-  ly += 40;
-  ctx.fillText(
+  ly = drawWrappedText(
+    ctx,
     `(${leave.verifierName || "................................................"})`,
-    leftX + 90,
-    ly
+    leftX + 70,
+    ly,
+    leftMaxW - 70,
+    36
   );
-  ly += 40;
-  ctx.fillText(
+  ly = drawWrappedText(
+    ctx,
     `(ตำแหน่ง) ${leave.verifierPosition || "...................................."}`,
     leftX,
-    ly
+    ly,
+    leftMaxW,
+    36
   );
-  ly += 40;
-  ctx.fillText(
+  ly = drawWrappedText(
+    ctx,
     `วันที่ ${
       leave.verifiedAt
         ? formatThaiDateSlash(leave.verifiedAt)
         : "........ / ........ / ........"
     }`,
     leftX,
-    ly
+    ly,
+    leftMaxW,
+    36
   );
-  ly += 85;
-
-  ctx.fillText("ในระหว่างที่ข้าพเจ้าลาพักผ่อนมอบหมายให้", leftX, ly);
   ly += 40;
-  ctx.fillText(
+
+  ly = drawWrappedText(
+    ctx,
+    "ในระหว่างที่ข้าพเจ้าลาพักผ่อนมอบหมายให้",
+    leftX,
+    ly,
+    leftMaxW,
+    36
+  );
+  ly = drawWrappedText(
+    ctx,
     `นาย/นาง/นางสาว ${
       leave.actingPersonName || ".................................."
     } ปฏิบัติหน้าที่แทน`,
     leftX,
-    ly
+    ly,
+    leftMaxW,
+    36
   );
-  ly += 60;
-  ctx.fillText("(ลงชื่อ)........................................ ผู้มอบ", leftX, ly);
-  ly += 38;
-  ctx.fillText(`(${leave.applicantName})`, leftX + 90, ly);
-  ly += 60;
-  ctx.fillText(
+  ly += 20;
+  ly = drawWrappedText(
+    ctx,
+    "(ลงชื่อ)........................................ ผู้มอบ",
+    leftX,
+    ly,
+    leftMaxW,
+    36
+  );
+  ly = drawWrappedText(ctx, `(${leave.applicantName})`, leftX + 70, ly, leftMaxW - 70, 36);
+  ly += 20;
+  ly = drawWrappedText(
+    ctx,
     "(ลงชื่อ)........................................ ผู้ปฏิบัติหน้าที่แทน",
     leftX,
-    ly
+    ly,
+    leftMaxW,
+    36
   );
-  ly += 38;
-  ctx.fillText(
+  drawWrappedText(
+    ctx,
     `(${leave.actingPersonName || "........................................"})`,
-    leftX + 90,
-    ly
+    leftX + 70,
+    ly,
+    leftMaxW - 70,
+    36
   );
 
-  // Right: Supervisor + Order
-  const rightX = 880;
-  let ry = y - 22;
-  ctx.font = `700 26px ${fontFamily}`;
+  // Right column
+  const rightX = 870;
+  const rightMaxW = RIGHT_LIMIT - rightX; // 626 px
+  let ry = y - 20;
+  ctx.font = `700 25px ${fontFamily}`;
   ctx.textAlign = "center";
-  ctx.fillText("ความเห็นผู้บังคับบัญชา", rightX + 300, ry);
-  ry += 52;
-  ctx.font = `400 25px ${fontFamily}`;
-  ctx.textAlign = "left";
-  ctx.fillText(
+  ctx.fillText("ความเห็นผู้บังคับบัญชา", rightX + rightMaxW / 2, ry);
+  ry += 46;
+  ctx.font = `400 24px ${fontFamily}`;
+  ry = drawWrappedText(
+    ctx,
     leave.supervisorComment ||
-      "....................................................................................",
+      "........................................................................",
     rightX,
-    ry
+    ry,
+    rightMaxW,
+    36
   );
-  ry += 65;
-  ctx.fillText(
+  ry += 22;
+  ry = drawWrappedText(
+    ctx,
     `(ลงชื่อ) ${
       leave.supervisorReviewedAt && leave.supervisorName
         ? leave.supervisorName
         : "........................................"
     }`,
     rightX,
-    ry
+    ry,
+    rightMaxW,
+    36
   );
-  ry += 40;
-  ctx.fillText(
+  ry = drawWrappedText(
+    ctx,
     `(${leave.supervisorName || "........................................"})`,
-    rightX + 90,
-    ry
+    rightX + 70,
+    ry,
+    rightMaxW - 70,
+    36
   );
-  ry += 40;
-  ctx.fillText(
+  ry = drawWrappedText(
+    ctx,
     `(ตำแหน่ง) ${leave.supervisorPosition || "...................................."}`,
     rightX,
-    ry
+    ry,
+    rightMaxW,
+    36
   );
-  ry += 40;
-  ctx.fillText(
+  ry = drawWrappedText(
+    ctx,
     `วันที่ ${
       leave.supervisorReviewedAt
         ? formatThaiDateSlash(leave.supervisorReviewedAt)
         : "........ / ........ / ........"
     }`,
     rightX,
-    ry
+    ry,
+    rightMaxW,
+    36
   );
 
-  ry += 95;
-  ctx.font = `700 26px ${fontFamily}`;
+  ry += 55;
+  ctx.font = `700 25px ${fontFamily}`;
+  ctx.textAlign = "left";
   ctx.fillText("คำสั่ง", rightX, ry);
-  let cx = drawCheckbox(
+  const cx = drawCheckbox(
     ctx,
-    rightX + 90,
+    rightX + 85,
     ry,
     leave.orderDecision === "approved",
     "อนุญาต",
@@ -306,41 +443,50 @@ function drawVacationForm(
     "ไม่อนุญาต",
     fontFamily
   );
-  ry += 45;
+  ry += 42;
   if (leave.orderComment) {
-    ctx.fillText(leave.orderComment, rightX, ry);
+    ry = drawWrappedText(ctx, leave.orderComment, rightX, ry, rightMaxW, 36);
   }
-  ry += 55;
-  ctx.fillText(
+  ry += 20;
+  ry = drawWrappedText(
+    ctx,
     `(ลงชื่อ) ${
       leave.orderedAt && leave.approverName
         ? leave.approverName
         : "........................................"
     }`,
     rightX,
-    ry
+    ry,
+    rightMaxW,
+    36
   );
-  ry += 40;
-  ctx.fillText(
+  ry = drawWrappedText(
+    ctx,
     `(${leave.approverName || "........................................"})`,
-    rightX + 90,
-    ry
+    rightX + 70,
+    ry,
+    rightMaxW - 70,
+    36
   );
-  ry += 40;
-  ctx.fillText(
+  ry = drawWrappedText(
+    ctx,
     `(ตำแหน่ง) ${leave.approverPosition || "...................................."}`,
     rightX,
-    ry
+    ry,
+    rightMaxW,
+    36
   );
-  ry += 40;
-  ctx.fillText(
+  drawWrappedText(
+    ctx,
     `วันที่ ${
       leave.orderedAt
         ? formatThaiDateSlash(leave.orderedAt)
         : "........ / ........ / ........"
     }`,
     rightX,
-    ry
+    ry,
+    rightMaxW,
+    36
   );
 }
 
@@ -360,129 +506,171 @@ function drawGeneralForm(
   const curMaternity =
     leave.leaveType === "maternity_leave" ? leave.totalWorkingDays : 0;
 
-  let y = 125;
+  let y = 120;
   ctx.fillStyle = "#000000";
   ctx.textBaseline = "alphabetic";
 
-  ctx.font = `700 38px ${fontFamily}`;
+  ctx.font = `700 36px ${fontFamily}`;
   ctx.textAlign = "center";
   ctx.fillText("ใบลาป่วย ลาคลอดบุตร ลากิจส่วนตัว", PAGE_W / 2, y);
-  y += 65;
+  y += 60;
 
-  ctx.font = `400 26px ${fontFamily}`;
-  ctx.textAlign = "left";
-  ctx.fillText(
+  ctx.font = `400 25px ${fontFamily}`;
+  y = drawWrappedText(
+    ctx,
     `เขียนที่ ${
       leave.writtenAt ||
       "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"
     }`,
-    760,
-    y
+    740,
+    y,
+    RIGHT_LIMIT - 740,
+    38
   );
-  y += 40;
-  ctx.fillText(
+  y = drawWrappedText(
+    ctx,
     `วันที่ ${writtenParts.day || "...."} เดือน ${
       writtenParts.month || "............"
     } พ.ศ. ${writtenParts.yearBE || "......"}`,
-    840,
-    y
+    820,
+    y + 2,
+    RIGHT_LIMIT - 820,
+    38
   );
-  y += 60;
+  y += 22;
 
-  ctx.font = `700 26px ${fontFamily}`;
-  ctx.fillText("เรื่อง", MARGIN_X, y);
-  ctx.font = `400 26px ${fontFamily}`;
-  ctx.fillText(leave.subject, MARGIN_X + 75, y);
-  y += 42;
+  ctx.font = `700 25px ${fontFamily}`;
+  ctx.textAlign = "left";
+  ctx.fillText("เรื่อง", MARGIN_LEFT, y);
+  ctx.font = `400 25px ${fontFamily}`;
+  y = drawWrappedText(
+    ctx,
+    leave.subject,
+    MARGIN_LEFT + 72,
+    y,
+    CONTENT_W - 72,
+    38
+  );
 
-  ctx.font = `700 26px ${fontFamily}`;
-  ctx.fillText("เรียน", MARGIN_X, y);
-  ctx.font = `400 26px ${fontFamily}`;
-  ctx.fillText(
+  ctx.font = `700 25px ${fontFamily}`;
+  ctx.textAlign = "left";
+  ctx.fillText("เรียน", MARGIN_LEFT, y + 4);
+  ctx.font = `400 25px ${fontFamily}`;
+  y = drawWrappedText(
+    ctx,
     leave.toRecipient || "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
-    MARGIN_X + 75,
-    y
+    MARGIN_LEFT + 72,
+    y + 4,
+    CONTENT_W - 72,
+    38
   );
-  y += 60;
+  y += 18;
 
-  ctx.fillText(
+  y = drawWrappedText(
+    ctx,
     `ข้าพเจ้า ${leave.applicantName}   ตำแหน่ง ${leave.applicantPosition || "-"}`,
-    MARGIN_X + 110,
-    y
+    MARGIN_LEFT + 95,
+    y,
+    CONTENT_W - 95,
+    38
   );
-  y += 42;
-  ctx.fillText(
+  y = drawWrappedText(
+    ctx,
     `สังกัด ${
       leave.applicantDivision
         ? `${leave.applicantDivision} (สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร)`
         : "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"
     }`,
-    MARGIN_X,
-    y
+    MARGIN_LEFT,
+    y,
+    CONTENT_W,
+    38
   );
-  y += 48;
+  y += 8;
 
   let cx = drawCheckbox(
     ctx,
-    MARGIN_X + 110,
+    MARGIN_LEFT + 95,
     y,
     leave.leaveType === "sick_leave",
     "ป่วย",
     fontFamily
   );
   if (leave.leaveType === "sick_leave" && leave.reason) {
-    ctx.fillText(`เนื่องจาก ${leave.reason}`, cx, y);
+    y = drawWrappedText(
+      ctx,
+      `เนื่องจาก ${leave.reason}`,
+      cx,
+      y,
+      RIGHT_LIMIT - cx,
+      38
+    );
+  } else {
+    y += 38;
   }
-  y += 42;
 
-  ctx.fillText("ขอลา", MARGIN_X + 30, y);
+  ctx.textAlign = "left";
+  ctx.fillText("ขอลา", MARGIN_LEFT + 20, y);
   cx = drawCheckbox(
     ctx,
-    MARGIN_X + 110,
+    MARGIN_LEFT + 95,
     y,
     leave.leaveType === "personal_leave",
     "กิจส่วนตัว",
     fontFamily
   );
-  ctx.fillText(
+  y = drawWrappedText(
+    ctx,
     `เนื่องจาก ${
       leave.leaveType === "personal_leave"
         ? leave.reason || "-"
-        : "............................................................"
+        : "........................................................"
     }`,
     cx,
-    y
+    y,
+    RIGHT_LIMIT - cx,
+    38
   );
-  y += 42;
 
   cx = drawCheckbox(
     ctx,
-    MARGIN_X + 110,
+    MARGIN_LEFT + 95,
     y,
     leave.leaveType === "maternity_leave",
     "คลอดบุตร",
     fontFamily
   );
   if (leave.leaveType === "maternity_leave" && leave.reason) {
-    ctx.fillText(`(${leave.reason})`, cx, y);
+    y = drawWrappedText(
+      ctx,
+      `(${leave.reason})`,
+      cx,
+      y,
+      RIGHT_LIMIT - cx,
+      38
+    );
+  } else {
+    y += 42;
   }
-  y += 50;
 
-  ctx.fillText(
+  y = drawWrappedText(
+    ctx,
     `ตั้งแต่วันที่ ${formatThaiDateFull(
       leave.startDate
     )} ถึงวันที่ ${formatThaiDateFull(leave.endDate)} มีกำหนด ${
       leave.totalWorkingDays
     } วัน`,
-    MARGIN_X,
-    y
+    MARGIN_LEFT,
+    y,
+    CONTENT_W,
+    38
   );
-  y += 42;
 
-  ctx.fillText("ข้าพเจ้าได้ลา", MARGIN_X, y);
+  ctx.textAlign = "left";
+  ctx.fillText("ข้าพเจ้าได้ลา", MARGIN_LEFT, y);
   cx = drawCheckbox(
     ctx,
-    MARGIN_X + 155,
+    MARGIN_LEFT + 145,
     y,
     leave.lastLeaveType === "sick_leave",
     "ป่วย",
@@ -504,21 +692,24 @@ function drawGeneralForm(
     "คลอดบุตร",
     fontFamily
   );
-  ctx.fillText(
+  y = drawWrappedText(
+    ctx,
     `ครั้งสุดท้ายตั้งแต่วันที่ ${
       leave.lastLeaveStartDate
         ? formatThaiDateFull(leave.lastLeaveStartDate)
         : "-"
     }`,
     cx,
-    y
+    y,
+    RIGHT_LIMIT - cx,
+    38
   );
-  y += 42;
 
   const contactCombined =
     [leave.contactInfo, leave.contactPhone].filter(Boolean).join(" โทร. ") ||
     "-";
-  ctx.fillText(
+  y = drawWrappedText(
+    ctx,
     `ถึงวันที่ ${
       leave.lastLeaveEndDate
         ? formatThaiDateFull(leave.lastLeaveEndDate)
@@ -526,36 +717,56 @@ function drawGeneralForm(
     } มีกำหนด ${
       leave.lastLeaveDays ?? "-"
     } วัน  ในระหว่างลาจะติดต่อข้าพเจ้าได้ที่ ${contactCombined}`,
-    MARGIN_X,
-    y
+    MARGIN_LEFT,
+    y,
+    CONTENT_W,
+    38
   );
-  y += 85;
+  y += 45;
 
+  const sigCenterX = RIGHT_LIMIT - 280;
   ctx.textAlign = "center";
-  ctx.fillText("ขอแสดงความนับถือ", 1180, y);
-  y += 70;
+  ctx.fillText("ขอแสดงความนับถือ", sigCenterX, y);
+  y += 62;
   ctx.fillText(
     "(ลงชื่อ)......................................................",
-    1180,
+    sigCenterX,
     y
   );
-  y += 38;
-  ctx.fillText(`(${leave.applicantName})`, 1180, y);
-  y += 85;
+  y += 36;
+  ctx.fillText(`(${leave.applicantName})`, sigCenterX, y);
+  y += 75;
 
   // Left: Stats table + Verifier
-  const leftX = MARGIN_X;
-  const colWidths = [165, 165, 165, 165];
+  const leftX = MARGIN_LEFT;
+  const leftMaxW = 610;
+  const colWidths = [150, 150, 150, 150];
   const tableW = colWidths.reduce((a, b) => a + b, 0);
-  ctx.font = `700 26px ${fontFamily}`;
+  ctx.font = `700 25px ${fontFamily}`;
+  ctx.textAlign = "center";
   ctx.fillText("สถิติการลาในปีงบประมาณนี้", leftX + tableW / 2, y);
-  y += 20;
+  y += 18;
 
   const tHeaders = ["ประเภทลา", "ลามาแล้ว", "ลาครั้งนี้", "รวมเป็น"];
   const tRows = [
-    ["ป่วย", String(leave.prevSickDays), curSick ? String(curSick) : "", String(leave.prevSickDays + curSick)],
-    ["กิจส่วนตัว", String(leave.prevPersonalDays), curPersonal ? String(curPersonal) : "", String(leave.prevPersonalDays + curPersonal)],
-    ["คลอดบุตร", String(leave.prevMaternityDays), curMaternity ? String(curMaternity) : "", String(leave.prevMaternityDays + curMaternity)],
+    [
+      "ป่วย",
+      String(leave.prevSickDays),
+      curSick ? String(curSick) : "",
+      String(leave.prevSickDays + curSick),
+    ],
+    [
+      "กิจส่วนตัว",
+      String(leave.prevPersonalDays),
+      curPersonal ? String(curPersonal) : "",
+      String(leave.prevPersonalDays + curPersonal),
+    ],
+    [
+      "คลอดบุตร",
+      String(leave.prevMaternityDays),
+      curMaternity ? String(curMaternity) : "",
+      String(leave.prevMaternityDays + curMaternity),
+    ],
   ];
 
   let ty = y;
@@ -563,110 +774,131 @@ function drawGeneralForm(
   for (let i = 0; i < 4; i++) {
     ctx.strokeStyle = "#000000";
     ctx.lineWidth = 1.5;
-    ctx.strokeRect(tx, ty, colWidths[i], 52);
-    ctx.font = `700 22px ${fontFamily}`;
+    ctx.strokeRect(tx, ty, colWidths[i], 50);
+    ctx.font = `700 21px ${fontFamily}`;
     ctx.textAlign = "center";
-    ctx.fillText(tHeaders[i], tx + colWidths[i] / 2, ty + 33);
+    ctx.fillText(tHeaders[i], tx + colWidths[i] / 2, ty + 32);
     tx += colWidths[i];
   }
-  ty += 52;
+  ty += 50;
 
   for (const r of tRows) {
     tx = leftX;
     for (let i = 0; i < 4; i++) {
-      ctx.strokeRect(tx, ty, colWidths[i], 44);
-      ctx.font = i === 3 ? `700 23px ${fontFamily}` : `400 23px ${fontFamily}`;
-      ctx.fillText(r[i], tx + colWidths[i] / 2, ty + 30);
+      ctx.strokeRect(tx, ty, colWidths[i], 42);
+      ctx.font = i === 3 ? `700 22px ${fontFamily}` : `400 22px ${fontFamily}`;
+      ctx.fillText(r[i], tx + colWidths[i] / 2, ty + 28);
       tx += colWidths[i];
     }
-    ty += 44;
+    ty += 42;
   }
 
-  let ly = ty + 65;
-  ctx.textAlign = "left";
-  ctx.font = `400 25px ${fontFamily}`;
-  ctx.fillText(
+  let ly = ty + 55;
+  ctx.font = `400 24px ${fontFamily}`;
+  ly = drawWrappedText(
+    ctx,
     `(ลงชื่อ) ${
       leave.verifiedAt && leave.verifierName
         ? leave.verifierName
         : "................................."
     } ผู้ตรวจสอบ`,
     leftX,
-    ly
+    ly,
+    leftMaxW,
+    36
   );
-  ly += 38;
-  ctx.fillText(
+  ly = drawWrappedText(
+    ctx,
     `(${leave.verifierName || "................................................"})`,
-    leftX + 90,
-    ly
+    leftX + 70,
+    ly,
+    leftMaxW - 70,
+    36
   );
-  ly += 38;
-  ctx.fillText(
+  ly = drawWrappedText(
+    ctx,
     `ตำแหน่ง ${leave.verifierPosition || "...................................."}`,
     leftX,
-    ly
+    ly,
+    leftMaxW,
+    36
   );
-  ly += 38;
-  ctx.fillText(
+  ly = drawWrappedText(
+    ctx,
     `วันที่ ${verifiedParts.day || "...."} เดือน ${
       verifiedParts.month || "............"
     } พ.ศ. ${verifiedParts.yearBE || "......"}`,
     leftX,
-    ly
+    ly,
+    leftMaxW,
+    36
   );
 
   // Right: Supervisor + Order
-  const rightX = 880;
-  let ry = y - 20;
-  ctx.font = `700 26px ${fontFamily}`;
+  const rightX = 870;
+  const rightMaxW = RIGHT_LIMIT - rightX; // 626 px
+  let ry = y - 18;
+  ctx.font = `700 25px ${fontFamily}`;
   ctx.textAlign = "center";
-  ctx.fillText("ความเห็นผู้บังคับบัญชา", rightX + 300, ry);
-  ry += 50;
-  ctx.font = `400 25px ${fontFamily}`;
-  ctx.textAlign = "left";
-  ctx.fillText(
+  ctx.fillText("ความเห็นผู้บังคับบัญชา", rightX + rightMaxW / 2, ry);
+  ry += 46;
+  ctx.font = `400 24px ${fontFamily}`;
+  ry = drawWrappedText(
+    ctx,
     leave.supervisorComment ||
-      "....................................................................................",
+      "........................................................................",
     rightX,
-    ry
+    ry,
+    rightMaxW,
+    36
   );
-  ry += 60;
-  ctx.fillText(
+  ry += 22;
+  ry = drawWrappedText(
+    ctx,
     `(ลงชื่อ) ${
       leave.supervisorReviewedAt && leave.supervisorName
         ? leave.supervisorName
         : "........................................"
     }`,
     rightX,
-    ry
+    ry,
+    rightMaxW,
+    36
   );
-  ry += 38;
-  ctx.fillText(
+  ry = drawWrappedText(
+    ctx,
     `(${leave.supervisorName || "........................................"})`,
-    rightX + 90,
-    ry
+    rightX + 70,
+    ry,
+    rightMaxW - 70,
+    36
   );
-  ry += 38;
-  ctx.fillText(
+  ry = drawWrappedText(
+    ctx,
     `ตำแหน่ง ${leave.supervisorPosition || "...................................."}`,
     rightX,
-    ry
+    ry,
+    rightMaxW,
+    36
   );
-  ry += 38;
-  ctx.fillText(
+  ry = drawWrappedText(
+    ctx,
     `วันที่ ${supParts.day || "...."} เดือน ${
       supParts.month || "............"
     } พ.ศ. ${supParts.yearBE || "......"}`,
     rightX,
-    ry
+    ry,
+    rightMaxW,
+    36
   );
 
-  ry += 80;
-  ctx.font = `700 26px ${fontFamily}`;
+  ry += 50;
+  ctx.font = `700 25px ${fontFamily}`;
+  ctx.textAlign = "left";
   ctx.fillText("คำสั่ง", rightX, ry);
   cx = drawCheckbox(
     ctx,
-    rightX + 90,
+    rightX + 85,
     ry,
     leave.orderDecision === "approved",
     "อนุญาต",
@@ -680,55 +912,63 @@ function drawGeneralForm(
     "ไม่อนุญาต",
     fontFamily
   );
-  ry += 42;
+  ry += 40;
   if (leave.orderComment) {
-    ctx.fillText(leave.orderComment, rightX, ry);
+    ry = drawWrappedText(ctx, leave.orderComment, rightX, ry, rightMaxW, 36);
   }
-  ry += 50;
-  ctx.fillText(
+  ry += 20;
+  ry = drawWrappedText(
+    ctx,
     `(ลงชื่อ) ${
       leave.orderedAt && leave.approverName
         ? leave.approverName
         : "........................................"
     }`,
     rightX,
-    ry
+    ry,
+    rightMaxW,
+    36
   );
-  ry += 38;
-  ctx.fillText(
+  ry = drawWrappedText(
+    ctx,
     `(${leave.approverName || "........................................"})`,
-    rightX + 90,
-    ry
+    rightX + 70,
+    ry,
+    rightMaxW - 70,
+    36
   );
-  ry += 38;
-  ctx.fillText(
+  ry = drawWrappedText(
+    ctx,
     `ตำแหน่ง ${leave.approverPosition || "...................................."}`,
     rightX,
-    ry
+    ry,
+    rightMaxW,
+    36
   );
-  ry += 38;
-  ctx.fillText(
+  ry = drawWrappedText(
+    ctx,
     `วันที่ ${ordParts.day || "...."} เดือน ${
       ordParts.month || "............"
     } พ.ศ. ${ordParts.yearBE || "......"}`,
     rightX,
-    ry
+    ry,
+    rightMaxW,
+    36
   );
 
   // Footer note
-  const noteY = Math.max(ly, ry) + 90;
-  ctx.font = `700 24px ${fontFamily}`;
-  ctx.fillText("หมายเหตุ :-", MARGIN_X, noteY);
-  ctx.font = `400 24px ${fontFamily}`;
-  ctx.fillText(
-    "การลากิจ + ลาป่วย ต้องไม่เกิน 23 วันทำการ จึงมีสิทธิเลื่อนขั้นเงินเดือน/ค่าจ้าง",
-    MARGIN_X + 135,
-    noteY
-  );
-  ctx.fillText(
-    "ในรอบ 6 เดือน คือ 1 ต.ค. – 31 มี.ค. , 1 เม.ย. – 30 ก.ย.",
-    MARGIN_X + 135,
-    noteY + 36
+  const noteY = Math.max(ly, ry) + 55;
+  ctx.font = `700 23px ${fontFamily}`;
+  ctx.textAlign = "left";
+  ctx.fillText("หมายเหตุ :-", MARGIN_LEFT, noteY);
+  ctx.font = `400 23px ${fontFamily}`;
+  drawWrappedText(
+    ctx,
+    "การลากิจ + ลาป่วย ต้องไม่เกิน 23 วันทำการ จึงมีสิทธิเลื่อนขั้นเงินเดือน/ค่าจ้าง\nในรอบ 6 เดือน คือ 1 ต.ค. – 31 มี.ค. , 1 เม.ย. – 30 ก.ย.",
+    MARGIN_LEFT + 130,
+    noteY,
+    CONTENT_W - 130,
+    34
   );
 }
 
