@@ -96,18 +96,18 @@ function buildWorksheetXml(spec: DailyReportSheetSpec): string {
   rowsXml.push(
     makeRow(sigStart, [
       {
-        col: 1,
+        col: 2,
         val: "ผู้ตรวจ..................................................................................",
         style: 5,
       },
     ])
   );
   rowsXml.push(
-    makeRow(sigStart + 1, [{ col: 1, val: "(นางสาวมะลิวัน  สิทธิโยธี)", style: 5 }])
+    makeRow(sigStart + 1, [{ col: 2, val: "(นางสาวมะลิวัน  สิทธิโยธี)", style: 5 }])
   );
   rowsXml.push(
     makeRow(sigStart + 2, [
-      { col: 1, val: "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร", style: 5 },
+      { col: 2, val: "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร", style: 5 },
     ])
   );
 

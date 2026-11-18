@@ -4,9 +4,12 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AttendanceLogItem, ScannerUserMapping } from "@/lib/attendance-db";
 import { getThaiFiscalPeriod } from "@/lib/attendance-rules";
 import { toThaiDate } from "@/lib/thai-numerals";
-import { downloadElementAsDocx } from "@/lib/word-export";
-import { exportElementToA4Pdf } from "@/lib/a4-pdf-export";
-import { downloadDailyAttendanceXlsx } from "@/lib/attendance-xlsx-export";
+import {
+  DailyReportSheetSpec,
+  downloadDailyAttendanceXlsx,
+} from "@/lib/attendance-xlsx-export";
+import { downloadDailyAttendanceDocx } from "@/lib/attendance-docx-export";
+import { downloadDailyAttendancePdf } from "@/lib/attendance-pdf-export";
 
 type DailyNoteType =
   | "general"
@@ -316,39 +319,58 @@ export function DailyAttendanceReport({
     }
   };
 
+  const buildDailyReportSheets = (): DailyReportSheetSpec[] => [
+    {
+      sheetName: "ขรก.-พรก.",
+      subtitle:
+        "ตารางบันทึกเวลา เข้า - ออก ปฏิบัติราชการ ข้าราชการ/พนักงานราชการ",
+      dateLabel: thaiDateLabel,
+      rows: group1Rows.map((r, idx) => ({
+        orderNo: idx + 1,
+        name: r.memberName,
+        checkInDisplay: r.checkInHHMM || "-----",
+        checkOutDisplay: r.checkOutHHMM || "-----",
+        noteDisplay: r.note?.noteText || "",
+      })),
+    },
+    {
+      sheetName: "พนง.กองทุน+จ้างเหมา",
+      subtitle:
+        "ตารางบันทึกเวลา เข้า - ออก ปฏิบัติราชการ พนง.กองทุน/พนง.จ้างเหมา",
+      dateLabel: thaiDateLabel,
+      rows: group2Rows.map((r, idx) => ({
+        orderNo: idx + 1,
+        name: r.memberName,
+        checkInDisplay: r.checkInHHMM || "-----",
+        checkOutDisplay: r.checkOutHHMM || "-----",
+        noteDisplay: r.note?.noteText || "",
+      })),
+    },
+  ];
+
   const handleExportXlsx = async () => {
     await downloadDailyAttendanceXlsx(
-      [
-        {
-          sheetName: "ขรก.-พรก.",
-          subtitle:
-            "ตารางบันทึกเวลา เข้า - ออก ปฏิบัติราชการ ข้าราชการ/พนักงานราชการ",
-          dateLabel: thaiDateLabel,
-          rows: group1Rows.map((r, idx) => ({
-            orderNo: idx + 1,
-            name: r.memberName,
-            checkInDisplay: r.checkInHHMM || "-----",
-            checkOutDisplay: r.checkOutHHMM || "-----",
-            noteDisplay: r.note?.noteText || "",
-          })),
-        },
-        {
-          sheetName: "พนง.กองทุน+จ้างเหมา",
-          subtitle:
-            "ตารางบันทึกเวลา เข้า - ออก ปฏิบัติราชการ พนง.กองทุน/พนง.จ้างเหมา",
-          dateLabel: thaiDateLabel,
-          rows: group2Rows.map((r, idx) => ({
-            orderNo: idx + 1,
-            name: r.memberName,
-            checkInDisplay: r.checkInHHMM || "-----",
-            checkOutDisplay: r.checkOutHHMM || "-----",
-            noteDisplay: r.note?.noteText || "",
-          })),
-        },
-      ],
+      buildDailyReportSheets(),
       `บันทึกเวลา_${thaiDateLabel}.xlsx`
     );
     showToast("📊 ส่งออกไฟล์ Excel 2 ชีท (.xlsx) เรียบร้อยแล้ว");
+  };
+
+  const handleExportDocx = async () => {
+    await downloadDailyAttendanceDocx(
+      buildDailyReportSheets(),
+      `บันทึกเวลา_${thaiDateLabel}`,
+      `บันทึกเวลา_${reportDate}.docx`
+    );
+    showToast("📝 ส่งออกไฟล์ Word (.docx) เรียบร้อยแล้ว");
+  };
+
+  const handleExportPdf = async () => {
+    await downloadDailyAttendancePdf(
+      buildDailyReportSheets(),
+      `บันทึกเวลา_${thaiDateLabel}.pdf`
+    );
+    showToast("📄 ดาวน์โหลดไฟล์ PDF (.pdf) เรียบร้อยแล้ว");
   };
 
   const renderGroupSheet = (
@@ -524,27 +546,14 @@ export function DailyAttendanceReport({
             </button>
             <button
               type="button"
-              onClick={() => {
-                if (!reportRef.current) return;
-                downloadElementAsDocx(
-                  reportRef.current,
-                  `บันทึกเวลา_${thaiDateLabel}`,
-                  `บันทึกเวลา_${reportDate}.docx`
-                );
-              }}
+              onClick={handleExportDocx}
               className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold cursor-pointer"
             >
               📝 Word (.docx)
             </button>
             <button
               type="button"
-              onClick={() => {
-                if (!reportRef.current) return;
-                exportElementToA4Pdf(
-                  reportRef.current,
-                  `บันทึกเวลา_${thaiDateLabel}`
-                );
-              }}
+              onClick={handleExportPdf}
               className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer"
             >
               📄 PDF (A4)
