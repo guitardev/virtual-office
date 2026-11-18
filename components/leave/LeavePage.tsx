@@ -18,6 +18,7 @@ import {
   LeaveType,
 } from "@/lib/leave-utils";
 import LeaveFormPrintView from "./LeaveFormPrintView";
+import PreloadSkeleton from "@/components/ui/PreloadSkeleton";
 
 const LEAVE_MIGRATION_SQL = `-- รันคำสั่งนี้ใน Supabase SQL Editor เพื่อสร้างตารางระบบใบลา
 CREATE TABLE IF NOT EXISTS public.leave_requests (
@@ -1060,9 +1061,11 @@ export default function LeavePage() {
       {activeTab === "my" && (
         <div className="space-y-4">
           {loading ? (
-            <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500 text-sm">
-              กำลังโหลดข้อมูล...
-            </div>
+            <PreloadSkeleton
+              variant="cards"
+              rows={3}
+              label="กำลังโหลดรายการใบลาของคุณ..."
+            />
           ) : myRequests.length === 0 ? (
             <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500 text-sm">
               ยังไม่มีรายการใบลาในปีงบประมาณ {fiscalYear}
@@ -1189,7 +1192,13 @@ export default function LeavePage() {
             ))}
           </div>
 
-          {filteredReviewRequests.length === 0 ? (
+          {loading ? (
+            <PreloadSkeleton
+              variant="cards"
+              rows={4}
+              label="กำลังโหลดคิวพิจารณาใบลา..."
+            />
+          ) : filteredReviewRequests.length === 0 ? (
             <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500 text-sm">
               ไม่พบรายการใบลาในตัวกรองนี้
             </div>
@@ -1312,6 +1321,13 @@ export default function LeavePage() {
 
       {/* TAB 4: สถิติและวันลาสะสม */}
       {activeTab === "summary" && (isAdmin || isVerifier) && (
+        loading ? (
+          <PreloadSkeleton
+            variant="table"
+            rows={6}
+            label="กำลังโหลดสถิติวันลาประจำปีงบประมาณ..."
+          />
+        ) : (
         <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
           <div className="p-4 border-b border-slate-100 flex items-center justify-between">
             <div className="font-bold text-slate-900">
@@ -1422,6 +1438,7 @@ export default function LeavePage() {
             </table>
           </div>
         </div>
+        )
       )}
 
       {/* Modal: ดำเนินการพิจารณาใบลา */}

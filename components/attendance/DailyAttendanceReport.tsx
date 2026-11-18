@@ -10,6 +10,7 @@ import {
 } from "@/lib/attendance-xlsx-export";
 import { downloadDailyAttendanceDocx } from "@/lib/attendance-docx-export";
 import { downloadDailyAttendancePdf } from "@/lib/attendance-pdf-export";
+import PreloadSkeleton from "@/components/ui/PreloadSkeleton";
 
 type DailyNoteType =
   | "general"
@@ -661,21 +662,29 @@ export function DailyAttendanceReport({
       </div>
 
       {/* Printable / Exportable Sheets */}
-      <div ref={reportRef} className="space-y-6">
-        {(groupFilter === "both" || groupFilter === "civil_or_emp") &&
-          renderGroupSheet(
-            "ตารางบันทึกเวลา เข้า - ออก ปฏิบัติราชการ ข้าราชการ/พนักงานราชการ",
-            group1Rows,
-            false
-          )}
+      {loading ? (
+        <PreloadSkeleton
+          variant="table"
+          rows={10}
+          label="กำลังโหลดข้อมูลลงเวลาปฏิบัติราชการ..."
+        />
+      ) : (
+        <div ref={reportRef} className="space-y-6">
+          {(groupFilter === "both" || groupFilter === "civil_or_emp") &&
+            renderGroupSheet(
+              "ตารางบันทึกเวลา เข้า - ออก ปฏิบัติราชการ ข้าราชการ/พนักงานราชการ",
+              group1Rows,
+              false
+            )}
 
-        {(groupFilter === "both" || groupFilter === "fund_or_contract") &&
-          renderGroupSheet(
-            "ตารางบันทึกเวลา เข้า - ออก ปฏิบัติราชการ พนง.กองทุน/พนง.จ้างเหมา",
-            group2Rows,
-            groupFilter === "both"
-          )}
-      </div>
+          {(groupFilter === "both" || groupFilter === "fund_or_contract") &&
+            renderGroupSheet(
+              "ตารางบันทึกเวลา เข้า - ออก ปฏิบัติราชการ พนง.กองทุน/พนง.จ้างเหมา",
+              group2Rows,
+              groupFilter === "both"
+            )}
+        </div>
+      )}
 
       {/* Daily Note Modal (Ready for future Leave / Official Trip linkage) */}
       {editingRow && (
