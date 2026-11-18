@@ -138,6 +138,29 @@ async function isAttendanceEditor(userId?: string, userName?: string): Promise<b
   );
 }
 
+async function getUserLeaveAuthorizedRole(userId?: string): Promise<{
+  canVerify: boolean;
+  canSupervisor: boolean;
+  canApprove: boolean;
+}> {
+  if (!userId) {
+    return { canVerify: false, canSupervisor: false, canApprove: false };
+  }
+  const { data, error } = await requireSupabase()
+    .from("leave_authorized_roles")
+    .select("can_verify, can_supervisor, can_approve")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error || !data) {
+    return { canVerify: false, canSupervisor: false, canApprove: false };
+  }
+  return {
+    canVerify: Boolean(data.can_verify),
+    canSupervisor: Boolean(data.can_supervisor),
+    canApprove: Boolean(data.can_approve),
+  };
+}
+
 async function syncApprovedLeaveToAttendance(
   leave: LeaveRequestItem,
   actorId?: string,
@@ -227,6 +250,7 @@ export async function GET(req: NextRequest) {
       { data: balRows, error: balErr },
       { data: mappingRows },
       { data: editorRows },
+      { data: leaveRoleRows, error: leaveRoleErr },
     ] = await Promise.all([
       reqQuery,
       requireSupabase()
@@ -239,6 +263,10 @@ export async function GET(req: NextRequest) {
       requireSupabase()
         .from("attendance_authorized_editors")
         .select("member_id, member_name"),
+      requireSupabase()
+        .from("leave_authorized_roles")
+        .select("*")
+        .order("user_name", { ascending: true }),
     ]);
 
     if (reqErr) {
@@ -279,11 +307,23 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       success: true,
       needsMigration: false,
+      needsRoleMigration: Boolean(leaveRoleErr && isMissingTableError(leaveRoleErr)),
       fiscalYear,
       requests: (reqRows || []).map(mapRowToLeaveRequest),
       balances: (balRows || []).map(mapRowToBalance),
       mappedUserIds,
       authorizedEditorIds,
+      leaveRoles: (leaveRoleRows || []).map((r) => ({
+        id: String(r.id),
+        userId: String(r.user_id),
+        userName: String(r.user_name || ""),
+        division: String(r.division || ""),
+        canVerify: Boolean(r.can_verify),
+        canSupervisor: Boolean(r.can_supervisor),
+        canApprove: Boolean(r.can_approve),
+        grantedBy: r.granted_by ? String(r.granted_by) : null,
+        updatedAt: String(r.updated_at || ""),
+      })),
     });
   } catch (err) {
     console.error("GET /api/leave error:", err);
@@ -508,12 +548,18 @@ export async function PATCH(req: NextRequest) {
     const nowIso = new Date().toISOString();
     const isAdmin = actorRole === "admin";
     const isManager = actorRole === "manager";
-    const isEditor = await isAttendanceEditor(actorId, actorName);
+    const [isEditor, customLeaveRole] = await Promise.all([
+      isAttendanceEditor(actorId, actorName),
+      getUserLeaveAuthorizedRole(actorId),
+    ]);
+    const canVerify = isAdmin || isEditor || customLeaveRole.canVerify;
+    const canSupervisor = isAdmin || isManager || customLeaveRole.canSupervisor;
+    const canApprove = isAdmin || customLeaveRole.canApprove;
 
     if (action === "verify") {
-      if (!isAdmin && !isEditor) {
+      if (!canVerify) {
         return NextResponse.json(
-          { success: false, error: "เฉพาะผู้ตรวจสอบ (HR / ผู้ดูแลลงเวลา) หรือ Admin เท่านั้น" },
+          { success: false, error: "เฉพาะผู้ตรวจสอบ (HR / ผู้ได้รับมอบสิทธิ์) หรือ Admin เท่านั้น" },
           { status: 403 }
         );
       }
@@ -544,9 +590,9 @@ export async function PATCH(req: NextRequest) {
     }
 
     if (action === "supervisor_review") {
-      if (!isAdmin && !isManager) {
+      if (!canSupervisor) {
         return NextResponse.json(
-          { success: false, error: "เฉพาะผู้บังคับบัญชา (Manager) หรือ Admin เท่านั้น" },
+          { success: false, error: "เฉพาะผู้บังคับบัญชา (Manager / ผู้ได้รับมอบสิทธิ์) หรือ Admin เท่านั้น" },
           { status: 403 }
         );
       }
@@ -577,9 +623,9 @@ export async function PATCH(req: NextRequest) {
     }
 
     if (action === "order") {
-      if (!isAdmin) {
+      if (!canApprove) {
         return NextResponse.json(
-          { success: false, error: "เฉพาะผู้มีอำนาจสั่งอนุญาต (Admin) เท่านั้น" },
+          { success: false, error: "เฉพาะผู้มีอำนาจสั่งอนุญาต (Admin / ผู้ได้รับมอบสิทธิ์) เท่านั้น" },
           { status: 403 }
         );
       }
@@ -625,7 +671,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     if (action === "sync_attendance") {
-      if (!isAdmin && !isEditor) {
+      if (!canVerify && !canApprove) {
         return NextResponse.json(
           { success: false, error: "ไม่มีสิทธิ์ซิงก์ข้อมูลลงเวลา" },
           { status: 403 }

@@ -101,7 +101,37 @@ CREATE POLICY "Allow all on leave_requests" ON public.leave_requests FOR ALL USI
 DROP POLICY IF EXISTS "Allow all on leave_balances" ON public.leave_balances;
 CREATE POLICY "Allow all on leave_balances" ON public.leave_balances FOR ALL USING (true) WITH CHECK (true);`;
 
-type LeaveTab = "form" | "my" | "review" | "summary";
+const LEAVE_ROLE_MIGRATION_SQL = `-- รันคำสั่งนี้ใน Supabase SQL Editor เพื่อสร้างตารางกำหนดสิทธิ์ระบบใบลา
+CREATE TABLE IF NOT EXISTS public.leave_authorized_roles (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id text NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  user_name text NOT NULL,
+  division text NOT NULL DEFAULT '',
+  can_verify boolean NOT NULL DEFAULT false,
+  can_supervisor boolean NOT NULL DEFAULT false,
+  can_approve boolean NOT NULL DEFAULT false,
+  granted_by text,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (user_id)
+);
+
+ALTER TABLE public.leave_authorized_roles ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all on leave_authorized_roles" ON public.leave_authorized_roles;
+CREATE POLICY "Allow all on leave_authorized_roles" ON public.leave_authorized_roles FOR ALL USING (true) WITH CHECK (true);`;
+
+interface LeaveAuthorizedRoleItem {
+  id: string;
+  userId: string;
+  userName: string;
+  division: string;
+  canVerify: boolean;
+  canSupervisor: boolean;
+  canApprove: boolean;
+  grantedBy: string | null;
+  updatedAt: string;
+}
+
+type LeaveTab = "form" | "my" | "review" | "summary" | "permissions";
 
 export default function LeavePage() {
   const { currentUser, currentUserRole, members, showToast } =
@@ -111,10 +141,19 @@ export default function LeavePage() {
   const [fiscalYear, setFiscalYear] = useState<number>(() => getFiscalYear());
   const [loading, setLoading] = useState(true);
   const [needsMigration, setNeedsMigration] = useState(false);
+  const [needsRoleMigration, setNeedsRoleMigration] = useState(false);
   const [requests, setRequests] = useState<LeaveRequestItem[]>([]);
   const [balances, setBalances] = useState<LeaveBalanceItem[]>([]);
   const [mappedUserIds, setMappedUserIds] = useState<string[]>([]);
   const [authorizedEditorIds, setAuthorizedEditorIds] = useState<string[]>([]);
+  const [leaveRoles, setLeaveRoles] = useState<LeaveAuthorizedRoleItem[]>([]);
+
+  // Permissions form state (Admin only)
+  const [permUserId, setPermUserId] = useState("");
+  const [permCanVerify, setPermCanVerify] = useState(true);
+  const [permCanSupervisor, setPermCanSupervisor] = useState(false);
+  const [permCanApprove, setPermCanApprove] = useState(false);
+  const [savingPerm, setSavingPerm] = useState(false);
 
   // Form state
   const [formKind, setFormKind] = useState<LeaveFormKind>("general");
@@ -174,12 +213,22 @@ export default function LeavePage() {
 
   const isAdmin = currentUserRole === "admin";
   const isManager = currentUserRole === "manager";
+  const myLeaveRole = useMemo(
+    () => leaveRoles.find((r) => r.userId === currentUser?.id) || null,
+    [leaveRoles, currentUser?.id]
+  );
   const isVerifier = useMemo(() => {
     if (!currentUser) return false;
-    return authorizedEditorIds.includes(currentUser.id);
-  }, [currentUser, authorizedEditorIds]);
+    return (
+      isAdmin ||
+      authorizedEditorIds.includes(currentUser.id) ||
+      Boolean(myLeaveRole?.canVerify)
+    );
+  }, [currentUser, isAdmin, authorizedEditorIds, myLeaveRole]);
 
-  const canReviewAny = isAdmin || isManager || isVerifier;
+  const isSupervisor = isAdmin || isManager || Boolean(myLeaveRole?.canSupervisor);
+  const isApprover = isAdmin || Boolean(myLeaveRole?.canApprove);
+  const canReviewAny = isVerifier || isSupervisor || isApprover;
 
   const loadLeaveData = useCallback(async () => {
     setLoading(true);
@@ -188,6 +237,7 @@ export default function LeavePage() {
       const data = await res.json();
       if (data?.success) {
         setNeedsMigration(Boolean(data.needsMigration));
+        setNeedsRoleMigration(Boolean(data.needsRoleMigration));
         setRequests(Array.isArray(data.requests) ? data.requests : []);
         setBalances(Array.isArray(data.balances) ? data.balances : []);
         setMappedUserIds(
@@ -196,6 +246,7 @@ export default function LeavePage() {
         setAuthorizedEditorIds(
           Array.isArray(data.authorizedEditorIds) ? data.authorizedEditorIds : []
         );
+        setLeaveRoles(Array.isArray(data.leaveRoles) ? data.leaveRoles : []);
       }
     } catch {
       showToast("❌ โหลดข้อมูลระบบใบลาไม่สำเร็จ");
@@ -514,27 +565,71 @@ export default function LeavePage() {
     }
   };
 
+  const handleSaveLeavePermission = async (
+    targetUserId: string,
+    canVerify: boolean,
+    canSupervisor: boolean,
+    canApprove: boolean
+  ) => {
+    if (!currentUser || !targetUserId) return;
+    const member = members.find((m) => m.id === targetUserId);
+    if (!member) return;
+    setSavingPerm(true);
+    try {
+      const res = await fetch("/api/leave/permissions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: member.id,
+          userName: member.name,
+          division: member.division || "",
+          canVerify,
+          canSupervisor,
+          canApprove,
+          actorRole: currentUserRole,
+          actorName: currentUser.name,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        showToast(`❌ ${data?.error || "บันทึกสิทธิ์ไม่สำเร็จ"}`);
+        return;
+      }
+      showToast(
+        data.removed
+          ? `✅ ถอนสิทธิ์ใบลาของ ${member.name} แล้ว`
+          : `✅ บันทึกสิทธิ์ใบลาของ ${member.name} เรียบร้อยแล้ว`
+      );
+      setPermUserId("");
+      await loadLeaveData();
+    } catch {
+      showToast("❌ เกิดข้อผิดพลาดในการบันทึกสิทธิ์");
+    } finally {
+      setSavingPerm(false);
+    }
+  };
+
   const actionableCount = useMemo(() => {
     return requests.filter((r) => {
-      if (r.status === "pending_verifier" && (isVerifier || isAdmin)) return true;
-      if (r.status === "pending_supervisor" && (isManager || isAdmin)) return true;
-      if (r.status === "pending_approver" && isAdmin) return true;
+      if (r.status === "pending_verifier" && isVerifier) return true;
+      if (r.status === "pending_supervisor" && isSupervisor) return true;
+      if (r.status === "pending_approver" && isApprover) return true;
       return false;
     }).length;
-  }, [requests, isVerifier, isAdmin, isManager]);
+  }, [requests, isVerifier, isSupervisor, isApprover]);
 
   const filteredReviewRequests = useMemo(() => {
     return requests.filter((r) => {
       if (reviewFilter === "actionable") {
-        if (r.status === "pending_verifier" && (isVerifier || isAdmin)) return true;
-        if (r.status === "pending_supervisor" && (isManager || isAdmin)) return true;
-        if (r.status === "pending_approver" && isAdmin) return true;
+        if (r.status === "pending_verifier" && isVerifier) return true;
+        if (r.status === "pending_supervisor" && isSupervisor) return true;
+        if (r.status === "pending_approver" && isApprover) return true;
         return false;
       }
       if (reviewFilter === "all") return true;
       return r.status === reviewFilter;
     });
-  }, [requests, reviewFilter, isVerifier, isAdmin, isManager]);
+  }, [requests, reviewFilter, isVerifier, isSupervisor, isApprover]);
 
   const handleExportPdf = async () => {
     if (!printRef.current || !previewLeave) return;
@@ -682,6 +777,19 @@ export default function LeavePage() {
             }`}
           >
             📊 สถิติและวันลาสะสม
+          </button>
+        )}
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => setActiveTab("permissions")}
+            className={`px-4 py-2 rounded-xl text-sm font-semibold transition cursor-pointer ${
+              activeTab === "permissions"
+                ? "bg-indigo-600 text-white shadow-sm"
+                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+            }`}
+          >
+            ⚙️ จัดการสิทธิ์ใบลา
           </button>
         )}
       </div>
@@ -1255,8 +1363,7 @@ export default function LeavePage() {
                       🖨️ แบบฟอร์ม
                     </button>
 
-                    {item.status === "pending_verifier" &&
-                      (isVerifier || isAdmin) && (
+                    {item.status === "pending_verifier" && isVerifier && (
                         <button
                           type="button"
                           onClick={() => {
@@ -1269,8 +1376,7 @@ export default function LeavePage() {
                         </button>
                       )}
 
-                    {item.status === "pending_supervisor" &&
-                      (isManager || isAdmin) && (
+                    {item.status === "pending_supervisor" && isSupervisor && (
                         <button
                           type="button"
                           onClick={() => {
@@ -1286,7 +1392,7 @@ export default function LeavePage() {
                         </button>
                       )}
 
-                    {item.status === "pending_approver" && isAdmin && (
+                    {item.status === "pending_approver" && isApprover && (
                       <button
                         type="button"
                         onClick={() => {
@@ -1302,7 +1408,7 @@ export default function LeavePage() {
 
                     {item.status === "approved" &&
                       !item.syncedToAttendance &&
-                      (isAdmin || isVerifier) && (
+                      (isVerifier || isApprover) && (
                         <button
                           type="button"
                           onClick={() => handleResyncAttendance(item)}
@@ -1439,6 +1545,231 @@ export default function LeavePage() {
           </div>
         </div>
         )
+      )}
+
+      {/* TAB 5: จัดการสิทธิ์ใบลา (เฉพาะ Admin) */}
+      {activeTab === "permissions" && isAdmin && (
+        <div className="space-y-4">
+          {needsRoleMigration && (
+            <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 text-sm text-amber-900 flex flex-wrap items-center justify-between gap-2">
+              <span>
+                ⚠️ ยังไม่ได้สร้างตาราง <code>leave_authorized_roles</code> ใน Supabase
+              </span>
+              <button
+                type="button"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(LEAVE_ROLE_MIGRATION_SQL);
+                  showToast("📋 คัดลอก SQL สร้างตาราง leave_authorized_roles แล้ว");
+                }}
+                className="px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700 cursor-pointer"
+              >
+                📋 คัดลอก SQL
+              </button>
+            </div>
+          )}
+
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
+            <div>
+              <h3 className="font-bold text-slate-900">
+                ⚙️ มอบสิทธิ์ผู้พิจารณาใบลารายบุคคล
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                สิทธิ์พื้นฐาน: <code>admin</code> ทำได้ทุกขั้น, <code>manager</code> ลงความเห็นผู้บังคับบัญชาได้, และผู้ดูแลลงเวลา (<code>attendance_authorized_editors</code>) ตรวจสอบสถิติได้ — ส่วนนี้ใช้สำหรับมอบสิทธิ์เพิ่มเติมเป็นรายบุคคล
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-end bg-slate-50 p-4 rounded-xl border border-slate-200">
+              <div className="lg:col-span-4">
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  เลือกบุคลากร
+                </label>
+                <select
+                  value={permUserId}
+                  onChange={(e) => {
+                    const uid = e.target.value;
+                    setPermUserId(uid);
+                    const existing = leaveRoles.find((r) => r.userId === uid);
+                    if (existing) {
+                      setPermCanVerify(existing.canVerify);
+                      setPermCanSupervisor(existing.canSupervisor);
+                      setPermCanApprove(existing.canApprove);
+                    } else {
+                      setPermCanVerify(true);
+                      setPermCanSupervisor(false);
+                      setPermCanApprove(false);
+                    }
+                  }}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
+                >
+                  <option value="">-- เลือกสมาชิก --</option>
+                  {members
+                    .filter((m) => m.status === "active")
+                    .map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name} ({m.role})
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div className="lg:col-span-6 flex flex-wrap gap-4 py-2">
+                <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={permCanVerify}
+                    onChange={(e) => setPermCanVerify(e.target.checked)}
+                    className="rounded border-slate-300"
+                  />
+                  <span>1. ผู้ตรวจสอบสถิติ</span>
+                </label>
+                <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={permCanSupervisor}
+                    onChange={(e) => setPermCanSupervisor(e.target.checked)}
+                    className="rounded border-slate-300"
+                  />
+                  <span>2. ผู้บังคับบัญชา</span>
+                </label>
+                <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={permCanApprove}
+                    onChange={(e) => setPermCanApprove(e.target.checked)}
+                    className="rounded border-slate-300"
+                  />
+                  <span>3. ผู้มีอำนาจสั่งอนุญาต</span>
+                </label>
+              </div>
+
+              <div className="lg:col-span-2 flex justify-end">
+                <button
+                  type="button"
+                  disabled={!permUserId || savingPerm || needsRoleMigration}
+                  onClick={() =>
+                    handleSaveLeavePermission(
+                      permUserId,
+                      permCanVerify,
+                      permCanSupervisor,
+                      permCanApprove
+                    )
+                  }
+                  className="w-full px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold cursor-pointer"
+                >
+                  {savingPerm ? "กำลังบันทึก..." : "💾 บันทึกสิทธิ์"}
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-slate-50 text-xs text-slate-600 uppercase">
+                  <tr>
+                    <th className="px-4 py-3">ชื่อ-สกุล</th>
+                    <th className="px-4 py-3 text-center">1. ผู้ตรวจสอบ</th>
+                    <th className="px-4 py-3 text-center">2. ผู้บังคับบัญชา</th>
+                    <th className="px-4 py-3 text-center">3. ผู้อนุญาต</th>
+                    <th className="px-4 py-3">มอบสิทธิ์โดย</th>
+                    <th className="px-4 py-3 text-right">จัดการ</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {leaveRoles.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="px-4 py-6 text-center text-xs text-slate-500"
+                      >
+                        ยังไม่มีรายชื่อที่กำหนดสิทธิ์เพิ่มเติม (ยังใช้สิทธิ์ตาม Role และผู้ดูแลลงเวลาตามปกติ)
+                      </td>
+                    </tr>
+                  ) : (
+                    leaveRoles.map((lr) => (
+                      <tr key={lr.userId} className="hover:bg-slate-50/60">
+                        <td className="px-4 py-3">
+                          <div className="font-semibold text-slate-900">
+                            {lr.userName}
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            {lr.division || "-"}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <input
+                            type="checkbox"
+                            checked={lr.canVerify}
+                            disabled={savingPerm}
+                            onChange={(e) =>
+                              handleSaveLeavePermission(
+                                lr.userId,
+                                e.target.checked,
+                                lr.canSupervisor,
+                                lr.canApprove
+                              )
+                            }
+                            className="cursor-pointer"
+                          />
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <input
+                            type="checkbox"
+                            checked={lr.canSupervisor}
+                            disabled={savingPerm}
+                            onChange={(e) =>
+                              handleSaveLeavePermission(
+                                lr.userId,
+                                lr.canVerify,
+                                e.target.checked,
+                                lr.canApprove
+                              )
+                            }
+                            className="cursor-pointer"
+                          />
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <input
+                            type="checkbox"
+                            checked={lr.canApprove}
+                            disabled={savingPerm}
+                            onChange={(e) =>
+                              handleSaveLeavePermission(
+                                lr.userId,
+                                lr.canVerify,
+                                lr.canSupervisor,
+                                e.target.checked
+                              )
+                            }
+                            className="cursor-pointer"
+                          />
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-500">
+                          {lr.grantedBy || "-"}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            type="button"
+                            disabled={savingPerm}
+                            onClick={() =>
+                              handleSaveLeavePermission(
+                                lr.userId,
+                                false,
+                                false,
+                                false
+                              )
+                            }
+                            className="px-3 py-1 rounded-lg border border-rose-200 text-xs font-semibold text-rose-600 hover:bg-rose-50 cursor-pointer"
+                          >
+                            ถอนสิทธิ์
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Modal: ดำเนินการพิจารณาใบลา */}

@@ -37,15 +37,25 @@ export async function POST(req: NextRequest) {
     const db = supabase;
     let isAllowed = actorRole === "admin";
     if (!isAllowed && (actorId || actorName)) {
-      const { data: editors } = await db
-        .from("attendance_authorized_editors")
-        .select("member_id, member_name");
+      const [{ data: editors }, { data: customRole }] = await Promise.all([
+        db
+          .from("attendance_authorized_editors")
+          .select("member_id, member_name"),
+        actorId
+          ? db
+              .from("leave_authorized_roles")
+              .select("can_verify")
+              .eq("user_id", actorId)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
+      ]);
       isAllowed = Boolean(
-        editors?.some(
-          (e) =>
-            (actorId && e.member_id === actorId) ||
-            (actorName && e.member_name?.trim() === actorName.trim())
-        )
+        customRole?.can_verify ||
+          editors?.some(
+            (e) =>
+              (actorId && e.member_id === actorId) ||
+              (actorName && e.member_name?.trim() === actorName.trim())
+          )
       );
     }
 
