@@ -295,7 +295,11 @@ function buildVacationLeaveBody(leave: LeaveRequestItem): string {
     statsTable,
     makePara(
       makeRun(
-        `(ลงชื่อ) ${leave.verifierName || "................................."} ผู้ตรวจสอบ`
+        `(ลงชื่อ) ${
+          leave.verifiedAt && leave.verifierName
+            ? leave.verifierName
+            : "................................."
+        } ผู้ตรวจสอบ`
       ),
       { before: 160, after: 20 }
     ),
@@ -745,7 +749,11 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem): string {
     statsTable,
     makePara(
       makeRun(
-        `(ลงชื่อ) ${leave.verifierName || "................................."} ผู้ตรวจสอบ`
+        `(ลงชื่อ) ${
+          leave.verifiedAt && leave.verifierName
+            ? leave.verifierName
+            : "................................."
+        } ผู้ตรวจสอบ`
       ),
       { before: 140, after: 20 }
     ),
@@ -795,6 +803,12 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem): string {
     ),
     makePara(
       makeRun(
+        `(${leave.supervisorName || "........................................"})`
+      ),
+      { leftIndent: 700, after: 20 }
+    ),
+    makePara(
+      makeRun(
         `ตำแหน่ง ${leave.supervisorPosition || "...................................."}`
       ),
       { after: 20 }
@@ -828,6 +842,12 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem): string {
         }`
       ),
       { after: 20 }
+    ),
+    makePara(
+      makeRun(
+        `(${leave.approverName || "........................................"})`
+      ),
+      { leftIndent: 700, after: 20 }
     ),
     makePara(
       makeRun(

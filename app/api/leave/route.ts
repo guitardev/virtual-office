@@ -365,6 +365,9 @@ export async function POST(req: NextRequest) {
       actingPersonUserId,
       actingPersonName,
       actingPersonPosition,
+      verifierUserId,
+      verifierName,
+      verifierPosition,
       supervisorUserId,
       supervisorName,
       supervisorPosition,
@@ -434,6 +437,29 @@ export async function POST(req: NextRequest) {
         ? totalWorkingDays
         : Math.max(1, getWorkingDatesBetween(startDate, endDate).length);
 
+    // หากไม่ระบุผู้ตรวจสอบ ให้ใช้ syno_ยุทธนา เป็นค่าเริ่มต้น
+    let resolvedVerifierId = verifierUserId || "syno_ยุทธนา";
+    let resolvedVerifierName = verifierName || "";
+    let resolvedVerifierPosition = verifierPosition || "";
+
+    if (!resolvedVerifierName || !resolvedVerifierPosition) {
+      const { data: defVerifier } = await requireSupabase()
+        .from("users")
+        .select("id, name, position")
+        .eq("id", resolvedVerifierId)
+        .maybeSingle();
+      if (defVerifier) {
+        resolvedVerifierId = defVerifier.id;
+        resolvedVerifierName = resolvedVerifierName || defVerifier.name || "";
+        resolvedVerifierPosition =
+          resolvedVerifierPosition || defVerifier.position || "";
+      } else {
+        resolvedVerifierName = resolvedVerifierName || "นายยุทธนา เจนจบ";
+        resolvedVerifierPosition =
+          resolvedVerifierPosition || "เจ้าพนักงานธุรการปฏิบัติงาน";
+      }
+    }
+
     // หากไม่ระบุผู้มีอำนาจอนุญาต ให้ใช้ syno_มะลิวัน เป็นค่าเริ่มต้น
     let resolvedApproverId = approverUserId || "syno_มะลิวัน";
     let resolvedApproverName = approverName || "";
@@ -499,6 +525,9 @@ export async function POST(req: NextRequest) {
       prev_personal_days: prevPersonalDays,
       prev_maternity_days: prevMaternityDays,
       prev_vacation_days: prevVacationDays,
+      verifier_user_id: resolvedVerifierId || null,
+      verifier_name: resolvedVerifierName || null,
+      verifier_position: resolvedVerifierPosition || null,
       supervisor_user_id: supervisorUserId || null,
       supervisor_name: supervisorName || null,
       supervisor_position: supervisorPosition || null,
@@ -588,7 +617,12 @@ export async function PATCH(req: NextRequest) {
       isAttendanceEditor(actorId, actorName),
       getUserLeaveAuthorizedRole(actorId),
     ]);
-    const canVerify = isAdmin || isEditor || customLeaveRole.canVerify;
+    const canVerify =
+      isAdmin ||
+      isEditor ||
+      actorId === "syno_ยุทธนา" ||
+      customLeaveRole.canVerify ||
+      (Boolean(existing.verifierUserId) && existing.verifierUserId === actorId);
     const canSupervisor = isAdmin || isManager || customLeaveRole.canSupervisor;
     const canApprove =
       isAdmin ||

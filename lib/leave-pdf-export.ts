@@ -181,7 +181,11 @@ function drawVacationForm(
   ctx.textAlign = "left";
   ctx.font = `400 25px ${fontFamily}`;
   ctx.fillText(
-    `(ลงชื่อ) ${leave.verifierName || "................................."} ผู้ตรวจสอบ`,
+    `(ลงชื่อ) ${
+      leave.verifiedAt && leave.verifierName
+        ? leave.verifierName
+        : "................................."
+    } ผู้ตรวจสอบ`,
     leftX,
     ly
   );
@@ -582,7 +586,11 @@ function drawGeneralForm(
   ctx.textAlign = "left";
   ctx.font = `400 25px ${fontFamily}`;
   ctx.fillText(
-    `(ลงชื่อ) ${leave.verifierName || "................................."} ผู้ตรวจสอบ`,
+    `(ลงชื่อ) ${
+      leave.verifiedAt && leave.verifierName
+        ? leave.verifierName
+        : "................................."
+    } ผู้ตรวจสอบ`,
     leftX,
     ly
   );
@@ -634,6 +642,12 @@ function drawGeneralForm(
   );
   ry += 38;
   ctx.fillText(
+    `(${leave.supervisorName || "........................................"})`,
+    rightX + 90,
+    ry
+  );
+  ry += 38;
+  ctx.fillText(
     `ตำแหน่ง ${leave.supervisorPosition || "...................................."}`,
     rightX,
     ry
@@ -678,6 +692,12 @@ function drawGeneralForm(
         : "........................................"
     }`,
     rightX,
+    ry
+  );
+  ry += 38;
+  ctx.fillText(
+    `(${leave.approverName || "........................................"})`,
+    rightX + 90,
     ry
   );
   ry += 38;

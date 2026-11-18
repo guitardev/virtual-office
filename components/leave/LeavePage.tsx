@@ -179,6 +179,7 @@ export default function LeavePage() {
   const [vacationAccumulatedDays, setVacationAccumulatedDays] = useState<number>(0);
   const [vacationAnnualDays, setVacationAnnualDays] = useState<number>(10);
   const [actingPersonUserId, setActingPersonUserId] = useState("");
+  const [verifierUserId, setVerifierUserId] = useState("syno_ยุทธนา");
   const [supervisorUserId, setSupervisorUserId] = useState("");
   const [approverUserId, setApproverUserId] = useState("syno_มะลิวัน");
   const [submitting, setSubmitting] = useState(false);
@@ -221,6 +222,7 @@ export default function LeavePage() {
     if (!currentUser) return false;
     return (
       isAdmin ||
+      currentUser.id === "syno_ยุทธนา" ||
       authorizedEditorIds.includes(currentUser.id) ||
       Boolean(myLeaveRole?.canVerify)
     );
@@ -232,6 +234,21 @@ export default function LeavePage() {
     currentUser?.id === "syno_มะลิวัน" ||
     Boolean(myLeaveRole?.canApprove);
   const canReviewAny = isVerifier || isSupervisor || isApprover;
+
+  const verifierCandidates = useMemo(() => {
+    const customVerIds = new Set(
+      leaveRoles.filter((r) => r.canVerify).map((r) => r.userId)
+    );
+    const editorSet = new Set(authorizedEditorIds);
+    return members.filter(
+      (m) =>
+        m.status === "active" &&
+        (m.id === "syno_ยุทธนา" ||
+          editorSet.has(m.id) ||
+          customVerIds.has(m.id) ||
+          m.role === "admin")
+    );
+  }, [members, leaveRoles, authorizedEditorIds]);
 
   const supervisorCandidates = useMemo(() => {
     const customSupIds = new Set(
@@ -448,6 +465,7 @@ export default function LeavePage() {
     }
 
     const actingMember = members.find((m) => m.id === actingPersonUserId);
+    const verifierMember = members.find((m) => m.id === verifierUserId);
     const supervisorMember = members.find((m) => m.id === supervisorUserId);
     const approverMember = members.find((m) => m.id === approverUserId);
     setSubmitting(true);
@@ -480,6 +498,10 @@ export default function LeavePage() {
           actingPersonUserId: actingMember?.id || null,
           actingPersonName: actingMember?.name || "",
           actingPersonPosition: actingMember?.position || "",
+          verifierUserId: verifierMember?.id || "syno_ยุทธนา",
+          verifierName: verifierMember?.name || "นายยุทธนา เจนจบ",
+          verifierPosition:
+            verifierMember?.position || "เจ้าพนักงานธุรการปฏิบัติงาน",
           supervisorUserId: supervisorMember?.id || null,
           supervisorName: supervisorMember?.name || "",
           supervisorPosition: supervisorMember?.position || "",
@@ -1236,11 +1258,38 @@ export default function LeavePage() {
             </div>
           </div>
 
-          {/* สายการพิจารณา (ผู้บังคับบัญชา & ผู้มีอำนาจอนุญาต) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-indigo-50/40 p-4 rounded-xl border border-indigo-100">
+          {/* สายการพิจารณา (ผู้ตรวจสอบ, ผู้บังคับบัญชา & ผู้มีอำนาจอนุญาต) */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-indigo-50/40 p-4 rounded-xl border border-indigo-100">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                ผู้บังคับบัญชา (ค่าเริ่มต้น: Manager ในสังกัด)
+                1. ผู้ตรวจสอบสถิติ (ค่าเริ่มต้น: syno_ยุทธนา)
+              </label>
+              <select
+                value={verifierUserId}
+                onChange={(e) => setVerifierUserId(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
+              >
+                {verifierCandidates.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+              {(() => {
+                const ver = verifierCandidates.find(
+                  (m) => m.id === verifierUserId
+                );
+                return (
+                  <div className="text-[11px] text-slate-500 mt-1">
+                    ตำแหน่ง: {ver?.position || "เจ้าพนักงานธุรการปฏิบัติงาน"}
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                2. ผู้บังคับบัญชา (ค่าเริ่มต้น: Manager ในสังกัด)
               </label>
               <select
                 value={supervisorUserId}
@@ -1268,7 +1317,7 @@ export default function LeavePage() {
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                ผู้มีอำนาจสั่งอนุญาต (ค่าเริ่มต้น: syno_มะลิวัน)
+                3. ผู้มีอำนาจสั่งอนุญาต (ค่าเริ่มต้น: syno_มะลิวัน)
               </label>
               <select
                 value={approverUserId}
@@ -1494,8 +1543,10 @@ export default function LeavePage() {
                       >
                         {statusMeta.label}
                       </span>
-                      {((item.status === "pending_supervisor" &&
-                        item.supervisorUserId === currentUser?.id) ||
+                      {((item.status === "pending_verifier" &&
+                        item.verifierUserId === currentUser?.id) ||
+                        (item.status === "pending_supervisor" &&
+                          item.supervisorUserId === currentUser?.id) ||
                         (item.status === "pending_approver" &&
                           item.approverUserId === currentUser?.id)) && (
                         <span className="text-xs px-2.5 py-0.5 rounded-full border bg-indigo-50 text-indigo-700 border-indigo-200 font-semibold">
