@@ -12,6 +12,7 @@ import {
 import { SocialStatisticsReportModal } from "./SocialStatisticsReportModal";
 import { OfficialOrdersPanel } from "./OfficialOrdersPanel";
 import { DataHubDocsPanel } from "./DataHubDocsPanel";
+import TpmapAnalyticsPanel from "./TpmapAnalyticsPanel";
 import {
   SOCIAL_SUB_TABS,
   SocialSubTabKey,
@@ -150,8 +151,8 @@ export const MISSION_GROUPS: MissionGroup[] = [
 ];
 
 export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPageProps) {
-  // Main Tab Navigation: stats, divisions, personnel, documents, orders
-  const [activeMainTab, setActiveMainTab] = useState<"stats" | "divisions" | "personnel" | "documents" | "orders">("stats");
+  // Main Tab Navigation: stats, tpmap, divisions, personnel, documents, orders
+  const [activeMainTab, setActiveMainTab] = useState<"stats" | "tpmap" | "divisions" | "personnel" | "documents" | "orders">("stats");
   const [activeSocialSubTab, setActiveSocialSubTab] = useState<SocialSubTabKey>("population");
 
   // Social Statistics Filters & Export State
@@ -387,6 +388,19 @@ export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPag
             >
               <span>📊</span>
               <span>สถานการณ์ทางสังคมจังหวัดกำแพงเพชร</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveMainTab("tpmap")}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                activeMainTab === "tpmap"
+                  ? "bg-indigo-600 text-white shadow-md border border-indigo-400/40"
+                  : "bg-white/10 hover:bg-white/20 text-slate-200"
+              }`}
+            >
+              <span>🎯</span>
+              <span>วิเคราะห์ TPMAP กำแพงเพชร</span>
             </button>
 
             <button
@@ -885,6 +899,8 @@ export function DataHubPage({ currentUser, showToast, members = [] }: DataHubPag
       )}
 
       {/* ─── 3. TAB 2: DIVISION SYSTEMS & KPIS ─── */}
+      {activeMainTab === "tpmap" && <TpmapAnalyticsPanel showToast={showToast} />}
+
       {activeMainTab === "divisions" && (
         <div className="space-y-6">
           {/* Group Selector Tabs */}
