@@ -71,8 +71,8 @@ export const MISSION_GROUPS: MissionGroup[] = [
     documents: [],
     systems: [
       { name: "ระบบ e-GP (กรมบัญชีกลาง)", desc: "ระบบการจัดซื้อจัดจ้างภาครัฐด้วยอิเล็กทรอนิกส์", url: "https://www.gprocurement.go.th", badge: "จัดซื้อจัดจ้าง", icon: "💼" },
-      { name: "ระบบ GFMIS Web Online", desc: "ระบบบริหารการเงินการคลังภาครัฐแบบอิเล็กทรอนิกส์", url: "https://gfmis.mof.go.th", badge: "การเงิน/งบประมาณ", icon: "💳" },
-      { name: "ระบบสารบรรณอิเล็กทรอนิกส์ พม.", desc: "ระบบรับส่งหนังสือราชการสารสนเทศ พม.", url: "https://edoc.m-society.go.th", badge: "สารบรรณ", icon: "📨" },
+      { name: "ระบบ New GFMIS Thai", desc: "ระบบบริหารการเงินการคลังภาครัฐแบบอิเล็กทรอนิกส์ใหม่ (Portal)", url: "https://portal.gfmis.go.th", badge: "การเงิน/งบประมาณ", icon: "💳" },
+      { name: "ระบบสารบรรณอิเล็กทรอนิกส์ (e-Saraban)", desc: "ระบบสารบรรณอิเล็กทรอนิกส์ภาครัฐกลาง (DGA)", url: "https://saraban.egov.go.th", badge: "สารบรรณ", icon: "📨" },
     ],
   },
   {
@@ -95,8 +95,8 @@ export const MISSION_GROUPS: MissionGroup[] = [
     documents: [],
     systems: [
       { name: "ระบบ TPMAP (ศจพ.)", desc: "ระบบบริหารจัดการข้อมูลการพัฒนาคนแบบชี้เป้า", url: "https://www.tpmap.in.th", badge: "ยากจนชี้เป้า", icon: "🎯" },
-      { name: "ศูนย์ข้อมูลสารสนเทศ พม. (MSOC)", desc: "สถิติและข้อมูลสารสนเทศด้านการพัฒนาสังคมแห่งชาติ", url: "https://msoc.m-society.go.th", badge: "คลังสถิติ", icon: "📈" },
-      { name: "ระบบ e-Monitoring", desc: "ระบบติดตามและประเมินผลโครงการภาครัฐ", url: "https://emonitoring.m-society.go.th", badge: "ติดตามผล", icon: "⏱️" },
+      { name: "เว็บไซต์กลาง & ศูนย์ข้อมูล พม.", desc: "พอร์ทัลกลาง ข้อมูลแผนงาน และสถิติกระทรวง พม.", url: "https://www.m-society.go.th", badge: "คลังสถิติ", icon: "📈" },
+      { name: "ระบบติดตามการใช้บริการ พม. (Service Tracking)", desc: "ระบบติดตามสถานะการขอรับความช่วยเหลือและบริการ พม.", url: "https://status.m-society.go.th", badge: "ติดตามผล", icon: "⏱️" },
     ],
   },
   {
@@ -118,9 +118,9 @@ export const MISSION_GROUPS: MissionGroup[] = [
     ],
     documents: [],
     systems: [
-      { name: "ระบบ e-Social (ระบบเงินสงเคราะห์)", desc: "ระบบจ่ายเงินสงเคราะห์และสวัสดิการสังคมอิเล็กทรอนิกส์", url: "https://esocial.m-society.go.th", badge: "เงินสงเคราะห์", icon: "💳" },
-      { name: "ระบบสมุดพกครอบครัวอิเล็กทรอนิกส์ (MSO-Logbook)", desc: "ระบบบันทึกและติดตามสภาพปัญหารายครัวเรือน", url: "https://logbook.m-society.go.th", badge: "ครอบครัวเปราะบาง", icon: "📖" },
-      { name: "ศูนย์ช่วยเหลือสังคม สายด่วน 1300", desc: "ระบบรับเรื่องราวร้องทุกข์และให้ความช่วยเหลือเร่งด่วน 24 ชม.", url: "https://1300.m-society.go.th", badge: "สายด่วน 1300", icon: "📞" },
+      { name: "ระบบ พม. CARE (เงินสงเคราะห์ออนไลน์)", desc: "ระบบยื่นคำขอรับเงินสงเคราะห์และสวัสดิการสังคมอิเล็กทรอนิกส์", url: "https://vsmart-care.m-society.go.th", badge: "เงินสงเคราะห์", icon: "💳" },
+      { name: "ระบบสมุดพกครอบครัวอิเล็กทรอนิกส์ (MSO-Logbook)", desc: "ระบบบันทึกและติดตามสภาพปัญหารายครัวเรือน", url: "https://mso-logbook.m-society.go.th", badge: "ครอบครัวเปราะบาง", icon: "📖" },
+      { name: "ศูนย์ช่วยเหลือสังคม สายด่วน 1300", desc: "ระบบรับเรื่องราวร้องทุกข์และให้ความช่วยเหลือเร่งด่วน 24 ชม.", url: "https://1300thailand.m-society.go.th", badge: "สายด่วน 1300", icon: "📞" },
     ],
   },
   {
@@ -142,9 +142,9 @@ export const MISSION_GROUPS: MissionGroup[] = [
     ],
     documents: [],
     systems: [
-      { name: "ระบบ DEP Information System (พก.)", desc: "ฐานข้อมูลสารสนเทศคนพิการระดับชาติ กรมส่งเสริมและพัฒนาคุณภาพชีวิตคนพิการ", url: "https://dep.go.th", badge: "ฐานข้อมูลคนพิการ", icon: "♿" },
+      { name: "ระบบสารสนเทศคนพิการ (พก.)", desc: "เว็บไซต์หลักกรมส่งเสริมและพัฒนาคุณภาพชีวิตคนพิการ", url: "https://www.dep.go.th", badge: "ฐานข้อมูลคนพิการ", icon: "♿" },
       { name: "ระบบกู้ยืมเงินกองทุน พก. ออนไลน์", desc: "ยื่นคำขอกู้ยืมเงินประกอบอาชีพสำหรับคนพิการและผู้ดูแล", url: "https://efund.dep.go.th", badge: "กองทุนกู้ยืม", icon: "💰" },
-      { name: "ระบบบัตรประจำตัวคนพิการดิจิทัล (D-Card)", desc: "ระบบออกบัตรและตรวจสอบสถานะบัตรคนพิการทางอิเล็กทรอนิกส์", url: "https://d-card.dep.go.th", badge: "บัตรคนพิการ", icon: "🪪" },
+      { name: "ระบบตรวจสอบสิทธิและข้อมูลคนพิการ (พก.)", desc: "ตรวจสอบข้อมูลบัตรประจำตัวคนพิการและสิทธิสวัสดิการอิเล็กทรอนิกส์", url: "https://govwelfare.dep.go.th", badge: "บัตร/สิทธิคนพิการ", icon: "🪪" },
     ],
   },
 ];
