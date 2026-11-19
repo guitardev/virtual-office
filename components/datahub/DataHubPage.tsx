@@ -72,7 +72,7 @@ export const MISSION_GROUPS: MissionGroup[] = [
     systems: [
       { name: "ระบบ e-GP (กรมบัญชีกลาง)", desc: "ระบบการจัดซื้อจัดจ้างภาครัฐด้วยอิเล็กทรอนิกส์", url: "https://www.gprocurement.go.th", badge: "จัดซื้อจัดจ้าง", icon: "💼" },
       { name: "ระบบ New GFMIS Thai", desc: "ระบบบริหารการเงินการคลังภาครัฐแบบอิเล็กทรอนิกส์ใหม่ (Portal)", url: "https://portal.gfmis.go.th", badge: "การเงิน/งบประมาณ", icon: "💳" },
-      { name: "ระบบสารบรรณอิเล็กทรอนิกส์ (e-Saraban)", desc: "ระบบสารบรรณอิเล็กทรอนิกส์ภาครัฐกลาง (DGA)", url: "https://saraban.egov.go.th", badge: "สารบรรณ", icon: "📨" },
+      { name: "ระบบสารบรรณอิเล็กทรอนิกส์ พม. (MSO e-Office)", desc: "ระบบรับส่งหนังสือราชการและสารบรรณอิเล็กทรอนิกส์ พม.", url: "https://mso.eoffice.go.th", badge: "สารบรรณ", icon: "📨" },
     ],
   },
   {
