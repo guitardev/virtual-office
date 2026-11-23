@@ -11,6 +11,7 @@ import {
   countWorkingDaysInRange,
   DEFAULT_LEAVE_ORDER_OPERATOR,
   detectLeaveOverlap,
+  findLatestApprovedGeneralLeave,
   formatThaiDateFull,
   formatThaiDateShort,
   getEffectiveLeaveDays,
@@ -26,6 +27,7 @@ import {
   LeaveFormKind,
   LeaveRequestItem,
   LeaveType,
+  normalizeAndValidateLastLeave,
   resolveLeaveAttachmentUrl,
   SOLE_LEAVE_APPROVER,
 } from "@/lib/leave-utils";
@@ -634,24 +636,72 @@ export default function LeavePage() {
     }
   };
 
-  // Auto-fill last approved general leave for Form 1
+  // Auto-fill last approved general leave for Form 1 (by latest calendar endDate/startDate)
+  const lastLeaveAutoFilledRef = useRef(false);
   useEffect(() => {
-    if (formKind !== "general") return;
-    const latestApproved = myRequests.find(
-      (r) =>
-        r.status === "approved" &&
-        (r.leaveType === "sick_leave" ||
-          r.leaveType === "personal_leave" ||
-          r.leaveType === "maternity_leave") &&
-        getEffectiveLeaveDays(r) > 0
-    );
-    if (latestApproved && !lastLeaveStartDate) {
+    lastLeaveAutoFilledRef.current = false;
+  }, [fiscalYear, currentUser?.id]);
+
+  useEffect(() => {
+    if (formKind !== "general" || editingReturnedLeave) return;
+    if (lastLeaveAutoFilledRef.current || lastLeaveStartDate) return;
+    const latestApproved = findLatestApprovedGeneralLeave(myRequests);
+    if (latestApproved) {
+      lastLeaveAutoFilledRef.current = true;
       setLastLeaveType(latestApproved.leaveType);
       setLastLeaveStartDate(latestApproved.startDate);
       setLastLeaveEndDate(latestApproved.endDate);
       setLastLeaveDays(String(getEffectiveLeaveDays(latestApproved)));
     }
-  }, [formKind, myRequests, lastLeaveStartDate]);
+  }, [formKind, myRequests, lastLeaveStartDate, editingReturnedLeave]);
+
+  const lastLeaveValidation = useMemo(
+    () =>
+      formKind === "general"
+        ? normalizeAndValidateLastLeave({
+            lastLeaveType,
+            lastLeaveStartDate,
+            lastLeaveEndDate,
+            lastLeaveDays,
+            holidayMap,
+          })
+        : {
+            lastLeaveType: null,
+            lastLeaveStartDate: null,
+            lastLeaveEndDate: null,
+            lastLeaveDays: null,
+            calculatedDays: null,
+            error: null,
+          },
+    [
+      formKind,
+      lastLeaveType,
+      lastLeaveStartDate,
+      lastLeaveEndDate,
+      lastLeaveDays,
+      holidayMap,
+    ]
+  );
+
+  const recalcLastLeaveDays = (
+    nextType: string,
+    nextStart: string,
+    nextEnd: string
+  ) => {
+    if (!nextStart || !nextEnd || nextEnd < nextStart) {
+      setLastLeaveDays("");
+      return;
+    }
+    const calcType: LeaveType =
+      nextType === "maternity_leave" ? "maternity_leave" : "sick_leave";
+    const calc = calculateLeavePeriodDetails({
+      startDate: nextStart,
+      endDate: nextEnd,
+      leaveType: calcType,
+      holidayMap,
+    });
+    setLastLeaveDays(calc.totalWorkingDays > 0 ? String(calc.totalWorkingDays) : "");
+  };
 
   // Compute current user's stats in fiscalYear + half-year 23-day rule (boundary-safe + effectiveDays)
   const myStats = useMemo(() => {
@@ -791,6 +841,14 @@ export default function LeavePage() {
     setEndDate(leave.endDate);
     setContactInfo(leave.contactInfo);
     setContactPhone(leave.contactPhone);
+    setLastLeaveType(leave.lastLeaveType || "");
+    setLastLeaveStartDate(leave.lastLeaveStartDate || "");
+    setLastLeaveEndDate(leave.lastLeaveEndDate || "");
+    setLastLeaveDays(
+      leave.lastLeaveDays !== null && leave.lastLeaveDays !== undefined
+        ? String(leave.lastLeaveDays)
+        : ""
+    );
     setAttachmentUrl(leave.attachmentUrl);
     setAttachmentName(leave.attachmentName);
     setAttachmentStorage(leave.attachmentStorage);
@@ -856,6 +914,10 @@ export default function LeavePage() {
       showToast("⚠️ กรุณาเลือกใบลาเดิมและระบุช่วงวันที่ขอยกเลิกให้ถูกต้อง");
       return;
     }
+    if (formKind === "general" && lastLeaveValidation.error) {
+      showToast(`⚠️ ${lastLeaveValidation.error}`);
+      return;
+    }
 
     const actingMember = members.find((m) => m.id === actingPersonUserId);
     const verifierMember = members.find((m) => m.id === verifierUserId);
@@ -877,6 +939,10 @@ export default function LeavePage() {
             endDate,
             leaveDayPeriod,
             reason,
+            lastLeaveType: lastLeaveValidation.lastLeaveType,
+            lastLeaveStartDate: lastLeaveValidation.lastLeaveStartDate,
+            lastLeaveEndDate: lastLeaveValidation.lastLeaveEndDate,
+            lastLeaveDays: lastLeaveValidation.lastLeaveDays,
             contactInfo,
             contactPhone,
             attachmentUrl,
@@ -931,10 +997,10 @@ export default function LeavePage() {
           startDate,
           endDate,
           cancelTargetLeaveId: formKind === "cancel" ? cancelTargetLeaveId : null,
-          lastLeaveType: lastLeaveType || null,
-          lastLeaveStartDate: lastLeaveStartDate || null,
-          lastLeaveEndDate: lastLeaveEndDate || null,
-          lastLeaveDays: lastLeaveDays ? Number(lastLeaveDays) : null,
+          lastLeaveType: lastLeaveValidation.lastLeaveType,
+          lastLeaveStartDate: lastLeaveValidation.lastLeaveStartDate,
+          lastLeaveEndDate: lastLeaveValidation.lastLeaveEndDate,
+          lastLeaveDays: lastLeaveValidation.lastLeaveDays,
           contactInfo,
           contactPhone,
           vacationAccumulatedDays,
@@ -2007,13 +2073,40 @@ export default function LeavePage() {
 
               {formKind === "general" && (
                 <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
-                  <div className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                    ประวัติการลาครั้งสุดท้าย (ถ้ามี — ระบบดึงจากใบลาล่าสุดให้อัตโนมัติ)
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                      ประวัติการลาครั้งสุดท้าย (ถ้ามี — ระบบดึงจากใบลาล่าสุดและคำนวณวันทำการให้อัตโนมัติ)
+                    </div>
+                    {(lastLeaveType || lastLeaveStartDate || lastLeaveEndDate || lastLeaveDays) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          lastLeaveAutoFilledRef.current = true;
+                          setLastLeaveType("");
+                          setLastLeaveStartDate("");
+                          setLastLeaveEndDate("");
+                          setLastLeaveDays("");
+                        }}
+                        className="text-[11px] font-semibold text-slate-500 hover:text-rose-600 cursor-pointer"
+                      >
+                        ✕ ล้างข้อมูลลาครั้งสุดท้าย
+                      </button>
+                    )}
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                     <select
                       value={lastLeaveType}
-                      onChange={(e) => setLastLeaveType(e.target.value)}
+                      onChange={(e) => {
+                        const nextType = e.target.value;
+                        setLastLeaveType(nextType);
+                        if (lastLeaveStartDate && lastLeaveEndDate) {
+                          recalcLastLeaveDays(
+                            nextType,
+                            lastLeaveStartDate,
+                            lastLeaveEndDate
+                          );
+                        }
+                      }}
                       className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
                     >
                       <option value="">-- ไม่ระบุ --</option>
@@ -2024,24 +2117,64 @@ export default function LeavePage() {
                     <input
                       type="date"
                       value={lastLeaveStartDate}
-                      onChange={(e) => setLastLeaveStartDate(e.target.value)}
+                      onChange={(e) => {
+                        const nextStart = e.target.value;
+                        const nextEnd =
+                          !lastLeaveEndDate || nextStart > lastLeaveEndDate
+                            ? nextStart
+                            : lastLeaveEndDate;
+                        setLastLeaveStartDate(nextStart);
+                        setLastLeaveEndDate(nextEnd);
+                        recalcLastLeaveDays(lastLeaveType, nextStart, nextEnd);
+                      }}
                       className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
                     />
                     <input
                       type="date"
                       value={lastLeaveEndDate}
-                      onChange={(e) => setLastLeaveEndDate(e.target.value)}
+                      min={lastLeaveStartDate || undefined}
+                      onChange={(e) => {
+                        const nextEnd = e.target.value;
+                        setLastLeaveEndDate(nextEnd);
+                        recalcLastLeaveDays(
+                          lastLeaveType,
+                          lastLeaveStartDate,
+                          nextEnd
+                        );
+                      }}
                       className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
                     />
                     <input
                       type="number"
                       step="0.5"
+                      min="0.5"
+                      max={lastLeaveValidation.calculatedDays ?? undefined}
                       placeholder="จำนวนวัน"
                       value={lastLeaveDays}
                       onChange={(e) => setLastLeaveDays(e.target.value)}
-                      className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                      className={`rounded-xl border px-3 py-2 text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white ${
+                        lastLeaveValidation.error
+                          ? "border-rose-400 dark:border-rose-600"
+                          : "border-slate-200 dark:border-slate-700"
+                      }`}
                     />
                   </div>
+                  {lastLeaveValidation.error ? (
+                    <div className="text-xs font-semibold text-rose-600 dark:text-rose-400">
+                      🚫 {lastLeaveValidation.error}
+                    </div>
+                  ) : (
+                    lastLeaveStartDate &&
+                    lastLeaveEndDate &&
+                    lastLeaveValidation.calculatedDays !== null && (
+                      <div className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                        ✓ คำนวณอัตโนมัติ: {lastLeaveValidation.calculatedDays}{" "}
+                        {lastLeaveType === "maternity_leave"
+                          ? "วันปฏิทิน"
+                          : "วันทำการ (หักเสาร์-อาทิตย์และวันหยุดราชการแล้ว · ปรับเป็น 0.5 ได้กรณีลาครึ่งวัน)"}
+                      </div>
+                    )
+                  )}
                 </div>
               )}
             </div>
@@ -2312,7 +2445,8 @@ export default function LeavePage() {
                 overlapCheck.hasOverlap ||
                 totalWorkingDays <= 0 ||
                 isVacationOverQuota ||
-                Boolean(isCancelInvalidRange)
+                Boolean(isCancelInvalidRange) ||
+                Boolean(lastLeaveValidation.error)
               }
               className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-semibold shadow-sm cursor-pointer"
             >

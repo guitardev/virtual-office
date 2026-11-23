@@ -629,3 +629,189 @@ export function formatThaiDateSlash(dateStr?: string | null): string {
   if (!p.day) return "........ / ........ / ........";
   return `${p.day} / ${p.monthShort} / ${p.yearBE}`;
 }
+
+export interface LastLeaveNormalizationResult {
+  lastLeaveType: string | null;
+  lastLeaveStartDate: string | null;
+  lastLeaveEndDate: string | null;
+  lastLeaveDays: number | null;
+  calculatedDays: number | null;
+  error: string | null;
+}
+
+/**
+ * หาใบลาทั่วไป (ป่วย/กิจ/คลอด) ที่ได้รับอนุญาตแล้วและมีช่วงวันที่ลาล่าสุดตามปฏิทินจริง (endDate -> startDate)
+ */
+export function findLatestApprovedGeneralLeave(
+  requests: LeaveRequestItem[]
+): LeaveRequestItem | null {
+  const candidates = requests.filter(
+    (r) =>
+      r.status === "approved" &&
+      (r.leaveType === "sick_leave" ||
+        r.leaveType === "personal_leave" ||
+        r.leaveType === "maternity_leave") &&
+      getEffectiveLeaveDays(r) > 0
+  );
+  if (candidates.length === 0) return null;
+
+  candidates.sort((a, b) => {
+    const endCmp = String(b.endDate || "").localeCompare(String(a.endDate || ""));
+    if (endCmp !== 0) return endCmp;
+    const startCmp = String(b.startDate || "").localeCompare(String(a.startDate || ""));
+    if (startCmp !== 0) return startCmp;
+    return String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
+  });
+  return candidates[0];
+}
+
+/**
+ * คำนวณและตรวจสอบความถูกต้องของข้อมูล "ประวัติการลาครั้งสุดท้าย"
+ * - ถ้าไม่กรอกประเภทและวันที่ จะคืนค่า null ทั้งหมด (ไม่บันทึก 0.0)
+ * - ถ้ากรอกช่วงวันที่ จะคำนวณวันทำการจริง (หักเสาร์-อาทิตย์และวันหยุดราชการไทยสำหรับป่วย/กิจ, นับวันปฏิทินสำหรับคลอด)
+ * - ป้องกันวันสิ้นสุดน้อยกว่าวันเริ่มต้น และป้องกันกรอกจำนวนวันเกินวันทำการจริงของช่วงวันที่นั้น (ยังคงอนุญาต 0.5 สำหรับวันเดียว)
+ */
+export function normalizeAndValidateLastLeave({
+  lastLeaveType,
+  lastLeaveStartDate,
+  lastLeaveEndDate,
+  lastLeaveDays,
+  holidayMap = DEFAULT_THAI_HOLIDAYS,
+}: {
+  lastLeaveType?: string | null;
+  lastLeaveStartDate?: string | null;
+  lastLeaveEndDate?: string | null;
+  lastLeaveDays?: number | string | null;
+  holidayMap?: Record<string, string>;
+}): LastLeaveNormalizationResult {
+  const type = String(lastLeaveType || "").trim() || null;
+  const start = String(lastLeaveStartDate || "").trim().slice(0, 10) || null;
+  const end = String(lastLeaveEndDate || "").trim().slice(0, 10) || null;
+
+  const rawDaysStr =
+    lastLeaveDays !== null && lastLeaveDays !== undefined
+      ? String(lastLeaveDays).trim()
+      : "";
+  const parsedDays =
+    rawDaysStr !== "" && !Number.isNaN(Number(rawDaysStr))
+      ? Math.round(Number(rawDaysStr) * 10) / 10
+      : null;
+
+  if (!type && !start && !end) {
+    return {
+      lastLeaveType: null,
+      lastLeaveStartDate: null,
+      lastLeaveEndDate: null,
+      lastLeaveDays: null,
+      calculatedDays: null,
+      error: null,
+    };
+  }
+
+  if ((start && !end) || (!start && end)) {
+    return {
+      lastLeaveType: type,
+      lastLeaveStartDate: start,
+      lastLeaveEndDate: end,
+      lastLeaveDays: parsedDays,
+      calculatedDays: null,
+      error: "กรุณาระบุทั้งวันที่เริ่มต้นและวันที่สิ้นสุดของการลาครั้งสุดท้ายให้ครบถ้วน",
+    };
+  }
+
+  if (start && end) {
+    if (end < start) {
+      return {
+        lastLeaveType: type,
+        lastLeaveStartDate: start,
+        lastLeaveEndDate: end,
+        lastLeaveDays: parsedDays,
+        calculatedDays: null,
+        error: "วันที่สิ้นสุดการลาครั้งสุดท้ายต้องไม่น้อยกว่าวันที่เริ่มต้น",
+      };
+    }
+
+    const calcType: LeaveType =
+      type === "maternity_leave" ? "maternity_leave" : "sick_leave";
+    const calc = calculateLeavePeriodDetails({
+      startDate: start,
+      endDate: end,
+      leaveType: calcType,
+      holidayMap,
+    });
+
+    if (calc.totalWorkingDays <= 0) {
+      return {
+        lastLeaveType: type,
+        lastLeaveStartDate: start,
+        lastLeaveEndDate: end,
+        lastLeaveDays: null,
+        calculatedDays: 0,
+        error: "ช่วงวันที่ลาครั้งสุดท้ายที่ระบุตรงกับวันหยุดทั้งหมด ไม่มีวันทำการ",
+      };
+    }
+
+    if (parsedDays === null) {
+      return {
+        lastLeaveType: type,
+        lastLeaveStartDate: start,
+        lastLeaveEndDate: end,
+        lastLeaveDays: calc.totalWorkingDays,
+        calculatedDays: calc.totalWorkingDays,
+        error: null,
+      };
+    }
+
+    if (parsedDays <= 0) {
+      return {
+        lastLeaveType: type,
+        lastLeaveStartDate: start,
+        lastLeaveEndDate: end,
+        lastLeaveDays: parsedDays,
+        calculatedDays: calc.totalWorkingDays,
+        error: "จำนวนวันลาครั้งสุดท้ายต้องมากกว่า 0 วัน",
+      };
+    }
+
+    if (parsedDays > calc.totalWorkingDays) {
+      return {
+        lastLeaveType: type,
+        lastLeaveStartDate: start,
+        lastLeaveEndDate: end,
+        lastLeaveDays: parsedDays,
+        calculatedDays: calc.totalWorkingDays,
+        error: `จำนวนวันลาครั้งสุดท้าย (${parsedDays} วัน) มากกว่าจำนวนวันทำการจริงในช่วงวันที่ที่ระบุ (${calc.totalWorkingDays} วัน)`,
+      };
+    }
+
+    return {
+      lastLeaveType: type,
+      lastLeaveStartDate: start,
+      lastLeaveEndDate: end,
+      lastLeaveDays: parsedDays,
+      calculatedDays: calc.totalWorkingDays,
+      error: null,
+    };
+  }
+
+  // มีเฉพาะประเภทการลาโดยไม่ได้ระบุวันที่
+  if (parsedDays !== null && parsedDays < 0) {
+    return {
+      lastLeaveType: type,
+      lastLeaveStartDate: null,
+      lastLeaveEndDate: null,
+      lastLeaveDays: parsedDays,
+      calculatedDays: null,
+      error: "จำนวนวันลาครั้งสุดท้ายต้องไม่ติดลบ",
+    };
+  }
+
+  return {
+    lastLeaveType: type,
+    lastLeaveStartDate: null,
+    lastLeaveEndDate: null,
+    lastLeaveDays: parsedDays && parsedDays > 0 ? parsedDays : null,
+    calculatedDays: null,
+    error: null,
+  };
+}

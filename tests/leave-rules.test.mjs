@@ -622,3 +622,125 @@ describe("Individual Leave Control Register (ทะเบียนคุมว�
     assert.ok(sheetXml.includes('<mergeCell ref="L5:L6"/>'));
   });
 });
+
+describe("Last Leave History Calculation & Validation (ประวัติการลาครั้งสุดท้าย)", async () => {
+  const { normalizeAndValidateLastLeave, findLatestApprovedGeneralLeave } =
+    await import("../lib/leave-utils.ts");
+
+  it("should return all nulls when last leave fields are blank (never storing 0.0)", () => {
+    const res = normalizeAndValidateLastLeave({
+      lastLeaveType: "",
+      lastLeaveStartDate: "",
+      lastLeaveEndDate: "",
+      lastLeaveDays: "0",
+    });
+    assert.equal(res.error, null);
+    assert.equal(res.lastLeaveType, null);
+    assert.equal(res.lastLeaveStartDate, null);
+    assert.equal(res.lastLeaveEndDate, null);
+    assert.equal(res.lastLeaveDays, null);
+  });
+
+  it("should auto-calculate 1 working day for 2026-10-30..2026-10-30, allow 0.5, and reject 2 days", () => {
+    const autoCalc = normalizeAndValidateLastLeave({
+      lastLeaveType: "sick_leave",
+      lastLeaveStartDate: "2026-10-30",
+      lastLeaveEndDate: "2026-10-30",
+      lastLeaveDays: "",
+    });
+    assert.equal(autoCalc.error, null);
+    assert.equal(autoCalc.lastLeaveDays, 1);
+    assert.equal(autoCalc.calculatedDays, 1);
+
+    const halfDay = normalizeAndValidateLastLeave({
+      lastLeaveType: "sick_leave",
+      lastLeaveStartDate: "2026-10-30",
+      lastLeaveEndDate: "2026-10-30",
+      lastLeaveDays: "0.5",
+    });
+    assert.equal(halfDay.error, null);
+    assert.equal(halfDay.lastLeaveDays, 0.5);
+
+    const overDays = normalizeAndValidateLastLeave({
+      lastLeaveType: "sick_leave",
+      lastLeaveStartDate: "2026-10-30",
+      lastLeaveEndDate: "2026-10-30",
+      lastLeaveDays: "2",
+    });
+    assert.ok(overDays.error && overDays.error.includes("มากกว่าจำนวนวันทำการจริง"));
+  });
+
+  it("should exclude weekends/holidays for sick/personal last leave and count calendar days for maternity", () => {
+    // Songkran range 2026-04-10..2026-04-17: 3 working days for sick/personal, 8 calendar days for maternity
+    const personal = normalizeAndValidateLastLeave({
+      lastLeaveType: "personal_leave",
+      lastLeaveStartDate: "2026-04-10",
+      lastLeaveEndDate: "2026-04-17",
+      lastLeaveDays: "",
+    });
+    assert.equal(personal.error, null);
+    assert.equal(personal.lastLeaveDays, 3);
+
+    const maternity = normalizeAndValidateLastLeave({
+      lastLeaveType: "maternity_leave",
+      lastLeaveStartDate: "2026-04-10",
+      lastLeaveEndDate: "2026-04-17",
+      lastLeaveDays: "",
+    });
+    assert.equal(maternity.error, null);
+    assert.equal(maternity.lastLeaveDays, 8);
+  });
+
+  it("should reject endDate < startDate, incomplete date pair, and holiday-only ranges", () => {
+    const reversed = normalizeAndValidateLastLeave({
+      lastLeaveType: "sick_leave",
+      lastLeaveStartDate: "2026-11-10",
+      lastLeaveEndDate: "2026-11-05",
+      lastLeaveDays: "1",
+    });
+    assert.ok(reversed.error);
+
+    const incomplete = normalizeAndValidateLastLeave({
+      lastLeaveType: "sick_leave",
+      lastLeaveStartDate: "2026-11-10",
+      lastLeaveEndDate: "",
+      lastLeaveDays: "1",
+    });
+    assert.ok(incomplete.error);
+
+    const holidayOnly = normalizeAndValidateLastLeave({
+      lastLeaveType: "sick_leave",
+      lastLeaveStartDate: "2026-04-13",
+      lastLeaveEndDate: "2026-04-15",
+      lastLeaveDays: "",
+    });
+    assert.ok(holidayOnly.error);
+  });
+
+  it("should pick the latest approved general leave by calendar endDate/startDate rather than createdAt", () => {
+    const olderLeaveCreatedLater = makeMockLeave({
+      id: "older-date-newer-created",
+      leaveType: "sick_leave",
+      startDate: "2026-10-10",
+      endDate: "2026-10-10",
+      totalWorkingDays: 1,
+      status: "approved",
+      createdAt: "2026-11-20T09:00:00Z",
+    });
+    const newerLeaveCreatedEarlier = makeMockLeave({
+      id: "newer-date-older-created",
+      leaveType: "personal_leave",
+      startDate: "2026-11-15",
+      endDate: "2026-11-16",
+      totalWorkingDays: 2,
+      status: "approved",
+      createdAt: "2026-11-01T09:00:00Z",
+    });
+
+    const latest = findLatestApprovedGeneralLeave([
+      olderLeaveCreatedLater,
+      newerLeaveCreatedEarlier,
+    ]);
+    assert.equal(latest?.id, "newer-date-older-created");
+  });
+});

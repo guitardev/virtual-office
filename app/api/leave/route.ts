@@ -14,6 +14,7 @@ import {
   LeaveDayPeriod,
   LeaveRequestItem,
   LeaveType,
+  normalizeAndValidateLastLeave,
   SOLE_LEAVE_APPROVER,
 } from "@/lib/leave-utils";
 import {
@@ -848,6 +849,20 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const lastLeaveCheck = normalizeAndValidateLastLeave({
+      lastLeaveType,
+      lastLeaveStartDate,
+      lastLeaveEndDate,
+      lastLeaveDays,
+      holidayMap,
+    });
+    if (lastLeaveCheck.error) {
+      return NextResponse.json(
+        { success: false, error: lastLeaveCheck.error },
+        { status: 400 }
+      );
+    }
+
     // ผู้มีอำนาจสั่งอนุญาตตามระเบียบมีเพียงผู้เดียวคือ นางสาวมะลิวัน สิทธิโยธี (syno_มะลิวัน)
     const soleApprover = await resolveSoleApproverInfo();
     const resolvedApproverId = soleApprover.userId;
@@ -889,13 +904,10 @@ export async function POST(req: NextRequest) {
         cancel_target_start_date: cancelTarget ? cancelTarget.startDate : null,
         cancel_target_end_date: cancelTarget ? cancelTarget.endDate : null,
         cancel_target_days: cancelTarget ? cancelTarget.totalWorkingDays : null,
-        last_leave_type: lastLeaveType || null,
-        last_leave_start_date: lastLeaveStartDate || null,
-        last_leave_end_date: lastLeaveEndDate || null,
-        last_leave_days:
-          lastLeaveDays !== undefined && lastLeaveDays !== null && lastLeaveDays !== ""
-            ? Number(lastLeaveDays)
-            : null,
+        last_leave_type: lastLeaveCheck.lastLeaveType,
+        last_leave_start_date: lastLeaveCheck.lastLeaveStartDate,
+        last_leave_end_date: lastLeaveCheck.lastLeaveEndDate,
+        last_leave_days: lastLeaveCheck.lastLeaveDays,
         contact_info: contactInfo || "",
         contact_phone: contactPhone || "",
         vacation_accumulated_days: resolvedAcc,
@@ -1019,6 +1031,10 @@ export async function PATCH(req: NextRequest) {
       endDate,
       leaveDayPeriod,
       reason,
+      lastLeaveType,
+      lastLeaveStartDate,
+      lastLeaveEndDate,
+      lastLeaveDays,
       contactInfo,
       contactPhone,
       attachmentUrl,
@@ -1322,6 +1338,47 @@ export async function PATCH(req: NextRequest) {
         }
       }
 
+      const hasLastLeaveUpdate =
+        lastLeaveType !== undefined ||
+        lastLeaveStartDate !== undefined ||
+        lastLeaveEndDate !== undefined ||
+        lastLeaveDays !== undefined;
+      let nextLastLeave = {
+        lastLeaveType: existing.lastLeaveType,
+        lastLeaveStartDate: existing.lastLeaveStartDate,
+        lastLeaveEndDate: existing.lastLeaveEndDate,
+        lastLeaveDays: existing.lastLeaveDays,
+      };
+      if (hasLastLeaveUpdate) {
+        const checkedLast = normalizeAndValidateLastLeave({
+          lastLeaveType:
+            lastLeaveType !== undefined ? lastLeaveType : existing.lastLeaveType,
+          lastLeaveStartDate:
+            lastLeaveStartDate !== undefined
+              ? lastLeaveStartDate
+              : existing.lastLeaveStartDate,
+          lastLeaveEndDate:
+            lastLeaveEndDate !== undefined
+              ? lastLeaveEndDate
+              : existing.lastLeaveEndDate,
+          lastLeaveDays:
+            lastLeaveDays !== undefined ? lastLeaveDays : existing.lastLeaveDays,
+          holidayMap,
+        });
+        if (checkedLast.error) {
+          return NextResponse.json(
+            { success: false, error: checkedLast.error },
+            { status: 400 }
+          );
+        }
+        nextLastLeave = {
+          lastLeaveType: checkedLast.lastLeaveType,
+          lastLeaveStartDate: checkedLast.lastLeaveStartDate,
+          lastLeaveEndDate: checkedLast.lastLeaveEndDate,
+          lastLeaveDays: checkedLast.lastLeaveDays,
+        };
+      }
+
       const soleApprover = await resolveSoleApproverInfo();
 
       const { data: updated, error } = await requireSupabase()
@@ -1334,6 +1391,10 @@ export async function PATCH(req: NextRequest) {
           excluded_holidays: calc.skippedHolidays,
           fiscal_year: nextFy,
           reason: nextReason,
+          last_leave_type: nextLastLeave.lastLeaveType,
+          last_leave_start_date: nextLastLeave.lastLeaveStartDate,
+          last_leave_end_date: nextLastLeave.lastLeaveEndDate,
+          last_leave_days: nextLastLeave.lastLeaveDays,
           contact_info: contactInfo !== undefined ? contactInfo : existing.contactInfo,
           contact_phone:
             contactPhone !== undefined ? contactPhone : existing.contactPhone,

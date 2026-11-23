@@ -340,4 +340,37 @@ test.describe("ระบบใบลาอิเล็กทรอนิกส�
       page.getByRole("button", { name: /ดาวน์โหลด Excel/ })
     ).toBeVisible();
   });
+
+  test("6. คำนวณจำนวนวันลาครั้งสุดท้ายอัตโนมัติตามช่วงวันที่ และป้องกันกรอกเกินวันทำการจริง", async ({
+    page,
+  }) => {
+    const lastLeaveBox = page.locator("div.rounded-xl").filter({
+      hasText: "ประวัติการลาครั้งสุดท้าย",
+    });
+    const lastTypeSelect = lastLeaveBox.locator("select");
+    const lastStartInput = lastLeaveBox.locator('input[type="date"]').nth(0);
+    const lastEndInput = lastLeaveBox.locator('input[type="date"]').nth(1);
+    const lastDaysInput = lastLeaveBox.locator('input[type="number"]');
+
+    // เลือกลาป่วย 2026-10-30 .. 2026-10-30 -> ต้องคำนวณอัตโนมัติเป็น 1 วัน
+    await lastTypeSelect.selectOption("sick_leave");
+    await lastStartInput.fill("2026-10-30");
+    await expect(lastEndInput).toHaveValue("2026-10-30");
+    await expect(lastDaysInput).toHaveValue("1");
+
+    // ทดลองกรอก 2 วัน (เกินวันทำการจริง 1 วัน) -> ต้องแสดงข้อความเตือนและปิดปุ่มส่ง
+    await lastDaysInput.fill("2");
+    await expect(
+      lastLeaveBox.getByText(/มากกว่าจำนวนวันทำการจริง/)
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /ส่งใบลาเข้าสู่สายการพิจารณา/ })
+    ).toBeDisabled();
+
+    // ปรับเป็น 0.5 (ครึ่งวัน) -> ผ่าน ไม่มีข้อความเตือน
+    await lastDaysInput.fill("0.5");
+    await expect(
+      lastLeaveBox.getByText(/มากกว่าจำนวนวันทำการจริง/)
+    ).toHaveCount(0);
+  });
 });
