@@ -4,11 +4,8 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Member, ChatGroup, ChatMessage, ChatAttachment, AttachmentType } from "@/lib/types";
 import { ROLE_CONFIG } from "@/lib/rbac";
 import {
-  loadStoredChatGroups,
-  saveStoredChatGroups,
+  clearLegacyChatLocalStorage,
   syncDivisionGroupMembers,
-  loadStoredChatMessages,
-  saveStoredChatMessages,
   detectAttachmentType,
   formatAttachmentSize,
   ATTACHMENT_TYPE_CONFIG,
@@ -119,37 +116,22 @@ export function ChatPage({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Load chat state from storage and sync with Supabase and latest members
+  // Load chat state strictly from Supabase (purge any legacy localStorage mock/cache)
   useEffect(() => {
-    const loadedGroups = loadStoredChatGroups(members);
-    const loadedMessages = loadStoredChatMessages();
-    setGroups(loadedGroups);
-    setMessages(loadedMessages);
+    clearLegacyChatLocalStorage();
 
     let isMounted = true;
 
     fetchChatGroups().then((remoteGroups) => {
-      if (isMounted && remoteGroups && remoteGroups.length > 0) {
-        setGroups((prev) => {
-          const remoteIds = new Set(remoteGroups.map((g) => g.id));
-          const unsynced = prev.filter((g) => !remoteIds.has(g.id));
-          const merged = [...remoteGroups, ...unsynced];
-          const synced = syncDivisionGroupMembers(merged, members);
-          saveStoredChatGroups(synced);
-          return synced;
-        });
+      if (isMounted) {
+        const synced = syncDivisionGroupMembers(remoteGroups || [], members);
+        setGroups(synced);
       }
     });
 
     fetchChatMessages().then((remoteMsgs) => {
-      if (isMounted && remoteMsgs) {
-        setMessages((prev) => {
-          const remoteIds = new Set(remoteMsgs.map((m) => m.id));
-          const unsynced = prev.filter((m) => !remoteIds.has(m.id));
-          const merged = [...remoteMsgs, ...unsynced];
-          saveStoredChatMessages(merged);
-          return merged;
-        });
+      if (isMounted) {
+        setMessages(remoteMsgs || []);
       }
     });
 
@@ -159,9 +141,7 @@ export function ChatPage({
         if (!isMounted) return;
         setMessages((prev) => {
           if (prev.some((m) => m.id === incomingMsg.id)) return prev;
-          const updated = [...prev, incomingMsg];
-          saveStoredChatMessages(updated);
-          return updated;
+          return [...prev, incomingMsg];
         });
       },
       onUpdate: (updatedMsg) => {
@@ -169,23 +149,16 @@ export function ChatPage({
         setMessages((prev) => {
           const idx = prev.findIndex((m) => m.id === updatedMsg.id);
           if (idx === -1) {
-            const appended = [...prev, updatedMsg];
-            saveStoredChatMessages(appended);
-            return appended;
+            return [...prev, updatedMsg];
           }
           const clone = [...prev];
           clone[idx] = updatedMsg;
-          saveStoredChatMessages(clone);
           return clone;
         });
       },
       onDelete: (deletedId) => {
         if (!isMounted) return;
-        setMessages((prev) => {
-          const filtered = prev.filter((m) => m.id !== deletedId);
-          saveStoredChatMessages(filtered);
-          return filtered;
-        });
+        setMessages((prev) => prev.filter((m) => m.id !== deletedId));
       },
     });
 
@@ -194,9 +167,7 @@ export function ChatPage({
         if (!isMounted) return;
         setGroups((prev) => {
           if (prev.some((g) => g.id === incomingGroup.id)) return prev;
-          const updated = [...prev, incomingGroup];
-          saveStoredChatGroups(updated);
-          return updated;
+          return syncDivisionGroupMembers([...prev, incomingGroup], members);
         });
       },
       onUpdate: (updatedGroup) => {
@@ -204,23 +175,16 @@ export function ChatPage({
         setGroups((prev) => {
           const idx = prev.findIndex((g) => g.id === updatedGroup.id);
           if (idx === -1) {
-            const appended = [...prev, updatedGroup];
-            saveStoredChatGroups(appended);
-            return appended;
+            return syncDivisionGroupMembers([...prev, updatedGroup], members);
           }
           const clone = [...prev];
           clone[idx] = updatedGroup;
-          saveStoredChatGroups(clone);
-          return clone;
+          return syncDivisionGroupMembers(clone, members);
         });
       },
       onDelete: (deletedGroupId) => {
         if (!isMounted) return;
-        setGroups((prev) => {
-          const filtered = prev.filter((g) => g.id !== deletedGroupId);
-          saveStoredChatGroups(filtered);
-          return filtered;
-        });
+        setGroups((prev) => prev.filter((g) => g.id !== deletedGroupId));
       },
     });
 
@@ -788,7 +752,6 @@ export function ChatPage({
 
     const updatedMessages = [...messages, newMsg];
     setMessages(updatedMessages);
-    saveStoredChatMessages(updatedMessages);
     sendChatMessage(newMsg).catch(() => {});
 
     setNewMessageText("");
@@ -818,14 +781,12 @@ export function ChatPage({
       return { ...m, isPinned: nextPin };
     });
     setMessages(updated);
-    saveStoredChatMessages(updated);
   };
 
   // Create new group
   const handleCreateGroup = (newGroup: ChatGroup) => {
     const updatedGroups = [...groups, newGroup];
     setGroups(updatedGroups);
-    saveStoredChatGroups(updatedGroups);
     saveChatGroup(newGroup).catch(() => {});
     setActiveGroupId(newGroup.id);
     showToast(`🎉 สร้างกลุ่มแชท "${newGroup.name}" สำเร็จ!`);
@@ -838,7 +799,6 @@ export function ChatPage({
       return { ...g, memberIds: newMemberIds };
     });
     setGroups(updatedGroups);
-    saveStoredChatGroups(updatedGroups);
     const targetGroup = groups.find((g) => g.id === groupId);
     if (targetGroup) {
       saveChatGroup({ ...targetGroup, memberIds: newMemberIds }).catch(() => {});
@@ -857,11 +817,9 @@ export function ChatPage({
 
     const updatedGroups = groups.filter((g) => g.id !== groupId);
     setGroups(updatedGroups);
-    saveStoredChatGroups(updatedGroups);
 
     const updatedMessages = messages.filter((m) => m.groupId !== groupId);
     setMessages(updatedMessages);
-    saveStoredChatMessages(updatedMessages);
 
     // If currently active, switch to another accessible group
     if (activeGroupId === groupId) {

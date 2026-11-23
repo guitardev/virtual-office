@@ -1,179 +1,26 @@
-import { AttachmentType, ChatGroup, ChatMessage, Member } from "./types";
+import { AttachmentType, ChatGroup, Member } from "./types";
 
-export const DEFAULT_CHAT_GROUPS: ChatGroup[] = [
-  {
-    id: "ch_all_staff",
-    name: "ประกาศและประสานงานกลาง พมจ.",
-    description: "ห้องสื่อสารและประสานงานภารกิจส่วนกลาง รวมข้าราชการและเจ้าหน้าที่ทุกกลุ่มงาน",
-    icon: "🏢",
-    type: "announcement",
-    isOfficial: true,
-    memberIds: [],
-    createdAt: "1 ต.ค. 2569",
-    createdBy: "system",
-  },
-  {
-    id: "ch_executive",
-    name: "คณะกรรมการบริหารสำนักงาน",
-    description: "ห้องประชุมปรึกษาข้อราชการเร่งด่วนสำหรับ พมจ. และหัวหน้ากลุ่ม/ฝ่าย",
-    icon: "👑",
-    type: "division",
-    division: "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร (ผู้บริหาร)",
-    isOfficial: true,
-    memberIds: [],
-    createdAt: "1 ต.ค. 2569",
-    createdBy: "system",
-  },
-  {
-    id: "ch_general_admin",
-    name: "ฝ่ายบริหารทั่วไป",
-    description: "งานสารบรรณ การเงินและบัญชี ยานพาหนะ พัสดุ และการบริหารงานบุคคล",
-    icon: "📁",
-    type: "division",
-    division: "ฝ่ายบริหารทั่วไป",
-    isOfficial: true,
-    memberIds: [],
-    createdAt: "1 ต.ค. 2569",
-    createdBy: "system",
-  },
-  {
-    id: "ch_policy_planning",
-    name: "กลุ่มนโยบายและวิชาการ",
-    description: "จัดทำแผนยุทธศาสตร์ ข้อมูลสารสนเทศ สถิติสังคม และติดตามประเมินผลโครงการ",
-    icon: "📊",
-    type: "division",
-    division: "กลุ่มนโยบายและวิชาการ",
-    isOfficial: true,
-    memberIds: [],
-    createdAt: "1 ต.ค. 2569",
-    createdBy: "system",
-  },
-  {
-    id: "ch_social_dev",
-    name: "กลุ่มการพัฒนาสังคมและสวัสดิการ",
-    description: "การช่วยเหลือผู้ประสบปัญหาทางสังคม เด็ก สตรี ผู้สูงอายุ และกลุ่มเปราะบาง",
-    icon: "🤝",
-    type: "division",
-    division: "กลุ่มการพัฒนาสังคมและสวัสดิการ",
-    isOfficial: true,
-    memberIds: [],
-    createdAt: "1 ต.ค. 2569",
-    createdBy: "system",
-  },
-  {
-    id: "ch_disability_center",
-    name: "ศูนย์บริการคนพิการจังหวัด",
-    description: "การออกบัตรประจำตัวคนพิการ กองทุนส่งเสริมและฟื้นฟูสมรรถภาพคนพิการ",
-    icon: "♿",
-    type: "division",
-    division: "ศูนย์บริการคนพิการจังหวัดกำแพงเพชร",
-    isOfficial: true,
-    memberIds: [],
-    createdAt: "1 ต.ค. 2569",
-    createdBy: "system",
-  },
-  {
-    id: "ch_advisors",
-    name: "คณะทำงานที่ปรึกษาและภาคีเครือข่าย",
-    description: "ประสานงานร่วมกับผู้ทรงคุณวุฒิ คณะอนุกรรมการ และภาคประชาสังคม",
-    icon: "🎓",
-    type: "division",
-    division: "คณะทำงานที่ปรึกษาและภาคีเครือข่ายภายนอก",
-    isOfficial: true,
-    memberIds: [],
-    createdAt: "1 ต.ค. 2569",
-    createdBy: "system",
-  },
-  {
-    id: "ch_project_disability_day",
-    name: "คณะทำงานจัดงานวันคนพิการสากล 2569",
-    description: "กลุ่มโครงการเฉพาะกิจ: วางแผนจัดกิจกรรมมอบโล่ประกาศเกียรติคุณและนิทรรศการ",
-    icon: "🌟",
-    type: "custom",
-    isOfficial: false,
-    memberIds: [],
-    createdAt: "5 ต.ค. 2569",
-    createdBy: "system",
-  },
-];
-
-export const INITIAL_CHAT_MESSAGES: ChatMessage[] = [
-  {
-    id: "msg_init_1",
-    groupId: "ch_all_staff",
-    senderId: "syno_มะลิวัน",
-    senderName: "นางสาวมะลิวัน สิทธิโยธี",
-    senderRole: "manager",
-    senderPosition: "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
-    senderDivision: "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร (ผู้บริหาร)",
-    text: "เรียนข้าราชการและเจ้าหน้าที่ทุกท่าน ขอให้ทุกกลุ่มงานเตรียมข้อมูลสรุปผลการดำเนินงานและการช่วยเหลือกลุ่มเปราะบาง 11 อำเภอ เพื่อเสนอที่ประชุม กบจ. ในสัปดาห์หน้าค่ะ",
-    timestamp: "08:30 น.",
-    isPinned: true,
-  },
-  {
-    id: "msg_init_2",
-    groupId: "ch_all_staff",
-    senderId: "syno_เสกพล",
-    senderName: "นายเสกพล ดิษฐโชติ",
-    senderRole: "manager",
-    senderPosition: "นักพัฒนาสังคมชำนาญการ",
-    senderDivision: "ฝ่ายบริหารทั่วไป",
-    text: "รับทราบครับท่าน พมจ. ฝ่ายบริหารทั่วไปได้จัดเตรียมห้องประชุมใหญ่และระบบถ่ายทอดสดพร้อมแล้วครับ",
-    timestamp: "08:45 น.",
-  },
-  {
-    id: "msg_init_3",
-    groupId: "ch_policy_planning",
-    senderId: "syno_วรวุฒิ",
-    senderName: "นายวรวุฒิ พึ่งพัก",
-    senderRole: "manager",
-    senderPosition: "นักพัฒนาสังคมชำนาญการพิเศษ",
-    senderDivision: "กลุ่มนโยบายและวิชาการ",
-    text: "กลุ่มนโยบายฯ กำลังรวบรวมตัวชี้วัด TPMAP และข้อมูลครัวเรือนเปราะบางทั้ง 11 อำเภอ ผ่าน Data Hub เพื่อเตรียมจัดทำรายงาน กบจ. ครับ",
-    timestamp: "09:00 น.",
-  },
-  {
-    id: "msg_init_4",
-    groupId: "ch_policy_planning",
-    senderId: "syno_ขวัญนภา",
-    senderName: "นางสาวขวัญนภา ศิริสมบัติ",
-    senderRole: "member",
-    senderPosition: "พนักงานจ้างเหมาบริการ",
-    senderDivision: "กลุ่มนโยบายและวิชาการ",
-    text: "อัปโหลดไฟล์สรุปสถิติขึ้นคลังเอกสาร Synology NAS DMS เรียบร้อยแล้วค่ะ",
-    timestamp: "09:15 น.",
-  },
-  {
-    id: "msg_init_5",
-    groupId: "ch_social_dev",
-    senderId: "syno_พนมศักย์",
-    senderName: "นายพนมศักย์ บริภัทรจิรากร",
-    senderRole: "manager",
-    senderPosition: "นักพัฒนาสังคมชำนาญการ",
-    senderDivision: "กลุ่มการพัฒนาสังคมและสวัสดิการ",
-    text: "วันนี้ทีม ศรส. 1300 และนักสังคมสงเคราะห์ลงพื้นที่อำเภอพรานกระต่าย เพื่อช่วยเหลือกรณีเคสฉุกเฉินครับ",
-    timestamp: "09:30 น.",
-  },
-  {
-    id: "msg_init_6",
-    groupId: "ch_disability_center",
-    senderId: "syno_สุมาลี",
-    senderName: "นางสาวสุมาลี แสงแก้ว",
-    senderRole: "manager",
-    senderPosition: "นักสังคมสงเคราะห์ชำนาญการ",
-    senderDivision: "ศูนย์บริการคนพิการจังหวัดกำแพงเพชร",
-    text: "รายงานยอดการพิจารณาคำขอกู้ยืมเงินกองทุนคนพิการ ประจำเดือนนี้ สรุปส่งกลุ่มนโยบายฯ เรียบร้อยค่ะ",
-    timestamp: "09:40 น.",
-  },
-];
-
-const CHAT_GROUPS_STORAGE_KEY = "smartmso_chat_groups_v3";
-const LEGACY_CHAT_GROUPS_STORAGE_KEYS = [
+const LEGACY_CHAT_STORAGE_KEYS = [
+  "smartmso_chat_groups_v3",
   "smartmso_chat_groups_v2",
   "omnioffice_chat_groups_v2",
+  "smartmso_chat_messages_v2",
+  "omnioffice_chat_messages_v2",
 ];
-const CHAT_MESSAGES_STORAGE_KEY = "smartmso_chat_messages_v2";
-const LEGACY_CHAT_MESSAGES_STORAGE_KEY = "omnioffice_chat_messages_v2";
+
+/**
+ * Remove any legacy cached/mock chat data from browser localStorage so only live Supabase data is used
+ */
+export function clearLegacyChatLocalStorage(): void {
+  if (typeof window === "undefined") return;
+  for (const key of LEGACY_CHAT_STORAGE_KEYS) {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // ignore storage errors
+    }
+  }
+}
 
 /**
  * Filter out legacy mock usr_ IDs (usr_mock, usr_1..usr_9999, usr_head_*)
@@ -239,118 +86,6 @@ export function syncDivisionGroupMembers(
       memberIds: cleanExisting,
     };
   });
-}
-
-/**
- * Load stored groups from localStorage with auto-sync
- */
-export function loadStoredChatGroups(allMembers: Member[] = []): ChatGroup[] {
-  if (typeof window === "undefined") {
-    return syncDivisionGroupMembers(DEFAULT_CHAT_GROUPS, allMembers);
-  }
-
-  try {
-    LEGACY_CHAT_GROUPS_STORAGE_KEYS.forEach((k) => {
-      try {
-        localStorage.removeItem(k);
-      } catch {}
-    });
-
-    const raw = localStorage.getItem(CHAT_GROUPS_STORAGE_KEY);
-    let loaded: ChatGroup[] = DEFAULT_CHAT_GROUPS;
-
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        const existingIds = new Set(parsed.map((g: ChatGroup) => g.id));
-        const missingDefaults = DEFAULT_CHAT_GROUPS.filter((d) => !existingIds.has(d.id));
-        loaded = [...parsed, ...missingDefaults];
-      }
-    }
-
-    const synced = syncDivisionGroupMembers(loaded, allMembers);
-    localStorage.setItem(CHAT_GROUPS_STORAGE_KEY, JSON.stringify(synced));
-    return synced;
-  } catch (err) {
-    console.error("Failed to load chat groups:", err);
-    return syncDivisionGroupMembers(DEFAULT_CHAT_GROUPS, allMembers);
-  }
-}
-
-/**
- * Save chat groups to localStorage
- */
-export function saveStoredChatGroups(groups: ChatGroup[]) {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(CHAT_GROUPS_STORAGE_KEY, JSON.stringify(groups));
-  } catch (err) {
-    console.error("Failed to save chat groups:", err);
-  }
-}
-
-/**
- * Load stored messages from localStorage
- */
-export function loadStoredChatMessages(): ChatMessage[] {
-  if (typeof window === "undefined") return INITIAL_CHAT_MESSAGES;
-
-  try {
-    const raw =
-      localStorage.getItem(CHAT_MESSAGES_STORAGE_KEY) ||
-      localStorage.getItem(LEGACY_CHAT_MESSAGES_STORAGE_KEY);
-    if (!raw) return INITIAL_CHAT_MESSAGES;
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_CHAT_MESSAGES;
-  } catch (err) {
-    console.error("Failed to load chat messages:", err);
-    return INITIAL_CHAT_MESSAGES;
-  }
-}
-
-/**
- * Save chat messages to localStorage
- */
-export function saveStoredChatMessages(messages: ChatMessage[]) {
-  if (typeof window === "undefined") return;
-  try {
-    // Proactively sanitize messages so raw dataUrl never exceeds localStorage quota
-    const sanitized = messages.slice(-100).map((m) => {
-      const hasLargeAttUrl = m.attachmentUrl?.startsWith("data:");
-      const hasDataUrls = m.attachments?.some((a) => Boolean(a.dataUrl));
-      if (!hasLargeAttUrl && !hasDataUrls) return m;
-
-      return {
-        ...m,
-        attachmentUrl: hasLargeAttUrl
-          ? (m.attachments?.[0]?.nasPath ? `/api/nas/download?path=${encodeURIComponent(m.attachments[0].nasPath)}` : undefined)
-          : m.attachmentUrl,
-        attachments: m.attachments?.map((a) => ({
-          ...a,
-          dataUrl: undefined,
-          url: a.url?.startsWith("data:")
-            ? (a.nasPath ? `/api/nas/download?path=${encodeURIComponent(a.nasPath)}` : undefined)
-            : a.url,
-        })),
-      };
-    });
-    localStorage.setItem(CHAT_MESSAGES_STORAGE_KEY, JSON.stringify(sanitized));
-  } catch (err) {
-    // Aggressive fallback: keep last 30 messages with minimal fields
-    try {
-      const minimal = messages.slice(-30).map((m) => ({
-        ...m,
-        attachmentUrl: m.attachmentUrl?.startsWith("data:") ? undefined : m.attachmentUrl,
-        attachments: m.attachments?.map((a) => ({
-          ...a,
-          dataUrl: undefined,
-        })),
-      }));
-      localStorage.setItem(CHAT_MESSAGES_STORAGE_KEY, JSON.stringify(minimal));
-    } catch {
-      // Non-fatal fallback
-    }
-  }
 }
 
 /**

@@ -36,7 +36,6 @@ import {
   INITIAL_VEHICLES,
   INITIAL_BOOKING_REQUESTS,
 } from "./carbooking-data";
-import { DEFAULT_CHAT_GROUPS, INITIAL_CHAT_MESSAGES } from "./chat-data";
 import { DEFAULT_ROOMS } from "./meeting-data";
 import {
   formatIsoDateOnly,
@@ -1336,16 +1335,16 @@ export function mapChatMessageToRow(m: ChatMessage): any {
 }
 
 export async function fetchChatGroups(): Promise<ChatGroup[]> {
-  if (!supabase) return DEFAULT_CHAT_GROUPS;
+  if (!supabase) return [];
   try {
     const { data, error } = await supabase
       .from("chat_channels")
       .select("*")
       .order("created_at", { ascending: true });
-    if (error || !data || data.length === 0) return DEFAULT_CHAT_GROUPS;
+    if (error || !data) return [];
     return data.map(mapRowToChatGroup);
   } catch {
-    return DEFAULT_CHAT_GROUPS;
+    return [];
   }
 }
 
@@ -1373,17 +1372,17 @@ export async function deleteChatGroup(groupId: string): Promise<boolean> {
 }
 
 export async function fetchChatMessages(): Promise<ChatMessage[]> {
-  if (!supabase) return INITIAL_CHAT_MESSAGES;
+  if (!supabase) return [];
   try {
     const { data, error } = await supabase
       .from("messages")
       .select("*")
       .order("created_at", { ascending: false })
       .limit(100);
-    if (error || !data || data.length === 0) return INITIAL_CHAT_MESSAGES;
+    if (error || !data) return [];
     return [...data].reverse().map(mapRowToChatMessage);
   } catch {
-    return INITIAL_CHAT_MESSAGES;
+    return [];
   }
 }
 
