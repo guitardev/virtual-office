@@ -8,6 +8,7 @@ import { downloadLeavePdf } from "@/lib/leave-pdf-export";
 import { uploadSmartFile } from "@/lib/smart-upload";
 import {
   calculateLeavePeriodDetails,
+  canUserDeleteInactiveLeave,
   countWorkingDaysInRange,
   DEFAULT_LEAVE_ORDER_OPERATOR,
   detectLeaveOverlap,
@@ -18,6 +19,7 @@ import {
   getFiscalYear,
   getHalfYearRange,
   getTodayIsoDate,
+  isDeletableLeaveStatus,
   LEAVE_DAY_PERIOD_LABELS,
   LEAVE_DAY_PERIOD_SHORT,
   LEAVE_STATUS_META,
@@ -174,7 +176,7 @@ interface LeaveAuthorizedRoleItem {
   updatedAt: string;
 }
 
-type LeaveTab = "form" | "my" | "review" | "summary" | "permissions";
+type LeaveTab = "form" | "my" | "review" | "summary" | "trash" | "permissions";
 
 function ApprovalStepper({ leave }: { leave: LeaveRequestItem }) {
   const isCancel = leave.leaveType === "cancel_leave";
@@ -364,6 +366,17 @@ export default function LeavePage() {
     vacationDaysCarried: 0,
   });
 
+  // Trash / Delete inactive (rejected & cancelled) leaves management
+  const [trashSearch, setTrashSearch] = useState("");
+  const [trashStatusFilter, setTrashStatusFilter] = useState<
+    "all" | "rejected" | "cancelled"
+  >("all");
+  const [selectedTrashIds, setSelectedTrashIds] = useState<string[]>([]);
+  const [deleteConfirmTargets, setDeleteConfirmTargets] = useState<
+    LeaveRequestItem[] | null
+  >(null);
+  const [deletingTrash, setDeletingTrash] = useState(false);
+
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const deepLinkAppliedRef = useRef(false);
 
@@ -398,6 +411,44 @@ export default function LeavePage() {
   const isOrderOperatorOnly =
     isApprover && currentUser?.id !== SOLE_LEAVE_APPROVER.userId;
   const canReviewAny = isVerifier || isSupervisor || isApprover;
+  const canDeleteInactiveLeave = useMemo(
+    () =>
+      canUserDeleteInactiveLeave({
+        userId: currentUser?.id,
+        userRole: currentUserRole,
+        canApproveRole: Boolean(myLeaveRole?.canApprove),
+      }),
+    [currentUser?.id, currentUserRole, myLeaveRole?.canApprove]
+  );
+
+  const deletableRequests = useMemo(
+    () => requests.filter((r) => isDeletableLeaveStatus(r.status)),
+    [requests]
+  );
+  const rejectedTrashCount = useMemo(
+    () => deletableRequests.filter((r) => r.status === "rejected").length,
+    [deletableRequests]
+  );
+  const cancelledTrashCount = useMemo(
+    () => deletableRequests.filter((r) => r.status === "cancelled").length,
+    [deletableRequests]
+  );
+  const filteredDeletableRequests = useMemo(() => {
+    const q = trashSearch.trim().toLowerCase();
+    return deletableRequests.filter((r) => {
+      if (trashStatusFilter !== "all" && r.status !== trashStatusFilter) {
+        return false;
+      }
+      if (!q) return true;
+      return (
+        r.requestNo.toLowerCase().includes(q) ||
+        r.applicantName.toLowerCase().includes(q) ||
+        r.applicantDivision.toLowerCase().includes(q) ||
+        r.reason.toLowerCase().includes(q) ||
+        (r.orderComment || "").toLowerCase().includes(q)
+      );
+    });
+  }, [deletableRequests, trashSearch, trashStatusFilter]);
 
   const verifierCandidates = useMemo(() => {
     const customVerIds = new Set(
@@ -1067,6 +1118,42 @@ export default function LeavePage() {
     }
   };
 
+  const handleConfirmDeleteLeaves = async () => {
+    if (!currentUser || !deleteConfirmTargets || deleteConfirmTargets.length === 0) {
+      return;
+    }
+    setDeletingTrash(true);
+    try {
+      const targetIds = deleteConfirmTargets.map((item) => item.id);
+      const res = await fetch("/api/leave", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ids: targetIds,
+          actorId: currentUser.id,
+          actorName: currentUser.name,
+          actorRole: currentUserRole,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        showToast(`❌ ${data?.error || "ลบใบลาไม่สำเร็จ"}`);
+        return;
+      }
+      const deletedSet = new Set<string>(data.deletedIds || targetIds);
+      setSelectedTrashIds((prev) => prev.filter((id) => !deletedSet.has(id)));
+      setDeleteConfirmTargets(null);
+      showToast(
+        `🗑️ ลบใบลาเรียบร้อยแล้ว ${data.deletedCount ?? targetIds.length} ฉบับ`
+      );
+      await loadLeaveData();
+    } catch {
+      showToast("❌ เกิดข้อผิดพลาดในการลบใบลา");
+    } finally {
+      setDeletingTrash(false);
+    }
+  };
+
   const handleSubmitWorkflowAction = async () => {
     if (!currentUser || !actionModal) return;
     if (actionModal.action === "return" && !actionComment.trim()) {
@@ -1631,6 +1718,28 @@ export default function LeavePage() {
               }`}
           >
             📊 สถิติและวันลาสะสม
+          </button>
+        )}
+        {canDeleteInactiveLeave && (
+          <button
+            type="button"
+            onClick={() => setActiveTab("trash")}
+            className={`px-4 py-2 rounded-xl text-sm font-semibold transition cursor-pointer flex items-center gap-2 ${activeTab === "trash"
+              ? "bg-rose-600 text-white shadow-sm"
+              : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-rose-50/70 dark:hover:bg-slate-800"
+              }`}
+          >
+            <span>🗑️ จัดการใบลาไม่ผ่าน/ยกเลิก</span>
+            {deletableRequests.length > 0 && (
+              <span
+                className={`px-2 py-0.5 text-xs rounded-full font-bold ${activeTab === "trash"
+                  ? "bg-white/20 text-white"
+                  : "bg-rose-100 text-rose-700 dark:bg-rose-950/70 dark:text-rose-300"
+                  }`}
+              >
+                {deletableRequests.length}
+              </span>
+            )}
           </button>
         )}
         {isAdmin && (
@@ -3154,6 +3263,249 @@ export default function LeavePage() {
         </div>
       )}
 
+      {/* TAB: จัดการลบใบลาที่ไม่ผ่านหรือยกเลิกไปแล้ว (เฉพาะผู้ได้รับสิทธิ์ เช่น ยุทธนา / Admin) */}
+      {activeTab === "trash" && canDeleteInactiveLeave && (
+        <div className="space-y-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm space-y-4">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                    🗑️ จัดการลบใบลาที่ไม่ผ่านการอนุมัติ / ยกเลิกแล้ว (ปีงบประมาณ {fiscalYear})
+                  </h3>
+                  <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 font-semibold">
+                    สิทธิ์ผู้ดูแล: {currentUser?.name || DEFAULT_LEAVE_ORDER_OPERATOR.name}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  แสดงเฉพาะใบลาที่มีสถานะ <strong>ไม่อนุญาต</strong> หรือ <strong>ยกเลิกแล้ว</strong> เพื่อทำความสะอาดรายการที่ไม่ใช้งาน (ใบลาที่อนุมัติแล้วหรืออยู่ระหว่างพิจารณาจะถูกล็อกไม่ให้ลบจากหน้านี้)
+                </p>
+              </div>
+
+              {selectedTrashIds.length > 0 && (
+                <button
+                  type="button"
+                  disabled={deletingTrash}
+                  onClick={() => {
+                    const targets = deletableRequests.filter((r) =>
+                      selectedTrashIds.includes(r.id)
+                    );
+                    if (targets.length > 0) setDeleteConfirmTargets(targets);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-bold shadow-sm cursor-pointer shrink-0"
+                >
+                  🗑️ ลบที่เลือกทั้งหมด ({selectedTrashIds.length} ฉบับ)
+                </button>
+              )}
+            </div>
+
+            {/* Filter & Search Bar */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTrashStatusFilter("all")}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${trashStatusFilter === "all"
+                    ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                    }`}
+                >
+                  ทั้งหมด ({deletableRequests.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTrashStatusFilter("rejected")}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${trashStatusFilter === "rejected"
+                    ? "bg-rose-600 text-white"
+                    : "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60 hover:bg-rose-100"
+                    }`}
+                >
+                  ✗ ไม่อนุญาต ({rejectedTrashCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTrashStatusFilter("cancelled")}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${trashStatusFilter === "cancelled"
+                    ? "bg-slate-600 text-white"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-200"
+                    }`}
+                >
+                  ⊘ ยกเลิกแล้ว ({cancelledTrashCount})
+                </button>
+              </div>
+
+              <input
+                type="text"
+                value={trashSearch}
+                onChange={(e) => setTrashSearch(e.target.value)}
+                placeholder="🔍 ค้นหาเลขที่ใบลา, ชื่อผู้ขอลา, กลุ่มงาน..."
+                className="w-full md:w-72 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+              />
+            </div>
+
+            {loading ? (
+              <PreloadSkeleton
+                variant="table"
+                rows={4}
+                label="กำลังโหลดรายการใบลาที่ไม่ผ่านหรือยกเลิกแล้ว..."
+              />
+            ) : filteredDeletableRequests.length === 0 ? (
+              <div className="py-12 text-center space-y-2 border border-dashed border-slate-200 dark:border-slate-700 rounded-2xl">
+                <div className="text-3xl">✨</div>
+                <div className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                  ไม่มีใบลาที่ไม่อนุญาตหรือยกเลิกแล้วในเงื่อนไขที่เลือก
+                </div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">
+                  รายการใบลาในปีงบประมาณ {fiscalYear} เรียบร้อยดี
+                </div>
+              </div>
+            ) : (
+              <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-slate-50 dark:bg-slate-800 text-xs text-slate-600 dark:text-slate-300 uppercase">
+                    <tr>
+                      <th className="px-3 py-3 w-10 text-center">
+                        <input
+                          type="checkbox"
+                          aria-label="เลือกใบลาทั้งหมดที่แสดง"
+                          checked={
+                            filteredDeletableRequests.length > 0 &&
+                            filteredDeletableRequests.every((r) =>
+                              selectedTrashIds.includes(r.id)
+                            )
+                          }
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedTrashIds(
+                                Array.from(
+                                  new Set([
+                                    ...selectedTrashIds,
+                                    ...filteredDeletableRequests.map((r) => r.id),
+                                  ])
+                                )
+                              );
+                            } else {
+                              const visibleSet = new Set(
+                                filteredDeletableRequests.map((r) => r.id)
+                              );
+                              setSelectedTrashIds((prev) =>
+                                prev.filter((id) => !visibleSet.has(id))
+                              );
+                            }
+                          }}
+                          className="rounded border-slate-300 cursor-pointer"
+                        />
+                      </th>
+                      <th className="px-3 py-3">เลขที่ / ประเภท</th>
+                      <th className="px-3 py-3">ผู้ขอลา</th>
+                      <th className="px-3 py-3">ช่วงวันที่ลา</th>
+                      <th className="px-3 py-3">สถานะ / หมายเหตุ</th>
+                      <th className="px-3 py-3 text-right">จัดการ</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {filteredDeletableRequests.map((item) => {
+                      const meta = LEAVE_TYPE_META[item.leaveType];
+                      const stMeta = LEAVE_STATUS_META[item.status];
+                      const checked = selectedTrashIds.includes(item.id);
+                      return (
+                        <tr
+                          key={item.id}
+                          className={`hover:bg-slate-50/70 dark:hover:bg-slate-800/40 ${checked ? "bg-rose-50/40 dark:bg-rose-950/20" : ""}`}
+                        >
+                          <td className="px-3 py-3 text-center">
+                            <input
+                              type="checkbox"
+                              aria-label={`เลือกใบลา ${item.requestNo}`}
+                              checked={checked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedTrashIds((prev) =>
+                                    prev.includes(item.id) ? prev : [...prev, item.id]
+                                  );
+                                } else {
+                                  setSelectedTrashIds((prev) =>
+                                    prev.filter((id) => id !== item.id)
+                                  );
+                                }
+                              }}
+                              className="rounded border-slate-300 cursor-pointer"
+                            />
+                          </td>
+                          <td className="px-3 py-3">
+                            <div className="font-mono text-xs font-bold text-slate-900 dark:text-white">
+                              {item.requestNo}
+                            </div>
+                            <span
+                              className={`inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${meta.badgeClass}`}
+                            >
+                              {meta.icon} {meta.label}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3">
+                            <div className="font-semibold text-slate-900 dark:text-white text-xs">
+                              {item.applicantName}
+                            </div>
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                              {item.applicantDivision || item.applicantPosition || "-"}
+                            </div>
+                          </td>
+                          <td className="px-3 py-3 text-xs text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                            <div>
+                              {formatThaiDateShort(item.startDate)} –{" "}
+                              {formatThaiDateShort(item.endDate)}
+                            </div>
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                              {item.totalWorkingDays} วันทำการ
+                              {item.leaveDayPeriod !== "full"
+                                ? ` (${LEAVE_DAY_PERIOD_SHORT[item.leaveDayPeriod]})`
+                                : ""}
+                            </div>
+                          </td>
+                          <td className="px-3 py-3">
+                            <span
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${stMeta.badgeClass}`}
+                            >
+                              {stMeta.label}
+                            </span>
+                            {(item.orderComment || item.reason) && (
+                              <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 max-w-xs truncate">
+                                {item.orderComment
+                                  ? `คำสั่ง: ${item.orderComment}`
+                                  : `เหตุผล: ${item.reason}`}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-3 py-3 text-right whitespace-nowrap">
+                            <div className="inline-flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setPreviewLeave(item)}
+                                className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                              >
+                                👁️ ดู
+                              </button>
+                              <button
+                                type="button"
+                                disabled={deletingTrash}
+                                onClick={() => setDeleteConfirmTargets([item])}
+                                className="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800 text-xs font-semibold text-rose-700 dark:text-rose-300 cursor-pointer"
+                              >
+                                🗑️ ลบถาวร
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* TAB 5: จัดการสิทธิ์ใบลา (เฉพาะ Admin) */}
       {activeTab === "permissions" && isAdmin && (
         <div className="space-y-4">
@@ -3185,7 +3537,7 @@ export default function LeavePage() {
                 <strong className="text-slate-700 dark:text-slate-200">
                   {SOLE_LEAVE_APPROVER.name}
                 </strong>{" "}
-                เพียงผู้เดียว ส่วนช่อง &ldquo;3. บันทึกผลอนุญาต (แทน พมจ.)&rdquo; ใช้กำหนดผู้มีสิทธิ์บันทึกผลคำสั่งลงในระบบหลังอนุมัติในเอกสารแล้ว (ค่าเริ่มต้นคือ{" "}
+                เพียงผู้เดียว ส่วนช่อง &ldquo;3. บันทึกผลอนุญาต (แทน พมจ.)&rdquo; ใช้กำหนดผู้มีสิทธิ์บันทึกผลคำสั่งลงในระบบหลังอนุมัติในเอกสารแล้ว รวมถึงสิทธิ์เข้าเมนู <strong>จัดการลบใบลาที่ไม่ผ่าน/ยกเลิกแล้ว</strong> (ค่าเริ่มต้นคือ{" "}
                 <strong className="text-slate-700 dark:text-slate-200">
                   {DEFAULT_LEAVE_ORDER_OPERATOR.name}
                 </strong>
@@ -3385,6 +3737,69 @@ export default function LeavePage() {
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: ยืนยันลบใบลาที่ไม่ผ่าน/ยกเลิกแล้วถาวร */}
+      {deleteConfirmTargets && deleteConfirmTargets.length > 0 && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-300 flex items-center justify-center text-xl shrink-0">
+                🗑️
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  ยืนยันลบใบลาถาวร ({deleteConfirmTargets.length} ฉบับ)
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  ข้อมูลใบลาที่ลบแล้วจะไม่สามารถกู้คืนได้ ระบบอนุญาตให้ลบเฉพาะใบลาที่ไม่อนุญาตหรือยกเลิกแล้วเท่านั้น
+                </p>
+              </div>
+            </div>
+
+            <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-800 bg-slate-50 dark:bg-slate-800/50">
+              {deleteConfirmTargets.map((item) => (
+                <div
+                  key={item.id}
+                  className="px-3 py-2 text-xs flex items-center justify-between gap-2"
+                >
+                  <div className="min-w-0">
+                    <div className="font-mono font-bold text-slate-800 dark:text-slate-100">
+                      {item.requestNo}
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                      {item.applicantName} · {LEAVE_TYPE_META[item.leaveType].label}
+                    </div>
+                  </div>
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border shrink-0 ${LEAVE_STATUS_META[item.status].badgeClass}`}
+                  >
+                    {LEAVE_STATUS_META[item.status].label}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                disabled={deletingTrash}
+                onClick={() => setDeleteConfirmTargets(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                disabled={deletingTrash}
+                onClick={handleConfirmDeleteLeaves}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-bold cursor-pointer"
+              >
+                {deletingTrash ? "กำลังลบ..." : "🗑️ ยืนยันลบถาวร"}
+              </button>
             </div>
           </div>
         </div>

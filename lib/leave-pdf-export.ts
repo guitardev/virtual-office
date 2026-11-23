@@ -533,12 +533,15 @@ function drawVacationForm(
     CONTENT_W,
     46
   );
-  y += 72;
+  y += 42;
 
   const sigCenterX = RIGHT_LIMIT - 285;
-  drawSigImgCentered(ctx, sigs.applicant, sigCenterX, y - 28);
   ctx.textAlign = "center";
   ctx.font = `400 30px ${fontFamily}`;
+  ctx.fillText("ขอแสดงความนับถือ", sigCenterX, y);
+  y += 58;
+
+  drawSigImgCentered(ctx, sigs.applicant, sigCenterX, y - 28);
   ctx.fillText(
     "(ลงชื่อ)......................................................",
     sigCenterX,

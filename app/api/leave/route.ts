@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabase as rawSupabase } from "@/lib/supabase";
 import {
   calculateLeavePeriodDetails,
+  canUserDeleteInactiveLeave,
   DEFAULT_LEAVE_ORDER_OPERATOR,
   detectLeaveOverlap,
   formatThaiDateShort,
   getEffectiveLeaveDays,
   getFiscalYear,
   getWorkingDatesBetween,
+  isDeletableLeaveStatus,
   LEAVE_DAY_PERIOD_SHORT,
   LEAVE_TYPE_META,
   LeaveBalanceItem,
@@ -1696,6 +1698,109 @@ export async function PATCH(req: NextRequest) {
       {
         success: false,
         error: err instanceof Error ? err.message : "ไม่สามารถอัปเดตใบลาได้",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { id, ids, actorId, actorRole } = body || {};
+
+    const targetIds: string[] = Array.from(
+      new Set(
+        [
+          ...(Array.isArray(ids) ? ids : []),
+          ...(typeof id === "string" && id.trim() ? [id.trim()] : []),
+        ]
+          .map((v) => String(v || "").trim())
+          .filter(Boolean)
+      )
+    );
+
+    if (targetIds.length === 0) {
+      return NextResponse.json(
+        { success: false, error: "ต้องระบุรหัสใบลาที่ต้องการลบอย่างน้อย 1 รายการ" },
+        { status: 400 }
+      );
+    }
+
+    const leaveRole = await getUserLeaveAuthorizedRole(actorId);
+    const canDelete = canUserDeleteInactiveLeave({
+      userId: actorId,
+      userRole: actorRole,
+      canApproveRole: leaveRole.canApprove,
+    });
+
+    if (!canDelete) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `ไม่มีสิทธิ์ลบใบลา (เฉพาะผู้ได้รับสิทธิ์จัดการ เช่น ${DEFAULT_LEAVE_ORDER_OPERATOR.name} หรือ Admin เท่านั้น)`,
+        },
+        { status: 403 }
+      );
+    }
+
+    const db = requireSupabase();
+    const { data: targetRows, error: fetchErr } = await db
+      .from("leave_requests")
+      .select("id, request_no, status")
+      .in("id", targetIds);
+
+    if (fetchErr) throw fetchErr;
+    if (!targetRows || targetRows.length === 0) {
+      return NextResponse.json(
+        { success: false, error: "ไม่พบข้อมูลใบลาที่ต้องการลบ" },
+        { status: 404 }
+      );
+    }
+
+    const nonDeletable = targetRows.filter(
+      (row) => !isDeletableLeaveStatus(String(row.status || ""))
+    );
+    if (nonDeletable.length > 0) {
+      const blockedNos = nonDeletable
+        .map((r) => String(r.request_no || r.id))
+        .join(", ");
+      return NextResponse.json(
+        {
+          success: false,
+          error: `ลบได้เฉพาะใบลาที่มีสถานะ "ไม่อนุญาต" หรือ "ยกเลิกแล้ว" เท่านั้น (ไม่สามารถลบ: ${blockedNos})`,
+        },
+        { status: 400 }
+      );
+    }
+
+    const validIds = targetRows.map((r) => String(r.id));
+
+    // ลบหมายเหตุลงเวลาที่อ้างอิงใบลาเหล่านี้ (ถ้ามีค้างอยู่)
+    await db
+      .from("attendance_daily_notes")
+      .delete()
+      .eq("ref_type", "leave_request")
+      .in("ref_id", validIds);
+
+    const { error: delErr } = await db
+      .from("leave_requests")
+      .delete()
+      .in("id", validIds);
+
+    if (delErr) throw delErr;
+
+    return NextResponse.json({
+      success: true,
+      deletedIds: validIds,
+      deletedCount: validIds.length,
+    });
+  } catch (err: unknown) {
+    console.error("DELETE /api/leave error:", err);
+    return NextResponse.json(
+      {
+        success: false,
+        error: err instanceof Error ? err.message : "ไม่สามารถลบใบลาได้",
       },
       { status: 500 }
     );

@@ -33,6 +33,9 @@ const {
   detectLeaveOverlap,
   countWorkingDaysInRange,
   resolveLeaveAttachmentUrl,
+  isDeletableLeaveStatus,
+  canUserDeleteInactiveLeave,
+  DEFAULT_LEAVE_ORDER_OPERATOR,
 } = await import("../lib/leave-utils.ts");
 
 function makeMockLeave(overrides = {}) {
@@ -394,6 +397,25 @@ describe("Vacation Leave Word DOCX Template Alignment", async () => {
       )
     );
 
+    // Closing salutation matching sick/personal leave form
+    assert.ok(xml.includes("ขอแสดงความนับถือ"));
+
+    // Strict A4 single-page dimensions (210mm x 297mm = 11906 x 16838 dxa) without inflated docGrid
+    assert.ok(xml.includes('<w:pgSz w:w="11906" w:h="16838"/>'));
+    assert.ok(!xml.includes("docGrid"));
+
+    // General leave (sick/personal/maternity) also uses strict A4 single-page layout
+    const generalXml = buildLeaveDocumentXml(
+      makeMockLeave({
+        leaveType: "sick_leave",
+        subject: "ขออนุญาตลาป่วย",
+        reason: "มีไข้สูง",
+      })
+    );
+    assert.ok(generalXml.includes('<w:pgSz w:w="11906" w:h="16838"/>'));
+    assert.ok(generalXml.includes("ขอแสดงความนับถือ"));
+    assert.ok(!generalXml.includes("docGrid"));
+
     // Fix duplicate นาย/นาง/นางสาว before นางสาวขวัญนภา ศิริสมบัติ
     assert.ok(!xml.includes("นาย/นาง/นางสาว นางสาวขวัญนภา"));
     assert.ok(xml.includes("นางสาวขวัญนภา ศิริสมบัติ ปฏิบัติหน้าที่แทน"));
@@ -742,5 +764,67 @@ describe("Last Leave History Calculation & Validation (ประวัติก�
       newerLeaveCreatedEarlier,
     ]);
     assert.equal(latest?.id, "newer-date-older-created");
+  });
+
+  it("should allow deleting ONLY rejected or cancelled leave requests", () => {
+    assert.equal(isDeletableLeaveStatus("rejected"), true);
+    assert.equal(isDeletableLeaveStatus("cancelled"), true);
+
+    assert.equal(isDeletableLeaveStatus("approved"), false);
+    assert.equal(isDeletableLeaveStatus("pending_verifier"), false);
+    assert.equal(isDeletableLeaveStatus("pending_supervisor"), false);
+    assert.equal(isDeletableLeaveStatus("pending_approver"), false);
+    assert.equal(isDeletableLeaveStatus("returned"), false);
+    assert.equal(isDeletableLeaveStatus(null), false);
+  });
+
+  it("should restrict inactive leave deletion to Yutthana, Admin, or users granted canApprove role", () => {
+    // นายยุทธนา เจนจบ (default operator) -> อนุญาต
+    assert.equal(
+      canUserDeleteInactiveLeave({
+        userId: DEFAULT_LEAVE_ORDER_OPERATOR.userId,
+        userRole: "staff",
+        canApproveRole: false,
+      }),
+      true
+    );
+
+    // Admin -> อนุญาต
+    assert.equal(
+      canUserDeleteInactiveLeave({
+        userId: "syno_admin",
+        userRole: "admin",
+        canApproveRole: false,
+      }),
+      true
+    );
+
+    // บุคลากรอื่นที่ได้รับสิทธิ์ canApprove จาก Admin -> อนุญาต
+    assert.equal(
+      canUserDeleteInactiveLeave({
+        userId: "syno_สมชาย",
+        userRole: "staff",
+        canApproveRole: true,
+      }),
+      true
+    );
+
+    // บุคลากรทั่วไป / manager ที่ไม่ได้รับสิทธิ์ -> ไม่อนุญาต
+    assert.equal(
+      canUserDeleteInactiveLeave({
+        userId: "syno_สมหญิง",
+        userRole: "staff",
+        canApproveRole: false,
+      }),
+      false
+    );
+    assert.equal(
+      canUserDeleteInactiveLeave({
+        userId: "syno_หัวหน้าฝ่าย",
+        userRole: "manager",
+        canApproveRole: false,
+      }),
+      false
+    );
   });
 });

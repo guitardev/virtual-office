@@ -815,3 +815,29 @@ export function normalizeAndValidateLastLeave({
     error: null,
   };
 }
+
+export const DELETABLE_LEAVE_STATUSES: readonly LeaveStatus[] = [
+  "rejected",
+  "cancelled",
+] as const;
+
+export function isDeletableLeaveStatus(status: string | null | undefined): boolean {
+  return status === "rejected" || status === "cancelled";
+}
+
+/**
+ * ตรวจสิทธิ์ผู้ที่สามารถเข้าเมนู "จัดการลบใบลาที่ไม่ผ่าน/ยกเลิกแล้ว"
+ * - ผู้ดูแลระบบ (admin)
+ * - ผู้ปฏิบัติงานหลักที่กำหนดสิทธิ์ไว้ (นายยุทธนา เจนจบ — DEFAULT_LEAVE_ORDER_OPERATOR)
+ * - ผู้ที่ Admin มอบสิทธิ์ดำเนินการแทน พมจ. (canApprove) ในตาราง leave_authorized_roles
+ */
+export function canUserDeleteInactiveLeave(params: {
+  userId?: string | null;
+  userRole?: string | null;
+  canApproveRole?: boolean;
+}): boolean {
+  if (!params.userId && params.userRole !== "admin") return false;
+  if (params.userRole === "admin") return true;
+  if (params.userId === DEFAULT_LEAVE_ORDER_OPERATOR.userId) return true;
+  return Boolean(params.canApproveRole);
+}

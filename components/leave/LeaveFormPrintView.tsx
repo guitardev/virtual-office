@@ -468,6 +468,7 @@ export default function LeaveFormPrintView({
 
         <div className="flex justify-end mt-5 mb-5">
           <div className="w-[46%] text-center">
+            <div>ขอแสดงความนับถือ</div>
             <SignatureBlock
               signatureUrl={leave.applicantSignature}
               signed={Boolean(leave.applicantSignature)}
