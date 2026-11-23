@@ -72,7 +72,12 @@ import {
   fetchChatGroups,
   fetchCircularDocs,
   subscribeToCircularDocs,
+  fetchLeaveRequests,
+  fetchLeaveAuthorizedRoles,
+  subscribeToLeaveRequests,
+  LeaveAuthorizedRoleLite,
 } from "@/lib/supabase";
+import { LeaveRequestItem } from "@/lib/leave-utils";
 import {
   initCurrentSession,
   listenSessionRevocation,
@@ -142,6 +147,8 @@ interface AppContextType {
   setMeetingRooms: React.Dispatch<React.SetStateAction<MeetingRoomMaster[]>>;
   carBookings: CarBookingRequest[];
   setCarBookings: React.Dispatch<React.SetStateAction<CarBookingRequest[]>>;
+  leaveRequests: LeaveRequestItem[];
+  setLeaveRequests: React.Dispatch<React.SetStateAction<LeaveRequestItem[]>>;
   circularDocs: CircularDocument[];
   setCircularDocs: React.Dispatch<React.SetStateAction<CircularDocument[]>>;
   chatMessages: ChatMessage[];
@@ -290,6 +297,8 @@ function AppProviderInner({ children }: { children: React.ReactNode }) {
   const [meetings, setMeetings] = useState<MeetingItem[]>([]);
   const [meetingRooms, setMeetingRooms] = useState<MeetingRoomMaster[]>(DEFAULT_ROOMS);
   const [carBookings, setCarBookings] = useState<CarBookingRequest[]>([]);
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequestItem[]>([]);
+  const [leaveAuthorizedRoles, setLeaveAuthorizedRoles] = useState<LeaveAuthorizedRoleLite[]>([]);
   const [adminTab, setAdminTab] = useState<AdminTabId>("members");
   const [memberSearch, setMemberSearch] = useState("");
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
@@ -653,6 +662,18 @@ function AppProviderInner({ children }: { children: React.ReactNode }) {
         }
       });
 
+      fetchLeaveRequests().then((liveLeaves) => {
+        if (liveLeaves) {
+          setLeaveRequests(liveLeaves);
+        }
+      });
+
+      fetchLeaveAuthorizedRoles().then((liveRoles) => {
+        if (liveRoles) {
+          setLeaveAuthorizedRoles(liveRoles);
+        }
+      });
+
       getSupabaseSession().then((session: any) => {
         if (session?.user) {
           setMembers((currentMembers) => {
@@ -808,6 +829,35 @@ function AppProviderInner({ children }: { children: React.ReactNode }) {
         });
       });
 
+      const unsubscribeLeaveRequests = subscribeToLeaveRequests((updatedLeaves) => {
+        setLeaveRequests((prev) => {
+          if (prev && updatedLeaves.length > 0) {
+            const prevMap = new Map(prev.map((x) => [x.id, x]));
+            for (const item of updatedLeaves) {
+              const old = prevMap.get(item.id);
+              if (!old && prev.length > 0 && item.applicantUserId !== currentUser?.id) {
+                if (
+                  currentUserRole === "admin" ||
+                  item.verifierUserId === currentUser?.id ||
+                  item.supervisorUserId === currentUser?.id
+                ) {
+                  showToast(`📝 มีคำขอลาใหม่ (${item.requestNo}) โดย ${item.applicantName}`);
+                }
+              } else if (old && old.status !== item.status && item.applicantUserId === currentUser?.id) {
+                if (item.status === "approved") {
+                  showToast(`✅ ใบลา ${item.requestNo} ได้รับอนุญาตแล้ว`);
+                } else if (item.status === "returned") {
+                  showToast(`↩️ ใบลา ${item.requestNo} ถูกตีกลับให้แก้ไข`);
+                } else if (item.status === "rejected") {
+                  showToast(`❌ ใบลา ${item.requestNo} ไม่ได้รับอนุญาต`);
+                }
+              }
+            }
+          }
+          return updatedLeaves;
+        });
+      });
+
       fetchChatMessages().then((msgs) => setChatMessages(msgs));
       fetchChatGroups().then((grps) => setChatGroups(grps));
       fetchCircularDocs().then((docs) => setCircularDocs(docs));
@@ -883,6 +933,7 @@ function AppProviderInner({ children }: { children: React.ReactNode }) {
         unsubscribeMeetings();
         unsubscribeMeetingRooms();
         unsubscribeCarBookings();
+        unsubscribeLeaveRequests();
         unsubscribeChat();
         unsubscribeCircular();
         authSub?.unsubscribe?.();
@@ -1757,6 +1808,14 @@ function AppProviderInner({ children }: { children: React.ReactNode }) {
     showToast("✅ บันทึกข้อมูลส่วนบุคคลเรียบร้อยแล้ว");
   };
 
+  const attendanceEditorIds = useMemo(
+    () =>
+      attendanceEditors
+        .map((e) => e.memberId)
+        .filter((id): id is string => Boolean(id)),
+    [attendanceEditors]
+  );
+
   // Unified Notifications
   const systemNotifications = useMemo(() => {
     return buildUnifiedNotifications({
@@ -1769,6 +1828,9 @@ function AppProviderInner({ children }: { children: React.ReactNode }) {
       carBookings,
       tasks,
       meetings,
+      leaveRequests,
+      leaveRoles: leaveAuthorizedRoles,
+      attendanceEditorIds,
       allMembers: members,
     });
   }, [
@@ -1781,6 +1843,9 @@ function AppProviderInner({ children }: { children: React.ReactNode }) {
     carBookings,
     tasks,
     meetings,
+    leaveRequests,
+    leaveAuthorizedRoles,
+    attendanceEditorIds,
     members,
     readNotifRevision,
   ]);
@@ -1832,6 +1897,12 @@ function AppProviderInner({ children }: { children: React.ReactNode }) {
       router.push("/tasks");
     } else if (notif.link.page === "meetings") {
       router.push(`/meetings${notif.link.targetId ? `?meetingId=${notif.link.targetId}` : ""}`);
+    } else if (notif.link.page === "leave") {
+      const qp = new URLSearchParams();
+      if (notif.link.subTab) qp.set("tab", notif.link.subTab);
+      if (notif.link.targetId) qp.set("leaveId", notif.link.targetId);
+      const qStr = qp.toString();
+      router.push(`/leave${qStr ? `?${qStr}` : ""}`);
     }
   };
 
@@ -1865,13 +1936,17 @@ function AppProviderInner({ children }: { children: React.ReactNode }) {
       (n) => n.type === "carbooking" && !n.isRead
     ).length;
 
+    const unreadLeaveCount = systemNotifications.filter(
+      (n) => n.type === "leave" && !n.isRead
+    ).length;
+
     return {
       dashboard: 0,
       chat: unreadChatCount,
       task: taskCount,
       meetings: meetingCount,
       carbooking: unreadCarBookingCount > 0 ? unreadCarBookingCount : carCount,
-      leave: 0,
+      leave: unreadLeaveCount,
       attendance: 0,
       circular: unreadCircularCount,
       files: 0,
@@ -2021,6 +2096,8 @@ function AppProviderInner({ children }: { children: React.ReactNode }) {
     setMeetingRooms,
     carBookings,
     setCarBookings,
+    leaveRequests,
+    setLeaveRequests,
     circularDocs,
     setCircularDocs,
     chatMessages,

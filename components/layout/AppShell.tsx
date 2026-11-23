@@ -403,7 +403,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                             ) : badgeCount > 0 && !isActive && isModuleOpen ? (
                               <span
                                 className={`px-1.5 py-0.2 text-[10px] font-bold rounded-full ${
-                                  item.id === "admin" || item.id === "carbooking"
+                                  item.id === "admin" || item.id === "carbooking" || item.id === "leave"
                                     ? "bg-amber-500 text-white shadow-xs animate-pulse"
                                     : "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
                                 }`}
@@ -995,6 +995,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                             ) : notif.type === "task" ? (
                               <div className="w-8 h-8 rounded-xl bg-orange-100 text-orange-800 font-bold text-sm flex items-center justify-center">
                                 📋
+                              </div>
+                            ) : notif.type === "leave" ? (
+                              <div className="w-8 h-8 rounded-xl bg-teal-100 text-teal-800 font-bold text-sm flex items-center justify-center">
+                                📝
                               </div>
                             ) : (
                               <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-800 font-bold text-sm flex items-center justify-center">

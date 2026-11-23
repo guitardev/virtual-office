@@ -39,6 +39,13 @@ import {
 import { DEFAULT_CHAT_GROUPS, INITIAL_CHAT_MESSAGES } from "./chat-data";
 import { DEFAULT_ROOMS } from "./meeting-data";
 import { formatIsoDateOnly, THAI_SHORT_MONTH_NAMES } from "./calendar";
+import {
+  getFiscalYear,
+  LeaveDayPeriod,
+  LeaveRequestItem,
+  LeaveStatus,
+  LeaveType,
+} from "./leave-utils";
 
 // Environment variables from Vercel Marketplace Supabase Integration
 const supabaseUrl =
@@ -2801,6 +2808,153 @@ export function subscribeToCircularDocs(
       circularDocsChannel = null;
     }
   };
+}
+
+// ---------------------------------------------------------------------------
+// Leave Request System (Realtime + Notifications Support)
+// ---------------------------------------------------------------------------
+
+export interface LeaveAuthorizedRoleLite {
+  userId: string;
+  canVerify: boolean;
+  canSupervisor: boolean;
+  canApprove: boolean;
+}
+
+function mapSupabaseRowToLeaveItem(row: Record<string, unknown>): LeaveRequestItem {
+  return {
+    id: String(row.id),
+    requestNo: String(row.request_no || ""),
+    leaveType: (row.leave_type as LeaveType) || "sick_leave",
+    leaveDayPeriod: (row.leave_day_period as LeaveDayPeriod) || "full",
+    writtenAt: String(row.written_at || ""),
+    writtenDate: String(row.written_date || ""),
+    subject: String(row.subject || ""),
+    toRecipient: String(row.to_recipient || ""),
+    applicantUserId: String(row.applicant_user_id || ""),
+    applicantName: String(row.applicant_name || ""),
+    applicantPosition: String(row.applicant_position || ""),
+    applicantDivision: String(row.applicant_division || ""),
+    reason: String(row.reason || ""),
+    startDate: String(row.start_date || ""),
+    endDate: String(row.end_date || ""),
+    totalWorkingDays: Number(row.total_working_days || 0),
+    cancelledDays: Number(row.cancelled_days || 0),
+    cancelTargetLeaveId: row.cancel_target_leave_id ? String(row.cancel_target_leave_id) : null,
+    cancelTargetRequestNo: row.cancel_target_request_no ? String(row.cancel_target_request_no) : null,
+    cancelTargetLeaveType: row.cancel_target_leave_type ? String(row.cancel_target_leave_type) : null,
+    cancelTargetStartDate: row.cancel_target_start_date ? String(row.cancel_target_start_date) : null,
+    cancelTargetEndDate: row.cancel_target_end_date ? String(row.cancel_target_end_date) : null,
+    cancelTargetDays:
+      row.cancel_target_days !== null && row.cancel_target_days !== undefined
+        ? Number(row.cancel_target_days)
+        : null,
+    lastLeaveType: row.last_leave_type ? String(row.last_leave_type) : null,
+    lastLeaveStartDate: row.last_leave_start_date ? String(row.last_leave_start_date) : null,
+    lastLeaveEndDate: row.last_leave_end_date ? String(row.last_leave_end_date) : null,
+    lastLeaveDays:
+      row.last_leave_days !== null && row.last_leave_days !== undefined
+        ? Number(row.last_leave_days)
+        : null,
+    contactInfo: String(row.contact_info || ""),
+    contactPhone: String(row.contact_phone || ""),
+    vacationAccumulatedDays: Number(row.vacation_accumulated_days || 0),
+    vacationAnnualDays: Number(row.vacation_annual_days ?? 10),
+    actingPersonUserId: row.acting_person_user_id ? String(row.acting_person_user_id) : null,
+    actingPersonName: String(row.acting_person_name || ""),
+    actingPersonPosition: String(row.acting_person_position || ""),
+    fiscalYear: Number(row.fiscal_year || getFiscalYear()),
+    prevSickDays: Number(row.prev_sick_days || 0),
+    prevPersonalDays: Number(row.prev_personal_days || 0),
+    prevMaternityDays: Number(row.prev_maternity_days || 0),
+    prevVacationDays: Number(row.prev_vacation_days || 0),
+    status: (row.status as LeaveStatus) || "pending_verifier",
+    verifierUserId: row.verifier_user_id ? String(row.verifier_user_id) : null,
+    verifierName: row.verifier_name ? String(row.verifier_name) : null,
+    verifierPosition: row.verifier_position ? String(row.verifier_position) : null,
+    verifierNote: row.verifier_note ? String(row.verifier_note) : null,
+    verifiedAt: row.verified_at ? String(row.verified_at) : null,
+    supervisorUserId: row.supervisor_user_id ? String(row.supervisor_user_id) : null,
+    supervisorName: row.supervisor_name ? String(row.supervisor_name) : null,
+    supervisorPosition: row.supervisor_position ? String(row.supervisor_position) : null,
+    supervisorComment: row.supervisor_comment ? String(row.supervisor_comment) : null,
+    supervisorReviewedAt: row.supervisor_reviewed_at ? String(row.supervisor_reviewed_at) : null,
+    approverUserId: row.approver_user_id ? String(row.approver_user_id) : null,
+    approverName: row.approver_name ? String(row.approver_name) : null,
+    approverPosition: row.approver_position ? String(row.approver_position) : null,
+    orderDecision:
+      row.order_decision === "approved" || row.order_decision === "rejected"
+        ? row.order_decision
+        : null,
+    orderComment: row.order_comment ? String(row.order_comment) : null,
+    orderedAt: row.ordered_at ? String(row.ordered_at) : null,
+    applicantSignature: row.applicant_signature ? String(row.applicant_signature) : null,
+    actingPersonSignature: row.acting_person_signature ? String(row.acting_person_signature) : null,
+    verifierSignature: row.verifier_signature ? String(row.verifier_signature) : null,
+    supervisorSignature: row.supervisor_signature ? String(row.supervisor_signature) : null,
+    approverSignature: row.approver_signature ? String(row.approver_signature) : null,
+    attachmentUrl: row.attachment_url ? String(row.attachment_url) : null,
+    attachmentName: row.attachment_name ? String(row.attachment_name) : null,
+    attachmentStorage: row.attachment_storage ? String(row.attachment_storage) : null,
+    excludedHolidays: Array.isArray(row.excluded_holidays)
+      ? (row.excluded_holidays as LeaveRequestItem["excludedHolidays"])
+      : [],
+    returnedByName: row.returned_by_name ? String(row.returned_by_name) : null,
+    returnedNote: row.returned_note ? String(row.returned_note) : null,
+    returnedAt: row.returned_at ? String(row.returned_at) : null,
+    syncedToAttendance: Boolean(row.synced_to_attendance),
+    syncedAt: row.synced_at ? String(row.synced_at) : null,
+    syncNote: row.sync_note ? String(row.sync_note) : null,
+    createdAt: String(row.created_at || ""),
+    updatedAt: String(row.updated_at || ""),
+  };
+}
+
+export async function fetchLeaveRequests(): Promise<LeaveRequestItem[]> {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from("leave_requests")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+    if (error || !data) return [];
+    return data.map(mapSupabaseRowToLeaveItem);
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchLeaveAuthorizedRoles(): Promise<LeaveAuthorizedRoleLite[]> {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from("leave_authorized_roles")
+      .select("user_id, can_verify, can_supervisor, can_approve");
+
+    if (error || !data) return [];
+    return data.map((r) => ({
+      userId: String(r.user_id),
+      canVerify: Boolean(r.can_verify),
+      canSupervisor: Boolean(r.can_supervisor),
+      canApprove: Boolean(r.can_approve),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+const leaveRequestsMultiplexer = createTableSubscriptionMultiplexer(
+  "leave_requests",
+  fetchLeaveRequests,
+  300
+);
+
+export function subscribeToLeaveRequests(
+  callback: (requests: LeaveRequestItem[]) => void
+) {
+  return leaveRequestsMultiplexer(callback);
 }
 
 

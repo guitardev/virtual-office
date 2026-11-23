@@ -99,11 +99,69 @@ async function tryUploadToR2(
   };
 }
 
+export async function compressImageForUpload(file: File): Promise<File> {
+  if (typeof window === "undefined") return file;
+  if (!file.type.startsWith("image/") || file.size <= 3.5 * 1024 * 1024) {
+    return file;
+  }
+  return new Promise((resolve) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.src = objectUrl;
+    img.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        const maxDim = 2560;
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx?.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => {
+            URL.revokeObjectURL(objectUrl);
+            const cleanName = file.name.replace(/\.[^.]+$/, "") + ".jpg";
+            resolve(blob ? new File([blob], cleanName, { type: "image/jpeg" }) : file);
+          },
+          "image/jpeg",
+          0.88
+        );
+      } catch {
+        URL.revokeObjectURL(objectUrl);
+        resolve(file);
+      }
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(file);
+    };
+  });
+}
+
+export interface SmartUploadOptions {
+  allowCloudFallback?: boolean;
+  compressImages?: boolean;
+}
+
 export async function uploadSmartFile(
   file: File,
-  nasFolder: string
+  nasFolder: string,
+  options?: SmartUploadOptions
 ): Promise<SmartUploadResult> {
-  if (file.size > MAX_LARGE_UPLOAD_BYTES) {
+  const preparedFile = options?.compressImages
+    ? await compressImageForUpload(file)
+    : file;
+
+  if (preparedFile.size > MAX_LARGE_UPLOAD_BYTES) {
     throw new Error(
       "ไฟล์มีขนาดเกิน 100 MB กรุณาบีบอัดไฟล์หรือใส่ลิงก์ภายนอกแทน"
     );
@@ -114,10 +172,10 @@ export async function uploadSmartFile(
     /\.vercel\.app$/i.test(window.location.hostname);
 
   // 1. Try Synology NAS via /api/nas/upload when <= 4 MB or running self-hosted
-  if (file.size <= MAX_SERVERLESS_UPLOAD_BYTES || !isVercelHost) {
+  if (preparedFile.size <= MAX_SERVERLESS_UPLOAD_BYTES || !isVercelHost) {
     try {
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", preparedFile);
       fd.append("folder_path", nasFolder);
       const rawSid = getUserNasSid();
       if (
@@ -137,33 +195,41 @@ export async function uploadSmartFile(
         const parsed = await safeParseJsonResponse(res);
         if (res.ok && parsed?.success) {
           const uploadedPath =
-            (parsed.path as string) || `${nasFolder}/${file.name}`;
+            (parsed.file?.path as string) ||
+            (parsed.path as string) ||
+            `${nasFolder}/${preparedFile.name}`;
           return {
             nasPath: uploadedPath,
             fileUrl: null,
-            fileName: file.name,
-            fileSize: file.size,
+            fileName: preparedFile.name,
+            fileSize: preparedFile.size,
             storage: "nas",
           };
         }
-        if (file.size <= MAX_SERVERLESS_UPLOAD_BYTES) {
+        if (
+          preparedFile.size <= MAX_SERVERLESS_UPLOAD_BYTES &&
+          !options?.allowCloudFallback
+        ) {
           throw new Error(
             String(parsed?.error || "อัปโหลดไฟล์ขึ้น Synology NAS ไม่สำเร็จ")
           );
         }
       }
     } catch (err) {
-      if (file.size <= MAX_SERVERLESS_UPLOAD_BYTES) {
+      if (
+        preparedFile.size <= MAX_SERVERLESS_UPLOAD_BYTES &&
+        !options?.allowCloudFallback
+      ) {
         throw err;
       }
-      // For > 4 MB files, fall through to Cloudflare R2 / Supabase Storage
+      // For > 4 MB files or when cloud fallback is enabled, fall through to Cloudflare R2 / Supabase Storage
     }
   }
 
-  const objectKey = buildSafeStorageObjectKey(nasFolder, file.name);
+  const objectKey = buildSafeStorageObjectKey(nasFolder, preparedFile.name);
 
   // 2. Try Cloudflare R2 direct browser upload (10 GB free, 0 egress, up to 100 MB)
-  const r2Result = await tryUploadToR2(file, objectKey);
+  const r2Result = await tryUploadToR2(preparedFile, objectKey);
   if (r2Result) {
     return r2Result;
   }
@@ -177,7 +243,7 @@ export async function uploadSmartFile(
 
   const { error: uploadError } = await supabase.storage
     .from(DATAHUB_STORAGE_BUCKET)
-    .upload(objectKey, file, {
+    .upload(objectKey, preparedFile, {
       cacheControl: "3600",
       upsert: true,
     });
@@ -198,8 +264,8 @@ export async function uploadSmartFile(
   return {
     nasPath: null,
     fileUrl: pub.publicUrl,
-    fileName: file.name,
-    fileSize: file.size,
+    fileName: preparedFile.name,
+    fileSize: preparedFile.size,
     storage: "supabase",
   };
 }

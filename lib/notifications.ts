@@ -13,6 +13,11 @@ import {
 import { getGroupMembers } from "./chat-data";
 import { getAttendeeName, getMeetingIsoDate } from "./calendar";
 import { getDeadlineStatus, getMissionGroupInfo } from "./task-missions";
+import {
+  formatThaiDateShort,
+  LEAVE_TYPE_META,
+  LeaveRequestItem,
+} from "./leave-utils";
 
 export const NOTIFICATION_READ_IDS_KEY = "smartmso_read_notif_ids";
 export const BROWSER_NOTIF_ENABLED_KEY = "smartmso_browser_notifs_enabled";
@@ -139,6 +144,9 @@ export function buildUnifiedNotifications({
   carBookings,
   tasks,
   meetings,
+  leaveRequests,
+  leaveRoles,
+  attendanceEditorIds,
   allMembers,
 }: {
   currentUser: Member | null;
@@ -150,6 +158,14 @@ export function buildUnifiedNotifications({
   carBookings: CarBookingRequest[];
   tasks?: TaskItem[];
   meetings?: MeetingItem[];
+  leaveRequests?: LeaveRequestItem[];
+  leaveRoles?: Array<{
+    userId: string;
+    canVerify: boolean;
+    canSupervisor: boolean;
+    canApprove: boolean;
+  }>;
+  attendanceEditorIds?: string[];
   allMembers: Member[];
 }): SystemNotification[] {
   if (!currentUser) return [];
@@ -672,6 +688,138 @@ export function buildUnifiedNotifications({
         targetId: String(m.id),
       },
     });
+  });
+
+  // ─── 7. LEAVE REQUEST WORKFLOW NOTIFICATIONS ───
+  const myLeaveRole = leaveRoles?.find((lr) => lr.userId === currentUser.id);
+  const isLeaveEditor = Boolean(attendanceEditorIds?.includes(currentUser.id));
+
+  leaveRequests?.forEach((r) => {
+    const typeLabel = LEAVE_TYPE_META[r.leaveType]?.label || "ใบลา";
+    const dateSpan = `${formatThaiDateShort(r.startDate)} – ${formatThaiDateShort(r.endDate)}`;
+    const isApplicant = r.applicantUserId === currentUser.id;
+
+    const isVerifierUser =
+      currentUserRole === "admin" ||
+      isLeaveEditor ||
+      Boolean(myLeaveRole?.canVerify) ||
+      currentUser.id === "syno_ยุทธนา" ||
+      r.verifierUserId === currentUser.id;
+
+    const isSupervisorUser =
+      currentUserRole === "admin" ||
+      currentUserRole === "manager" ||
+      Boolean(myLeaveRole?.canSupervisor) ||
+      r.supervisorUserId === currentUser.id;
+
+    const isApproverUser =
+      currentUserRole === "admin" ||
+      Boolean(myLeaveRole?.canApprove) ||
+      currentUser.id === "syno_มะลิวัน" ||
+      r.approverUserId === currentUser.id;
+
+    if (r.status === "pending_verifier" && isVerifierUser && !isApplicant) {
+      const notifId = `leave_pending_verifier_${r.id}`;
+      notifs.push({
+        id: notifId,
+        type: "leave",
+        title: `รอตรวจสอบสถิติใบลา (${r.requestNo})`,
+        message: `${r.applicantName} ขออนุญาต${typeLabel} ${r.totalWorkingDays} วัน (${dateSpan})`,
+        timestamp: formatThaiDateShort(r.writtenDate),
+        createdAt: r.updatedAt || r.createdAt || new Date().toISOString(),
+        isRead: readIds.has(notifId),
+        priority: "urgent",
+        senderName: r.applicantName,
+        link: { page: "leave", targetId: r.id, subTab: "review" },
+      });
+    } else if (r.status === "pending_supervisor" && isSupervisorUser && !isApplicant) {
+      const notifId = `leave_pending_supervisor_${r.id}`;
+      notifs.push({
+        id: notifId,
+        type: "leave",
+        title: `รอความเห็นผู้บังคับบัญชา (${r.requestNo})`,
+        message: `${r.applicantName} (${typeLabel} ${r.totalWorkingDays} วัน · ${dateSpan}) รอความเห็นท่าน`,
+        timestamp: formatThaiDateShort(r.verifiedAt || r.writtenDate),
+        createdAt: r.updatedAt || r.createdAt || new Date().toISOString(),
+        isRead: readIds.has(notifId),
+        priority: "urgent",
+        senderName: r.verifierName || r.applicantName,
+        link: { page: "leave", targetId: r.id, subTab: "review" },
+      });
+    } else if (r.status === "pending_approver" && isApproverUser && !isApplicant) {
+      const notifId = `leave_pending_approver_${r.id}`;
+      notifs.push({
+        id: notifId,
+        type: "leave",
+        title: `รอคำสั่งอนุญาตใบลา (${r.requestNo})`,
+        message: `${r.applicantName} (${typeLabel} ${r.totalWorkingDays} วัน · ${dateSpan}) ผ่านความเห็นชอบแล้ว`,
+        timestamp: formatThaiDateShort(r.supervisorReviewedAt || r.writtenDate),
+        createdAt: r.updatedAt || r.createdAt || new Date().toISOString(),
+        isRead: readIds.has(notifId),
+        priority: "emergency",
+        senderName: r.supervisorName || r.applicantName,
+        link: { page: "leave", targetId: r.id, subTab: "review" },
+      });
+    } else if (r.status === "returned" && isApplicant) {
+      const notifId = `leave_returned_${r.id}`;
+      notifs.push({
+        id: notifId,
+        type: "leave",
+        title: `↩️ ใบลาถูกตีกลับให้แก้ไข (${r.requestNo})`,
+        message: `${r.returnedByName || "ผู้พิจารณา"} ส่งกลับ: ${r.returnedNote || "กรุณาตรวจสอบรายละเอียด"}`,
+        timestamp: formatThaiDateShort(r.returnedAt || r.updatedAt),
+        createdAt: r.returnedAt || r.updatedAt || new Date().toISOString(),
+        isRead: readIds.has(notifId),
+        priority: "urgent",
+        senderName: r.returnedByName || "ผู้พิจารณาใบลา",
+        link: { page: "leave", targetId: r.id, subTab: "my" },
+      });
+    } else if (r.status === "approved") {
+      if (isApplicant) {
+        const notifId = `leave_approved_${r.id}`;
+        notifs.push({
+          id: notifId,
+          type: "leave",
+          title: `✅ ใบลาได้รับคำสั่งอนุญาตแล้ว (${r.requestNo})`,
+          message: `${typeLabel} ${r.totalWorkingDays} วัน (${dateSpan}) — ${r.approverName || "ผู้อนุญาต"} อนุญาตแล้ว`,
+          timestamp: formatThaiDateShort(r.orderedAt || r.updatedAt),
+          createdAt: r.orderedAt || r.updatedAt || new Date().toISOString(),
+          isRead: readIds.has(notifId),
+          priority: "normal",
+          senderName: r.approverName || "ผู้มีอำนาจสั่งอนุญาต",
+          link: { page: "leave", targetId: r.id, subTab: "my" },
+        });
+      }
+      if (r.actingPersonUserId && r.actingPersonUserId === currentUser.id) {
+        const notifId = `leave_acting_${r.id}`;
+        notifs.push({
+          id: notifId,
+          type: "leave",
+          title: `🤝 มอบหมายปฏิบัติหน้าที่แทนระหว่างลา (${r.requestNo})`,
+          message: `${r.applicantName} ได้รับอนุญาต${typeLabel} (${dateSpan}) มอบหมายท่านปฏิบัติหน้าที่แทน`,
+          timestamp: formatThaiDateShort(r.orderedAt || r.updatedAt),
+          createdAt: r.orderedAt || r.updatedAt || new Date().toISOString(),
+          isRead: readIds.has(notifId),
+          priority: "normal",
+          senderName: r.applicantName,
+          link: { page: "leave", targetId: r.id, subTab: "my" },
+        });
+      }
+    } else if (r.status === "rejected" && isApplicant) {
+      const notifId = `leave_rejected_${r.id}`;
+      notifs.push({
+        id: notifId,
+        type: "leave",
+        title: `❌ ใบลาไม่ได้รับอนุญาต (${r.requestNo})`,
+        message: `${typeLabel} (${dateSpan}): ${r.orderComment || "ไม่ได้รับคำสั่งอนุญาต"}`,
+        timestamp: formatThaiDateShort(r.orderedAt || r.updatedAt),
+        createdAt: r.orderedAt || r.updatedAt || new Date().toISOString(),
+        isRead: readIds.has(notifId),
+        priority: "urgent",
+        senderName: r.approverName || "ผู้มีอำนาจสั่งอนุญาต",
+        link: { page: "leave", targetId: r.id, subTab: "my" },
+      });
+    }
   });
 
   // Sort: Unread first, then by createdAt descending

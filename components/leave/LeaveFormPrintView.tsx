@@ -5,12 +5,55 @@ import {
   formatThaiDateFull,
   formatThaiDateParts,
   formatThaiDateSlash,
+  LEAVE_DAY_PERIOD_SHORT,
+  LEAVE_TYPE_META,
   LeaveRequestItem,
+  LeaveType,
 } from "@/lib/leave-utils";
 
 interface LeaveFormPrintViewProps {
   leave: LeaveRequestItem;
   printRef?: React.RefObject<HTMLDivElement | null>;
+}
+
+function formatWrittenAtShort(writtenAt?: string | null): string {
+  const trimmed = (writtenAt || "").trim();
+  if (
+    !trimmed ||
+    trimmed === "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร" ||
+    trimmed === "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์ จังหวัดกำแพงเพชร"
+  ) {
+    return "สนง.พมจ.กำแพงเพชร";
+  }
+  return trimmed;
+}
+
+function formatActingPersonText(actingPersonName?: string | null): string {
+  const trimmed = (actingPersonName || "").trim();
+  if (trimmed) {
+    return `${trimmed} ปฏิบัติหน้าที่แทน`;
+  }
+  return "นาย/นาง/นางสาว .................................. ปฏิบัติหน้าที่แทน";
+}
+
+function renderSplitPosition(position?: string | null): React.ReactNode {
+  const raw = (position || "").trim();
+  if (!raw) return null;
+  if (raw.length > 35 && raw.includes("จังหวัด")) {
+    const idx = raw.indexOf("จังหวัด");
+    const before = raw.slice(0, idx).trimEnd();
+    const after = raw.slice(idx);
+    if (before && after) {
+      return (
+        <>
+          {before}
+          <br />
+          {after}
+        </>
+      );
+    }
+  }
+  return raw;
 }
 
 function CheckboxBox({ checked, label }: { checked: boolean; label: string }) {
@@ -24,6 +67,92 @@ function CheckboxBox({ checked, label }: { checked: boolean; label: string }) {
   );
 }
 
+function SignatureBlock({
+  signatureUrl,
+  signed: _signed,
+  signerName,
+  position,
+  dateStr,
+  suffix,
+  align = "center",
+  positionPrefix = "ตำแหน่ง",
+  slashDate = false,
+  noDotsOnSignLine = false,
+}: {
+  signatureUrl?: string | null;
+  signed?: boolean;
+  signerName?: string | null;
+  position?: string | null;
+  dateStr?: string | null;
+  suffix?: string;
+  align?: "center" | "left";
+  positionPrefix?: string;
+  slashDate?: boolean;
+  noDotsOnSignLine?: boolean;
+}) {
+  const dateParts = formatThaiDateParts(dateStr);
+  const alignCls = align === "center" ? "text-center" : "text-left";
+  const imgCls = align === "center" ? "mx-auto" : "ml-10";
+
+  return (
+    <div className={`space-y-1 ${alignCls}`}>
+      {signatureUrl ? (
+        <div className="pt-1">
+          <img
+            src={signatureUrl}
+            alt="ลายเซ็น"
+            className={`h-10 max-w-[155px] object-contain ${imgCls} -mb-1`}
+          />
+        </div>
+      ) : null}
+      <div>
+        <span className="font-bold">(ลงชื่อ)</span>{" "}
+        {noDotsOnSignLine ? (
+          <span className="inline-block min-w-[128px]" />
+        ) : (
+          <span className="inline-block min-w-[140px] border-b border-dotted border-slate-600 text-center" />
+        )}
+        {suffix ? <span className="font-bold">{` ${suffix}`}</span> : null}
+      </div>
+      <div className={align === "left" ? "pl-10" : ""}>
+        ({signerName || "................................................"})
+      </div>
+      {position !== undefined && (
+        <div>
+          <span className="font-bold">{positionPrefix}</span>{" "}
+          <span className="inline-block min-w-[155px] px-1">
+            {renderSplitPosition(position) || "...................................."}
+          </span>
+        </div>
+      )}
+      {dateStr !== undefined &&
+        (slashDate ? (
+          <div>
+            <span className="font-bold">วันที่</span>{" "}
+            <span className="inline-block min-w-[130px] text-center">
+              {dateStr ? formatThaiDateSlash(dateStr) : "........ / ........ / ........"}
+            </span>
+          </div>
+        ) : (
+          <div>
+            <span className="font-bold">วันที่</span>{" "}
+            <span className="inline-block min-w-[28px] text-center">
+              {dateParts.day || "...."}
+            </span>{" "}
+            <span className="font-bold">เดือน</span>{" "}
+            <span className="inline-block min-w-[70px] text-center">
+              {dateParts.month || "............"}
+            </span>{" "}
+            <span className="font-bold">พ.ศ.</span>{" "}
+            <span className="inline-block min-w-[40px] text-center">
+              {dateParts.yearBE || "......"}
+            </span>
+          </div>
+        ))}
+    </div>
+  );
+}
+
 export default function LeaveFormPrintView({
   leave,
   printRef,
@@ -31,10 +160,205 @@ export default function LeaveFormPrintView({
   const writtenParts = formatThaiDateParts(leave.writtenDate);
   const startParts = formatThaiDateParts(leave.startDate);
   const endParts = formatThaiDateParts(leave.endDate);
-  const verifiedParts = formatThaiDateParts(leave.verifiedAt);
-  const supParts = formatThaiDateParts(leave.supervisorReviewedAt);
-  const ordParts = formatThaiDateParts(leave.orderedAt);
+  const periodSuffix =
+    leave.leaveDayPeriod && leave.leaveDayPeriod !== "full"
+      ? ` (${LEAVE_DAY_PERIOD_SHORT[leave.leaveDayPeriod]})`
+      : "";
 
+  // ---------------------------------------------------------------------------
+  // แบบฟอร์ม 3: ใบขอยกเลิกวันลา
+  // ---------------------------------------------------------------------------
+  if (leave.leaveType === "cancel_leave") {
+    const targetLabel =
+      leave.cancelTargetLeaveType &&
+      LEAVE_TYPE_META[leave.cancelTargetLeaveType as LeaveType]
+        ? LEAVE_TYPE_META[leave.cancelTargetLeaveType as LeaveType].label
+        : "ลา";
+
+    return (
+      <div
+        id="leave-print-sheet"
+        ref={printRef}
+        className="bg-white text-slate-900 mx-auto p-8 border border-slate-200 shadow-sm text-[16px] leading-[1.72]"
+        style={{
+          width: "210mm",
+          minHeight: "297mm",
+          fontFamily: "'TH Sarabun New', 'Sarabun', sans-serif",
+        }}
+      >
+        <h1 className="text-center text-[22px] font-bold mb-4">
+          แบบใบขอยกเลิกวันลา
+        </h1>
+
+        <div className="flex justify-end mb-3">
+          <div className="w-[54%] text-[16px]">
+            <div>
+              <span className="font-bold">เขียนที่</span>{" "}
+              <span className="px-1">{formatWrittenAtShort(leave.writtenAt)}</span>
+            </div>
+            <div className="mt-1">
+              <span className="font-bold">วันที่</span>{" "}
+              <span className="inline-block min-w-[26px] text-center">
+                {writtenParts.day || "...."}
+              </span>{" "}
+              <span className="font-bold">เดือน</span>{" "}
+              <span className="inline-block min-w-[78px] text-center">
+                {writtenParts.month || "............"}
+              </span>{" "}
+              <span className="font-bold">พ.ศ.</span>{" "}
+              <span className="inline-block min-w-[40px] text-center">
+                {writtenParts.yearBE || "......"}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-1.5 mt-2">
+          <div>
+            <span className="font-bold">เรื่อง</span>{" "}
+            <span className="ml-2">{leave.subject || "ขอยกเลิกวันลา"}</span>
+          </div>
+          <div>
+            <span className="font-bold">เรียน</span>{" "}
+            <span className="ml-2">
+              {leave.toRecipient ||
+                "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"}
+            </span>
+          </div>
+        </div>
+
+        <div className="mt-4 space-y-2">
+          <div className="indent-12">
+            <span className="font-bold">ข้าพเจ้า</span>{" "}
+            <span className="px-1">{leave.applicantName}</span>{" "}
+            <span className="font-bold ml-2">ตำแหน่ง</span>{" "}
+            <span className="px-1">{leave.applicantPosition || "-"}</span>{" "}
+            <span className="font-bold ml-2">กลุ่ม/ฝ่าย</span>{" "}
+            <span className="px-1">{leave.applicantDivision || "-"}</span>{" "}
+            <span className="font-bold ml-2">สังกัด</span>{" "}
+            <span>สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร</span>
+          </div>
+          <div className="indent-12">
+            ได้รับอนุญาตให้{" "}
+            <span className="border-b border-dotted border-slate-600 px-2 font-semibold">
+              {targetLabel}
+            </span>{" "}
+            (เลขที่ใบลาเดิม{" "}
+            <span className="border-b border-dotted border-slate-600 px-1.5">
+              {leave.cancelTargetRequestNo || "-"}
+            </span>
+            ) ตั้งแต่วันที่{" "}
+            <span className="border-b border-dotted border-slate-600 px-2">
+              {leave.cancelTargetStartDate
+                ? formatThaiDateFull(leave.cancelTargetStartDate)
+                : "-"}
+            </span>{" "}
+            ถึงวันที่{" "}
+            <span className="border-b border-dotted border-slate-600 px-2">
+              {leave.cancelTargetEndDate
+                ? formatThaiDateFull(leave.cancelTargetEndDate)
+                : "-"}
+            </span>{" "}
+            รวม{" "}
+            <span className="inline-block min-w-[34px] text-center border-b border-dotted border-slate-600 font-semibold">
+              {leave.cancelTargetDays ?? "-"}
+            </span>{" "}
+            วัน นั้น
+          </div>
+          <div className="indent-12">
+            เนื่องจาก{" "}
+            <span className="inline-block min-w-[340px] border-b border-dotted border-slate-600 px-2">
+              {leave.reason || "-"}
+            </span>{" "}
+            จึงขอยกเลิกวันลา{" "}
+            <span className="border-b border-dotted border-slate-600 px-2 font-semibold">
+              {targetLabel}
+            </span>{" "}
+            ตั้งแต่วันที่{" "}
+            <span className="border-b border-dotted border-slate-600 px-2">
+              {formatThaiDateFull(leave.startDate)}
+            </span>{" "}
+            ถึงวันที่{" "}
+            <span className="border-b border-dotted border-slate-600 px-2">
+              {formatThaiDateFull(leave.endDate)}
+            </span>{" "}
+            จำนวน{" "}
+            <span className="inline-block min-w-[38px] text-center border-b border-dotted border-slate-600 font-semibold">
+              {leave.totalWorkingDays}
+            </span>{" "}
+            วันทำการ{periodSuffix}
+          </div>
+        </div>
+
+        <div className="flex justify-end mt-8 mb-8">
+          <div className="w-[46%] text-center">
+            <div>ขอแสดงความนับถือ</div>
+            <SignatureBlock
+              signatureUrl={leave.applicantSignature}
+              signed={Boolean(leave.applicantSignature)}
+              signerName={leave.applicantName}
+              position={leave.applicantPosition || "-"}
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-10 mt-6 items-start">
+          <div className="space-y-2">
+            <div className="font-bold text-center underline">
+              ความเห็นผู้บังคับบัญชา
+            </div>
+            <div className="min-h-[48px] px-1 flex items-end justify-center">
+              {leave.supervisorComment ||
+                ".................................................................................."}
+            </div>
+            <SignatureBlock
+              signatureUrl={leave.supervisorSignature}
+              signed={Boolean(leave.supervisorReviewedAt)}
+              signerName={leave.supervisorName}
+              position={leave.supervisorPosition}
+              dateStr={leave.supervisorReviewedAt}
+              positionPrefix="(ตำแหน่ง)"
+              slashDate
+            />
+          </div>
+
+          <div className="space-y-2">
+            <div className="font-bold text-center">
+              คำสั่ง{" "}
+              <span className="ml-4 font-normal">
+                <CheckboxBox
+                  checked={leave.orderDecision === "approved"}
+                  label="อนุญาต"
+                />
+                <CheckboxBox
+                  checked={leave.orderDecision === "rejected"}
+                  label="ไม่อนุญาต"
+                />
+              </span>
+            </div>
+            {leave.orderComment && (
+              <div className="text-[15px] text-slate-700 text-center">
+                {leave.orderComment}
+              </div>
+            )}
+            <SignatureBlock
+              signatureUrl={leave.approverSignature}
+              signed={Boolean(leave.orderedAt)}
+              signerName={leave.approverName}
+              position={leave.approverPosition}
+              dateStr={leave.orderedAt}
+              positionPrefix="(ตำแหน่ง)"
+              slashDate
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // แบบฟอร์ม 2: ใบลาพักผ่อน
+  // ---------------------------------------------------------------------------
   if (leave.leaveType === "vacation_leave") {
     const totalEntitled =
       Number(leave.vacationAccumulatedDays || 0) +
@@ -44,36 +368,34 @@ export default function LeaveFormPrintView({
 
     return (
       <div
+        id="leave-print-sheet"
         ref={printRef}
-        className="bg-white text-slate-900 mx-auto p-8 border border-slate-200 shadow-sm text-[15px] leading-[1.7]"
+        className="bg-white text-slate-900 mx-auto p-8 border border-slate-200 shadow-sm text-[16px] leading-[1.68]"
         style={{
           width: "210mm",
           minHeight: "297mm",
           fontFamily: "'TH Sarabun New', 'Sarabun', sans-serif",
         }}
       >
-        <h1 className="text-center text-[21px] font-bold mb-3">ใบลาพักผ่อน</h1>
+        <h1 className="text-center text-[22px] font-bold mb-3">ใบลาพักผ่อน</h1>
 
         <div className="flex justify-end mb-2">
-          <div className="w-[58%] text-[15px]">
+          <div className="w-[52%] text-[16px]">
             <div>
-              เขียนที่{" "}
-              <span className="border-b border-dotted border-slate-600 px-1">
-                {leave.writtenAt ||
-                  "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์ จังหวัดกำแพงเพชร"}
-              </span>
+              <span className="font-bold">เขียนที่</span>{" "}
+              <span className="px-1">{formatWrittenAtShort(leave.writtenAt)}</span>
             </div>
             <div className="mt-1">
-              วันที่{" "}
-              <span className="inline-block min-w-[28px] text-center border-b border-dotted border-slate-600">
+              <span className="font-bold">วันที่</span>{" "}
+              <span className="inline-block min-w-[26px] text-center">
                 {writtenParts.day || "...."}
               </span>{" "}
-              เดือน{" "}
-              <span className="inline-block min-w-[85px] text-center border-b border-dotted border-slate-600">
+              <span className="font-bold">เดือน</span>{" "}
+              <span className="inline-block min-w-[78px] text-center">
                 {writtenParts.month || "............"}
               </span>{" "}
-              พ.ศ.{" "}
-              <span className="inline-block min-w-[44px] text-center border-b border-dotted border-slate-600">
+              <span className="font-bold">พ.ศ.</span>{" "}
+              <span className="inline-block min-w-[40px] text-center">
                 {writtenParts.yearBE || "......"}
               </span>
             </div>
@@ -82,11 +404,11 @@ export default function LeaveFormPrintView({
 
         <div className="space-y-1.5 mt-2">
           <div>
-            <span className="font-semibold">เรื่อง</span>{" "}
+            <span className="font-bold">เรื่อง</span>{" "}
             <span className="ml-2">{leave.subject || "ขอลาพักผ่อน"}</span>
           </div>
           <div>
-            <span className="font-semibold">เรียน</span>{" "}
+            <span className="font-bold">เรียน</span>{" "}
             <span className="ml-2">
               {leave.toRecipient ||
                 "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"}
@@ -96,87 +418,62 @@ export default function LeaveFormPrintView({
 
         <div className="mt-3 space-y-1.5">
           <div className="indent-12">
-            ข้าพเจ้า{" "}
-            <span className="inline-block min-w-[180px] border-b border-dotted border-slate-600 px-2">
-              {leave.applicantName}
-            </span>{" "}
-            ตำแหน่ง{" "}
-            <span className="inline-block min-w-[180px] border-b border-dotted border-slate-600 px-2">
-              {leave.applicantPosition || "-"}
-            </span>
-          </div>
-          <div>
-            กลุ่ม/ฝ่าย{" "}
-            <span className="inline-block min-w-[170px] border-b border-dotted border-slate-600 px-2">
-              {leave.applicantDivision || "-"}
-            </span>{" "}
-            สังกัด{" "}
+            <span className="font-bold">ข้าพเจ้า</span>{" "}
+            <span className="px-1">{leave.applicantName}</span>{" "}
+            <span className="font-bold ml-2">ตำแหน่ง</span>{" "}
+            <span className="px-1">{leave.applicantPosition || "-"}</span>{" "}
+            <span className="font-bold ml-2">กลุ่ม/ฝ่าย</span>{" "}
+            <span className="px-1">{leave.applicantDivision || "-"}</span>{" "}
+            <span className="font-bold ml-2">สังกัด</span>{" "}
             <span>สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร</span>
           </div>
           <div>
-            มีวันลาพักผ่อนสะสม{" "}
-            <span className="inline-block min-w-[42px] text-center border-b border-dotted border-slate-600">
-              {leave.vacationAccumulatedDays}
-            </span>{" "}
-            วันทำการ มีสิทธิลาพักผ่อนประจำปีอีก{" "}
-            <span className="inline-block min-w-[42px] text-center border-b border-dotted border-slate-600">
-              {leave.vacationAnnualDays}
-            </span>{" "}
-            วันทำการ รวมเป็น{" "}
-            <span className="inline-block min-w-[42px] text-center border-b border-dotted border-slate-600">
-              {totalEntitled}
-            </span>{" "}
-            วันทำการ
+            <span className="font-bold">มีวันลาพักผ่อนสะสม</span>{" "}
+            <span className="px-1">{leave.vacationAccumulatedDays}</span>{" "}
+            <span className="font-bold">วันทำการ</span>{" "}
+            <span className="font-bold ml-2">มีสิทธิลาพักผ่อนประจำปีอีก</span>{" "}
+            <span className="px-1">{leave.vacationAnnualDays}</span>{" "}
+            <span className="font-bold">วันทำการ</span>{" "}
+            <span className="font-bold ml-2">รวมเป็น</span>{" "}
+            <span className="px-1">{totalEntitled}</span>{" "}
+            <span className="font-bold">วันทำการ</span>
           </div>
           <div>
-            ขอลาพักผ่อนตั้งแต่วันที่{" "}
-            <span className="inline-block min-w-[26px] text-center border-b border-dotted border-slate-600">
-              {startParts.day}
+            <span className="font-bold">ขอลาพักผ่อนตั้งแต่วันที่</span>{" "}
+            <span className="px-1">{startParts.day}</span>{" "}
+            <span className="font-bold">เดือน</span>{" "}
+            <span className="px-1">{startParts.month}</span>{" "}
+            <span className="font-bold">พ.ศ.</span>{" "}
+            <span className="px-1">{startParts.yearBE}</span>{" "}
+            <span className="font-bold">ถึงวันที่</span>{" "}
+            <span className="px-1">{endParts.day}</span>{" "}
+            <span className="font-bold">เดือน</span>{" "}
+            <span className="px-1">{endParts.month}</span>{" "}
+            <span className="font-bold">พ.ศ.</span>{" "}
+            <span className="px-1">{endParts.yearBE}</span>
+            <br />
+            <span className="font-bold">มีกำหนด</span>{" "}
+            <span className="px-1">{leave.totalWorkingDays}</span>{" "}
+            <span className="font-bold">วัน</span>
+            {periodSuffix}{" "}
+            <span className="font-bold ml-2">
+              ในระหว่างลาจะติดต่อข้าพเจ้าได้ที่
             </span>{" "}
-            เดือน{" "}
-            <span className="inline-block min-w-[72px] text-center border-b border-dotted border-slate-600">
-              {startParts.month}
-            </span>{" "}
-            พ.ศ.{" "}
-            <span className="inline-block min-w-[40px] text-center border-b border-dotted border-slate-600">
-              {startParts.yearBE}
-            </span>{" "}
-            ถึงวันที่{" "}
-            <span className="inline-block min-w-[26px] text-center border-b border-dotted border-slate-600">
-              {endParts.day}
-            </span>{" "}
-            เดือน{" "}
-            <span className="inline-block min-w-[72px] text-center border-b border-dotted border-slate-600">
-              {endParts.month}
-            </span>{" "}
-            พ.ศ.{" "}
-            <span className="inline-block min-w-[40px] text-center border-b border-dotted border-slate-600">
-              {endParts.yearBE}
-            </span>{" "}
-            มีกำหนด{" "}
-            <span className="inline-block min-w-[36px] text-center border-b border-dotted border-slate-600 font-semibold">
-              {leave.totalWorkingDays}
-            </span>{" "}
-            วัน
-          </div>
-          <div>
-            ในระหว่างลาจะติดต่อข้าพเจ้าได้ที่{" "}
-            <span className="inline-block min-w-[230px] border-b border-dotted border-slate-600 px-2">
-              {leave.contactInfo || "-"}
-            </span>{" "}
-            หมายเลขโทรศัพท์{" "}
-            <span className="inline-block min-w-[110px] border-b border-dotted border-slate-600 px-2">
-              {leave.contactPhone || "-"}
+            <span className="px-1">{leave.contactInfo || "-"}</span>{" "}
+            <span className="ml-2">
+              หมายเลขโทรศัพท์ {leave.contactPhone || "-"}
             </span>
           </div>
         </div>
 
         <div className="flex justify-end mt-5 mb-5">
           <div className="w-[46%] text-center">
-            <div className="mt-4">
-              (ลงชื่อ)......................................................
-            </div>
-            <div>({leave.applicantName})</div>
+            <SignatureBlock
+              signatureUrl={leave.applicantSignature}
+              signed={Boolean(leave.applicantSignature)}
+              signerName={leave.applicantName}
+              position={leave.applicantPosition || "-"}
+            />
           </div>
         </div>
 
@@ -184,26 +481,20 @@ export default function LeaveFormPrintView({
           {/* Left column */}
           <div className="space-y-4">
             <div>
-              <div className="font-semibold text-center mb-1">
+              <div className="font-bold text-center mb-1.5">
                 สถิติการลาในปีงบประมาณนี้
               </div>
-              <table className="w-full border-collapse border border-slate-800 text-center text-[14px]">
+              <table className="w-full border-collapse border border-slate-800 text-center text-[15px]">
                 <thead>
                   <tr>
-                    <th className="border border-slate-800 px-2 py-1 font-semibold">
-                      ลามาแล้ว
-                      <br />
-                      (วันทำการ)
+                    <th className="border border-slate-800 px-2 py-2 font-bold">
+                      ลามาแล้ว (วันทำการ)
                     </th>
-                    <th className="border border-slate-800 px-2 py-1 font-semibold">
-                      ลาครั้งนี้
-                      <br />
-                      (วันทำการ)
+                    <th className="border border-slate-800 px-2 py-2 font-bold">
+                      ลาครั้งนี้ (วันทำการ)
                     </th>
-                    <th className="border border-slate-800 px-2 py-1 font-semibold">
-                      รวมเป็น
-                      <br />
-                      (วันทำการ)
+                    <th className="border border-slate-800 px-2 py-2 font-bold">
+                      รวมเป็น (วันทำการ)
                     </th>
                   </tr>
                 </thead>
@@ -215,7 +506,7 @@ export default function LeaveFormPrintView({
                     <td className="border border-slate-800 px-2 py-2">
                       {leave.totalWorkingDays}
                     </td>
-                    <td className="border border-slate-800 px-2 py-2 font-semibold">
+                    <td className="border border-slate-800 px-2 py-2 font-bold">
                       {totalUsed}
                     </td>
                   </tr>
@@ -223,50 +514,54 @@ export default function LeaveFormPrintView({
               </table>
             </div>
 
-            <div className="pt-2 space-y-1">
-              <div>
-                (ลงชื่อ){" "}
-                <span className="inline-block min-w-[140px] border-b border-dotted border-slate-600 text-center">
-                  {leave.verifierName || ""}
-                </span>{" "}
-                ผู้ตรวจสอบ
-              </div>
-              <div className="pl-12">
-                ({leave.verifierName || "................................................"})
-              </div>
-              <div>
-                (ตำแหน่ง){" "}
-                <span className="inline-block min-w-[155px] border-b border-dotted border-slate-600 px-1">
-                  {leave.verifierPosition || ""}
-                </span>
-              </div>
-              <div>
-                วันที่{" "}
-                <span className="inline-block min-w-[140px] border-b border-dotted border-slate-600 text-center">
-                  {leave.verifiedAt ? formatThaiDateSlash(leave.verifiedAt) : ""}
-                </span>
-              </div>
+            <div className="pt-2">
+              <SignatureBlock
+                signatureUrl={leave.verifierSignature}
+                signed={Boolean(leave.verifiedAt)}
+                signerName={leave.verifierName}
+                position={leave.verifierPosition}
+                dateStr={leave.verifiedAt}
+                suffix="ผู้ตรวจสอบ"
+                align="left"
+                positionPrefix="(ตำแหน่ง)"
+                slashDate
+                noDotsOnSignLine
+              />
             </div>
 
             <div className="pt-3 space-y-2">
               <div>
                 ในระหว่างที่ข้าพเจ้าลาพักผ่อนมอบหมายให้
                 <br />
-                นาย/นาง/นางสาว{" "}
-                <span className="inline-block min-w-[165px] border-b border-dotted border-slate-600 px-1">
-                  {leave.actingPersonName || "-"}
-                </span>{" "}
-                ปฏิบัติหน้าที่แทน
+                <span>{formatActingPersonText(leave.actingPersonName)}</span>
               </div>
               <div className="pt-1">
+                {leave.applicantSignature && (
+                  <img
+                    src={leave.applicantSignature}
+                    alt="ลายเซ็นผู้มอบ"
+                    className="h-9 max-w-[130px] object-contain ml-8 -mb-1"
+                  />
+                )}
                 <div>
-                  (ลงชื่อ)........................................ ผู้มอบ
+                  <span className="font-bold">(ลงชื่อ)</span>
+                  ..........................................{" "}
+                  <span className="font-bold">ผู้มอบ</span>
                 </div>
                 <div className="pl-12">({leave.applicantName})</div>
               </div>
               <div className="pt-1">
+                {leave.actingPersonSignature && (
+                  <img
+                    src={leave.actingPersonSignature}
+                    alt="ลายเซ็นผู้ปฏิบัติหน้าที่แทน"
+                    className="h-9 max-w-[130px] object-contain ml-8 -mb-1"
+                  />
+                )}
                 <div>
-                  (ลงชื่อ)........................................ ผู้ปฏิบัติหน้าที่แทน
+                  <span className="font-bold">(ลงชื่อ)</span>
+                  ...........................................{" "}
+                  <span className="font-bold">ผู้ปฏิบัติหน้าที่แทน</span>
                 </div>
                 <div className="pl-12">
                   ({leave.actingPersonName || "........................................"})
@@ -278,41 +573,28 @@ export default function LeaveFormPrintView({
           {/* Right column */}
           <div className="space-y-6">
             <div className="space-y-1.5">
-              <div className="font-semibold text-center underline">
+              <div className="font-bold text-center underline">
                 ความเห็นผู้บังคับบัญชา
               </div>
-              <div className="min-h-[42px] border-b border-dotted border-slate-600 px-1 flex items-end">
-                {leave.supervisorComment || ""}
+              <div className="min-h-[42px] px-1 flex items-end justify-center">
+                {leave.supervisorComment ||
+                  ".................................................................................."}
               </div>
-              <div className="pt-2">
-                (ลงชื่อ){" "}
-                <span className="inline-block min-w-[155px] border-b border-dotted border-slate-600 text-center">
-                  {leave.supervisorName || ""}
-                </span>
-              </div>
-              <div className="pl-12">
-                ({leave.supervisorName || "........................................"})
-              </div>
-              <div>
-                (ตำแหน่ง){" "}
-                <span className="inline-block min-w-[155px] border-b border-dotted border-slate-600 px-1">
-                  {leave.supervisorPosition || ""}
-                </span>
-              </div>
-              <div>
-                วันที่{" "}
-                <span className="inline-block min-w-[155px] border-b border-dotted border-slate-600 text-center">
-                  {leave.supervisorReviewedAt
-                    ? formatThaiDateSlash(leave.supervisorReviewedAt)
-                    : ""}
-                </span>
-              </div>
+              <SignatureBlock
+                signatureUrl={leave.supervisorSignature}
+                signed={Boolean(leave.supervisorReviewedAt)}
+                signerName={leave.supervisorName}
+                position={leave.supervisorPosition}
+                dateStr={leave.supervisorReviewedAt}
+                positionPrefix="(ตำแหน่ง)"
+                slashDate
+              />
             </div>
 
             <div className="space-y-1.5 pt-2">
-              <div className="font-semibold">
+              <div className="font-bold text-center">
                 คำสั่ง{" "}
-                <span className="ml-4">
+                <span className="ml-4 font-normal">
                   <CheckboxBox
                     checked={leave.orderDecision === "approved"}
                     label="อนุญาต"
@@ -324,31 +606,19 @@ export default function LeaveFormPrintView({
                 </span>
               </div>
               {leave.orderComment && (
-                <div className="text-[14px] text-slate-700 border-b border-dotted border-slate-500">
+                <div className="text-[15px] text-slate-700 text-center">
                   {leave.orderComment}
                 </div>
               )}
-              <div className="pt-4">
-                (ลงชื่อ){" "}
-                <span className="inline-block min-w-[155px] border-b border-dotted border-slate-600 text-center">
-                  {leave.approverName || ""}
-                </span>
-              </div>
-              <div className="pl-12">
-                ({leave.approverName || "........................................"})
-              </div>
-              <div>
-                (ตำแหน่ง){" "}
-                <span className="inline-block min-w-[155px] border-b border-dotted border-slate-600 px-1">
-                  {leave.approverPosition || ""}
-                </span>
-              </div>
-              <div>
-                วันที่{" "}
-                <span className="inline-block min-w-[155px] border-b border-dotted border-slate-600 text-center">
-                  {leave.orderedAt ? formatThaiDateSlash(leave.orderedAt) : ""}
-                </span>
-              </div>
+              <SignatureBlock
+                signatureUrl={leave.approverSignature}
+                signed={Boolean(leave.orderedAt)}
+                signerName={leave.approverName}
+                position={leave.approverPosition}
+                dateStr={leave.orderedAt}
+                positionPrefix="(ตำแหน่ง)"
+                slashDate
+              />
             </div>
           </div>
         </div>
@@ -356,7 +626,9 @@ export default function LeaveFormPrintView({
     );
   }
 
+  // ---------------------------------------------------------------------------
   // แบบฟอร์ม 1: ใบลาป่วย ลาคลอดบุตร ลากิจส่วนตัว
+  // ---------------------------------------------------------------------------
   const curSick = leave.leaveType === "sick_leave" ? leave.totalWorkingDays : 0;
   const curPersonal =
     leave.leaveType === "personal_leave" ? leave.totalWorkingDays : 0;
@@ -365,38 +637,36 @@ export default function LeaveFormPrintView({
 
   return (
     <div
+      id="leave-print-sheet"
       ref={printRef}
-      className="bg-white text-slate-900 mx-auto p-8 border border-slate-200 shadow-sm text-[15px] leading-[1.68]"
+      className="bg-white text-slate-900 mx-auto p-8 border border-slate-200 shadow-sm text-[16px] leading-[1.66]"
       style={{
         width: "210mm",
         minHeight: "297mm",
         fontFamily: "'TH Sarabun New', 'Sarabun', sans-serif",
       }}
     >
-      <h1 className="text-center text-[21px] font-bold mb-3">
+      <h1 className="text-center text-[22px] font-bold mb-3">
         ใบลาป่วย ลาคลอดบุตร ลากิจส่วนตัว
       </h1>
 
       <div className="flex justify-end mb-2">
-        <div className="w-[56%] text-[15px]">
+        <div className="w-[54%] text-[16px]">
           <div>
-            เขียนที่{" "}
-            <span className="border-b border-dotted border-slate-600 px-1">
-              {leave.writtenAt ||
-                "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"}
-            </span>
+            <span className="font-bold">เขียนที่</span>{" "}
+            <span className="px-1">{formatWrittenAtShort(leave.writtenAt)}</span>
           </div>
           <div className="mt-1">
-            วันที่{" "}
-            <span className="inline-block min-w-[28px] text-center border-b border-dotted border-slate-600">
+            <span className="font-bold">วันที่</span>{" "}
+            <span className="inline-block min-w-[28px] text-center">
               {writtenParts.day || "...."}
             </span>{" "}
-            เดือน{" "}
-            <span className="inline-block min-w-[85px] text-center border-b border-dotted border-slate-600">
+            <span className="font-bold">เดือน</span>{" "}
+            <span className="inline-block min-w-[85px] text-center">
               {writtenParts.month || "............"}
             </span>{" "}
-            พ.ศ.{" "}
-            <span className="inline-block min-w-[44px] text-center border-b border-dotted border-slate-600">
+            <span className="font-bold">พ.ศ.</span>{" "}
+            <span className="inline-block min-w-[44px] text-center">
               {writtenParts.yearBE || "......"}
             </span>
           </div>
@@ -405,11 +675,11 @@ export default function LeaveFormPrintView({
 
       <div className="space-y-1.5 mt-2">
         <div>
-          <span className="font-semibold">เรื่อง</span>{" "}
+          <span className="font-bold">เรื่อง</span>{" "}
           <span className="ml-2">{leave.subject}</span>
         </div>
         <div>
-          <span className="font-semibold">เรียน</span>{" "}
+          <span className="font-bold">เรียน</span>{" "}
           <span className="ml-2">
             {leave.toRecipient ||
               "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"}
@@ -419,22 +689,14 @@ export default function LeaveFormPrintView({
 
       <div className="mt-3 space-y-1.5">
         <div className="indent-12">
-          ข้าพเจ้า{" "}
-          <span className="inline-block min-w-[180px] border-b border-dotted border-slate-600 px-2">
-            {leave.applicantName}
-          </span>{" "}
-          ตำแหน่ง{" "}
-          <span className="inline-block min-w-[180px] border-b border-dotted border-slate-600 px-2">
-            {leave.applicantPosition || "-"}
-          </span>
-        </div>
-        <div>
-          สังกัด{" "}
-          <span className="inline-block min-w-[320px] border-b border-dotted border-slate-600 px-2">
-            {leave.applicantDivision
-              ? `${leave.applicantDivision} (สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร)`
-              : "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"}
-          </span>
+          <span className="font-bold">ข้าพเจ้า</span>{" "}
+          <span className="px-1">{leave.applicantName}</span>{" "}
+          <span className="font-bold ml-2">ตำแหน่ง</span>{" "}
+          <span className="px-1">{leave.applicantPosition || "-"}</span>{" "}
+          <span className="font-bold ml-2">กลุ่ม/ฝ่าย</span>{" "}
+          <span className="px-1">{leave.applicantDivision || "-"}</span>{" "}
+          <span className="font-bold ml-2">สังกัด</span>{" "}
+          <span>สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร</span>
         </div>
 
         <div className="pl-6 space-y-1 py-1">
@@ -485,7 +747,7 @@ export default function LeaveFormPrintView({
           <span className="inline-block min-w-[40px] border-b border-dotted border-slate-600 text-center font-semibold">
             {leave.totalWorkingDays}
           </span>{" "}
-          วัน
+          วัน{periodSuffix}
         </div>
 
         <div>
@@ -530,10 +792,12 @@ export default function LeaveFormPrintView({
       <div className="flex justify-end mt-4 mb-4">
         <div className="w-[46%] text-center">
           <div>ขอแสดงความนับถือ</div>
-          <div className="mt-5">
-            (ลงชื่อ)......................................................
-          </div>
-          <div>({leave.applicantName})</div>
+          <SignatureBlock
+            signatureUrl={leave.applicantSignature}
+            signed={Boolean(leave.applicantSignature)}
+            signerName={leave.applicantName}
+            position={leave.applicantPosition || "-"}
+          />
         </div>
       </div>
 
@@ -612,37 +876,16 @@ export default function LeaveFormPrintView({
             </table>
           </div>
 
-          <div className="pt-2 space-y-1">
-            <div>
-              (ลงชื่อ){" "}
-              <span className="inline-block min-w-[140px] border-b border-dotted border-slate-600 text-center">
-                {leave.verifierName || ""}
-              </span>{" "}
-              ผู้ตรวจสอบ
-            </div>
-            <div className="pl-12">
-              ({leave.verifierName || "................................................"})
-            </div>
-            <div>
-              ตำแหน่ง{" "}
-              <span className="inline-block min-w-[165px] border-b border-dotted border-slate-600 px-1">
-                {leave.verifierPosition || ""}
-              </span>
-            </div>
-            <div>
-              วันที่{" "}
-              <span className="inline-block min-w-[30px] text-center border-b border-dotted border-slate-600">
-                {verifiedParts.day}
-              </span>{" "}
-              เดือน{" "}
-              <span className="inline-block min-w-[70px] text-center border-b border-dotted border-slate-600">
-                {verifiedParts.month}
-              </span>{" "}
-              พ.ศ.{" "}
-              <span className="inline-block min-w-[40px] text-center border-b border-dotted border-slate-600">
-                {verifiedParts.yearBE}
-              </span>
-            </div>
+          <div className="pt-2">
+            <SignatureBlock
+              signatureUrl={leave.verifierSignature}
+              signed={Boolean(leave.verifiedAt)}
+              signerName={leave.verifierName}
+              position={leave.verifierPosition}
+              dateStr={leave.verifiedAt}
+              suffix="ผู้ตรวจสอบ"
+              align="left"
+            />
           </div>
         </div>
 
@@ -655,32 +898,13 @@ export default function LeaveFormPrintView({
             <div className="min-h-[42px] border-b border-dotted border-slate-600 px-1 flex items-end">
               {leave.supervisorComment || ""}
             </div>
-            <div className="pt-2">
-              (ลงชื่อ){" "}
-              <span className="inline-block min-w-[155px] border-b border-dotted border-slate-600 text-center">
-                {leave.supervisorName || ""}
-              </span>
-            </div>
-            <div>
-              ตำแหน่ง{" "}
-              <span className="inline-block min-w-[155px] border-b border-dotted border-slate-600 px-1">
-                {leave.supervisorPosition || ""}
-              </span>
-            </div>
-            <div>
-              วันที่{" "}
-              <span className="inline-block min-w-[30px] text-center border-b border-dotted border-slate-600">
-                {supParts.day}
-              </span>{" "}
-              เดือน{" "}
-              <span className="inline-block min-w-[70px] text-center border-b border-dotted border-slate-600">
-                {supParts.month}
-              </span>{" "}
-              พ.ศ.{" "}
-              <span className="inline-block min-w-[40px] text-center border-b border-dotted border-slate-600">
-                {supParts.yearBE}
-              </span>
-            </div>
+            <SignatureBlock
+              signatureUrl={leave.supervisorSignature}
+              signed={Boolean(leave.supervisorReviewedAt)}
+              signerName={leave.supervisorName}
+              position={leave.supervisorPosition}
+              dateStr={leave.supervisorReviewedAt}
+            />
           </div>
 
           <div className="space-y-1.5 pt-2">
@@ -702,32 +926,13 @@ export default function LeaveFormPrintView({
                 {leave.orderComment}
               </div>
             )}
-            <div className="pt-4">
-              (ลงชื่อ){" "}
-              <span className="inline-block min-w-[155px] border-b border-dotted border-slate-600 text-center">
-                {leave.approverName || ""}
-              </span>
-            </div>
-            <div>
-              ตำแหน่ง{" "}
-              <span className="inline-block min-w-[155px] border-b border-dotted border-slate-600 px-1">
-                {leave.approverPosition || ""}
-              </span>
-            </div>
-            <div>
-              วันที่{" "}
-              <span className="inline-block min-w-[30px] text-center border-b border-dotted border-slate-600">
-                {ordParts.day}
-              </span>{" "}
-              เดือน{" "}
-              <span className="inline-block min-w-[70px] text-center border-b border-dotted border-slate-600">
-                {ordParts.month}
-              </span>{" "}
-              พ.ศ.{" "}
-              <span className="inline-block min-w-[40px] text-center border-b border-dotted border-slate-600">
-                {ordParts.yearBE}
-              </span>
-            </div>
+            <SignatureBlock
+              signatureUrl={leave.approverSignature}
+              signed={Boolean(leave.orderedAt)}
+              signerName={leave.approverName}
+              position={leave.approverPosition}
+              dateStr={leave.orderedAt}
+            />
           </div>
         </div>
       </div>

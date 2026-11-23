@@ -1,30 +1,47 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAppContext } from "@/context/AppContext";
 import { downloadLeaveDocx } from "@/lib/leave-docx-export";
 import { downloadLeavePdf } from "@/lib/leave-pdf-export";
+import { uploadSmartFile } from "@/lib/smart-upload";
 import {
+  calculateLeavePeriodDetails,
+  countWorkingDaysInRange,
+  detectLeaveOverlap,
   formatThaiDateFull,
   formatThaiDateShort,
+  getEffectiveLeaveDays,
   getFiscalYear,
   getHalfYearRange,
   getTodayIsoDate,
-  getWorkingDatesBetween,
+  LEAVE_DAY_PERIOD_LABELS,
+  LEAVE_DAY_PERIOD_SHORT,
   LEAVE_STATUS_META,
   LEAVE_TYPE_META,
   LeaveBalanceItem,
+  LeaveDayPeriod,
   LeaveFormKind,
   LeaveRequestItem,
   LeaveType,
+  resolveLeaveAttachmentUrl,
 } from "@/lib/leave-utils";
+import {
+  buildHolidayMap,
+  listHolidaysForFiscalYear,
+  ThaiHolidayItem,
+} from "@/lib/thai-holidays";
+import LeaveSignaturePad from "./LeaveSignaturePad";
+import LeavePreviewModal from "./LeavePreviewModal";
 import PreloadSkeleton from "@/components/ui/PreloadSkeleton";
 
-const LEAVE_MIGRATION_SQL = `-- รันคำสั่งนี้ใน Supabase SQL Editor เพื่อสร้างตารางระบบใบลา
+const LEAVE_MIGRATION_SQL = `-- รันคำสั่งนี้ใน Supabase SQL Editor เพื่อสร้างตารางระบบใบลา (ครั้งแรก)
 CREATE TABLE IF NOT EXISTS public.leave_requests (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   request_no text NOT NULL,
-  leave_type text NOT NULL CHECK (leave_type IN ('sick_leave', 'personal_leave', 'maternity_leave', 'vacation_leave')),
+  leave_type text NOT NULL CHECK (leave_type IN ('sick_leave', 'personal_leave', 'maternity_leave', 'vacation_leave', 'cancel_leave')),
+  leave_day_period text NOT NULL DEFAULT 'full' CHECK (leave_day_period IN ('full', 'morning', 'afternoon')),
   written_at text NOT NULL DEFAULT 'สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร',
   written_date date NOT NULL DEFAULT CURRENT_DATE,
   subject text NOT NULL,
@@ -37,6 +54,13 @@ CREATE TABLE IF NOT EXISTS public.leave_requests (
   start_date date NOT NULL,
   end_date date NOT NULL,
   total_working_days numeric(5,1) NOT NULL DEFAULT 1,
+  cancelled_days numeric(5,1) NOT NULL DEFAULT 0,
+  cancel_target_leave_id uuid REFERENCES public.leave_requests(id) ON DELETE SET NULL,
+  cancel_target_request_no text,
+  cancel_target_leave_type text,
+  cancel_target_start_date date,
+  cancel_target_end_date date,
+  cancel_target_days numeric(5,1),
   last_leave_type text,
   last_leave_start_date date,
   last_leave_end_date date,
@@ -53,7 +77,7 @@ CREATE TABLE IF NOT EXISTS public.leave_requests (
   prev_personal_days numeric(5,1) NOT NULL DEFAULT 0,
   prev_maternity_days numeric(5,1) NOT NULL DEFAULT 0,
   prev_vacation_days numeric(5,1) NOT NULL DEFAULT 0,
-  status text NOT NULL DEFAULT 'pending_verifier' CHECK (status IN ('pending_verifier', 'pending_supervisor', 'pending_approver', 'approved', 'rejected', 'cancelled')),
+  status text NOT NULL DEFAULT 'pending_verifier' CHECK (status IN ('pending_verifier', 'pending_supervisor', 'pending_approver', 'approved', 'rejected', 'returned', 'cancelled')),
   verifier_user_id text REFERENCES public.users(id) ON DELETE SET NULL,
   verifier_name text,
   verifier_position text,
@@ -70,36 +94,54 @@ CREATE TABLE IF NOT EXISTS public.leave_requests (
   order_decision text CHECK (order_decision IN ('approved', 'rejected')),
   order_comment text,
   ordered_at timestamptz,
+  applicant_signature text,
+  acting_person_signature text,
+  verifier_signature text,
+  supervisor_signature text,
+  approver_signature text,
   attachment_url text,
   attachment_name text,
+  attachment_storage text,
+  excluded_holidays jsonb NOT NULL DEFAULT '[]'::jsonb,
+  returned_by_name text,
+  returned_note text,
+  returned_at timestamptz,
   synced_to_attendance boolean NOT NULL DEFAULT false,
   synced_at timestamptz,
   sync_note text,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
-);
+);`;
 
-CREATE TABLE IF NOT EXISTS public.leave_balances (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id text NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+const LEAVE_V2_MIGRATION_SQL = `-- รันคำสั่งในไฟล์ supabase/migrations/20261123000001_enhance_leave_system.sql ใน Supabase SQL Editor
+ALTER TABLE public.leave_requests
+  ADD COLUMN IF NOT EXISTS leave_day_period text NOT NULL DEFAULT 'full',
+  ADD COLUMN IF NOT EXISTS cancelled_days numeric(5,1) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS cancel_target_leave_id uuid REFERENCES public.leave_requests(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS cancel_target_request_no text,
+  ADD COLUMN IF NOT EXISTS cancel_target_leave_type text,
+  ADD COLUMN IF NOT EXISTS cancel_target_start_date date,
+  ADD COLUMN IF NOT EXISTS cancel_target_end_date date,
+  ADD COLUMN IF NOT EXISTS cancel_target_days numeric(5,1),
+  ADD COLUMN IF NOT EXISTS applicant_signature text,
+  ADD COLUMN IF NOT EXISTS acting_person_signature text,
+  ADD COLUMN IF NOT EXISTS verifier_signature text,
+  ADD COLUMN IF NOT EXISTS supervisor_signature text,
+  ADD COLUMN IF NOT EXISTS approver_signature text,
+  ADD COLUMN IF NOT EXISTS attachment_storage text,
+  ADD COLUMN IF NOT EXISTS excluded_holidays jsonb NOT NULL DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS returned_by_name text,
+  ADD COLUMN IF NOT EXISTS returned_note text,
+  ADD COLUMN IF NOT EXISTS returned_at timestamptz;
+
+CREATE TABLE IF NOT EXISTS public.thai_public_holidays (
+  holiday_date date PRIMARY KEY,
+  name text NOT NULL,
   fiscal_year integer NOT NULL,
-  sick_days_carried numeric(5,1) NOT NULL DEFAULT 0,
-  personal_days_carried numeric(5,1) NOT NULL DEFAULT 0,
-  maternity_days_carried numeric(5,1) NOT NULL DEFAULT 0,
-  vacation_accumulated_days numeric(5,1) NOT NULL DEFAULT 0,
-  vacation_annual_days numeric(5,1) NOT NULL DEFAULT 10,
-  vacation_days_carried numeric(5,1) NOT NULL DEFAULT 0,
-  updated_by text,
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (user_id, fiscal_year)
-);
-
-ALTER TABLE public.leave_requests ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.leave_balances ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow all on leave_requests" ON public.leave_requests;
-CREATE POLICY "Allow all on leave_requests" ON public.leave_requests FOR ALL USING (true) WITH CHECK (true);
-DROP POLICY IF EXISTS "Allow all on leave_balances" ON public.leave_balances;
-CREATE POLICY "Allow all on leave_balances" ON public.leave_balances FOR ALL USING (true) WITH CHECK (true);`;
+  is_active boolean NOT NULL DEFAULT true,
+  created_by text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);`;
 
 const LEAVE_ROLE_MIGRATION_SQL = `-- รันคำสั่งนี้ใน Supabase SQL Editor เพื่อสร้างตารางกำหนดสิทธิ์ระบบใบลา
 CREATE TABLE IF NOT EXISTS public.leave_authorized_roles (
@@ -113,11 +155,7 @@ CREATE TABLE IF NOT EXISTS public.leave_authorized_roles (
   granted_by text,
   updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (user_id)
-);
-
-ALTER TABLE public.leave_authorized_roles ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow all on leave_authorized_roles" ON public.leave_authorized_roles;
-CREATE POLICY "Allow all on leave_authorized_roles" ON public.leave_authorized_roles FOR ALL USING (true) WITH CHECK (true);`;
+);`;
 
 interface LeaveAuthorizedRoleItem {
   id: string;
@@ -133,20 +171,96 @@ interface LeaveAuthorizedRoleItem {
 
 type LeaveTab = "form" | "my" | "review" | "summary" | "permissions";
 
+function ApprovalStepper({ leave }: { leave: LeaveRequestItem }) {
+  const isCancel = leave.leaveType === "cancel_leave";
+  const steps = isCancel
+    ? [
+        {
+          label: "2. ผู้บังคับบัญชา",
+          done: Boolean(leave.supervisorReviewedAt),
+          active: leave.status === "pending_supervisor",
+          actor: leave.supervisorName || "รอระบุ",
+          note: leave.supervisorComment,
+        },
+        {
+          label: "3. คำสั่งอนุญาต",
+          done: Boolean(leave.orderedAt),
+          active: leave.status === "pending_approver",
+          rejected: leave.status === "rejected",
+          actor: leave.approverName || "ผู้อนุญาต",
+          note: leave.orderComment,
+        },
+      ]
+    : [
+        {
+          label: "1. ผู้ตรวจสอบสถิติ",
+          done: Boolean(leave.verifiedAt),
+          active: leave.status === "pending_verifier",
+          actor: leave.verifierName || "ผู้ตรวจสอบ",
+          note: leave.verifierNote,
+        },
+        {
+          label: "2. ผู้บังคับบัญชา",
+          done: Boolean(leave.supervisorReviewedAt),
+          active: leave.status === "pending_supervisor",
+          actor: leave.supervisorName || "รอระบุ",
+          note: leave.supervisorComment,
+        },
+        {
+          label: "3. คำสั่งอนุญาต",
+          done: Boolean(leave.orderedAt),
+          active: leave.status === "pending_approver",
+          rejected: leave.status === "rejected",
+          actor: leave.approverName || "ผู้อนุญาต",
+          note: leave.orderComment,
+        },
+      ];
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 pt-1.5">
+      {steps.map((st, idx) => (
+        <React.Fragment key={st.label}>
+          <div
+            title={st.note || undefined}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-medium ${
+              st.rejected
+                ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800/60"
+                : st.done
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800/60"
+                : st.active
+                ? "bg-indigo-50 text-indigo-700 border-indigo-300 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-700"
+                : "bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-800/60 dark:text-slate-400 dark:border-slate-700"
+            }`}
+          >
+            <span>{st.rejected ? "✗" : st.done ? "✓" : st.active ? "⏳" : "•"}</span>
+            <span className="font-semibold">{st.label}:</span>
+            <span className="truncate max-w-[140px]">{st.actor}</span>
+          </div>
+          {idx < steps.length - 1 && (
+            <span className="text-slate-300 dark:text-slate-600 text-xs">➔</span>
+          )}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
 export default function LeavePage() {
-  const { currentUser, currentUserRole, members, showToast } =
-    useAppContext();
+  const searchParams = useSearchParams();
+  const { currentUser, currentUserRole, members, showToast } = useAppContext();
 
   const [activeTab, setActiveTab] = useState<LeaveTab>("form");
   const [fiscalYear, setFiscalYear] = useState<number>(() => getFiscalYear());
   const [loading, setLoading] = useState(true);
   const [needsMigration, setNeedsMigration] = useState(false);
+  const [needsV2Migration, setNeedsV2Migration] = useState(false);
   const [needsRoleMigration, setNeedsRoleMigration] = useState(false);
   const [requests, setRequests] = useState<LeaveRequestItem[]>([]);
   const [balances, setBalances] = useState<LeaveBalanceItem[]>([]);
   const [mappedUserIds, setMappedUserIds] = useState<string[]>([]);
   const [authorizedEditorIds, setAuthorizedEditorIds] = useState<string[]>([]);
   const [leaveRoles, setLeaveRoles] = useState<LeaveAuthorizedRoleItem[]>([]);
+  const [dbHolidays, setDbHolidays] = useState<ThaiHolidayItem[]>([]);
 
   // Permissions form state (Admin only)
   const [permUserId, setPermUserId] = useState("");
@@ -155,12 +269,15 @@ export default function LeavePage() {
   const [permCanApprove, setPermCanApprove] = useState(false);
   const [savingPerm, setSavingPerm] = useState(false);
 
+  // Edit-returned mode
+  const [editingReturnedLeave, setEditingReturnedLeave] =
+    useState<LeaveRequestItem | null>(null);
+
   // Form state
   const [formKind, setFormKind] = useState<LeaveFormKind>("general");
   const [leaveType, setLeaveType] = useState<LeaveType>("sick_leave");
-  const [writtenAt, setWrittenAt] = useState(
-    "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"
-  );
+  const [leaveDayPeriod, setLeaveDayPeriod] = useState<LeaveDayPeriod>("full");
+  const [writtenAt, setWrittenAt] = useState("สนง.พมจ.กำแพงเพชร");
   const [writtenDate, setWrittenDate] = useState(() => getTodayIsoDate());
   const [applicantPosition, setApplicantPosition] = useState("");
   const [subject, setSubject] = useState("ขออนุญาตลาป่วย");
@@ -170,34 +287,58 @@ export default function LeavePage() {
   const [reason, setReason] = useState("");
   const [startDate, setStartDate] = useState(() => getTodayIsoDate());
   const [endDate, setEndDate] = useState(() => getTodayIsoDate());
-  const [totalWorkingDays, setTotalWorkingDays] = useState<number>(1);
   const [contactInfo, setContactInfo] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [lastLeaveType, setLastLeaveType] = useState("");
   const [lastLeaveStartDate, setLastLeaveStartDate] = useState("");
   const [lastLeaveEndDate, setLastLeaveEndDate] = useState("");
   const [lastLeaveDays, setLastLeaveDays] = useState<string>("");
-  const [vacationAccumulatedDays, setVacationAccumulatedDays] = useState<number>(0);
+  const [vacationAccumulatedDays, setVacationAccumulatedDays] =
+    useState<number>(0);
   const [vacationAnnualDays, setVacationAnnualDays] = useState<number>(10);
   const [actingPersonUserId, setActingPersonUserId] = useState("");
   const [verifierUserId, setVerifierUserId] = useState("syno_ยุทธนา");
   const [supervisorUserId, setSupervisorUserId] = useState("");
   const [approverUserId, setApproverUserId] = useState("syno_มะลิวัน");
+
+  // Form 3 (ขอยกเลิกวันลา) & Attachment & Signature
+  const [cancelTargetLeaveId, setCancelTargetLeaveId] = useState("");
+  const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
+  const [attachmentName, setAttachmentName] = useState<string | null>(null);
+  const [attachmentStorage, setAttachmentStorage] = useState<string | null>(null);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const attachInputRef = useRef<HTMLInputElement | null>(null);
+  const [applicantSignature, setApplicantSignature] = useState<string | null>(
+    null
+  );
   const [submitting, setSubmitting] = useState(false);
+
+  // Preview Modal
+  const [previewLeave, setPreviewLeave] = useState<LeaveRequestItem | null>(null);
 
   // Review / Modal state
   const [reviewFilter, setReviewFilter] = useState<string>("actionable");
+  const [reviewSearch, setReviewSearch] = useState("");
+  const [reviewTypeFilter, setReviewTypeFilter] = useState<string>("all");
   const [actionModal, setActionModal] = useState<{
     leave: LeaveRequestItem;
-    action: "verify" | "supervisor_review" | "order";
+    action: "verify" | "supervisor_review" | "order" | "return";
   } | null>(null);
   const [actionComment, setActionComment] = useState("");
+  const [actionSignature, setActionSignature] = useState<string | null>(null);
   const [orderDecision, setOrderDecision] = useState<"approved" | "rejected">(
     "approved"
   );
   const [processingAction, setProcessingAction] = useState(false);
 
-  // Balance edit modal
+  // Summary / Balance / Holiday management
+  const [summarySearch, setSummarySearch] = useState("");
+  const [summaryDivisionFilter, setSummaryDivisionFilter] = useState("all");
+  const [showHolidayPanel, setShowHolidayPanel] = useState(false);
+  const [newHolidayDate, setNewHolidayDate] = useState("");
+  const [newHolidayName, setNewHolidayName] = useState("");
+  const [savingHoliday, setSavingHoliday] = useState(false);
+
   const [balanceModalUser, setBalanceModalUser] = useState<{
     userId: string;
     name: string;
@@ -212,6 +353,13 @@ export default function LeavePage() {
   });
 
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const deepLinkAppliedRef = useRef(false);
+
+  const holidayMap = useMemo(() => buildHolidayMap(dbHolidays), [dbHolidays]);
+  const fiscalHolidayList = useMemo(
+    () => listHolidaysForFiscalYear(fiscalYear, dbHolidays),
+    [fiscalYear, dbHolidays]
+  );
 
   const isAdmin = currentUserRole === "admin";
   const isManager = currentUserRole === "manager";
@@ -288,7 +436,10 @@ export default function LeavePage() {
           myDiv !== ""
       ) ||
       supervisorCandidates.find(
-        (m) => m.id !== currentUser.id && (m.division || "").trim() === myDiv && myDiv !== ""
+        (m) =>
+          m.id !== currentUser.id &&
+          (m.division || "").trim() === myDiv &&
+          myDiv !== ""
       ) ||
       supervisorCandidates.find((m) => m.id !== currentUser.id) ||
       supervisorCandidates[0];
@@ -313,6 +464,7 @@ export default function LeavePage() {
       const data = await res.json();
       if (data?.success) {
         setNeedsMigration(Boolean(data.needsMigration));
+        setNeedsV2Migration(Boolean(data.needsV2Migration));
         setNeedsRoleMigration(Boolean(data.needsRoleMigration));
         setRequests(Array.isArray(data.requests) ? data.requests : []);
         setBalances(Array.isArray(data.balances) ? data.balances : []);
@@ -323,6 +475,7 @@ export default function LeavePage() {
           Array.isArray(data.authorizedEditorIds) ? data.authorizedEditorIds : []
         );
         setLeaveRoles(Array.isArray(data.leaveRoles) ? data.leaveRoles : []);
+        setDbHolidays(Array.isArray(data.holidays) ? data.holidays : []);
       }
     } catch {
       showToast("❌ โหลดข้อมูลระบบใบลาไม่สำเร็จ");
@@ -334,6 +487,25 @@ export default function LeavePage() {
   useEffect(() => {
     loadLeaveData();
   }, [loadLeaveData]);
+
+  // Handle URL deep link (?tab=review&leaveId=...)
+  useEffect(() => {
+    if (deepLinkAppliedRef.current || loading) return;
+    const tabParam = searchParams.get("tab") as LeaveTab | null;
+    const leaveIdParam = searchParams.get("leaveId");
+    if (tabParam && ["form", "my", "review", "summary", "permissions"].includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+    if (leaveIdParam && requests.length > 0) {
+      const target = requests.find((r) => r.id === leaveIdParam);
+      if (target) {
+        setPreviewLeave(target);
+      }
+    }
+    if (tabParam || leaveIdParam) {
+      deepLinkAppliedRef.current = true;
+    }
+  }, [searchParams, loading, requests]);
 
   // Pre-fill contact phone & balance for current user
   useEffect(() => {
@@ -349,25 +521,92 @@ export default function LeavePage() {
       setVacationAccumulatedDays(myBal.vacationAccumulatedDays);
       setVacationAnnualDays(myBal.vacationAnnualDays);
     }
-  }, [currentUser, balances, contactPhone]);
+  }, [currentUser, balances, applicantPosition, contactPhone]);
 
-  // Auto-calculate working days when date range changes
+  // Ensure half-day resets when start != end or maternity selected
   useEffect(() => {
-    const working = getWorkingDatesBetween(startDate, endDate);
-    if (working.length > 0) {
-      setTotalWorkingDays(working.length);
+    if (startDate !== endDate || leaveType === "maternity_leave") {
+      if (leaveDayPeriod !== "full") setLeaveDayPeriod("full");
     }
-  }, [startDate, endDate]);
+  }, [startDate, endDate, leaveType, leaveDayPeriod]);
 
-  // Switch between Form 1 (ป่วย/กิจ/คลอด) and Form 2 (พักผ่อน)
+  const myRequests = useMemo(
+    () => requests.filter((r) => r.applicantUserId === currentUser?.id),
+    [requests, currentUser?.id]
+  );
+
+  // List of user's approved regular leaves eligible for Form 3 (ขอยกเลิกวันลา)
+  const cancelableApprovedLeaves = useMemo(
+    () =>
+      myRequests.filter(
+        (r) =>
+          r.status === "approved" &&
+          r.leaveType !== "cancel_leave" &&
+          getEffectiveLeaveDays(r) > 0
+      ),
+    [myRequests]
+  );
+
+  const selectedCancelTarget = useMemo(
+    () =>
+      cancelableApprovedLeaves.find((r) => r.id === cancelTargetLeaveId) || null,
+    [cancelableApprovedLeaves, cancelTargetLeaveId]
+  );
+
+  // Auto-calculate working days + Thai holidays skipped
+  const effectiveCalcType: LeaveType =
+    formKind === "cancel" && selectedCancelTarget
+      ? selectedCancelTarget.leaveType
+      : leaveType;
+
+  const calcDetails = useMemo(
+    () =>
+      calculateLeavePeriodDetails({
+        startDate,
+        endDate,
+        leaveType: effectiveCalcType,
+        leaveDayPeriod,
+        holidayMap,
+      }),
+    [startDate, endDate, effectiveCalcType, leaveDayPeriod, holidayMap]
+  );
+  const totalWorkingDays = calcDetails.totalWorkingDays;
+
+  // Live Overlap Check for Tab 1 (form 1 & 2)
+  const overlapCheck = useMemo(() => {
+    if (formKind === "cancel") {
+      return { hasOverlap: false, conflicts: [] as LeaveRequestItem[] };
+    }
+    return detectLeaveOverlap({
+      candidateStart: startDate,
+      candidateEnd: endDate,
+      candidatePeriod: leaveDayPeriod,
+      existingRequests: myRequests,
+      excludeLeaveId: editingReturnedLeave?.id,
+    });
+  }, [formKind, startDate, endDate, leaveDayPeriod, myRequests, editingReturnedLeave?.id]);
+
+  // Switch between Form 1, 2, 3
   const handleSelectFormKind = (kind: LeaveFormKind) => {
     setFormKind(kind);
     if (kind === "vacation") {
       setLeaveType("vacation_leave");
       setSubject(LEAVE_TYPE_META.vacation_leave.defaultSubject);
+    } else if (kind === "cancel") {
+      setLeaveType("cancel_leave");
+      setSubject(LEAVE_TYPE_META.cancel_leave.defaultSubject);
+      if (cancelableApprovedLeaves.length > 0 && !cancelTargetLeaveId) {
+        const first = cancelableApprovedLeaves[0];
+        setCancelTargetLeaveId(first.id);
+        setStartDate(first.startDate);
+        setEndDate(first.endDate);
+        setLeaveDayPeriod(first.leaveDayPeriod || "full");
+      }
     } else {
       const nextType: LeaveType =
-        leaveType === "vacation_leave" ? "sick_leave" : leaveType;
+        leaveType === "vacation_leave" || leaveType === "cancel_leave"
+          ? "sick_leave"
+          : leaveType;
       setLeaveType(nextType);
       setSubject(LEAVE_TYPE_META[nextType].defaultSubject);
     }
@@ -378,13 +617,17 @@ export default function LeavePage() {
     setSubject(LEAVE_TYPE_META[type].defaultSubject);
   };
 
-  // Auto-fill last approved general leave for Form 1
-  const myRequests = useMemo(
-    () =>
-      requests.filter((r) => r.applicantUserId === currentUser?.id),
-    [requests, currentUser?.id]
-  );
+  const handleSelectCancelTarget = (targetId: string) => {
+    setCancelTargetLeaveId(targetId);
+    const target = cancelableApprovedLeaves.find((r) => r.id === targetId);
+    if (target) {
+      setStartDate(target.startDate);
+      setEndDate(target.endDate);
+      setLeaveDayPeriod(target.leaveDayPeriod || "full");
+    }
+  };
 
+  // Auto-fill last approved general leave for Form 1
   useEffect(() => {
     if (formKind !== "general") return;
     const latestApproved = myRequests.find(
@@ -392,17 +635,18 @@ export default function LeavePage() {
         r.status === "approved" &&
         (r.leaveType === "sick_leave" ||
           r.leaveType === "personal_leave" ||
-          r.leaveType === "maternity_leave")
+          r.leaveType === "maternity_leave") &&
+        getEffectiveLeaveDays(r) > 0
     );
     if (latestApproved && !lastLeaveStartDate) {
       setLastLeaveType(latestApproved.leaveType);
       setLastLeaveStartDate(latestApproved.startDate);
       setLastLeaveEndDate(latestApproved.endDate);
-      setLastLeaveDays(String(latestApproved.totalWorkingDays));
+      setLastLeaveDays(String(getEffectiveLeaveDays(latestApproved)));
     }
   }, [formKind, myRequests, lastLeaveStartDate]);
 
-  // Compute current user's stats in fiscalYear + half-year 23-day rule
+  // Compute current user's stats in fiscalYear + half-year 23-day rule (boundary-safe + effectiveDays)
   const myStats = useMemo(() => {
     const bal = balances.find((b) => b.userId === currentUser?.id);
     let sick = bal?.sickDaysCarried || 0;
@@ -414,32 +658,50 @@ export default function LeavePage() {
     let halfYearSickPersonal = 0;
 
     for (const r of myRequests) {
-      if (r.status !== "approved") continue;
-      if (r.leaveType === "sick_leave") sick += r.totalWorkingDays;
-      else if (r.leaveType === "personal_leave") personal += r.totalWorkingDays;
-      else if (r.leaveType === "maternity_leave")
-        maternity += r.totalWorkingDays;
-      else if (r.leaveType === "vacation_leave") vacation += r.totalWorkingDays;
+      if (r.status !== "approved" || r.leaveType === "cancel_leave") continue;
+      const eff = getEffectiveLeaveDays(r);
+      if (eff <= 0) continue;
 
-      if (
-        (r.leaveType === "sick_leave" || r.leaveType === "personal_leave") &&
-        r.startDate >= halfYear.startDate &&
-        r.startDate <= halfYear.endDate
-      ) {
-        halfYearSickPersonal += r.totalWorkingDays;
+      if (r.leaveType === "sick_leave") sick += eff;
+      else if (r.leaveType === "personal_leave") personal += eff;
+      else if (r.leaveType === "maternity_leave") maternity += eff;
+      else if (r.leaveType === "vacation_leave") vacation += eff;
+
+      if (r.leaveType === "sick_leave" || r.leaveType === "personal_leave") {
+        halfYearSickPersonal += countWorkingDaysInRange(
+          r,
+          halfYear.startDate,
+          halfYear.endDate,
+          holidayMap
+        );
       }
     }
 
+    const vacationEntitled =
+      (bal?.vacationAccumulatedDays ?? vacationAccumulatedDays) +
+      (bal?.vacationAnnualDays ?? vacationAnnualDays);
+    const vacationRemaining = Math.max(
+      0,
+      Math.round((vacationEntitled - vacation) * 10) / 10
+    );
+    const pendingCount = myRequests.filter(
+      (r) =>
+        r.status === "pending_verifier" ||
+        r.status === "pending_supervisor" ||
+        r.status === "pending_approver" ||
+        r.status === "returned"
+    ).length;
+
     return {
-      sick,
-      personal,
-      maternity,
-      vacation,
+      sick: Math.round(sick * 10) / 10,
+      personal: Math.round(personal * 10) / 10,
+      maternity: Math.round(maternity * 10) / 10,
+      vacation: Math.round(vacation * 10) / 10,
       halfYearLabel: halfYear.label,
-      halfYearSickPersonal,
-      vacationEntitled:
-        (bal?.vacationAccumulatedDays ?? vacationAccumulatedDays) +
-        (bal?.vacationAnnualDays ?? vacationAnnualDays),
+      halfYearSickPersonal: Math.round(halfYearSickPersonal * 10) / 10,
+      vacationEntitled: Math.round(vacationEntitled * 10) / 10,
+      vacationRemaining,
+      pendingCount,
     };
   }, [
     balances,
@@ -448,13 +710,105 @@ export default function LeavePage() {
     startDate,
     vacationAccumulatedDays,
     vacationAnnualDays,
+    holidayMap,
   ]);
 
   const projectedHalfYear =
-    myStats.halfYearSickPersonal +
-    (leaveType === "sick_leave" || leaveType === "personal_leave"
-      ? totalWorkingDays
-      : 0);
+    Math.round(
+      (myStats.halfYearSickPersonal +
+        (leaveType === "sick_leave" || leaveType === "personal_leave"
+          ? totalWorkingDays
+          : 0)) *
+        10
+    ) / 10;
+
+  const isVacationOverQuota =
+    leaveType === "vacation_leave" && totalWorkingDays > myStats.vacationRemaining;
+
+  const isCancelInvalidRange =
+    formKind === "cancel" &&
+    selectedCancelTarget &&
+    (startDate < selectedCancelTarget.startDate ||
+      endDate > selectedCancelTarget.endDate ||
+      totalWorkingDays > getEffectiveLeaveDays(selectedCancelTarget));
+
+  const handleAttachmentUpload = async (file: File) => {
+    setUploadingAttachment(true);
+    try {
+      const result = await uploadSmartFile(
+        file,
+        `/virtual-office/leave_attachments/${fiscalYear}`,
+        { allowCloudFallback: true, compressImages: true }
+      );
+      setAttachmentUrl(result.fileUrl || result.nasPath || null);
+      setAttachmentName(result.fileName);
+      setAttachmentStorage(result.storage);
+      showToast(`✅ อัปโหลดไฟล์แนบ "${result.fileName}" สำเร็จ`);
+    } catch (err) {
+      showToast(
+        `❌ ${err instanceof Error ? err.message : "อัปโหลดไฟล์แนบไม่สำเร็จ"}`
+      );
+    } finally {
+      setUploadingAttachment(false);
+    }
+  };
+
+  const resetFormAfterSubmit = () => {
+    setReason("");
+    setAttachmentUrl(null);
+    setAttachmentName(null);
+    setAttachmentStorage(null);
+    setEditingReturnedLeave(null);
+    setCancelTargetLeaveId("");
+    setLeaveDayPeriod("full");
+  };
+
+  const handleStartEditReturned = (leave: LeaveRequestItem) => {
+    setEditingReturnedLeave(leave);
+    setFormKind(
+      leave.leaveType === "cancel_leave"
+        ? "cancel"
+        : leave.leaveType === "vacation_leave"
+        ? "vacation"
+        : "general"
+    );
+    setLeaveType(leave.leaveType);
+    setLeaveDayPeriod(leave.leaveDayPeriod || "full");
+    setWrittenAt(leave.writtenAt);
+    setWrittenDate(leave.writtenDate);
+    setApplicantPosition(leave.applicantPosition);
+    setSubject(leave.subject);
+    setToRecipient(leave.toRecipient);
+    setReason(leave.reason);
+    setStartDate(leave.startDate);
+    setEndDate(leave.endDate);
+    setContactInfo(leave.contactInfo);
+    setContactPhone(leave.contactPhone);
+    setAttachmentUrl(leave.attachmentUrl);
+    setAttachmentName(leave.attachmentName);
+    setAttachmentStorage(leave.attachmentStorage);
+    setApplicantSignature(leave.applicantSignature);
+    setActingPersonUserId(leave.actingPersonUserId || "");
+    if (leave.verifierUserId) setVerifierUserId(leave.verifierUserId);
+    if (leave.supervisorUserId) setSupervisorUserId(leave.supervisorUserId);
+    if (leave.approverUserId) setApproverUserId(leave.approverUserId);
+    if (leave.cancelTargetLeaveId) setCancelTargetLeaveId(leave.cancelTargetLeaveId);
+    setActiveTab("form");
+    showToast(`✏️ กำลังแก้ไขใบลา ${leave.requestNo} เพื่อส่งพิจารณาใหม่`);
+  };
+
+  const handleShortcutToCancelForm = (targetLeave: LeaveRequestItem) => {
+    setEditingReturnedLeave(null);
+    setFormKind("cancel");
+    setLeaveType("cancel_leave");
+    setSubject(LEAVE_TYPE_META.cancel_leave.defaultSubject);
+    setCancelTargetLeaveId(targetLeave.id);
+    setStartDate(targetLeave.startDate);
+    setEndDate(targetLeave.endDate);
+    setLeaveDayPeriod(targetLeave.leaveDayPeriod || "full");
+    setReason("");
+    setActiveTab("form");
+  };
 
   const handleSubmitLeave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -463,15 +817,37 @@ export default function LeavePage() {
       showToast("⚠️ วันที่สิ้นสุดต้องไม่น้อยกว่าวันที่เริ่มต้น");
       return;
     }
+    if (totalWorkingDays <= 0) {
+      showToast("⚠️ ช่วงวันที่เลือกตรงกับวันหยุดทั้งหมด ไม่มีวันทำการ");
+      return;
+    }
+    if (overlapCheck.hasOverlap) {
+      showToast("⚠️ พบวันลาซ้อนทับ กรุณาปรับช่วงวันที่ลาก่อนส่งคำขอ");
+      return;
+    }
+    if (isVacationOverQuota) {
+      showToast(
+        `⚠️ วันลาพักผ่อนคงเหลือไม่เพียงพอ (เหลือ ${myStats.vacationRemaining} วันทำการ)`
+      );
+      return;
+    }
     if (
-      (leaveType === "sick_leave" || leaveType === "personal_leave") &&
+      (leaveType === "sick_leave" ||
+        leaveType === "personal_leave" ||
+        leaveType === "cancel_leave") &&
       !reason.trim()
     ) {
       showToast(
         leaveType === "sick_leave"
           ? "⚠️ กรุณาระบุอาการป่วย / เหตุผลการลาป่วย"
+          : leaveType === "cancel_leave"
+          ? "⚠️ กรุณาระบุเหตุผลการขอยกเลิกวันลา"
           : "⚠️ กรุณาระบุเหตุผลการลากิจส่วนตัว"
       );
+      return;
+    }
+    if (formKind === "cancel" && (!cancelTargetLeaveId || isCancelInvalidRange)) {
+      showToast("⚠️ กรุณาเลือกใบลาเดิมและระบุช่วงวันที่ขอยกเลิกให้ถูกต้อง");
       return;
     }
 
@@ -479,13 +855,67 @@ export default function LeavePage() {
     const verifierMember = members.find((m) => m.id === verifierUserId);
     const supervisorMember = members.find((m) => m.id === supervisorUserId);
     const approverMember = members.find((m) => m.id === approverUserId);
+
     setSubmitting(true);
     try {
+      if (editingReturnedLeave) {
+        const res = await fetch("/api/leave", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: editingReturnedLeave.id,
+            action: "resubmit",
+            actorId: currentUser.id,
+            actorName: currentUser.name,
+            actorRole: currentUserRole,
+            startDate,
+            endDate,
+            leaveDayPeriod,
+            reason,
+            contactInfo,
+            contactPhone,
+            attachmentUrl,
+            attachmentName,
+            attachmentStorage,
+            applicantSignature,
+            actingPersonUserId: actingMember?.id || null,
+            actingPersonName: actingMember?.name || "",
+            actingPersonPosition: actingMember?.position || "",
+            verifierUserId: verifierMember?.id || "syno_ยุทธนา",
+            verifierName: verifierMember?.name || "นายยุทธนา เจนจบ",
+            verifierPosition:
+              verifierMember?.position || "เจ้าพนักงานธุรการปฏิบัติงาน",
+            supervisorUserId: supervisorMember?.id || null,
+            supervisorName: supervisorMember?.name || "",
+            supervisorPosition: supervisorMember?.position || "",
+            approverUserId: approverMember?.id || "syno_มะลิวัน",
+            approverName: approverMember?.name || "นางสาวมะลิวัน สิทธิโยธี",
+            approverPosition:
+              approverMember?.position ||
+              "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          if (data?.needsV2Migration) setNeedsV2Migration(true);
+          showToast(`❌ ${data?.error || "ส่งแก้ไขใบลาไม่สำเร็จ"}`);
+          return;
+        }
+        showToast(
+          `✅ ส่งใบลาแก้ไข ${editingReturnedLeave.requestNo} เข้าสายพิจารณาใหม่แล้ว`
+        );
+        resetFormAfterSubmit();
+        await loadLeaveData();
+        setActiveTab("my");
+        return;
+      }
+
       const res = await fetch("/api/leave", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           leaveType,
+          leaveDayPeriod,
           writtenAt,
           writtenDate,
           subject,
@@ -497,7 +927,7 @@ export default function LeavePage() {
           reason,
           startDate,
           endDate,
-          totalWorkingDays,
+          cancelTargetLeaveId: formKind === "cancel" ? cancelTargetLeaveId : null,
           lastLeaveType: lastLeaveType || null,
           lastLeaveStartDate: lastLeaveStartDate || null,
           lastLeaveEndDate: lastLeaveEndDate || null,
@@ -521,19 +951,24 @@ export default function LeavePage() {
           approverPosition:
             approverMember?.position ||
             "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
+          applicantSignature,
+          attachmentUrl,
+          attachmentName,
+          attachmentStorage,
         }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
+        if (data?.needsV2Migration) setNeedsV2Migration(true);
         showToast(`❌ ${data?.error || "ยื่นใบลาไม่สำเร็จ"}`);
         return;
       }
-      showToast(`✅ ยื่นใบลาเลขที่ ${data.request.requestNo} เรียบร้อยแล้ว`);
-      setReason("");
+      showToast(`✅ ยื่นคำขอเลขที่ ${data.request.requestNo} เรียบร้อยแล้ว`);
+      resetFormAfterSubmit();
       await loadLeaveData();
       setActiveTab("my");
     } catch {
-      showToast("❌ เกิดข้อผิดพลาดในการยื่นใบลา");
+      showToast("❌ เกิดข้อผิดพลาดในการยื่นคำขอ");
     } finally {
       setSubmitting(false);
     }
@@ -567,6 +1002,10 @@ export default function LeavePage() {
 
   const handleSubmitWorkflowAction = async () => {
     if (!currentUser || !actionModal) return;
+    if (actionModal.action === "return" && !actionComment.trim()) {
+      showToast("⚠️ กรุณาระบุเหตุผลหรือจุดที่ต้องการให้แก้ไขก่อนตีกลับ");
+      return;
+    }
     setProcessingAction(true);
     try {
       const res = await fetch("/api/leave", {
@@ -581,25 +1020,30 @@ export default function LeavePage() {
           actorRole: currentUserRole,
           comment: actionComment,
           decision: orderDecision,
+          signature: actionModal.action !== "return" ? actionSignature : null,
         }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
+        if (data?.needsV2Migration) setNeedsV2Migration(true);
         showToast(`❌ ${data?.error || "ดำเนินการไม่สำเร็จ"}`);
         return;
       }
       const updated: LeaveRequestItem = data.request;
-      if (actionModal.action === "order" && updated.status === "approved") {
+      if (actionModal.action === "return") {
+        showToast(`↩️ ตีกลับใบลา ${updated.requestNo} ให้ผู้ขอลาแก้ไขแล้ว`);
+      } else if (actionModal.action === "order" && updated.status === "approved") {
         showToast(
           updated.syncedToAttendance
-            ? `✅ อนุญาตใบลาและซิงก์เข้าตารางลงเวลาแล้ว`
-            : `✅ อนุญาตใบลาแล้ว (${updated.syncNote || "รอจับคู่เครื่องสแกน"})`
+            ? "✅ อนุญาตและซิงก์เข้าตารางลงเวลาเรียบร้อยแล้ว"
+            : `✅ อนุญาตแล้ว (${updated.syncNote || "รอจับคู่เครื่องสแกน"})`
         );
       } else {
         showToast("✅ บันทึกผลการพิจารณาเรียบร้อยแล้ว");
       }
       setActionModal(null);
       setActionComment("");
+      setActionSignature(null);
       await loadLeaveData();
     } catch {
       showToast("❌ เกิดข้อผิดพลาดในการบันทึกผล");
@@ -666,6 +1110,66 @@ export default function LeavePage() {
     }
   };
 
+  const handleAddHoliday = async () => {
+    if (!currentUser || !newHolidayDate || !newHolidayName.trim()) return;
+    setSavingHoliday(true);
+    try {
+      const res = await fetch("/api/leave/holidays", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          holidayDate: newHolidayDate,
+          name: newHolidayName.trim(),
+          isActive: true,
+          actorId: currentUser.id,
+          actorName: currentUser.name,
+          actorRole: currentUserRole,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        showToast(`❌ ${data?.error || "เพิ่มวันหยุดไม่สำเร็จ"}`);
+        return;
+      }
+      showToast(`✅ บันทึกวันหยุด "${newHolidayName.trim()}" เรียบร้อยแล้ว`);
+      setNewHolidayDate("");
+      setNewHolidayName("");
+      await loadLeaveData();
+    } catch {
+      showToast("❌ เกิดข้อผิดพลาดในการบันทึกวันหยุด");
+    } finally {
+      setSavingHoliday(false);
+    }
+  };
+
+  const handleRemoveHoliday = async (holidayDate: string) => {
+    if (!currentUser) return;
+    setSavingHoliday(true);
+    try {
+      const res = await fetch("/api/leave/holidays", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          holidayDate,
+          actorId: currentUser.id,
+          actorName: currentUser.name,
+          actorRole: currentUserRole,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        showToast(`❌ ${data?.error || "ลบวันหยุดไม่สำเร็จ"}`);
+        return;
+      }
+      showToast("✅ ปิดวันหยุดราชการเรียบร้อยแล้ว");
+      await loadLeaveData();
+    } catch {
+      showToast("❌ เกิดข้อผิดพลาดในการลบวันหยุด");
+    } finally {
+      setSavingHoliday(false);
+    }
+  };
+
   const handleSaveLeavePermission = async (
     targetUserId: string,
     canVerify: boolean,
@@ -720,17 +1224,61 @@ export default function LeavePage() {
   }, [requests, isVerifier, isSupervisor, isApprover]);
 
   const filteredReviewRequests = useMemo(() => {
+    const q = reviewSearch.trim().toLowerCase();
     return requests.filter((r) => {
       if (reviewFilter === "actionable") {
-        if (r.status === "pending_verifier" && isVerifier) return true;
-        if (r.status === "pending_supervisor" && isSupervisor) return true;
-        if (r.status === "pending_approver" && isApprover) return true;
+        const canAct =
+          (r.status === "pending_verifier" && isVerifier) ||
+          (r.status === "pending_supervisor" && isSupervisor) ||
+          (r.status === "pending_approver" && isApprover);
+        if (!canAct) return false;
+      } else if (reviewFilter !== "all" && r.status !== reviewFilter) {
         return false;
       }
-      if (reviewFilter === "all") return true;
-      return r.status === reviewFilter;
+
+      if (reviewTypeFilter !== "all" && r.leaveType !== reviewTypeFilter) {
+        return false;
+      }
+
+      if (q) {
+        const hay = `${r.requestNo} ${r.applicantName} ${r.applicantDivision} ${r.reason}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
     });
-  }, [requests, reviewFilter, isVerifier, isSupervisor, isApprover]);
+  }, [
+    requests,
+    reviewFilter,
+    reviewTypeFilter,
+    reviewSearch,
+    isVerifier,
+    isSupervisor,
+    isApprover,
+  ]);
+
+  const divisionList = useMemo(() => {
+    const divs = new Set(
+      members
+        .filter((m) => m.status === "active" && m.division)
+        .map((m) => m.division)
+    );
+    return Array.from(divs);
+  }, [members]);
+
+  const filteredSummaryMembers = useMemo(() => {
+    const q = summarySearch.trim().toLowerCase();
+    return members.filter((m) => {
+      if (m.status !== "active") return false;
+      if (summaryDivisionFilter !== "all" && m.division !== summaryDivisionFilter) {
+        return false;
+      }
+      if (q) {
+        const hay = `${m.name} ${m.position || ""} ${m.division || ""}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [members, summaryDivisionFilter, summarySearch]);
 
   const handleDownloadDocx = async (leave: LeaveRequestItem) => {
     setDownloadingId(`${leave.id}:docx`);
@@ -759,21 +1307,26 @@ export default function LeavePage() {
   const isCurrentUserMapped = currentUser
     ? mappedUserIds.includes(currentUser.id)
     : false;
+  const halfYearPct = Math.min(
+    100,
+    Math.round((myStats.halfYearSickPersonal / 23) * 100)
+  );
+  const canEditVacationBalance = isAdmin || isVerifier;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+    <div className="space-y-5">
+      {/* Header Banner */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5 flex-wrap">
-            <h1 className="text-xl font-bold text-slate-900">
+            <h1 className="text-xl font-bold text-slate-900 dark:text-white font-heading">
               📝 ระบบใบลาอิเล็กทรอนิกส์ (Leave Request)
             </h1>
             <span
               className={`text-xs px-2.5 py-0.5 rounded-full border font-medium ${
                 isCurrentUserMapped
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                  : "bg-amber-50 text-amber-700 border-amber-200"
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800"
+                  : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800"
               }`}
             >
               {isCurrentUserMapped
@@ -781,30 +1334,17 @@ export default function LeavePage() {
                 : "⚠️ ยังไม่จับคู่รหัสเครื่องสแกน"}
             </span>
           </div>
-          <p className="text-sm text-slate-500 mt-1">
-            รองรับแบบฟอร์ม 1. ใบลาป่วย/ลากิจ/ลาคลอด และ 2. ใบลาพักผ่อน
-            พร้อมซิงก์ลงรายงานลงเวลาราชการอัตโนมัติเมื่อได้รับคำสั่งอนุญาต
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            รองรับ 3 แบบฟอร์มราชการ (ป่วย/กิจ/คลอด · ลาพักผ่อน · ขอยกเลิกวันลา) หักวันหยุดราชการไทย & ตรวจวันซ้อนทับอัตโนมัติ พร้อมลายเซ็นดิจิทัลและซิงก์ลงเวลาราชการ
           </p>
         </div>
 
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs">
-            <span className="text-slate-500">ลากิจ+ป่วย ({myStats.halfYearLabel}): </span>
-            <span
-              className={`font-bold ${
-                myStats.halfYearSickPersonal > 23
-                  ? "text-rose-600"
-                  : "text-indigo-700"
-              }`}
-            >
-              {myStats.halfYearSickPersonal} / 23 วันทำการ
-            </span>
-          </div>
-
+        <div className="flex items-center gap-2.5 flex-wrap shrink-0">
           <select
             value={fiscalYear}
             onChange={(e) => setFiscalYear(Number(e.target.value))}
-            className="text-sm border border-slate-200 rounded-xl px-3 py-1.5 bg-white text-slate-700 font-medium"
+            aria-label="ปีงบประมาณ"
+            className="text-sm border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold"
           >
             {[fiscalYear - 1, fiscalYear, fiscalYear + 1].map((fy) => (
               <option key={fy} value={fy}>
@@ -815,9 +1355,114 @@ export default function LeavePage() {
         </div>
       </div>
 
-      {/* Migration Banner */}
+      {/* 4 Executive Quota KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+              🤒 ลาป่วยปีงบฯ {fiscalYear}
+            </span>
+            <span className="text-[11px] px-2 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 font-semibold">
+              ใช้แล้วสุทธิ
+            </span>
+          </div>
+          <div className="mt-2 flex items-baseline gap-1.5">
+            <span className="text-2xl font-bold text-slate-900 dark:text-white">
+              {myStats.sick}
+            </span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">วันทำการ</span>
+          </div>
+          <div className="text-[11px] text-slate-400 mt-1">
+            คลอดบุตรใช้แล้ว {myStats.maternity} วัน
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+              📋 เกณฑ์ 23 วัน (กิจ+ป่วย)
+            </span>
+            <span
+              className={`text-[11px] font-bold ${
+                myStats.halfYearSickPersonal > 23
+                  ? "text-rose-600 dark:text-rose-400"
+                  : myStats.halfYearSickPersonal >= 18
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-indigo-600 dark:text-indigo-400"
+              }`}
+            >
+              {myStats.halfYearSickPersonal} / 23 วัน
+            </span>
+          </div>
+          <div className="mt-2.5 h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${
+                myStats.halfYearSickPersonal > 23
+                  ? "bg-rose-500"
+                  : myStats.halfYearSickPersonal >= 18
+                  ? "bg-amber-500"
+                  : "bg-indigo-600"
+              }`}
+              style={{ width: `${halfYearPct}%` }}
+            />
+          </div>
+          <div className="text-[11px] text-slate-400 mt-1.5 truncate">
+            {myStats.halfYearLabel} • กิจปีนี้ {myStats.personal} วัน
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+              🌴 ลาพักผ่อนคงเหลือ
+            </span>
+            <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 font-semibold">
+              สิทธิ {myStats.vacationEntitled} วัน
+            </span>
+          </div>
+          <div className="mt-2 flex items-baseline gap-1.5">
+            <span className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+              {myStats.vacationRemaining}
+            </span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">วันทำการ</span>
+          </div>
+          <div className="text-[11px] text-slate-400 mt-1">
+            ใช้ไปแล้ว {myStats.vacation} จาก {myStats.vacationEntitled} วันทำการ
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+              ⏳ สถานะงานใบลา
+            </span>
+            {canReviewAny && actionableCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setActiveTab("review")}
+                className="text-[11px] px-2 py-0.5 rounded-full bg-rose-600 text-white font-bold hover:bg-rose-700 cursor-pointer"
+              >
+                รอฉัน {actionableCount}
+              </button>
+            )}
+          </div>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-2xl font-bold text-slate-900 dark:text-white">
+              {myStats.pendingCount}
+            </span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              ใบลาของฉันรอดำเนินการ
+            </span>
+          </div>
+          <div className="text-[11px] text-slate-400 mt-1">
+            คำขอทั้งหมด {myRequests.length} ฉบับในปีงบ {fiscalYear}
+          </div>
+        </div>
+      </div>
+
+      {/* Migration Banners */}
       {needsMigration && (
-        <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 text-sm text-amber-900 space-y-2">
+        <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-2xl p-4 text-sm text-amber-900 dark:text-amber-200 space-y-2">
           <div className="font-semibold flex items-center justify-between gap-2 flex-wrap">
             <span>
               ⚠️ ยังไม่ได้สร้างตาราง <code>leave_requests</code> และ{" "}
@@ -834,9 +1479,29 @@ export default function LeavePage() {
               📋 คัดลอก SQL Migration
             </button>
           </div>
-          <p className="text-xs text-amber-800">
-            คัดลอก SQL แล้วนำไปรันใน Supabase Dashboard → SQL Editor จากนั้นกดรีเฟรชหน้านี้
-          </p>
+        </div>
+      )}
+
+      {!needsMigration && needsV2Migration && isAdmin && (
+        <div className="bg-sky-50 dark:bg-sky-950/40 border border-sky-300 dark:border-sky-800 rounded-2xl p-4 text-sm text-sky-900 dark:text-sky-200 flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <div className="font-bold">
+              🚀 ตรวจพบ Schema v2 ยังไม่ถูกติดตั้งบน Supabase (ฟีเจอร์ลายเซ็น / ครึ่งวัน / ตีกลับ / ยกเลิกวันลา / วันหยุดไทย)
+            </div>
+            <div className="text-xs opacity-80 mt-0.5">
+              คัดลอก SQL หรือรันไฟล์ <code>supabase/migrations/20261123000001_enhance_leave_system.sql</code> ใน Supabase SQL Editor จากนั้นรีเฟรชหน้า
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={async () => {
+              await navigator.clipboard.writeText(LEAVE_V2_MIGRATION_SQL);
+              showToast("📋 คัดลอก SQL อัปเกรด v2 แล้ว");
+            }}
+            className="px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shrink-0 cursor-pointer"
+          >
+            📋 คัดลอก SQL อัปเกรด v2
+          </button>
         </div>
       )}
 
@@ -848,10 +1513,10 @@ export default function LeavePage() {
           className={`px-4 py-2 rounded-xl text-sm font-semibold transition cursor-pointer ${
             activeTab === "form"
               ? "bg-indigo-600 text-white shadow-sm"
-              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+              : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
           }`}
         >
-          ✍️ ยื่นใบลาใหม่
+          ✍️ {editingReturnedLeave ? `แก้ไขใบลา (${editingReturnedLeave.requestNo})` : "ยื่นใบลาใหม่"}
         </button>
         <button
           type="button"
@@ -859,7 +1524,7 @@ export default function LeavePage() {
           className={`px-4 py-2 rounded-xl text-sm font-semibold transition cursor-pointer ${
             activeTab === "my"
               ? "bg-indigo-600 text-white shadow-sm"
-              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+              : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
           }`}
         >
           📄 ใบลาของฉัน ({myRequests.length})
@@ -871,7 +1536,7 @@ export default function LeavePage() {
             className={`px-4 py-2 rounded-xl text-sm font-semibold transition cursor-pointer flex items-center gap-2 ${
               activeTab === "review"
                 ? "bg-indigo-600 text-white shadow-sm"
-                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
             }`}
           >
             <span>✅ พิจารณาใบลา</span>
@@ -889,7 +1554,7 @@ export default function LeavePage() {
             className={`px-4 py-2 rounded-xl text-sm font-semibold transition cursor-pointer ${
               activeTab === "summary"
                 ? "bg-indigo-600 text-white shadow-sm"
-                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
             }`}
           >
             📊 สถิติและวันลาสะสม
@@ -902,7 +1567,7 @@ export default function LeavePage() {
             className={`px-4 py-2 rounded-xl text-sm font-semibold transition cursor-pointer ${
               activeTab === "permissions"
                 ? "bg-indigo-600 text-white shadow-sm"
-                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
             }`}
           >
             ⚙️ จัดการสิทธิ์ใบลา
@@ -914,45 +1579,85 @@ export default function LeavePage() {
       {activeTab === "form" && (
         <form
           onSubmit={handleSubmitLeave}
-          className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-6"
+          className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-6"
         >
-          {/* เลือกรูปแบบใบลา */}
-          <div>
-            <label className="block text-sm font-bold text-slate-800 mb-2">
-              1. เลือกแบบฟอร์มการลา
-            </label>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {editingReturnedLeave && (
+            <div className="p-4 rounded-xl bg-orange-50 dark:bg-orange-950/40 border border-orange-300 dark:border-orange-800 flex flex-wrap items-center justify-between gap-3">
+              <div className="text-xs text-orange-900 dark:text-orange-200 space-y-0.5">
+                <div className="font-bold">
+                  ↩️ กำลังแก้ไขใบลาที่ถูกตีกลับ: {editingReturnedLeave.requestNo}
+                </div>
+                <div>
+                  ผู้ส่งกลับ: <strong>{editingReturnedLeave.returnedByName || "-"}</strong> · เหตุผล: &ldquo;{editingReturnedLeave.returnedNote || "-"}&rdquo;
+                </div>
+              </div>
               <button
                 type="button"
+                onClick={resetFormAfterSubmit}
+                className="px-3 py-1.5 rounded-lg border border-orange-300 text-xs font-semibold text-orange-800 dark:text-orange-200 hover:bg-orange-100 cursor-pointer"
+              >
+                ยกเลิกโหมดแก้ไข
+              </button>
+            </div>
+          )}
+
+          {/* 1. เลือกแบบฟอร์ม 3 แบบ */}
+          <div>
+            <label className="block text-sm font-bold text-slate-800 dark:text-slate-100 mb-2">
+              1. เลือกแบบฟอร์มการลา
+            </label>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <button
+                type="button"
+                disabled={Boolean(editingReturnedLeave)}
                 onClick={() => handleSelectFormKind("general")}
-                className={`p-4 rounded-xl border-2 text-left transition cursor-pointer ${
+                className={`p-4 rounded-xl border-2 text-left transition cursor-pointer disabled:opacity-70 ${
                   formKind === "general"
-                    ? "border-indigo-600 bg-indigo-50/60"
-                    : "border-slate-200 hover:border-slate-300 bg-white"
+                    ? "border-indigo-600 bg-indigo-50/70 dark:bg-indigo-950/40"
+                    : "border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-slate-900"
                 }`}
               >
-                <div className="font-bold text-slate-900">
-                  🤒 แบบฟอร์ม 1: ใบลาป่วย / ลากิจส่วนตัว / ลาคลอดบุตร
+                <div className="font-bold text-slate-900 dark:text-white text-sm">
+                  🤒 แบบฟอร์ม 1: ป่วย / กิจ / คลอด
                 </div>
-                <div className="text-xs text-slate-500 mt-1">
-                  ใช้สำหรับขอลาป่วย, ลากิจส่วนตัว หรือลาคลอดบุตร ตามแบบฟอร์มมาตรฐาน
+                <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  ใบลาป่วย, ลากิจส่วนตัว หรือลาคลอดบุตร ตามแบบฟอร์มมาตรฐานราชการ
                 </div>
               </button>
 
               <button
                 type="button"
+                disabled={Boolean(editingReturnedLeave)}
                 onClick={() => handleSelectFormKind("vacation")}
-                className={`p-4 rounded-xl border-2 text-left transition cursor-pointer ${
+                className={`p-4 rounded-xl border-2 text-left transition cursor-pointer disabled:opacity-70 ${
                   formKind === "vacation"
-                    ? "border-emerald-600 bg-emerald-50/60"
-                    : "border-slate-200 hover:border-slate-300 bg-white"
+                    ? "border-emerald-600 bg-emerald-50/70 dark:bg-emerald-950/40"
+                    : "border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-slate-900"
                 }`}
               >
-                <div className="font-bold text-slate-900">
+                <div className="font-bold text-slate-900 dark:text-white text-sm">
                   🌴 แบบฟอร์ม 2: ใบลาพักผ่อน
                 </div>
-                <div className="text-xs text-slate-500 mt-1">
-                  ใช้สำหรับขอลาพักผ่อนประจำปี พร้อมระบุวันลาสะสมและผู้ปฏิบัติหน้าที่แทน
+                <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  ขอลาพักผ่อนประจำปี ตรวจโควตาคงเหลือและระบุผู้ปฏิบัติหน้าที่แทน
+                </div>
+              </button>
+
+              <button
+                type="button"
+                disabled={Boolean(editingReturnedLeave)}
+                onClick={() => handleSelectFormKind("cancel")}
+                className={`p-4 rounded-xl border-2 text-left transition cursor-pointer disabled:opacity-70 ${
+                  formKind === "cancel"
+                    ? "border-violet-600 bg-violet-50/70 dark:bg-violet-950/40"
+                    : "border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-slate-900"
+                }`}
+              >
+                <div className="font-bold text-slate-900 dark:text-white text-sm">
+                  ↩️ แบบฟอร์ม 3: ขอยกเลิกวันลา
+                </div>
+                <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  ขอยกเลิกวันลาที่อนุมัติแล้วทั้งหมดหรือบางส่วน พร้อมคืนยอดวันลาอัตโนมัติ
                 </div>
               </button>
             </div>
@@ -961,7 +1666,7 @@ export default function LeavePage() {
           {/* ประเภทย่อยกรณีแบบฟอร์ม 1 */}
           {formKind === "general" && (
             <div>
-              <label className="block text-sm font-bold text-slate-800 mb-2">
+              <label className="block text-sm font-bold text-slate-800 dark:text-slate-100 mb-2">
                 ประเภทการขอลา
               </label>
               <div className="flex flex-wrap gap-2">
@@ -972,11 +1677,12 @@ export default function LeavePage() {
                       <button
                         key={t}
                         type="button"
+                        disabled={Boolean(editingReturnedLeave)}
                         onClick={() => handleSelectGeneralLeaveType(t)}
                         className={`px-4 py-2 rounded-xl border text-sm font-semibold transition cursor-pointer ${
                           leaveType === t
                             ? "bg-indigo-600 text-white border-indigo-600"
-                            : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                            : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-50"
                         }`}
                       >
                         {meta.icon} {meta.label}
@@ -988,16 +1694,62 @@ export default function LeavePage() {
             </div>
           )}
 
+          {/* ฟอร์ม 3: เลือกใบลาเดิมที่จะยกเลิก */}
+          {formKind === "cancel" && (
+            <div className="p-4 rounded-xl bg-violet-50/60 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800 space-y-3">
+              <label className="block text-xs font-bold text-violet-900 dark:text-violet-200">
+                เลือกใบลาที่ได้รับอนุญาตแล้วและต้องการขอยกเลิกวันลา <span className="text-rose-500">*</span>
+              </label>
+              {cancelableApprovedLeaves.length === 0 ? (
+                <div className="text-xs text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 p-3 rounded-lg border border-violet-200 dark:border-slate-700">
+                  คุณยังไม่มีใบลาที่ได้รับอนุญาตในปีงบประมาณ {fiscalYear} ที่สามารถขอยกเลิกได้
+                </div>
+              ) : (
+                <select
+                  value={cancelTargetLeaveId}
+                  onChange={(e) => handleSelectCancelTarget(e.target.value)}
+                  className="w-full rounded-xl border border-violet-300 dark:border-violet-700 px-3 py-2 text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
+                  required
+                >
+                  <option value="">-- เลือกใบลาเดิมที่ต้องการขอยกเลิก --</option>
+                  {cancelableApprovedLeaves.map((item) => {
+                    const meta = LEAVE_TYPE_META[item.leaveType];
+                    return (
+                      <option key={item.id} value={item.id}>
+                        {item.requestNo} · {meta.label} ({formatThaiDateShort(item.startDate)} –{" "}
+                        {formatThaiDateShort(item.endDate)} · เหลือยกเลิกได้ {getEffectiveLeaveDays(item)} วัน)
+                      </option>
+                    );
+                  })}
+                </select>
+              )}
+              {selectedCancelTarget && (
+                <div className="text-xs text-violet-800 dark:text-violet-300 flex flex-wrap gap-3">
+                  <span>
+                    📄 อ้างอิง: <strong>{selectedCancelTarget.requestNo}</strong>
+                  </span>
+                  <span>
+                    📅 ช่วงที่อนุญาต: {formatThaiDateFull(selectedCancelTarget.startDate)} –{" "}
+                    {formatThaiDateFull(selectedCancelTarget.endDate)}
+                  </span>
+                  <span>
+                    ⚖️ คงเหลือยกเลิกได้: <strong>{getEffectiveLeaveDays(selectedCancelTarget)} วัน</strong>
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ข้อมูลหัวเอกสารและผู้ขอลา */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200 items-center">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-slate-200 dark:border-slate-700 items-center">
             <div>
-              <div className="text-xs text-slate-500">ผู้ขอลา</div>
-              <div className="font-semibold text-slate-900">
+              <div className="text-xs text-slate-500 dark:text-slate-400">ผู้ขอลา</div>
+              <div className="font-semibold text-slate-900 dark:text-white">
                 {currentUser?.name || "-"}
               </div>
             </div>
             <div>
-              <label className="block text-xs text-slate-500 mb-1">
+              <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">
                 ตำแหน่งผู้ขอลา
               </label>
               <input
@@ -1005,12 +1757,12 @@ export default function LeavePage() {
                 value={applicantPosition}
                 onChange={(e) => setApplicantPosition(e.target.value)}
                 placeholder="ระบุตำแหน่ง"
-                className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm font-medium text-slate-900"
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 py-1.5 text-sm font-medium text-slate-900 dark:text-white"
               />
             </div>
             <div>
-              <div className="text-xs text-slate-500">กลุ่ม/ฝ่าย</div>
-              <div className="font-semibold text-slate-900">
+              <div className="text-xs text-slate-500 dark:text-slate-400">กลุ่ม/ฝ่าย</div>
+              <div className="font-semibold text-slate-900 dark:text-white">
                 {currentUser?.division || "-"}
               </div>
             </div>
@@ -1018,20 +1770,20 @@ export default function LeavePage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
                 เขียนที่
               </label>
               <input
                 type="text"
                 value={writtenAt}
                 onChange={(e) => setWrittenAt(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-white"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">
-                วันที่ยื่นใบลา (วัน/เดือน/ปี):{" "}
-                <span className="text-indigo-700 font-bold">
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                วันที่ยื่นใบลา:{" "}
+                <span className="text-indigo-700 dark:text-indigo-400 font-bold">
                   {formatThaiDateFull(writtenDate)}
                 </span>
               </label>
@@ -1039,82 +1791,166 @@ export default function LeavePage() {
                 type="date"
                 value={writtenDate}
                 onChange={(e) => setWrittenDate(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-white"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
                 เรื่อง
               </label>
               <input
                 type="text"
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-white"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
                 เรียน
               </label>
               <input
                 type="text"
                 value={toRecipient}
                 onChange={(e) => setToRecipient(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-white"
                 required
               />
             </div>
           </div>
 
-          {/* ช่วงวันที่ลา */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">
-                ตั้งแต่วันที่
-              </label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                required
-              />
+          {/* ช่วงวันที่ลา + ช่วงเวลาครึ่งวัน + สรุปวันหยุดราชการที่หักออกอัตโนมัติ */}
+          <div className="space-y-3 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-900/50 bg-indigo-50/30 dark:bg-indigo-950/20">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                  {formKind === "cancel" ? "ยกเลิกตั้งแต่วันที่" : "ตั้งแต่วันที่"}
+                </label>
+                <input
+                  type="date"
+                  value={startDate}
+                  min={selectedCancelTarget?.startDate || undefined}
+                  max={selectedCancelTarget?.endDate || undefined}
+                  onChange={(e) => {
+                    setStartDate(e.target.value);
+                    if (e.target.value > endDate) {
+                      setEndDate(e.target.value);
+                    }
+                  }}
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-white"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                  {formKind === "cancel" ? "ถึงวันที่" : "ถึงวันที่"}
+                </label>
+                <input
+                  type="date"
+                  value={endDate}
+                  min={selectedCancelTarget?.startDate || startDate || undefined}
+                  max={selectedCancelTarget?.endDate || undefined}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-white"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                  จำนวนวันลาสุทธิ (คำนวณอัตโนมัติ)
+                </label>
+                <div className="rounded-xl border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-900 px-3 py-2 text-sm font-bold text-indigo-700 dark:text-indigo-300 flex items-center justify-between">
+                  <span>
+                    {totalWorkingDays}{" "}
+                    {calcDetails.isCalendarCount ? "วันปฏิทิน" : "วันทำการ"}
+                  </span>
+                  {leaveDayPeriod !== "full" && (
+                    <span className="text-[11px] px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300">
+                      {LEAVE_DAY_PERIOD_SHORT[leaveDayPeriod]}
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">
-                ถึงวันที่
-              </label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">
-                มีกำหนด (วันทำการ)
-              </label>
-              <input
-                type="number"
-                step="0.5"
-                min="0.5"
-                value={totalWorkingDays}
-                onChange={(e) => setTotalWorkingDays(Number(e.target.value))}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold"
-                required
-              />
+
+            {/* ครึ่งวัน */}
+            {startDate === endDate && effectiveCalcType !== "maternity_leave" && (
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                  ช่วงเวลาที่ขอลา (ลา 1 วัน):
+                </span>
+                {(["full", "morning", "afternoon"] as LeaveDayPeriod[]).map(
+                  (period) => (
+                    <button
+                      key={period}
+                      type="button"
+                      onClick={() => setLeaveDayPeriod(period)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold border cursor-pointer transition ${
+                        leaveDayPeriod === period
+                          ? "bg-indigo-600 text-white border-indigo-600"
+                          : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      {LEAVE_DAY_PERIOD_LABELS[period]}
+                    </button>
+                  )
+                )}
+              </div>
+            )}
+
+            {/* Breakdown วันหยุดเสาร์-อาทิตย์ และวันหยุดราชการไทย */}
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              {calcDetails.skippedWeekends > 0 && (
+                <span className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300">
+                  🗓️ หักเสาร์-อาทิตย์ {calcDetails.skippedWeekends} วัน
+                </span>
+              )}
+              {calcDetails.skippedHolidays.length > 0 && (
+                <span className="px-2.5 py-1 rounded-lg bg-teal-50 dark:bg-teal-950/50 border border-teal-200 dark:border-teal-800 text-teal-800 dark:text-teal-300 font-medium">
+                  🏛️ หักวันหยุดราชการ {calcDetails.skippedHolidays.length} วัน:{" "}
+                  {calcDetails.skippedHolidays
+                    .map((h) => `${formatThaiDateShort(h.date)} (${h.name})`)
+                    .join(", ")}
+                </span>
+              )}
+              {calcDetails.isCalendarCount && (
+                <span className="px-2.5 py-1 rounded-lg bg-pink-50 dark:bg-pink-950/40 border border-pink-200 text-pink-700 dark:text-pink-300">
+                  👶 ลาคลอดบุตรนับวันต่อเนื่องตามปฏิทินรวมวันหยุด
+                </span>
+              )}
+              {totalWorkingDays <= 0 && (
+                <span className="px-2.5 py-1 rounded-lg bg-rose-100 dark:bg-rose-950/60 border border-rose-300 text-rose-700 dark:text-rose-300 font-semibold">
+                  ⚠️ ช่วงวันที่เลือกไม่มีวันทำการ (ตรงกับวันหยุดทั้งหมด)
+                </span>
+              )}
             </div>
           </div>
+
+          {/* แจ้งเตือนวันลาซ้อนทับ (Overlap) */}
+          {overlapCheck.hasOverlap && (
+            <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-300 dark:border-rose-800 text-xs text-rose-800 dark:text-rose-200 space-y-1">
+              <div className="font-bold flex items-center gap-1.5">
+                🚫 พบวันลาซ้อนทับกับคำขอที่มีอยู่แล้ว (ไม่สามารถยื่นซ้อนได้)
+              </div>
+              <ul className="list-disc pl-5 space-y-0.5">
+                {overlapCheck.conflicts.map((c) => (
+                  <li key={c.id}>
+                    <strong>{c.requestNo}</strong> · {LEAVE_TYPE_META[c.leaveType].label} (
+                    {formatThaiDateShort(c.startDate)} – {formatThaiDateShort(c.endDate)} ·{" "}
+                    {LEAVE_DAY_PERIOD_SHORT[c.leaveDayPeriod || "full"]}) — สถานะ:{" "}
+                    {LEAVE_STATUS_META[c.status].label}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* เตือนเงื่อนไข 23 วันทำการ */}
           {(leaveType === "sick_leave" || leaveType === "personal_leave") &&
             projectedHalfYear > 23 && (
-              <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800">
+              <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200">
                 ⚠️ <strong>แจ้งเตือนตามระเบียบ:</strong> เมื่อรวมการลาครั้งนี้ (
                 {totalWorkingDays} วัน) ยอดลากิจ + ลาป่วยใน{myStats.halfYearLabel}
                 จะรวมเป็น <strong>{projectedHalfYear} วันทำการ</strong> ซึ่งเกินเกณฑ์ 23
@@ -1122,14 +1958,31 @@ export default function LeavePage() {
               </div>
             )}
 
-          {/* รายละเอียดเฉพาะฟอร์ม 1 vs ฟอร์ม 2 */}
-          {formKind === "general" ? (
+          {/* แนะนำแนบใบรับรองแพทย์เมื่อลาป่วย >= 3 วัน */}
+          {leaveType === "sick_leave" && totalWorkingDays >= 3 && (
+            <div className="p-3.5 rounded-xl bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 text-xs text-sky-900 dark:text-sky-200 flex items-center justify-between gap-2 flex-wrap">
+              <span>
+                🏥 <strong>คำแนะนำตามระเบียบ:</strong> การลาป่วยตั้งแต่ 3 วันทำการขึ้นไป ควรแนบ<strong>ใบรับรองแพทย์</strong>ประกอบการพิจารณาด้านล่าง
+              </span>
+              {attachmentName && (
+                <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 font-semibold">
+                  ✓ แนบไฟล์แล้ว: {attachmentName}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* เหตุผลการลา / ประวัติล่าสุด / โควตาพักผ่อน */}
+          {(formKind === "general" || formKind === "cancel") && (
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">
-                  เนื่องจาก / เหตุผลการลา{" "}
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                  {formKind === "cancel"
+                    ? "เหตุผลความจำเป็นในการขอยกเลิกวันลา"
+                    : "เนื่องจาก / เหตุผลการลา"}{" "}
                   {(leaveType === "sick_leave" ||
-                    leaveType === "personal_leave") && (
+                    leaveType === "personal_leave" ||
+                    leaveType === "cancel_leave") && (
                     <span className="text-rose-500">*</span>
                   )}
                 </label>
@@ -1138,108 +1991,137 @@ export default function LeavePage() {
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                   required={
-                    leaveType === "sick_leave" || leaveType === "personal_leave"
+                    leaveType === "sick_leave" ||
+                    leaveType === "personal_leave" ||
+                    leaveType === "cancel_leave"
                   }
-                  placeholder="ระบุอาการป่วย หรือเหตุผลในการลากิจส่วนตัว"
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  placeholder={
+                    formKind === "cancel"
+                      ? "เช่น ได้รับมอบหมายภารกิจราชการเร่งด่วน จึงขอกลับมาปฏิบัติงาน"
+                      : "ระบุอาการป่วย หรือเหตุผลในการลากิจส่วนตัว"
+                  }
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-white"
                 />
               </div>
 
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
-                <div className="text-xs font-bold text-slate-700">
-                  ประวัติการลาครั้งสุดท้าย (ถ้ามี — ระบบดึงจากใบลาล่าสุดให้อัตโนมัติ)
+              {formKind === "general" && (
+                <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
+                  <div className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                    ประวัติการลาครั้งสุดท้าย (ถ้ามี — ระบบดึงจากใบลาล่าสุดให้อัตโนมัติ)
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <select
+                      value={lastLeaveType}
+                      onChange={(e) => setLastLeaveType(e.target.value)}
+                      className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                    >
+                      <option value="">-- ไม่ระบุ --</option>
+                      <option value="sick_leave">ป่วย</option>
+                      <option value="personal_leave">กิจส่วนตัว</option>
+                      <option value="maternity_leave">คลอดบุตร</option>
+                    </select>
+                    <input
+                      type="date"
+                      value={lastLeaveStartDate}
+                      onChange={(e) => setLastLeaveStartDate(e.target.value)}
+                      className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                    />
+                    <input
+                      type="date"
+                      value={lastLeaveEndDate}
+                      onChange={(e) => setLastLeaveEndDate(e.target.value)}
+                      className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                    />
+                    <input
+                      type="number"
+                      step="0.5"
+                      placeholder="จำนวนวัน"
+                      value={lastLeaveDays}
+                      onChange={(e) => setLastLeaveDays(e.target.value)}
+                      className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                    />
+                  </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                  <select
-                    value={lastLeaveType}
-                    onChange={(e) => setLastLeaveType(e.target.value)}
-                    className="rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
-                  >
-                    <option value="">-- ไม่ระบุ --</option>
-                    <option value="sick_leave">ป่วย</option>
-                    <option value="personal_leave">กิจส่วนตัว</option>
-                    <option value="maternity_leave">คลอดบุตร</option>
-                  </select>
-                  <input
-                    type="date"
-                    value={lastLeaveStartDate}
-                    onChange={(e) => setLastLeaveStartDate(e.target.value)}
-                    className="rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
-                  />
-                  <input
-                    type="date"
-                    value={lastLeaveEndDate}
-                    onChange={(e) => setLastLeaveEndDate(e.target.value)}
-                    className="rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
-                  />
-                  <input
-                    type="number"
-                    step="0.5"
-                    placeholder="จำนวนวัน"
-                    value={lastLeaveDays}
-                    onChange={(e) => setLastLeaveDays(e.target.value)}
-                    className="rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
-                  />
-                </div>
-              </div>
+              )}
             </div>
-          ) : (
+          )}
+
+          {formKind === "vacation" && (
             <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-emerald-50/50 p-4 rounded-xl border border-emerald-200">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-emerald-50/50 dark:bg-emerald-950/30 p-4 rounded-xl border border-emerald-200 dark:border-emerald-800">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
                     วันลาพักผ่อนสะสม (วันทำการ)
                   </label>
                   <input
                     type="number"
                     step="0.5"
                     min="0"
+                    readOnly={!canEditVacationBalance}
                     value={vacationAccumulatedDays}
                     onChange={(e) =>
                       setVacationAccumulatedDays(Number(e.target.value))
                     }
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
+                    className={`w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm ${
+                      canEditVacationBalance
+                        ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                        : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 cursor-not-allowed"
+                    }`}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
                     สิทธิลาพักผ่อนประจำปี (วันทำการ)
                   </label>
                   <input
                     type="number"
                     step="0.5"
                     min="0"
+                    readOnly={!canEditVacationBalance}
                     value={vacationAnnualDays}
                     onChange={(e) => setVacationAnnualDays(Number(e.target.value))}
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
+                    className={`w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm ${
+                      canEditVacationBalance
+                        ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                        : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 cursor-not-allowed"
+                    }`}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    รวมสิทธิทั้งหมด / คงเหลือหลังลา
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                    สิทธิคงเหลือหลังหักการลาครั้งนี้
                   </label>
-                  <div className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm font-bold text-emerald-700">
-                    {vacationAccumulatedDays + vacationAnnualDays} วัน (คงเหลือ{" "}
+                  <div
+                    className={`rounded-xl border px-3 py-2 text-sm font-bold ${
+                      isVacationOverQuota
+                        ? "bg-rose-50 border-rose-300 text-rose-700"
+                        : "bg-white dark:bg-slate-900 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300"
+                    }`}
+                  >
+                    มีสิทธิ {myStats.vacationEntitled} วัน · เหลือสุทธิ{" "}
                     {Math.max(
                       0,
-                      vacationAccumulatedDays +
-                        vacationAnnualDays -
-                        myStats.vacation -
-                        totalWorkingDays
+                      Math.round((myStats.vacationRemaining - totalWorkingDays) * 10) / 10
                     )}{" "}
-                    วัน)
+                    วัน
                   </div>
                 </div>
               </div>
 
+              {isVacationOverQuota && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-300 text-xs text-rose-700 font-semibold">
+                  🚫 วันลาพักผ่อนคงเหลือ ({myStats.vacationRemaining} วันทำการ) น้อยกว่าจำนวนวันที่ขอลา ({totalWorkingDays} วันทำการ)
+                </div>
+              )}
+
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
                   ในระหว่างลาพักผ่อน มอบหมายให้ผู้ใดปฏิบัติหน้าที่แทน
                 </label>
                 <select
                   value={actingPersonUserId}
                   onChange={(e) => setActingPersonUserId(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
                 >
                   <option value="">-- เลือกผู้ปฏิบัติหน้าที่แทน --</option>
                   {members
@@ -1254,71 +2136,135 @@ export default function LeavePage() {
             </div>
           )}
 
-          {/* ช่องทางติดต่อระหว่างลา */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">
-                ในระหว่างลาจะติดต่อข้าพเจ้าได้ที่ (ที่อยู่/ช่องทาง)
-              </label>
-              <input
-                type="text"
-                value={contactInfo}
-                onChange={(e) => setContactInfo(e.target.value)}
-                placeholder="เช่น บ้านพัก / อ.เมือง จ.กำแพงเพชร"
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-              />
+          {/* ช่องทางติดต่อระหว่างลา (สำหรับฟอร์ม 1 และ 2) */}
+          {formKind !== "cancel" && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                  ในระหว่างลาจะติดต่อข้าพเจ้าได้ที่ (ที่อยู่/ช่องทาง)
+                </label>
+                <input
+                  type="text"
+                  value={contactInfo}
+                  onChange={(e) => setContactInfo(e.target.value)}
+                  placeholder="เช่น บ้านพัก / อ.เมือง จ.กำแพงเพชร"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                  หมายเลขโทรศัพท์ติดต่อ
+                </label>
+                <input
+                  type="text"
+                  value={contactPhone}
+                  onChange={(e) => setContactPhone(e.target.value)}
+                  placeholder="08x-xxx-xxxx"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-white"
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">
-                หมายเลขโทรศัพท์ติดต่อ
-              </label>
-              <input
-                type="text"
-                value={contactPhone}
-                onChange={(e) => setContactPhone(e.target.value)}
-                placeholder="08x-xxx-xxxx"
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-              />
+          )}
+
+          {/* แนบเอกสารประกอบ / ใบรับรองแพทย์ */}
+          <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 p-4 bg-slate-50/60 dark:bg-slate-800/40 space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                  📎 เอกสารประกอบ / ใบรับรองแพทย์ (PDF หรือรูปภาพ JPG, PNG)
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                  จัดเก็บบน Synology NAS ของสำนักงาน (หรือ Cloud Storage สำรองหากขนาดไฟล์ใหญ่)
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  ref={attachInputRef}
+                  type="file"
+                  accept="application/pdf,image/*"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleAttachmentUpload(f);
+                    e.target.value = "";
+                  }}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  disabled={uploadingAttachment}
+                  onClick={() => attachInputRef.current?.click()}
+                  className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-100 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer disabled:opacity-50"
+                >
+                  {uploadingAttachment ? "⏳ กำลังอัปโหลด..." : "📤 เลือกไฟล์แนบ / ใบรับรองแพทย์"}
+                </button>
+              </div>
             </div>
+            {attachmentUrl && (
+              <div className="flex flex-wrap items-center justify-between gap-2 bg-white dark:bg-slate-900 px-3 py-2 rounded-xl border border-emerald-200 dark:border-emerald-800 text-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-emerald-600 font-bold">✓ แนบแล้ว:</span>
+                  <a
+                    href={resolveLeaveAttachmentUrl(attachmentUrl) || "#"}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-semibold text-indigo-600 hover:underline truncate"
+                  >
+                    {attachmentName || "เอกสารแนบ"}
+                  </a>
+                  {attachmentStorage && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 uppercase">
+                      {attachmentStorage}
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAttachmentUrl(null);
+                    setAttachmentName(null);
+                    setAttachmentStorage(null);
+                  }}
+                  className="text-rose-600 hover:underline font-semibold cursor-pointer"
+                >
+                  ลบไฟล์แนบ
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* สายการพิจารณา (ผู้ตรวจสอบ, ผู้บังคับบัญชา & ผู้มีอำนาจอนุญาต) */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-indigo-50/40 p-4 rounded-xl border border-indigo-100">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                1. ผู้ตรวจสอบสถิติ (ค่าเริ่มต้น: syno_ยุทธนา)
-              </label>
-              <select
-                value={verifierUserId}
-                onChange={(e) => setVerifierUserId(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
-              >
-                {verifierCandidates.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-              {(() => {
-                const ver = verifierCandidates.find(
-                  (m) => m.id === verifierUserId
-                );
-                return (
-                  <div className="text-[11px] text-slate-500 mt-1">
-                    ตำแหน่ง: {ver?.position || "เจ้าพนักงานธุรการปฏิบัติงาน"}
-                  </div>
-                );
-              })()}
-            </div>
+          {/* สายการพิจารณา */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-indigo-50/40 dark:bg-indigo-950/20 p-4 rounded-xl border border-indigo-100 dark:border-indigo-900/50">
+            {formKind !== "cancel" ? (
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1">
+                  1. ผู้ตรวจสอบสถิติ
+                </label>
+                <select
+                  value={verifierUserId}
+                  onChange={(e) => setVerifierUserId(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                >
+                  {verifierCandidates.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center">
+                ℹ️ แบบฟอร์มขอยกเลิกวันลาส่งตรงสู่ผู้บังคับบัญชา (ข้ามขั้นผู้ตรวจสอบ)
+              </div>
+            )}
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                2. ผู้บังคับบัญชา (ค่าเริ่มต้น: Manager ในสังกัด)
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1">
+                2. ผู้บังคับบัญชา
               </label>
               <select
                 value={supervisorUserId}
                 onChange={(e) => setSupervisorUserId(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
               >
                 <option value="">-- เลือกผู้บังคับบัญชา --</option>
                 {supervisorCandidates.map((m) => (
@@ -1327,26 +2273,16 @@ export default function LeavePage() {
                   </option>
                 ))}
               </select>
-              {(() => {
-                const sup = supervisorCandidates.find(
-                  (m) => m.id === supervisorUserId
-                );
-                return sup ? (
-                  <div className="text-[11px] text-slate-500 mt-1">
-                    ตำแหน่ง: {sup.position || "-"}
-                  </div>
-                ) : null;
-              })()}
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                3. ผู้มีอำนาจสั่งอนุญาต (ค่าเริ่มต้น: syno_มะลิวัน)
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1">
+                3. ผู้มีอำนาจสั่งอนุญาต
               </label>
               <select
                 value={approverUserId}
                 onChange={(e) => setApproverUserId(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
               >
                 {approverCandidates.map((m) => (
                   <option key={m.id} value={m.id}>
@@ -1354,28 +2290,37 @@ export default function LeavePage() {
                   </option>
                 ))}
               </select>
-              {(() => {
-                const app = approverCandidates.find(
-                  (m) => m.id === approverUserId
-                );
-                return (
-                  <div className="text-[11px] text-slate-500 mt-1">
-                    ตำแหน่ง:{" "}
-                    {app?.position ||
-                      "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"}
-                  </div>
-                );
-              })()}
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
+          {/* ลายเซ็นผู้ขอลา */}
+          <LeaveSignaturePad
+            userId={currentUser?.id}
+            label="ลายมือชื่อผู้ขอลา (แสดงบนเอกสาร A4 / PDF / Word)"
+            value={applicantSignature}
+            onChange={setApplicantSignature}
+          />
+
+          <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
             <button
               type="submit"
-              disabled={submitting || needsMigration}
+              disabled={
+                submitting ||
+                needsMigration ||
+                overlapCheck.hasOverlap ||
+                totalWorkingDays <= 0 ||
+                isVacationOverQuota ||
+                Boolean(isCancelInvalidRange)
+              }
               className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-semibold shadow-sm cursor-pointer"
             >
-              {submitting ? "กำลังบันทึก..." : "📨 ส่งใบลาเข้าสู่สายการพิจารณา"}
+              {submitting
+                ? "กำลังบันทึก..."
+                : editingReturnedLeave
+                ? "📨 ยืนยันแก้ไขและส่งพิจารณาใหม่"
+                : formKind === "cancel"
+                ? "↩️ ส่งแบบใบขอยกเลิกวันลา"
+                : "📨 ส่งใบลาเข้าสู่สายการพิจารณา"}
             </button>
           </div>
         </form>
@@ -1391,21 +2336,23 @@ export default function LeavePage() {
               label="กำลังโหลดรายการใบลาของคุณ..."
             />
           ) : myRequests.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500 text-sm">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-8 text-center text-slate-500 text-sm">
               ยังไม่มีรายการใบลาในปีงบประมาณ {fiscalYear}
             </div>
           ) : (
             myRequests.map((item) => {
               const typeMeta = LEAVE_TYPE_META[item.leaveType];
               const statusMeta = LEAVE_STATUS_META[item.status];
+              const attachHref = resolveLeaveAttachmentUrl(item.attachmentUrl);
+              const effDays = getEffectiveLeaveDays(item);
               return (
                 <div
                   key={item.id}
-                  className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+                  className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4"
                 >
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-mono text-slate-500">
+                      <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
                         {item.requestNo}
                       </span>
                       <span
@@ -1418,12 +2365,22 @@ export default function LeavePage() {
                       >
                         {statusMeta.label}
                       </span>
+                      {item.leaveDayPeriod !== "full" && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300">
+                          {LEAVE_DAY_PERIOD_SHORT[item.leaveDayPeriod]}
+                        </span>
+                      )}
+                      {item.cancelledDays > 0 && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200">
+                          ยกเลิกบางส่วน -{item.cancelledDays} วัน (สุทธิ {effDays} วัน)
+                        </span>
+                      )}
                       {item.status === "approved" && (
                         <span
                           className={`text-xs px-2.5 py-0.5 rounded-full border ${
                             item.syncedToAttendance
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                              : "bg-amber-50 text-amber-700 border-amber-200"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300"
+                              : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300"
                           }`}
                         >
                           {item.syncedToAttendance
@@ -1432,56 +2389,63 @@ export default function LeavePage() {
                         </span>
                       )}
                     </div>
-                    <div className="font-semibold text-slate-900">
+
+                    <div className="font-semibold text-slate-900 dark:text-white">
                       {formatThaiDateFull(item.startDate)} –{" "}
                       {formatThaiDateFull(item.endDate)} ({item.totalWorkingDays}{" "}
-                      วันทำการ)
+                      {item.leaveType === "maternity_leave" ? "วันปฏิทิน" : "วันทำการ"}
+                      )
                     </div>
-                    <div className="text-xs text-slate-500">
+
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
                       ตำแหน่ง: {item.applicantPosition || "-"} • ยื่นเมื่อ{" "}
                       {formatThaiDateShort(item.writtenDate)}
+                      {item.cancelTargetRequestNo && (
+                        <span> · อ้างอิงใบลาเดิม: {item.cancelTargetRequestNo}</span>
+                      )}
                     </div>
+
                     {item.reason && (
-                      <div className="text-xs text-slate-600">
+                      <div className="text-xs text-slate-600 dark:text-slate-300">
                         เหตุผล: {item.reason}
                       </div>
                     )}
-                    <div className="text-xs text-slate-500 flex flex-wrap gap-x-4 gap-y-1 pt-1">
-                      <span>
-                        1. ผู้ตรวจสอบ:{" "}
-                        {item.verifiedAt
-                          ? `✓ ${item.verifierName}`
-                          : "รอดำเนินการ"}
-                      </span>
-                      <span>
-                        2. ผู้บังคับบัญชา:{" "}
-                        {item.supervisorReviewedAt
-                          ? `✓ ${item.supervisorName}`
-                          : item.supervisorName
-                          ? `⏳ รอ ${item.supervisorName}`
-                          : "รอดำเนินการ"}
-                      </span>
-                      <span>
-                        3. คำสั่ง:{" "}
-                        {item.orderedAt
-                          ? `${item.orderDecision === "approved" ? "✓ อนุญาต" : "✗ ไม่อนุญาต"} (${item.approverName})`
-                          : item.approverName
-                          ? `⏳ รอ ${item.approverName}`
-                          : "รอดำเนินการ"}
-                      </span>
-                    </div>
+
+                    {item.status === "returned" && item.returnedNote && (
+                      <div className="p-2.5 rounded-xl bg-orange-50 dark:bg-orange-950/40 border border-orange-200 dark:border-orange-800 text-xs text-orange-800 dark:text-orange-200">
+                        ↩️ <strong>ตีกลับโดย {item.returnedByName || "ผู้พิจารณา"}:</strong>{" "}
+                        {item.returnedNote}
+                      </div>
+                    )}
+
+                    <ApprovalStepper leave={item} />
                   </div>
 
                   <div className="flex items-center gap-2 flex-wrap shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewLeave(item)}
+                      className="px-3 py-2 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 text-xs font-semibold cursor-pointer"
+                    >
+                      👁️ ดูตัวอย่าง A4
+                    </button>
+                    {attachHref && (
+                      <a
+                        href={attachHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-2 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-xs font-semibold"
+                      >
+                        📎 เอกสารแนบ
+                      </a>
+                    )}
                     <button
                       type="button"
                       disabled={downloadingId === `${item.id}:docx`}
                       onClick={() => handleDownloadDocx(item)}
                       className="px-3 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold disabled:opacity-50 cursor-pointer"
                     >
-                      {downloadingId === `${item.id}:docx`
-                        ? "⏳..."
-                        : "📝 Word (.docx)"}
+                      {downloadingId === `${item.id}:docx` ? "⏳..." : "📝 Word"}
                     </button>
                     <button
                       type="button"
@@ -1489,15 +2453,33 @@ export default function LeavePage() {
                       onClick={() => handleDownloadPdf(item)}
                       className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold disabled:opacity-50 cursor-pointer"
                     >
-                      {downloadingId === `${item.id}:pdf`
-                        ? "⏳..."
-                        : "📄 PDF (.pdf)"}
+                      {downloadingId === `${item.id}:pdf` ? "⏳..." : "📄 PDF"}
                     </button>
+                    {item.status === "returned" && (
+                      <button
+                        type="button"
+                        onClick={() => handleStartEditReturned(item)}
+                        className="px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold cursor-pointer"
+                      >
+                        ✏️ แก้ไขและส่งใหม่
+                      </button>
+                    )}
+                    {item.status === "approved" &&
+                      item.leaveType !== "cancel_leave" &&
+                      effDays > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => handleShortcutToCancelForm(item)}
+                          className="px-3 py-2 rounded-xl bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-200 text-xs font-semibold cursor-pointer"
+                        >
+                          ↩️ ขอยกเลิกวันลา
+                        </button>
+                      )}
                     {item.status !== "approved" && item.status !== "cancelled" && (
                       <button
                         type="button"
                         onClick={() => handleCancelLeave(item)}
-                        className="px-3.5 py-2 rounded-xl border border-rose-200 text-xs font-semibold text-rose-600 hover:bg-rose-50 cursor-pointer"
+                        className="px-3 py-2 rounded-xl border border-rose-200 text-xs font-semibold text-rose-600 hover:bg-rose-50 cursor-pointer"
                       >
                         ยกเลิก
                       </button>
@@ -1513,28 +2495,53 @@ export default function LeavePage() {
       {/* TAB 3: พิจารณาใบลา */}
       {activeTab === "review" && canReviewAny && (
         <div className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            {[
-              { id: "actionable", label: `รอฉันดำเนินการ (${actionableCount})` },
-              { id: "pending_verifier", label: "รอผู้ตรวจสอบ" },
-              { id: "pending_supervisor", label: "รอผู้บังคับบัญชา" },
-              { id: "pending_approver", label: "รอคำสั่งอนุญาต" },
-              { id: "approved", label: "อนุญาตแล้ว" },
-              { id: "all", label: "ทั้งหมด" },
-            ].map((f) => (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => setReviewFilter(f.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold border cursor-pointer ${
-                  reviewFilter === f.id
-                    ? "bg-slate-900 text-white border-slate-900"
-                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                }`}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {[
+                { id: "actionable", label: `รอฉันดำเนินการ (${actionableCount})` },
+                { id: "pending_verifier", label: "รอผู้ตรวจสอบ" },
+                { id: "pending_supervisor", label: "รอผู้บังคับบัญชา" },
+                { id: "pending_approver", label: "รอคำสั่งอนุญาต" },
+                { id: "returned", label: "ตีกลับแก้ไข" },
+                { id: "approved", label: "อนุญาตแล้ว" },
+                { id: "all", label: "ทั้งหมด" },
+              ].map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setReviewFilter(f.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold border cursor-pointer ${
+                    reviewFilter === f.id
+                      ? "bg-slate-900 text-white border-slate-900 dark:bg-indigo-600 dark:border-indigo-600"
+                      : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <input
+                type="text"
+                value={reviewSearch}
+                onChange={(e) => setReviewSearch(e.target.value)}
+                placeholder="🔍 ค้นหาชื่อผู้ขอลา, เลขที่ใบลา (LV-...), หรือกลุ่มงาน"
+                className="md:col-span-2 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+              />
+              <select
+                value={reviewTypeFilter}
+                onChange={(e) => setReviewTypeFilter(e.target.value)}
+                className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
               >
-                {f.label}
-              </button>
-            ))}
+                <option value="all">ทุกประเภทการลา</option>
+                <option value="sick_leave">🤒 ลาป่วย</option>
+                <option value="personal_leave">📋 ลากิจส่วนตัว</option>
+                <option value="maternity_leave">👶 ลาคลอดบุตร</option>
+                <option value="vacation_leave">🌴 ลาพักผ่อน</option>
+                <option value="cancel_leave">↩️ ขอยกเลิกวันลา</option>
+              </select>
+            </div>
           </div>
 
           {loading ? (
@@ -1544,21 +2551,27 @@ export default function LeavePage() {
               label="กำลังโหลดคิวพิจารณาใบลา..."
             />
           ) : filteredReviewRequests.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500 text-sm">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-8 text-center text-slate-500 text-sm">
               ไม่พบรายการใบลาในตัวกรองนี้
             </div>
           ) : (
             filteredReviewRequests.map((item) => {
               const typeMeta = LEAVE_TYPE_META[item.leaveType];
               const statusMeta = LEAVE_STATUS_META[item.status];
+              const attachHref = resolveLeaveAttachmentUrl(item.attachmentUrl);
+              const canReturnItem =
+                (item.status === "pending_verifier" && isVerifier) ||
+                (item.status === "pending_supervisor" && isSupervisor) ||
+                (item.status === "pending_approver" && isApprover);
+
               return (
                 <div
                   key={item.id}
-                  className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+                  className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4"
                 >
-                  <div className="space-y-1">
+                  <div className="space-y-1 flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-mono text-slate-500">
+                      <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
                         {item.requestNo}
                       </span>
                       <span
@@ -1571,6 +2584,11 @@ export default function LeavePage() {
                       >
                         {statusMeta.label}
                       </span>
+                      {item.leaveDayPeriod !== "full" && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          {LEAVE_DAY_PERIOD_SHORT[item.leaveDayPeriod]}
+                        </span>
+                      )}
                       {((item.status === "pending_verifier" &&
                         item.verifierUserId === currentUser?.id) ||
                         (item.status === "pending_supervisor" &&
@@ -1582,51 +2600,57 @@ export default function LeavePage() {
                         </span>
                       )}
                     </div>
-                    <div className="font-bold text-slate-900">
+
+                    <div className="font-bold text-slate-900 dark:text-white">
                       {item.applicantName}{" "}
-                      <span className="text-xs font-normal text-slate-500">
-                        ({item.applicantPosition || "-"} • {item.applicantDivision || "-"})
+                      <span className="text-xs font-normal text-slate-500 dark:text-slate-400">
+                        ({item.applicantPosition || "-"} •{" "}
+                        {item.applicantDivision || "-"})
                       </span>
                     </div>
-                    <div className="text-sm text-slate-700">
+
+                    <div className="text-sm text-slate-700 dark:text-slate-300">
                       {formatThaiDateShort(item.startDate)} –{" "}
                       {formatThaiDateShort(item.endDate)} ({item.totalWorkingDays}{" "}
-                      วันทำการ)
+                      {item.leaveType === "maternity_leave" ? "วันปฏิทิน" : "วันทำการ"}
+                      )
                       {item.reason ? ` • ${item.reason}` : ""}
                     </div>
-                    {(item.supervisorName || item.approverName) && (
-                      <div className="text-xs text-slate-500 flex flex-wrap gap-x-3 gap-y-0.5">
-                        {item.supervisorName && (
-                          <span>
-                            ผู้บังคับบัญชา: {item.supervisorName}
-                            {item.supervisorReviewedAt ? " ✓" : ""}
-                          </span>
-                        )}
-                        {item.approverName && (
-                          <span>
-                            ผู้อนุญาต: {item.approverName}
-                            {item.orderedAt ? " ✓" : ""}
-                          </span>
-                        )}
-                      </div>
-                    )}
+
                     {item.syncNote && (
-                      <div className="text-xs text-slate-500">
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
                         ⏱️ Attendance: {item.syncNote}
                       </div>
                     )}
+
+                    <ApprovalStepper leave={item} />
                   </div>
 
                   <div className="flex items-center gap-2 flex-wrap shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewLeave(item)}
+                      className="px-3 py-2 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 text-xs font-semibold cursor-pointer"
+                    >
+                      👁️ ดูตัวอย่าง A4
+                    </button>
+                    {attachHref && (
+                      <a
+                        href={attachHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-2 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-xs font-semibold"
+                      >
+                        📎 เอกสารแนบ
+                      </a>
+                    )}
                     <button
                       type="button"
                       disabled={downloadingId === `${item.id}:docx`}
                       onClick={() => handleDownloadDocx(item)}
                       className="px-3 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold disabled:opacity-50 cursor-pointer"
                     >
-                      {downloadingId === `${item.id}:docx`
-                        ? "⏳..."
-                        : "📝 Word (.docx)"}
+                      {downloadingId === `${item.id}:docx` ? "⏳..." : "📝 Word"}
                     </button>
                     <button
                       type="button"
@@ -1634,39 +2658,53 @@ export default function LeavePage() {
                       onClick={() => handleDownloadPdf(item)}
                       className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold disabled:opacity-50 cursor-pointer"
                     >
-                      {downloadingId === `${item.id}:pdf`
-                        ? "⏳..."
-                        : "📄 PDF (.pdf)"}
+                      {downloadingId === `${item.id}:pdf` ? "⏳..." : "📄 PDF"}
                     </button>
 
+                    {canReturnItem && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActionComment("");
+                          setActionSignature(null);
+                          setActionModal({ leave: item, action: "return" });
+                        }}
+                        className="px-3 py-2 rounded-xl border border-orange-300 text-orange-700 hover:bg-orange-50 text-xs font-semibold cursor-pointer"
+                      >
+                        ↩️ ตีกลับ
+                      </button>
+                    )}
+
                     {item.status === "pending_verifier" && isVerifier && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setActionComment("ตรวจสอบสถิติการลาถูกต้อง");
-                            setActionModal({ leave: item, action: "verify" });
-                          }}
-                          className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold cursor-pointer"
-                        >
-                          1. ลงนามผู้ตรวจสอบ
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActionComment("ตรวจสอบสถิติการลาถูกต้อง");
+                          setActionSignature(null);
+                          setActionModal({ leave: item, action: "verify" });
+                        }}
+                        className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold cursor-pointer"
+                      >
+                        1. ลงนามผู้ตรวจสอบ
+                      </button>
+                    )}
 
                     {item.status === "pending_supervisor" && isSupervisor && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setActionComment("เห็นควรอนุญาต");
-                            setActionModal({
-                              leave: item,
-                              action: "supervisor_review",
-                            });
-                          }}
-                          className="px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold cursor-pointer"
-                        >
-                          2. ความเห็นผู้บังคับบัญชา
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActionComment("เห็นควรอนุญาต");
+                          setActionSignature(null);
+                          setActionModal({
+                            leave: item,
+                            action: "supervisor_review",
+                          });
+                        }}
+                        className="px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold cursor-pointer"
+                      >
+                        2. ความเห็นผู้บังคับบัญชา
+                      </button>
+                    )}
 
                     {item.status === "pending_approver" && isApprover && (
                       <button
@@ -1674,6 +2712,7 @@ export default function LeavePage() {
                         onClick={() => {
                           setOrderDecision("approved");
                           setActionComment("");
+                          setActionSignature(null);
                           setActionModal({ leave: item, action: "order" });
                         }}
                         className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold cursor-pointer"
@@ -1683,6 +2722,7 @@ export default function LeavePage() {
                     )}
 
                     {item.status === "approved" &&
+                      item.leaveType !== "cancel_leave" &&
                       !item.syncedToAttendance &&
                       (isVerifier || isApprover) && (
                         <button
@@ -1701,133 +2741,252 @@ export default function LeavePage() {
         </div>
       )}
 
-      {/* TAB 4: สถิติและวันลาสะสม */}
+      {/* TAB 4: สถิติและวันลาสะสม + ปฏิทินวันหยุดราชการ */}
       {activeTab === "summary" && (isAdmin || isVerifier) && (
-        loading ? (
-          <PreloadSkeleton
-            variant="table"
-            rows={6}
-            label="กำลังโหลดสถิติวันลาประจำปีงบประมาณ..."
-          />
-        ) : (
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-            <div className="font-bold text-slate-900">
-              สรุปวันลาประจำปีงบประมาณ {fiscalYear}
-            </div>
-            <div className="text-xs text-slate-500">
-              คลิก &ldquo;ตั้งค่ายอดยกมา&rdquo; เพื่อกำหนดวันลาสะสมหรือวันลาพักผ่อนตั้งต้น
-            </div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-slate-50 text-xs text-slate-600 uppercase">
-                <tr>
-                  <th className="px-4 py-3">ชื่อ-สกุล</th>
-                  <th className="px-4 py-3 text-center">ป่วย</th>
-                  <th className="px-4 py-3 text-center">กิจส่วนตัว</th>
-                  <th className="px-4 py-3 text-center">คลอดบุตร</th>
-                  <th className="px-4 py-3 text-center">พักผ่อน (ใช้/สิทธิ)</th>
-                  <th className="px-4 py-3 text-center">เครื่องสแกน</th>
-                  <th className="px-4 py-3 text-right">จัดการ</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {members
-                  .filter((m) => m.status === "active")
-                  .map((m) => {
-                    const bal = balances.find((b) => b.userId === m.id);
-                    const userApproved = requests.filter(
-                      (r) => r.applicantUserId === m.id && r.status === "approved"
-                    );
-                    const sick =
-                      (bal?.sickDaysCarried || 0) +
-                      userApproved
-                        .filter((r) => r.leaveType === "sick_leave")
-                        .reduce((s, r) => s + r.totalWorkingDays, 0);
-                    const personal =
-                      (bal?.personalDaysCarried || 0) +
-                      userApproved
-                        .filter((r) => r.leaveType === "personal_leave")
-                        .reduce((s, r) => s + r.totalWorkingDays, 0);
-                    const maternity =
-                      (bal?.maternityDaysCarried || 0) +
-                      userApproved
-                        .filter((r) => r.leaveType === "maternity_leave")
-                        .reduce((s, r) => s + r.totalWorkingDays, 0);
-                    const vacationUsed =
-                      (bal?.vacationDaysCarried || 0) +
-                      userApproved
-                        .filter((r) => r.leaveType === "vacation_leave")
-                        .reduce((s, r) => s + r.totalWorkingDays, 0);
-                    const vacationTotal =
-                      (bal?.vacationAccumulatedDays || 0) +
-                      (bal?.vacationAnnualDays ?? 10);
-                    const isMapped = mappedUserIds.includes(m.id);
+        <div className="space-y-4">
+          {loading ? (
+            <PreloadSkeleton
+              variant="table"
+              rows={6}
+              label="กำลังโหลดสถิติวันลาประจำปีงบประมาณ..."
+            />
+          ) : (
+            <>
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+                <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div>
+                    <div className="font-bold text-slate-900 dark:text-white">
+                      สรุปวันลาประจำปีงบประมาณ {fiscalYear}
+                    </div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      คำนวณยอดสุทธิ (หักวันที่ขอยกเลิกวันลาแล้ว) · คลิก &ldquo;ตั้งค่ายอดยกมา&rdquo; เพื่อกำหนดวันลาสะสมตั้งต้น
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <input
+                      type="text"
+                      value={summarySearch}
+                      onChange={(e) => setSummarySearch(e.target.value)}
+                      placeholder="🔍 ค้นหาชื่อบุคลากร..."
+                      className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                    />
+                    <select
+                      value={summaryDivisionFilter}
+                      onChange={(e) => setSummaryDivisionFilter(e.target.value)}
+                      className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                    >
+                      <option value="all">ทุกกลุ่ม/ฝ่าย</option>
+                      {divisionList.map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
 
-                    return (
-                      <tr key={m.id} className="hover:bg-slate-50/60">
-                        <td className="px-4 py-3">
-                          <div className="font-semibold text-slate-900">
-                            {m.name}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead className="bg-slate-50 dark:bg-slate-800 text-xs text-slate-600 dark:text-slate-300 uppercase">
+                      <tr>
+                        <th className="px-4 py-3">ชื่อ-สกุล</th>
+                        <th className="px-4 py-3 text-center">ป่วย</th>
+                        <th className="px-4 py-3 text-center">กิจส่วนตัว</th>
+                        <th className="px-4 py-3 text-center">คลอดบุตร</th>
+                        <th className="px-4 py-3 text-center">พักผ่อน (ใช้/สิทธิ)</th>
+                        <th className="px-4 py-3 text-center">เครื่องสแกน</th>
+                        <th className="px-4 py-3 text-right">จัดการ</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {filteredSummaryMembers.map((m) => {
+                        const bal = balances.find((b) => b.userId === m.id);
+                        const userApproved = requests.filter(
+                          (r) =>
+                            r.applicantUserId === m.id &&
+                            r.status === "approved" &&
+                            r.leaveType !== "cancel_leave"
+                        );
+                        const sick =
+                          (bal?.sickDaysCarried || 0) +
+                          userApproved
+                            .filter((r) => r.leaveType === "sick_leave")
+                            .reduce((s, r) => s + getEffectiveLeaveDays(r), 0);
+                        const personal =
+                          (bal?.personalDaysCarried || 0) +
+                          userApproved
+                            .filter((r) => r.leaveType === "personal_leave")
+                            .reduce((s, r) => s + getEffectiveLeaveDays(r), 0);
+                        const maternity =
+                          (bal?.maternityDaysCarried || 0) +
+                          userApproved
+                            .filter((r) => r.leaveType === "maternity_leave")
+                            .reduce((s, r) => s + getEffectiveLeaveDays(r), 0);
+                        const vacationUsed =
+                          (bal?.vacationDaysCarried || 0) +
+                          userApproved
+                            .filter((r) => r.leaveType === "vacation_leave")
+                            .reduce((s, r) => s + getEffectiveLeaveDays(r), 0);
+                        const vacationTotal =
+                          (bal?.vacationAccumulatedDays || 0) +
+                          (bal?.vacationAnnualDays ?? 10);
+                        const isMapped = mappedUserIds.includes(m.id);
+
+                        return (
+                          <tr
+                            key={m.id}
+                            className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40"
+                          >
+                            <td className="px-4 py-3">
+                              <div className="font-semibold text-slate-900 dark:text-white">
+                                {m.name}
+                              </div>
+                              <div className="text-xs text-slate-500 dark:text-slate-400">
+                                {m.position || "-"} · {m.division || "-"}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-center text-slate-700 dark:text-slate-200">
+                              {sick}
+                            </td>
+                            <td className="px-4 py-3 text-center text-slate-700 dark:text-slate-200">
+                              {personal}
+                            </td>
+                            <td className="px-4 py-3 text-center text-slate-700 dark:text-slate-200">
+                              {maternity}
+                            </td>
+                            <td className="px-4 py-3 text-center text-slate-700 dark:text-slate-200 font-semibold">
+                              {vacationUsed} / {vacationTotal}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              {isMapped ? (
+                                <span className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">
+                                  ✓ จับคู่แล้ว
+                                </span>
+                              ) : (
+                                <span className="text-xs text-slate-400">
+                                  ยังไม่จับคู่
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setBalanceModalUser({
+                                    userId: m.id,
+                                    name: m.name,
+                                  });
+                                  setBalanceForm({
+                                    sickDaysCarried: bal?.sickDaysCarried || 0,
+                                    personalDaysCarried:
+                                      bal?.personalDaysCarried || 0,
+                                    maternityDaysCarried:
+                                      bal?.maternityDaysCarried || 0,
+                                    vacationAccumulatedDays:
+                                      bal?.vacationAccumulatedDays || 0,
+                                    vacationAnnualDays:
+                                      bal?.vacationAnnualDays ?? 10,
+                                    vacationDaysCarried:
+                                      bal?.vacationDaysCarried || 0,
+                                  });
+                                }}
+                                className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                              >
+                                ตั้งค่ายอดยกมา
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* ปฏิทินวันหยุดราชการไทย */}
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => setShowHolidayPanel((p) => !p)}
+                  className="w-full p-4 flex items-center justify-between text-left hover:bg-slate-50 dark:hover:bg-slate-800/40 cursor-pointer"
+                >
+                  <div>
+                    <div className="font-bold text-slate-900 dark:text-white text-sm">
+                      📅 ปฏิทินวันหยุดราชการไทย (ปีงบประมาณ {fiscalYear} · {fiscalHolidayList.length} วัน)
+                    </div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      วันหยุดเหล่านี้ถูกหักออกจากจำนวนวันทำการอัตโนมัติทุกครั้งที่ยื่นใบลา (เพิ่มวันหยุดพิเศษตามมติ ครม. ได้)
+                    </div>
+                  </div>
+                  <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+                    {showHolidayPanel ? "ซ่อน ▲" : "จัดการวันหยุด ▼"}
+                  </span>
+                </button>
+
+                {showHolidayPanel && (
+                  <div className="p-4 pt-0 border-t border-slate-100 dark:border-slate-800 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 pt-4">
+                      <input
+                        type="date"
+                        value={newHolidayDate}
+                        onChange={(e) => setNewHolidayDate(e.target.value)}
+                        className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                      />
+                      <input
+                        type="text"
+                        value={newHolidayName}
+                        onChange={(e) => setNewHolidayName(e.target.value)}
+                        placeholder="ชื่อวันหยุดราชการ / วันหยุดพิเศษตามมติ ครม."
+                        className="md:col-span-2 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                      />
+                      <button
+                        type="button"
+                        disabled={savingHoliday || !newHolidayDate || !newHolidayName.trim()}
+                        onClick={handleAddHoliday}
+                        className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-xs font-bold cursor-pointer"
+                      >
+                        + เพิ่ม/อัปเดตวันหยุด
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                      {fiscalHolidayList.map((h) => (
+                        <div
+                          key={h.holidayDate}
+                          className="flex items-center justify-between gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-xs"
+                        >
+                          <div className="min-w-0">
+                            <div className="font-bold text-slate-800 dark:text-slate-100">
+                              {formatThaiDateShort(h.holidayDate)}
+                            </div>
+                            <div className="text-slate-500 dark:text-slate-400 truncate">
+                              {h.name}
+                            </div>
                           </div>
-                          <div className="text-xs text-slate-500">
-                            {m.position || "-"}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-center">{sick}</td>
-                        <td className="px-4 py-3 text-center">{personal}</td>
-                        <td className="px-4 py-3 text-center">{maternity}</td>
-                        <td className="px-4 py-3 text-center">
-                          {vacationUsed} / {vacationTotal}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          {isMapped ? (
-                            <span className="text-xs text-emerald-700 font-medium">
-                              ✓ จับคู่แล้ว
-                            </span>
-                          ) : (
-                            <span className="text-xs text-slate-400">
-                              ยังไม่จับคู่
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right">
                           <button
                             type="button"
-                            onClick={() => {
-                              setBalanceModalUser({ userId: m.id, name: m.name });
-                              setBalanceForm({
-                                sickDaysCarried: bal?.sickDaysCarried || 0,
-                                personalDaysCarried: bal?.personalDaysCarried || 0,
-                                maternityDaysCarried:
-                                  bal?.maternityDaysCarried || 0,
-                                vacationAccumulatedDays:
-                                  bal?.vacationAccumulatedDays || 0,
-                                vacationAnnualDays: bal?.vacationAnnualDays ?? 10,
-                                vacationDaysCarried: bal?.vacationDaysCarried || 0,
-                              });
-                            }}
-                            className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer"
+                            disabled={savingHoliday}
+                            onClick={() => handleRemoveHoliday(h.holidayDate)}
+                            className="text-rose-600 hover:underline font-semibold shrink-0 cursor-pointer"
                           >
-                            ตั้งค่ายอดยกมา
+                            ปิดใช้งาน
                           </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-              </tbody>
-            </table>
-          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
-        )
       )}
 
       {/* TAB 5: จัดการสิทธิ์ใบลา (เฉพาะ Admin) */}
       {activeTab === "permissions" && isAdmin && (
         <div className="space-y-4">
           {needsRoleMigration && (
-            <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 text-sm text-amber-900 flex flex-wrap items-center justify-between gap-2">
+            <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-2xl p-4 text-sm text-amber-900 dark:text-amber-200 flex flex-wrap items-center justify-between gap-2">
               <span>
                 ⚠️ ยังไม่ได้สร้างตาราง <code>leave_authorized_roles</code> ใน Supabase
               </span>
@@ -1844,19 +3003,19 @@ export default function LeavePage() {
             </div>
           )}
 
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm space-y-4">
             <div>
-              <h3 className="font-bold text-slate-900">
+              <h3 className="font-bold text-slate-900 dark:text-white">
                 ⚙️ มอบสิทธิ์ผู้พิจารณาใบลารายบุคคล
               </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 สิทธิ์พื้นฐาน: <code>admin</code> ทำได้ทุกขั้น, <code>manager</code> ลงความเห็นผู้บังคับบัญชาได้, และผู้ดูแลลงเวลา (<code>attendance_authorized_editors</code>) ตรวจสอบสถิติได้ — ส่วนนี้ใช้สำหรับมอบสิทธิ์เพิ่มเติมเป็นรายบุคคล
               </p>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-end bg-slate-50 p-4 rounded-xl border border-slate-200">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-end bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
               <div className="lg:col-span-4">
-                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
                   เลือกบุคลากร
                 </label>
                 <select
@@ -1875,7 +3034,7 @@ export default function LeavePage() {
                       setPermCanApprove(false);
                     }
                   }}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
                 >
                   <option value="">-- เลือกสมาชิก --</option>
                   {members
@@ -1889,7 +3048,7 @@ export default function LeavePage() {
               </div>
 
               <div className="lg:col-span-6 flex flex-wrap gap-4 py-2">
-                <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={permCanVerify}
@@ -1898,7 +3057,7 @@ export default function LeavePage() {
                   />
                   <span>1. ผู้ตรวจสอบสถิติ</span>
                 </label>
-                <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={permCanSupervisor}
@@ -1907,7 +3066,7 @@ export default function LeavePage() {
                   />
                   <span>2. ผู้บังคับบัญชา</span>
                 </label>
-                <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={permCanApprove}
@@ -1939,7 +3098,7 @@ export default function LeavePage() {
 
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left">
-                <thead className="bg-slate-50 text-xs text-slate-600 uppercase">
+                <thead className="bg-slate-50 dark:bg-slate-800 text-xs text-slate-600 dark:text-slate-300 uppercase">
                   <tr>
                     <th className="px-4 py-3">ชื่อ-สกุล</th>
                     <th className="px-4 py-3 text-center">1. ผู้ตรวจสอบ</th>
@@ -1949,7 +3108,7 @@ export default function LeavePage() {
                     <th className="px-4 py-3 text-right">จัดการ</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {leaveRoles.length === 0 ? (
                     <tr>
                       <td
@@ -1961,12 +3120,15 @@ export default function LeavePage() {
                     </tr>
                   ) : (
                     leaveRoles.map((lr) => (
-                      <tr key={lr.userId} className="hover:bg-slate-50/60">
+                      <tr
+                        key={lr.userId}
+                        className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40"
+                      >
                         <td className="px-4 py-3">
-                          <div className="font-semibold text-slate-900">
+                          <div className="font-semibold text-slate-900 dark:text-white">
                             {lr.userName}
                           </div>
-                          <div className="text-xs text-slate-500">
+                          <div className="text-xs text-slate-500 dark:text-slate-400">
                             {lr.division || "-"}
                           </div>
                         </td>
@@ -2018,7 +3180,7 @@ export default function LeavePage() {
                             className="cursor-pointer"
                           />
                         </td>
-                        <td className="px-4 py-3 text-xs text-slate-500">
+                        <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
                           {lr.grantedBy || "-"}
                         </td>
                         <td className="px-4 py-3 text-right">
@@ -2048,31 +3210,60 @@ export default function LeavePage() {
         </div>
       )}
 
-      {/* Modal: ดำเนินการพิจารณาใบลา */}
+      {/* Modal: ดำเนินการพิจารณา / ตีกลับใบลา + ลายเซ็นดิจิทัล */}
       {actionModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl">
-            <h3 className="text-lg font-bold text-slate-900">
-              {actionModal.action === "verify"
-                ? "1. ลงนามผู้ตรวจสอบสถิติการลา"
-                : actionModal.action === "supervisor_review"
-                ? "2. ความเห็นผู้บังคับบัญชา"
-                : "3. คำสั่งผู้มีอำนาจอนุญาต"}
-            </h3>
-            <div className="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-xl my-auto">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                {actionModal.action === "verify"
+                  ? "1. ลงนามผู้ตรวจสอบสถิติการลา"
+                  : actionModal.action === "supervisor_review"
+                  ? "2. ความเห็นผู้บังคับบัญชา"
+                  : actionModal.action === "return"
+                  ? "↩️ ตีกลับใบลาให้ผู้ขอลาแก้ไข"
+                  : "3. คำสั่งผู้มีอำนาจอนุญาต"}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setPreviewLeave(actionModal.leave)}
+                className="px-2.5 py-1 rounded-lg bg-teal-50 text-teal-700 border border-teal-200 text-xs font-semibold cursor-pointer"
+              >
+                👁️ ดูแบบฟอร์ม A4
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 p-3 rounded-xl space-y-1">
               <div>
-                <strong>ผู้ขอลา:</strong> {actionModal.leave.applicantName}
+                <strong>ผู้ขอลา:</strong> {actionModal.leave.applicantName} ({actionModal.leave.requestNo})
               </div>
               <div>
                 <strong>ประเภท:</strong>{" "}
                 {LEAVE_TYPE_META[actionModal.leave.leaveType].label} (
-                {actionModal.leave.totalWorkingDays} วันทำการ)
+                {actionModal.leave.totalWorkingDays} วัน
+                {actionModal.leave.leaveDayPeriod !== "full"
+                  ? ` · ${LEAVE_DAY_PERIOD_SHORT[actionModal.leave.leaveDayPeriod]}`
+                  : ""}
+                )
               </div>
               <div>
                 <strong>วันที่:</strong>{" "}
                 {formatThaiDateFull(actionModal.leave.startDate)} –{" "}
                 {formatThaiDateFull(actionModal.leave.endDate)}
               </div>
+              {resolveLeaveAttachmentUrl(actionModal.leave.attachmentUrl) && (
+                <div>
+                  <strong>เอกสารแนบ:</strong>{" "}
+                  <a
+                    href={resolveLeaveAttachmentUrl(actionModal.leave.attachmentUrl) || "#"}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-indigo-600 hover:underline font-semibold"
+                  >
+                    📎 {actionModal.leave.attachmentName || "เปิดดูเอกสารแนบ"}
+                  </a>
+                </div>
+              )}
             </div>
 
             {actionModal.action === "order" && (
@@ -2083,7 +3274,7 @@ export default function LeavePage() {
                   className={`flex-1 py-2.5 rounded-xl border text-sm font-bold cursor-pointer ${
                     orderDecision === "approved"
                       ? "bg-emerald-600 text-white border-emerald-600"
-                      : "bg-white text-slate-700 border-slate-200"
+                      : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700"
                   }`}
                 >
                   ✓ อนุญาต (ซิงก์ลงเวลา)
@@ -2094,7 +3285,7 @@ export default function LeavePage() {
                   className={`flex-1 py-2.5 rounded-xl border text-sm font-bold cursor-pointer ${
                     orderDecision === "rejected"
                       ? "bg-rose-600 text-white border-rose-600"
-                      : "bg-white text-slate-700 border-slate-200"
+                      : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700"
                   }`}
                 >
                   ✗ ไม่อนุญาต
@@ -2103,22 +3294,39 @@ export default function LeavePage() {
             )}
 
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">
-                ความเห็น / หมายเหตุ
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                {actionModal.action === "return"
+                  ? "เหตุผล / จุดที่ต้องการให้แก้ไข *"
+                  : "ความเห็น / หมายเหตุ"}
               </label>
               <textarea
                 rows={3}
                 value={actionComment}
                 onChange={(e) => setActionComment(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                placeholder={
+                  actionModal.action === "return"
+                    ? "เช่น กรุณาแนบใบรับรองแพทย์ หรือระบุช่วงวันที่ให้ถูกต้อง"
+                    : "ระบุความเห็นประกอบ (ถ้ามี)"
+                }
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white"
               />
             </div>
+
+            {actionModal.action !== "return" && (
+              <LeaveSignaturePad
+                compact
+                userId={currentUser?.id}
+                label="ลายมือชื่อผู้พิจารณา"
+                value={actionSignature}
+                onChange={setActionSignature}
+              />
+            )}
 
             <div className="flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setActionModal(null)}
-                className="px-4 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 cursor-pointer"
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-sm text-slate-600 dark:text-slate-300 cursor-pointer"
               >
                 ปิด
               </button>
@@ -2126,9 +3334,17 @@ export default function LeavePage() {
                 type="button"
                 disabled={processingAction}
                 onClick={handleSubmitWorkflowAction}
-                className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 cursor-pointer"
+                className={`px-4 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50 cursor-pointer ${
+                  actionModal.action === "return"
+                    ? "bg-orange-600 hover:bg-orange-700"
+                    : "bg-indigo-600 hover:bg-indigo-700"
+                }`}
               >
-                {processingAction ? "กำลังบันทึก..." : "ยืนยันและลงนาม"}
+                {processingAction
+                  ? "กำลังบันทึก..."
+                  : actionModal.action === "return"
+                  ? "↩️ ยืนยันตีกลับให้แก้ไข"
+                  : "✓ ยืนยันและลงนาม"}
               </button>
             </div>
           </div>
@@ -2138,13 +3354,15 @@ export default function LeavePage() {
       {/* Modal: ตั้งค่ายอดยกมา */}
       {balanceModalUser && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl">
-            <h3 className="text-lg font-bold text-slate-900">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
               ตั้งค่ายอดวันลา ({balanceModalUser.name})
             </h3>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div>
-                <label className="text-xs text-slate-600">ลาป่วยยกมา (วัน)</label>
+                <label className="text-xs text-slate-600 dark:text-slate-300">
+                  ลาป่วยยกมา (วัน)
+                </label>
                 <input
                   type="number"
                   step="0.5"
@@ -2155,11 +3373,13 @@ export default function LeavePage() {
                       sickDaysCarried: Number(e.target.value),
                     }))
                   }
-                  className="w-full mt-1 rounded-xl border border-slate-200 px-3 py-1.5"
+                  className="w-full mt-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-slate-900 dark:text-white"
                 />
               </div>
               <div>
-                <label className="text-xs text-slate-600">ลากิจยกมา (วัน)</label>
+                <label className="text-xs text-slate-600 dark:text-slate-300">
+                  ลากิจยกมา (วัน)
+                </label>
                 <input
                   type="number"
                   step="0.5"
@@ -2170,11 +3390,28 @@ export default function LeavePage() {
                       personalDaysCarried: Number(e.target.value),
                     }))
                   }
-                  className="w-full mt-1 rounded-xl border border-slate-200 px-3 py-1.5"
+                  className="w-full mt-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-slate-900 dark:text-white"
                 />
               </div>
               <div>
-                <label className="text-xs text-slate-600">
+                <label className="text-xs text-slate-600 dark:text-slate-300">
+                  ลาคลอดบุตรยกมา (วัน)
+                </label>
+                <input
+                  type="number"
+                  step="0.5"
+                  value={balanceForm.maternityDaysCarried}
+                  onChange={(e) =>
+                    setBalanceForm((p) => ({
+                      ...p,
+                      maternityDaysCarried: Number(e.target.value),
+                    }))
+                  }
+                  className="w-full mt-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-slate-900 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-600 dark:text-slate-300">
                   พักผ่อนสะสม (วัน)
                 </label>
                 <input
@@ -2187,11 +3424,11 @@ export default function LeavePage() {
                       vacationAccumulatedDays: Number(e.target.value),
                     }))
                   }
-                  className="w-full mt-1 rounded-xl border border-slate-200 px-3 py-1.5"
+                  className="w-full mt-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-slate-900 dark:text-white"
                 />
               </div>
               <div>
-                <label className="text-xs text-slate-600">
+                <label className="text-xs text-slate-600 dark:text-slate-300">
                   สิทธิพักผ่อนประจำปี (วัน)
                 </label>
                 <input
@@ -2204,11 +3441,11 @@ export default function LeavePage() {
                       vacationAnnualDays: Number(e.target.value),
                     }))
                   }
-                  className="w-full mt-1 rounded-xl border border-slate-200 px-3 py-1.5"
+                  className="w-full mt-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-slate-900 dark:text-white"
                 />
               </div>
               <div>
-                <label className="text-xs text-slate-600">
+                <label className="text-xs text-slate-600 dark:text-slate-300">
                   พักผ่อนใช้แล้วยกมา (วัน)
                 </label>
                 <input
@@ -2221,7 +3458,7 @@ export default function LeavePage() {
                       vacationDaysCarried: Number(e.target.value),
                     }))
                   }
-                  className="w-full mt-1 rounded-xl border border-slate-200 px-3 py-1.5"
+                  className="w-full mt-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-slate-900 dark:text-white"
                 />
               </div>
             </div>
@@ -2229,7 +3466,7 @@ export default function LeavePage() {
               <button
                 type="button"
                 onClick={() => setBalanceModalUser(null)}
-                className="px-4 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 cursor-pointer"
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-sm text-slate-600 dark:text-slate-300 cursor-pointer"
               >
                 ยกเลิก
               </button>
@@ -2245,6 +3482,16 @@ export default function LeavePage() {
         </div>
       )}
 
+      {/* Modal: ดูตัวอย่างแบบฟอร์ม A4 */}
+      {previewLeave && (
+        <LeavePreviewModal
+          leave={previewLeave}
+          onClose={() => setPreviewLeave(null)}
+          onDownloadDocx={handleDownloadDocx}
+          onDownloadPdf={handleDownloadPdf}
+          downloadingId={downloadingId}
+        />
+      )}
     </div>
   );
 }

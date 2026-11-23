@@ -1,10 +1,15 @@
+import { DEFAULT_THAI_HOLIDAYS } from "./thai-holidays";
+
 export type LeaveType =
   | "sick_leave"
   | "personal_leave"
   | "maternity_leave"
-  | "vacation_leave";
+  | "vacation_leave"
+  | "cancel_leave";
 
-export type LeaveFormKind = "general" | "vacation";
+export type LeaveFormKind = "general" | "vacation" | "cancel";
+
+export type LeaveDayPeriod = "full" | "morning" | "afternoon";
 
 export type LeaveStatus =
   | "pending_verifier"
@@ -12,12 +17,19 @@ export type LeaveStatus =
   | "pending_approver"
   | "approved"
   | "rejected"
+  | "returned"
   | "cancelled";
+
+export interface ExcludedHolidayInfo {
+  date: string;
+  name: string;
+}
 
 export interface LeaveRequestItem {
   id: string;
   requestNo: string;
   leaveType: LeaveType;
+  leaveDayPeriod: LeaveDayPeriod;
   writtenAt: string;
   writtenDate: string;
   subject: string;
@@ -30,6 +42,13 @@ export interface LeaveRequestItem {
   startDate: string;
   endDate: string;
   totalWorkingDays: number;
+  cancelledDays: number;
+  cancelTargetLeaveId: string | null;
+  cancelTargetRequestNo: string | null;
+  cancelTargetLeaveType: string | null;
+  cancelTargetStartDate: string | null;
+  cancelTargetEndDate: string | null;
+  cancelTargetDays: number | null;
   lastLeaveType: string | null;
   lastLeaveStartDate: string | null;
   lastLeaveEndDate: string | null;
@@ -63,8 +82,18 @@ export interface LeaveRequestItem {
   orderDecision: "approved" | "rejected" | null;
   orderComment: string | null;
   orderedAt: string | null;
+  applicantSignature: string | null;
+  actingPersonSignature: string | null;
+  verifierSignature: string | null;
+  supervisorSignature: string | null;
+  approverSignature: string | null;
   attachmentUrl: string | null;
   attachmentName: string | null;
+  attachmentStorage: string | null;
+  excludedHolidays: ExcludedHolidayInfo[];
+  returnedByName: string | null;
+  returnedNote: string | null;
+  returnedAt: string | null;
   syncedToAttendance: boolean;
   syncedAt: string | null;
   syncNote: string | null;
@@ -86,6 +115,18 @@ export interface LeaveBalanceItem {
   updatedAt?: string;
 }
 
+export const LEAVE_DAY_PERIOD_LABELS: Record<LeaveDayPeriod, string> = {
+  full: "เต็มวัน",
+  morning: "ครึ่งเช้า (08:30–12:00 น.)",
+  afternoon: "ครึ่งบ่าย (13:00–16:30 น.)",
+};
+
+export const LEAVE_DAY_PERIOD_SHORT: Record<LeaveDayPeriod, string> = {
+  full: "เต็มวัน",
+  morning: "ครึ่งเช้า",
+  afternoon: "ครึ่งบ่าย",
+};
+
 export const LEAVE_TYPE_META: Record<
   LeaveType,
   {
@@ -104,7 +145,7 @@ export const LEAVE_TYPE_META: Record<
     formKind: "general",
     defaultSubject: "ขออนุญาตลาป่วย",
     icon: "🤒",
-    badgeClass: "bg-rose-50 text-rose-700 border-rose-200",
+    badgeClass: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800/60",
     dailyNoteType: "sick_leave",
   },
   personal_leave: {
@@ -113,7 +154,7 @@ export const LEAVE_TYPE_META: Record<
     formKind: "general",
     defaultSubject: "ขออนุญาตลากิจส่วนตัว",
     icon: "📋",
-    badgeClass: "bg-amber-50 text-amber-700 border-amber-200",
+    badgeClass: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800/60",
     dailyNoteType: "personal_leave",
   },
   maternity_leave: {
@@ -122,7 +163,7 @@ export const LEAVE_TYPE_META: Record<
     formKind: "general",
     defaultSubject: "ขออนุญาตลาคลอดบุตร",
     icon: "👶",
-    badgeClass: "bg-pink-50 text-pink-700 border-pink-200",
+    badgeClass: "bg-pink-50 text-pink-700 border-pink-200 dark:bg-pink-950/50 dark:text-pink-300 dark:border-pink-800/60",
     dailyNoteType: "other",
   },
   vacation_leave: {
@@ -131,8 +172,17 @@ export const LEAVE_TYPE_META: Record<
     formKind: "vacation",
     defaultSubject: "ขอลาพักผ่อน",
     icon: "🌴",
-    badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800/60",
     dailyNoteType: "vacation_leave",
+  },
+  cancel_leave: {
+    label: "ขอยกเลิกวันลา",
+    shortLabel: "ยกเลิกวันลา",
+    formKind: "cancel",
+    defaultSubject: "ขอยกเลิกวันลา",
+    icon: "↩️",
+    badgeClass: "bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/50 dark:text-violet-300 dark:border-violet-800/60",
+    dailyNoteType: "other",
   },
 };
 
@@ -142,32 +192,37 @@ export const LEAVE_STATUS_META: Record<
 > = {
   pending_verifier: {
     label: "รอผู้ตรวจสอบสถิติ",
-    badgeClass: "bg-amber-50 text-amber-700 border-amber-200",
+    badgeClass: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800/60",
     stepIndex: 1,
   },
   pending_supervisor: {
     label: "รอความเห็นผู้บังคับบัญชา",
-    badgeClass: "bg-sky-50 text-sky-700 border-sky-200",
+    badgeClass: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/50 dark:text-sky-300 dark:border-sky-800/60",
     stepIndex: 2,
   },
   pending_approver: {
     label: "รอคำสั่งอนุญาต",
-    badgeClass: "bg-indigo-50 text-indigo-700 border-indigo-200",
+    badgeClass: "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-800/60",
     stepIndex: 3,
   },
   approved: {
     label: "อนุญาตแล้ว",
-    badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800/60",
     stepIndex: 4,
   },
   rejected: {
     label: "ไม่อนุญาต",
-    badgeClass: "bg-rose-50 text-rose-700 border-rose-200",
+    badgeClass: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800/60",
     stepIndex: 4,
+  },
+  returned: {
+    label: "ตีกลับให้แก้ไข",
+    badgeClass: "bg-orange-50 text-orange-700 border-orange-300 dark:bg-orange-950/50 dark:text-orange-300 dark:border-orange-700/70",
+    stepIndex: 1,
   },
   cancelled: {
     label: "ยกเลิกแล้ว",
-    badgeClass: "bg-slate-100 text-slate-600 border-slate-200",
+    badgeClass: "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
     stepIndex: 0,
   },
 };
@@ -231,7 +286,6 @@ export function getHalfYearRange(dateStr?: string): {
   const year = base.getFullYear();
   const month = base.getMonth(); // 0..11
   if (month >= 9) {
-    // Oct..Dec -> 1 Oct (year) to 31 Mar (year+1)
     return {
       label: `รอบที่ 1 (1 ต.ค. ${year + 543 - 2500} – 31 มี.ค. ${year + 544 - 2500})`,
       startDate: `${year}-10-01`,
@@ -239,14 +293,12 @@ export function getHalfYearRange(dateStr?: string): {
     };
   }
   if (month <= 2) {
-    // Jan..Mar -> 1 Oct (year-1) to 31 Mar (year)
     return {
       label: `รอบที่ 1 (1 ต.ค. ${year + 542 - 2500} – 31 มี.ค. ${year + 543 - 2500})`,
       startDate: `${year - 1}-10-01`,
       endDate: `${year}-03-31`,
     };
   }
-  // Apr..Sep -> 1 Apr (year) to 30 Sep (year)
   return {
     label: `รอบที่ 2 (1 เม.ย. ${year + 543 - 2500} – 30 ก.ย. ${year + 543 - 2500})`,
     startDate: `${year}-04-01`,
@@ -254,8 +306,32 @@ export function getHalfYearRange(dateStr?: string): {
   };
 }
 
-/** คืนรายการวันที่ทำงาน (จันทร์-ศุกร์) ในช่วง startDate..endDate */
-export function getWorkingDatesBetween(startDate: string, endDate: string): string[] {
+/** จำนวนวันลาสุทธิหลังหักวันที่ขอยกเลิกวันลาแล้ว */
+export function getEffectiveLeaveDays(
+  item: Pick<LeaveRequestItem, "totalWorkingDays" | "cancelledDays" | "leaveType">
+): number {
+  if (item.leaveType === "cancel_leave") return 0;
+  return Math.max(
+    0,
+    Math.round((Number(item.totalWorkingDays || 0) - Number(item.cancelledDays || 0)) * 10) / 10
+  );
+}
+
+function toIsoDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * คืนรายการวันที่ทำงาน (จันทร์-ศุกร์ และไม่ตรงกับวันหยุดราชการไทย) ในช่วง startDate..endDate
+ */
+export function getWorkingDatesBetween(
+  startDate: string,
+  endDate: string,
+  holidayMap: Record<string, string> = DEFAULT_THAI_HOLIDAYS
+): string[] {
   if (!startDate || !endDate) return [];
   const start = new Date(`${startDate.slice(0, 10)}T00:00:00`);
   const end = new Date(`${endDate.slice(0, 10)}T00:00:00`);
@@ -267,16 +343,233 @@ export function getWorkingDatesBetween(startDate: string, endDate: string): stri
   let guard = 0;
   while (cursor <= end && guard < 366) {
     const day = cursor.getDay();
-    if (day !== 0 && day !== 6) {
-      const y = cursor.getFullYear();
-      const m = String(cursor.getMonth() + 1).padStart(2, "0");
-      const d = String(cursor.getDate()).padStart(2, "0");
-      dates.push(`${y}-${m}-${d}`);
+    const iso = toIsoDate(cursor);
+    if (day !== 0 && day !== 6 && !holidayMap[iso]) {
+      dates.push(iso);
     }
     cursor.setDate(cursor.getDate() + 1);
     guard += 1;
   }
   return dates;
+}
+
+export interface LeaveCalculationResult {
+  workingDates: string[];
+  allCalendarDays: number;
+  totalWorkingDays: number;
+  skippedWeekends: number;
+  skippedHolidays: ExcludedHolidayInfo[];
+  isCalendarCount: boolean;
+}
+
+/**
+ * คำนวณวันลาอย่างละเอียดตามระเบียบราชการ:
+ * - ลาคลอดบุตร นับวันต่อเนื่องรวมวันหยุด (ปฏิทิน)
+ * - ลาป่วย/กิจ/พักผ่อน/ยกเลิกวันลา ตัดเสาร์-อาทิตย์ และวันหยุดราชการไทย
+ * - ลาวันเดียวแบบครึ่งเช้า/ครึ่งบ่าย คิดเป็น 0.5 วันทำการ
+ */
+export function calculateLeavePeriodDetails({
+  startDate,
+  endDate,
+  leaveType,
+  leaveDayPeriod = "full",
+  holidayMap = DEFAULT_THAI_HOLIDAYS,
+}: {
+  startDate: string;
+  endDate: string;
+  leaveType: LeaveType;
+  leaveDayPeriod?: LeaveDayPeriod;
+  holidayMap?: Record<string, string>;
+}): LeaveCalculationResult {
+  if (!startDate || !endDate) {
+    return {
+      workingDates: [],
+      allCalendarDays: 0,
+      totalWorkingDays: 0,
+      skippedWeekends: 0,
+      skippedHolidays: [],
+      isCalendarCount: false,
+    };
+  }
+
+  const start = new Date(`${startDate.slice(0, 10)}T00:00:00`);
+  const end = new Date(`${endDate.slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+    return {
+      workingDates: [],
+      allCalendarDays: 0,
+      totalWorkingDays: 0,
+      skippedWeekends: 0,
+      skippedHolidays: [],
+      isCalendarCount: false,
+    };
+  }
+
+  const workingDates: string[] = [];
+  const skippedHolidays: ExcludedHolidayInfo[] = [];
+  let skippedWeekends = 0;
+  let allCalendarDays = 0;
+
+  const cursor = new Date(start);
+  let guard = 0;
+  while (cursor <= end && guard < 366) {
+    allCalendarDays += 1;
+    const day = cursor.getDay();
+    const iso = toIsoDate(cursor);
+    if (day === 0 || day === 6) {
+      skippedWeekends += 1;
+    } else if (holidayMap[iso]) {
+      skippedHolidays.push({ date: iso, name: holidayMap[iso] });
+    } else {
+      workingDates.push(iso);
+    }
+    cursor.setDate(cursor.getDate() + 1);
+    guard += 1;
+  }
+
+  if (leaveType === "maternity_leave") {
+    return {
+      workingDates,
+      allCalendarDays,
+      totalWorkingDays: allCalendarDays,
+      skippedWeekends,
+      skippedHolidays,
+      isCalendarCount: true,
+    };
+  }
+
+  const isSingleDate = startDate.slice(0, 10) === endDate.slice(0, 10);
+  if (isSingleDate && (leaveDayPeriod === "morning" || leaveDayPeriod === "afternoon")) {
+    return {
+      workingDates,
+      allCalendarDays,
+      totalWorkingDays: workingDates.length === 1 ? 0.5 : 0,
+      skippedWeekends,
+      skippedHolidays,
+      isCalendarCount: false,
+    };
+  }
+
+  return {
+    workingDates,
+    allCalendarDays,
+    totalWorkingDays: workingDates.length,
+    skippedWeekends,
+    skippedHolidays,
+    isCalendarCount: false,
+  };
+}
+
+/**
+ * ตรวจสอบการยื่นวันลาซ้อนทับ (Overlap) กับใบลาที่ยังมีผลอยู่ของผู้ขอลาคนเดียวกัน
+ * - อนุญาตกรณีวันเดียวกันแต่คนละช่วงเวลา (ครึ่งเช้า กับ ครึ่งบ่าย)
+ * - ละเว้นใบลาที่ถูกยกเลิก (cancelled), ไม่อนุญาต (rejected), หรือใบขอยกเลิกวันลา (cancel_leave)
+ */
+export function detectLeaveOverlap({
+  candidateStart,
+  candidateEnd,
+  candidatePeriod = "full",
+  existingRequests,
+  excludeLeaveId,
+}: {
+  candidateStart: string;
+  candidateEnd: string;
+  candidatePeriod?: LeaveDayPeriod;
+  existingRequests: LeaveRequestItem[];
+  excludeLeaveId?: string;
+}): { hasOverlap: boolean; conflicts: LeaveRequestItem[] } {
+  const s = candidateStart?.slice(0, 10);
+  const e = candidateEnd?.slice(0, 10);
+  if (!s || !e || e < s) {
+    return { hasOverlap: false, conflicts: [] };
+  }
+
+  const blockingStatuses = new Set<LeaveStatus>([
+    "pending_verifier",
+    "pending_supervisor",
+    "pending_approver",
+    "returned",
+    "approved",
+  ]);
+
+  const isCandidateSingleDay = s === e;
+  const conflicts: LeaveRequestItem[] = [];
+
+  for (const r of existingRequests) {
+    if (excludeLeaveId && r.id === excludeLeaveId) continue;
+    if (r.leaveType === "cancel_leave") continue;
+    if (!blockingStatuses.has(r.status)) continue;
+    if (getEffectiveLeaveDays(r) <= 0) continue;
+
+    const rs = String(r.startDate || "").slice(0, 10);
+    const re = String(r.endDate || "").slice(0, 10);
+    if (!rs || !re) continue;
+
+    if (rs <= e && re >= s) {
+      const isExistingSingleDay = rs === re;
+      const existingPeriod = r.leaveDayPeriod || "full";
+      if (
+        isCandidateSingleDay &&
+        isExistingSingleDay &&
+        rs === s &&
+        ((candidatePeriod === "morning" && existingPeriod === "afternoon") ||
+          (candidatePeriod === "afternoon" && existingPeriod === "morning"))
+      ) {
+        continue;
+      }
+      conflicts.push(r);
+    }
+  }
+
+  return {
+    hasOverlap: conflicts.length > 0,
+    conflicts,
+  };
+}
+
+/**
+ * นับวันลาเฉพาะส่วนที่ตกอยู่ในช่วงรอบประเมิน 6 เดือน (แก้ปัญหาใบลาคร่อมรอบ 31 มี.ค. / 30 ก.ย.)
+ */
+export function countWorkingDaysInRange(
+  leave: LeaveRequestItem,
+  rangeStart: string,
+  rangeEnd: string,
+  holidayMap: Record<string, string> = DEFAULT_THAI_HOLIDAYS
+): number {
+  const effective = getEffectiveLeaveDays(leave);
+  if (effective <= 0) return 0;
+
+  const ls = String(leave.startDate || "").slice(0, 10);
+  const le = String(leave.endDate || "").slice(0, 10);
+  if (!ls || !le || le < rangeStart || ls > rangeEnd) return 0;
+
+  // หากอยู่ภายในช่วงทั้งหมด คืนยอดสุทธิทันที (รองรับครึ่งวันและหักวันยกเลิกแล้ว)
+  if (ls >= rangeStart && le <= rangeEnd) {
+    return effective;
+  }
+
+  const overlapStart = ls > rangeStart ? ls : rangeStart;
+  const overlapEnd = le < rangeEnd ? le : rangeEnd;
+  const totalInRange = getWorkingDatesBetween(overlapStart, overlapEnd, holidayMap).length;
+  return Math.min(effective, totalInRange);
+}
+
+/**
+ * แปลง path หรือ URL ของไฟล์แนบใบลา (เช่น ใบรับรองแพทย์บน NAS หรือ R2/Supabase) ให้เปิดดูได้
+ */
+export function resolveLeaveAttachmentUrl(url?: string | null): string | null {
+  if (!url) return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  if (
+    trimmed.startsWith("http://") ||
+    trimmed.startsWith("https://") ||
+    trimmed.startsWith("/api/") ||
+    trimmed.startsWith("data:")
+  ) {
+    return trimmed;
+  }
+  return `/api/nas/download?path=${encodeURIComponent(trimmed)}&mode=open`;
 }
 
 export function formatThaiDateParts(dateStr?: string | null): {

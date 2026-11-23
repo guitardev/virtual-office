@@ -1,13 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase as rawSupabase } from "@/lib/supabase";
 import {
+  calculateLeavePeriodDetails,
+  detectLeaveOverlap,
+  formatThaiDateShort,
+  getEffectiveLeaveDays,
   getFiscalYear,
   getWorkingDatesBetween,
+  LEAVE_DAY_PERIOD_SHORT,
   LEAVE_TYPE_META,
   LeaveBalanceItem,
+  LeaveDayPeriod,
   LeaveRequestItem,
   LeaveType,
 } from "@/lib/leave-utils";
+import {
+  buildHolidayMap,
+  DEFAULT_THAI_HOLIDAYS,
+  ThaiHolidayItem,
+} from "@/lib/thai-holidays";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +34,21 @@ function isMissingTableError(err: { code?: string; message?: string } | null): b
   return (
     err.code === "42P01" ||
     err.code === "PGRST205" ||
-    /relation .*leave_(requests|balances).* does not exist|Could not find the table/i.test(
+    /relation .*(leave_requests|leave_balances|leave_authorized_roles|thai_public_holidays).* does not exist|Could not find the table/i.test(
+      err.message || ""
+    )
+  );
+}
+
+function isMissingV2SchemaError(
+  err: { code?: string; message?: string } | null
+): boolean {
+  if (!err) return false;
+  return (
+    err.code === "42703" ||
+    err.code === "PGRST204" ||
+    err.code === "23514" ||
+    /column .*(leave_day_period|cancelled_days|cancel_target_leave_id|applicant_signature|returned_note).* does not exist|Could not find the '?(leave_day_period|cancelled_days|applicant_signature)'? column|violates check constraint/i.test(
       err.message || ""
     )
   );
@@ -34,6 +59,7 @@ function mapRowToLeaveRequest(row: Record<string, unknown>): LeaveRequestItem {
     id: String(row.id),
     requestNo: String(row.request_no || ""),
     leaveType: (row.leave_type as LeaveType) || "sick_leave",
+    leaveDayPeriod: (row.leave_day_period as LeaveDayPeriod) || "full",
     writtenAt: String(row.written_at || ""),
     writtenDate: String(row.written_date || ""),
     subject: String(row.subject || ""),
@@ -46,6 +72,26 @@ function mapRowToLeaveRequest(row: Record<string, unknown>): LeaveRequestItem {
     startDate: String(row.start_date || ""),
     endDate: String(row.end_date || ""),
     totalWorkingDays: Number(row.total_working_days || 0),
+    cancelledDays: Number(row.cancelled_days || 0),
+    cancelTargetLeaveId: row.cancel_target_leave_id
+      ? String(row.cancel_target_leave_id)
+      : null,
+    cancelTargetRequestNo: row.cancel_target_request_no
+      ? String(row.cancel_target_request_no)
+      : null,
+    cancelTargetLeaveType: row.cancel_target_leave_type
+      ? String(row.cancel_target_leave_type)
+      : null,
+    cancelTargetStartDate: row.cancel_target_start_date
+      ? String(row.cancel_target_start_date)
+      : null,
+    cancelTargetEndDate: row.cancel_target_end_date
+      ? String(row.cancel_target_end_date)
+      : null,
+    cancelTargetDays:
+      row.cancel_target_days !== null && row.cancel_target_days !== undefined
+        ? Number(row.cancel_target_days)
+        : null,
     lastLeaveType: row.last_leave_type ? String(row.last_leave_type) : null,
     lastLeaveStartDate: row.last_leave_start_date
       ? String(row.last_leave_start_date)
@@ -99,8 +145,32 @@ function mapRowToLeaveRequest(row: Record<string, unknown>): LeaveRequestItem {
         : null,
     orderComment: row.order_comment ? String(row.order_comment) : null,
     orderedAt: row.ordered_at ? String(row.ordered_at) : null,
+    applicantSignature: row.applicant_signature
+      ? String(row.applicant_signature)
+      : null,
+    actingPersonSignature: row.acting_person_signature
+      ? String(row.acting_person_signature)
+      : null,
+    verifierSignature: row.verifier_signature
+      ? String(row.verifier_signature)
+      : null,
+    supervisorSignature: row.supervisor_signature
+      ? String(row.supervisor_signature)
+      : null,
+    approverSignature: row.approver_signature
+      ? String(row.approver_signature)
+      : null,
     attachmentUrl: row.attachment_url ? String(row.attachment_url) : null,
     attachmentName: row.attachment_name ? String(row.attachment_name) : null,
+    attachmentStorage: row.attachment_storage
+      ? String(row.attachment_storage)
+      : null,
+    excludedHolidays: Array.isArray(row.excluded_holidays)
+      ? (row.excluded_holidays as LeaveRequestItem["excludedHolidays"])
+      : [],
+    returnedByName: row.returned_by_name ? String(row.returned_by_name) : null,
+    returnedNote: row.returned_note ? String(row.returned_note) : null,
+    returnedAt: row.returned_at ? String(row.returned_at) : null,
     syncedToAttendance: Boolean(row.synced_to_attendance),
     syncedAt: row.synced_at ? String(row.synced_at) : null,
     syncNote: row.sync_note ? String(row.sync_note) : null,
@@ -123,6 +193,109 @@ function mapRowToBalance(row: Record<string, unknown>): LeaveBalanceItem {
     updatedBy: row.updated_by ? String(row.updated_by) : null,
     updatedAt: row.updated_at ? String(row.updated_at) : undefined,
   };
+}
+
+async function loadHolidayData(): Promise<{
+  holidayMap: Record<string, string>;
+  rawHolidays: ThaiHolidayItem[];
+  needsHolidayMigration: boolean;
+}> {
+  const { data, error } = await requireSupabase()
+    .from("thai_public_holidays")
+    .select("*")
+    .order("holiday_date", { ascending: true });
+
+  if (error || !data) {
+    return {
+      holidayMap: { ...DEFAULT_THAI_HOLIDAYS },
+      rawHolidays: [],
+      needsHolidayMigration: Boolean(error && isMissingTableError(error)),
+    };
+  }
+
+  const rawHolidays: ThaiHolidayItem[] = data.map((row) => ({
+    holidayDate: String(row.holiday_date).slice(0, 10),
+    name: String(row.name || ""),
+    fiscalYear: Number(row.fiscal_year),
+    isActive: Boolean(row.is_active ?? true),
+    createdBy: row.created_by ? String(row.created_by) : null,
+  }));
+
+  return {
+    holidayMap: buildHolidayMap(rawHolidays),
+    rawHolidays,
+    needsHolidayMigration: false,
+  };
+}
+
+async function computeLivePreviousStats(
+  applicantUserId: string,
+  fiscalYear: number,
+  excludeLeaveId?: string
+) {
+  const [{ data: balRow }, { data: approvedRows }] = await Promise.all([
+    requireSupabase()
+      .from("leave_balances")
+      .select("*")
+      .eq("user_id", applicantUserId)
+      .eq("fiscal_year", fiscalYear)
+      .maybeSingle(),
+    requireSupabase()
+      .from("leave_requests")
+      .select("*")
+      .eq("applicant_user_id", applicantUserId)
+      .eq("fiscal_year", fiscalYear)
+      .eq("status", "approved")
+      .neq("leave_type", "cancel_leave")
+      .order("end_date", { ascending: false }),
+  ]);
+
+  let prevSickDays = Number(balRow?.sick_days_carried || 0);
+  let prevPersonalDays = Number(balRow?.personal_days_carried || 0);
+  let prevMaternityDays = Number(balRow?.maternity_days_carried || 0);
+  let prevVacationDays = Number(balRow?.vacation_days_carried || 0);
+
+  for (const r of approvedRows || []) {
+    if (excludeLeaveId && r.id === excludeLeaveId) continue;
+    const days = getEffectiveLeaveDays({
+      leaveType: r.leave_type as LeaveType,
+      totalWorkingDays: Number(r.total_working_days || 0),
+      cancelledDays: Number(r.cancelled_days || 0),
+    });
+    if (days <= 0) continue;
+    if (r.leave_type === "sick_leave") prevSickDays += days;
+    else if (r.leave_type === "personal_leave") prevPersonalDays += days;
+    else if (r.leave_type === "maternity_leave") prevMaternityDays += days;
+    else if (r.leave_type === "vacation_leave") prevVacationDays += days;
+  }
+
+  return {
+    balRow,
+    prevSickDays: Math.round(prevSickDays * 10) / 10,
+    prevPersonalDays: Math.round(prevPersonalDays * 10) / 10,
+    prevMaternityDays: Math.round(prevMaternityDays * 10) / 10,
+    prevVacationDays: Math.round(prevVacationDays * 10) / 10,
+  };
+}
+
+async function nextLeaveSequence(
+  prefix: "LV" | "CLV",
+  fiscalYear: number
+): Promise<number> {
+  const { data } = await requireSupabase()
+    .from("leave_requests")
+    .select("request_no")
+    .like("request_no", `${prefix}-${fiscalYear}-%`);
+
+  let maxNum = 0;
+  for (const row of data || []) {
+    const parts = String(row.request_no || "").split("-");
+    const num = Number(parts[2] || 0);
+    if (Number.isFinite(num) && num > maxNum) {
+      maxNum = num;
+    }
+  }
+  return maxNum + 1;
 }
 
 async function isAttendanceEditor(userId?: string, userName?: string): Promise<boolean> {
@@ -164,7 +337,8 @@ async function getUserLeaveAuthorizedRole(userId?: string): Promise<{
 async function syncApprovedLeaveToAttendance(
   leave: LeaveRequestItem,
   actorId?: string,
-  actorName?: string
+  actorName?: string,
+  holidayMap?: Record<string, string>
 ): Promise<{ synced: boolean; note: string }> {
   const { data: mappings, error: mapErr } = await requireSupabase()
     .from("attendance_user_mappings")
@@ -187,16 +361,26 @@ async function syncApprovedLeaveToAttendance(
     };
   }
 
-  const workingDates = getWorkingDatesBetween(leave.startDate, leave.endDate);
+  const workingDates = getWorkingDatesBetween(
+    leave.startDate,
+    leave.endDate,
+    holidayMap
+  );
   if (workingDates.length === 0) {
     return {
       synced: false,
-      note: "ไม่พบวันทำการในช่วงวันที่ลาที่ระบุ",
+      note: "ไม่พบวันทำการ (หลังหักวันหยุดราชการ/เสาร์-อาทิตย์) ในช่วงวันที่ลาที่ระบุ",
     };
   }
 
   const meta = LEAVE_TYPE_META[leave.leaveType];
-  const noteText = `${meta.label} (อนุญาตแล้ว)${leave.reason ? ` — ${leave.reason}` : ""}`;
+  const periodLabel =
+    leave.leaveDayPeriod && leave.leaveDayPeriod !== "full"
+      ? ` ${LEAVE_DAY_PERIOD_SHORT[leave.leaveDayPeriod]}`
+      : "";
+  const noteText = `${meta.label}${periodLabel} (อนุญาตแล้ว)${
+    leave.reason ? ` — ${leave.reason}` : ""
+  }`;
   const nowIso = new Date().toISOString();
 
   const rows = workingDates.map((workDate) => ({
@@ -251,6 +435,8 @@ export async function GET(req: NextRequest) {
       { data: mappingRows },
       { data: editorRows },
       { data: leaveRoleRows, error: leaveRoleErr },
+      { rawHolidays, needsHolidayMigration },
+      { error: v2ProbeErr },
     ] = await Promise.all([
       reqQuery,
       requireSupabase()
@@ -267,6 +453,11 @@ export async function GET(req: NextRequest) {
         .from("leave_authorized_roles")
         .select("*")
         .order("user_name", { ascending: true }),
+      loadHolidayData(),
+      requireSupabase()
+        .from("leave_requests")
+        .select("leave_day_period")
+        .limit(1),
     ]);
 
     if (reqErr) {
@@ -274,11 +465,13 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({
           success: true,
           needsMigration: true,
+          needsV2Migration: true,
           fiscalYear,
           requests: [],
           balances: [],
           mappedUserIds: [],
           authorizedEditorIds: [],
+          holidays: [],
         });
       }
       throw reqErr;
@@ -287,6 +480,9 @@ export async function GET(req: NextRequest) {
     if (balErr && !isMissingTableError(balErr)) {
       throw balErr;
     }
+
+    const needsV2Migration =
+      needsHolidayMigration || Boolean(v2ProbeErr && isMissingV2SchemaError(v2ProbeErr));
 
     const mappedUserIds = Array.from(
       new Set(
@@ -307,12 +503,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       success: true,
       needsMigration: false,
+      needsV2Migration,
       needsRoleMigration: Boolean(leaveRoleErr && isMissingTableError(leaveRoleErr)),
       fiscalYear,
       requests: (reqRows || []).map(mapRowToLeaveRequest),
       balances: (balRows || []).map(mapRowToBalance),
       mappedUserIds,
       authorizedEditorIds,
+      holidays: rawHolidays,
       leaveRoles: (leaveRoleRows || []).map((r) => ({
         id: String(r.id),
         userId: String(r.user_id),
@@ -342,6 +540,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const {
       leaveType,
+      leaveDayPeriod,
       writtenAt,
       writtenDate,
       subject,
@@ -353,7 +552,6 @@ export async function POST(req: NextRequest) {
       reason,
       startDate,
       endDate,
-      totalWorkingDays,
       lastLeaveType,
       lastLeaveStartDate,
       lastLeaveEndDate,
@@ -374,34 +572,31 @@ export async function POST(req: NextRequest) {
       approverUserId,
       approverName,
       approverPosition,
+      applicantSignature,
+      actingPersonSignature,
       attachmentUrl,
       attachmentName,
+      attachmentStorage,
+      cancelTargetLeaveId,
     } = body || {};
 
     if (!applicantUserId || !applicantName || !leaveType || !startDate || !endDate) {
       return NextResponse.json(
-        { success: false, error: "ข้อมูลสำคัญไม่ครบถ้วน (ผู้ขอลา, ประเภทการลา, วันที่ลา)" },
-        { status: 400 }
-      );
-    }
-
-    if (
-      (leaveType === "sick_leave" || leaveType === "personal_leave") &&
-      !String(reason || "").trim()
-    ) {
-      return NextResponse.json(
         {
           success: false,
-          error:
-            leaveType === "sick_leave"
-              ? "กรุณาระบุอาการป่วย / เหตุผลการลาป่วย"
-              : "กรุณาระบุเหตุผลการลากิจส่วนตัว",
+          error: "ข้อมูลสำคัญไม่ครบถ้วน (ผู้ขอลา, ประเภทการลา, วันที่ลา)",
         },
         { status: 400 }
       );
     }
 
-    const fiscalYear = getFiscalYear(startDate);
+    if (String(endDate).slice(0, 10) < String(startDate).slice(0, 10)) {
+      return NextResponse.json(
+        { success: false, error: "วันที่สิ้นสุดต้องไม่น้อยกว่าวันที่เริ่มต้น" },
+        { status: 400 }
+      );
+    }
+
     const meta = LEAVE_TYPE_META[leaveType as LeaveType];
     if (!meta) {
       return NextResponse.json(
@@ -410,48 +605,206 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // คำนวณยอดลามาแล้วในปีงบประมาณนี้ (จาก leave_balances + leave_requests ที่ approved)
-    const [{ data: balRow }, { data: approvedRows }] = await Promise.all([
-      requireSupabase()
-        .from("leave_balances")
-        .select("*")
-        .eq("user_id", applicantUserId)
-        .eq("fiscal_year", fiscalYear)
-        .maybeSingle(),
-      requireSupabase()
-        .from("leave_requests")
-        .select("leave_type, total_working_days, start_date, end_date")
-        .eq("applicant_user_id", applicantUserId)
-        .eq("fiscal_year", fiscalYear)
-        .eq("status", "approved")
-        .order("end_date", { ascending: false }),
-    ]);
-
-    let prevSickDays = Number(balRow?.sick_days_carried || 0);
-    let prevPersonalDays = Number(balRow?.personal_days_carried || 0);
-    let prevMaternityDays = Number(balRow?.maternity_days_carried || 0);
-    let prevVacationDays = Number(balRow?.vacation_days_carried || 0);
-
-    for (const r of approvedRows || []) {
-      const days = Number(r.total_working_days || 0);
-      if (r.leave_type === "sick_leave") prevSickDays += days;
-      else if (r.leave_type === "personal_leave") prevPersonalDays += days;
-      else if (r.leave_type === "maternity_leave") prevMaternityDays += days;
-      else if (r.leave_type === "vacation_leave") prevVacationDays += days;
+    if (
+      (leaveType === "sick_leave" ||
+        leaveType === "personal_leave" ||
+        leaveType === "cancel_leave") &&
+      !String(reason || "").trim()
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            leaveType === "sick_leave"
+              ? "กรุณาระบุอาการป่วย / เหตุผลการลาป่วย"
+              : leaveType === "cancel_leave"
+              ? "กรุณาระบุเหตุผลการขอยกเลิกวันลา"
+              : "กรุณาระบุเหตุผลการลากิจส่วนตัว",
+        },
+        { status: 400 }
+      );
     }
 
-    const { count } = await requireSupabase()
-      .from("leave_requests")
-      .select("id", { count: "exact", head: true })
-      .eq("fiscal_year", fiscalYear);
+    const fiscalYear = getFiscalYear(startDate);
+    const { holidayMap } = await loadHolidayData();
 
-    const seq = String((count || 0) + 1).padStart(4, "0");
-    const requestNo = `LV-${fiscalYear}-${seq}`;
+    const cleanStart = String(startDate).slice(0, 10);
+    const cleanEnd = String(endDate).slice(0, 10);
+    const normalizedPeriod: LeaveDayPeriod =
+      cleanStart === cleanEnd &&
+      leaveType !== "maternity_leave" &&
+      (leaveDayPeriod === "morning" || leaveDayPeriod === "afternoon")
+        ? leaveDayPeriod
+        : "full";
 
-    const computedDays =
-      typeof totalWorkingDays === "number" && totalWorkingDays > 0
-        ? totalWorkingDays
-        : Math.max(1, getWorkingDatesBetween(startDate, endDate).length);
+    // คำนวณวันลาจริง + ตรวจแบบฟอร์ม 3 (ขอยกเลิกวันลา) vs ฟอร์ม 1/2
+    let computedDays = 0;
+    let excludedHolidays: { date: string; name: string }[] = [];
+    let cancelTarget: LeaveRequestItem | null = null;
+
+    if (leaveType === "cancel_leave") {
+      if (!cancelTargetLeaveId) {
+        return NextResponse.json(
+          { success: false, error: "กรุณาเลือกใบลาเดิมที่ต้องการขอยกเลิกวันลา" },
+          { status: 400 }
+        );
+      }
+
+      const { data: targetRow, error: targetErr } = await requireSupabase()
+        .from("leave_requests")
+        .select("*")
+        .eq("id", cancelTargetLeaveId)
+        .maybeSingle();
+
+      if (targetErr || !targetRow) {
+        return NextResponse.json(
+          { success: false, error: "ไม่พบข้อมูลใบลาเดิมที่เลือก" },
+          { status: 404 }
+        );
+      }
+
+      cancelTarget = mapRowToLeaveRequest(targetRow);
+      if (cancelTarget.applicantUserId !== applicantUserId) {
+        return NextResponse.json(
+          { success: false, error: "สามารถขอยกเลิกได้เฉพาะใบลาของตนเองเท่านั้น" },
+          { status: 403 }
+        );
+      }
+      if (cancelTarget.status !== "approved" || cancelTarget.leaveType === "cancel_leave") {
+        return NextResponse.json(
+          { success: false, error: "ขอยกเลิกวันลาได้เฉพาะใบลาที่ได้รับอนุญาตแล้วเท่านั้น" },
+          { status: 400 }
+        );
+      }
+      if (cleanStart < cancelTarget.startDate || cleanEnd > cancelTarget.endDate) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `ช่วงวันที่ขอยกเลิกต้องอยู่ภายในช่วงวันลาเดิม (${formatThaiDateShort(
+              cancelTarget.startDate
+            )} – ${formatThaiDateShort(cancelTarget.endDate)})`,
+          },
+          { status: 400 }
+        );
+      }
+
+      const calc = calculateLeavePeriodDetails({
+        startDate: cleanStart,
+        endDate: cleanEnd,
+        leaveType: cancelTarget.leaveType,
+        leaveDayPeriod: normalizedPeriod,
+        holidayMap,
+      });
+      computedDays = calc.totalWorkingDays;
+      excludedHolidays = calc.skippedHolidays;
+
+      const remainingCancelable = getEffectiveLeaveDays(cancelTarget);
+      if (computedDays <= 0) {
+        return NextResponse.json(
+          { success: false, error: "ช่วงวันที่เลือกไม่มีวันทำการให้ยกเลิก" },
+          { status: 400 }
+        );
+      }
+      if (computedDays > remainingCancelable) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `จำนวนวันที่ขอยกเลิก (${computedDays} วัน) เกินวันลาคงเหลือของใบลาเดิม (${remainingCancelable} วัน)`,
+          },
+          { status: 400 }
+        );
+      }
+    } else {
+      // ฟอร์ม 1 และ 2: ตรวจวันลาซ้อนทับ (Overlap) ก่อนบันทึก
+      const { data: userActiveRows } = await requireSupabase()
+        .from("leave_requests")
+        .select("*")
+        .eq("applicant_user_id", applicantUserId)
+        .in("status", [
+          "pending_verifier",
+          "pending_supervisor",
+          "pending_approver",
+          "returned",
+          "approved",
+        ]);
+
+      const activeItems = (userActiveRows || []).map(mapRowToLeaveRequest);
+      const overlap = detectLeaveOverlap({
+        candidateStart: cleanStart,
+        candidateEnd: cleanEnd,
+        candidatePeriod: normalizedPeriod,
+        existingRequests: activeItems,
+      });
+
+      if (overlap.hasOverlap) {
+        const conflictNos = overlap.conflicts
+          .map(
+            (c) =>
+              `${c.requestNo} (${formatThaiDateShort(c.startDate)}–${formatThaiDateShort(
+                c.endDate
+              )})`
+          )
+          .join(", ");
+        return NextResponse.json(
+          {
+            success: false,
+            error: `พบวันลาซ้อนทับกับคำขอที่มีอยู่แล้ว: ${conflictNos}`,
+            conflicts: overlap.conflicts,
+          },
+          { status: 409 }
+        );
+      }
+
+      const calc = calculateLeavePeriodDetails({
+        startDate: cleanStart,
+        endDate: cleanEnd,
+        leaveType: leaveType as LeaveType,
+        leaveDayPeriod: normalizedPeriod,
+        holidayMap,
+      });
+      computedDays = calc.totalWorkingDays;
+      excludedHolidays = calc.skippedHolidays;
+
+      if (computedDays <= 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "ช่วงวันที่เลือกตรงกับวันหยุดเสาร์-อาทิตย์หรือวันหยุดราชการทั้งหมด (0 วันทำการ)",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    const {
+      balRow,
+      prevSickDays,
+      prevPersonalDays,
+      prevMaternityDays,
+      prevVacationDays,
+    } = await computeLivePreviousStats(applicantUserId, fiscalYear);
+
+    const resolvedAcc = Number(
+      balRow?.vacation_accumulated_days ?? vacationAccumulatedDays ?? 0
+    );
+    const resolvedAnnual = Number(
+      balRow?.vacation_annual_days ?? vacationAnnualDays ?? 10
+    );
+
+    if (leaveType === "vacation_leave") {
+      const entitled = resolvedAcc + resolvedAnnual;
+      const remainingVac = Math.max(0, Math.round((entitled - prevVacationDays) * 10) / 10);
+      if (computedDays > remainingVac) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `วันลาพักผ่อนคงเหลือไม่เพียงพอ (สิทธิ ${entitled} ใช้แล้ว ${prevVacationDays} เหลือ ${remainingVac} วันทำการ แต่ขอลา ${computedDays} วันทำการ)`,
+          },
+          { status: 400 }
+        );
+      }
+    }
 
     // หากไม่ระบุผู้ตรวจสอบ ให้ใช้ syno_ยุทธนา เป็นค่าเริ่มต้น
     let resolvedVerifierId = verifierUserId || "syno_ยุทธนา";
@@ -500,87 +853,143 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const payload = {
-      request_no: requestNo,
-      leave_type: leaveType,
-      written_at:
-        writtenAt?.trim() ||
-        "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
-      written_date: writtenDate || new Date().toISOString().slice(0, 10),
-      subject: subject?.trim() || meta.defaultSubject,
-      to_recipient:
-        toRecipient?.trim() || "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
-      applicant_user_id: applicantUserId,
-      applicant_name: applicantName,
-      applicant_position: applicantPosition || "",
-      applicant_division: applicantDivision || "",
-      reason: reason || "",
-      start_date: startDate,
-      end_date: endDate,
-      total_working_days: computedDays,
-      last_leave_type: lastLeaveType || null,
-      last_leave_start_date: lastLeaveStartDate || null,
-      last_leave_end_date: lastLeaveEndDate || null,
-      last_leave_days:
-        lastLeaveDays !== undefined && lastLeaveDays !== null && lastLeaveDays !== ""
-          ? Number(lastLeaveDays)
-          : null,
-      contact_info: contactInfo || "",
-      contact_phone: contactPhone || "",
-      vacation_accumulated_days: Number(
-        vacationAccumulatedDays ?? balRow?.vacation_accumulated_days ?? 0
-      ),
-      vacation_annual_days: Number(
-        vacationAnnualDays ?? balRow?.vacation_annual_days ?? 10
-      ),
-      acting_person_user_id: actingPersonUserId || null,
-      acting_person_name: actingPersonName || "",
-      acting_person_position: actingPersonPosition || "",
-      fiscal_year: fiscalYear,
-      prev_sick_days: prevSickDays,
-      prev_personal_days: prevPersonalDays,
-      prev_maternity_days: prevMaternityDays,
-      prev_vacation_days: prevVacationDays,
-      verifier_user_id: resolvedVerifierId || null,
-      verifier_name: resolvedVerifierName || null,
-      verifier_position: resolvedVerifierPosition || null,
-      supervisor_user_id: supervisorUserId || null,
-      supervisor_name: supervisorName || null,
-      supervisor_position: supervisorPosition || null,
-      approver_user_id: resolvedApproverId || null,
-      approver_name: resolvedApproverName || null,
-      approver_position: resolvedApproverPosition || null,
-      status: "pending_verifier",
-      attachment_url: attachmentUrl || null,
-      attachment_name: attachmentName || null,
-    };
+    const prefix: "LV" | "CLV" = leaveType === "cancel_leave" ? "CLV" : "LV";
+    let seqNum = await nextLeaveSequence(prefix, fiscalYear);
+    let inserted: Record<string, unknown> | null = null;
+    let lastInsertErr: { code?: string; message?: string } | null = null;
 
-    const { data: inserted, error } = await requireSupabase()
-      .from("leave_requests")
-      .insert(payload)
-      .select("*")
-      .single();
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const requestNo = `${prefix}-${fiscalYear}-${String(seqNum + attempt).padStart(
+        4,
+        "0"
+      )}`;
 
-    if (error) {
+      const payload = {
+        request_no: requestNo,
+        leave_type: leaveType,
+        leave_day_period: normalizedPeriod,
+        written_at: writtenAt?.trim() || "สนง.พมจ.กำแพงเพชร",
+        written_date: writtenDate || new Date().toISOString().slice(0, 10),
+        subject: subject?.trim() || meta.defaultSubject,
+        to_recipient:
+          toRecipient?.trim() || "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
+        applicant_user_id: applicantUserId,
+        applicant_name: applicantName,
+        applicant_position: applicantPosition || "",
+        applicant_division: applicantDivision || "",
+        reason: reason || "",
+        start_date: cleanStart,
+        end_date: cleanEnd,
+        total_working_days: computedDays,
+        cancelled_days: 0,
+        cancel_target_leave_id: cancelTarget ? cancelTarget.id : null,
+        cancel_target_request_no: cancelTarget ? cancelTarget.requestNo : null,
+        cancel_target_leave_type: cancelTarget ? cancelTarget.leaveType : null,
+        cancel_target_start_date: cancelTarget ? cancelTarget.startDate : null,
+        cancel_target_end_date: cancelTarget ? cancelTarget.endDate : null,
+        cancel_target_days: cancelTarget ? cancelTarget.totalWorkingDays : null,
+        last_leave_type: lastLeaveType || null,
+        last_leave_start_date: lastLeaveStartDate || null,
+        last_leave_end_date: lastLeaveEndDate || null,
+        last_leave_days:
+          lastLeaveDays !== undefined && lastLeaveDays !== null && lastLeaveDays !== ""
+            ? Number(lastLeaveDays)
+            : null,
+        contact_info: contactInfo || "",
+        contact_phone: contactPhone || "",
+        vacation_accumulated_days: resolvedAcc,
+        vacation_annual_days: resolvedAnnual,
+        acting_person_user_id: actingPersonUserId || null,
+        acting_person_name: actingPersonName || "",
+        acting_person_position: actingPersonPosition || "",
+        fiscal_year: fiscalYear,
+        prev_sick_days: prevSickDays,
+        prev_personal_days: prevPersonalDays,
+        prev_maternity_days: prevMaternityDays,
+        prev_vacation_days: prevVacationDays,
+        verifier_user_id:
+          leaveType === "cancel_leave" ? null : resolvedVerifierId || null,
+        verifier_name:
+          leaveType === "cancel_leave" ? null : resolvedVerifierName || null,
+        verifier_position:
+          leaveType === "cancel_leave" ? null : resolvedVerifierPosition || null,
+        supervisor_user_id: supervisorUserId || null,
+        supervisor_name: supervisorName || null,
+        supervisor_position: supervisorPosition || null,
+        approver_user_id: resolvedApproverId || null,
+        approver_name: resolvedApproverName || null,
+        approver_position: resolvedApproverPosition || null,
+        status:
+          leaveType === "cancel_leave" ? "pending_supervisor" : "pending_verifier",
+        applicant_signature: applicantSignature || null,
+        acting_person_signature: actingPersonSignature || null,
+        attachment_url: attachmentUrl || null,
+        attachment_name: attachmentName || null,
+        attachment_storage: attachmentStorage || null,
+        excluded_holidays: excludedHolidays,
+      };
+
+      const { data, error } = await requireSupabase()
+        .from("leave_requests")
+        .insert(payload)
+        .select("*")
+        .single();
+
+      if (!error) {
+        inserted = data;
+        lastInsertErr = null;
+        break;
+      }
+
+      lastInsertErr = error;
       if (isMissingTableError(error)) {
         return NextResponse.json(
           {
             success: false,
             needsMigration: true,
-            error: "ยังไม่ได้สร้างตาราง leave_requests ใน requireSupabase()",
+            error: "ยังไม่ได้สร้างตาราง leave_requests ใน Supabase",
           },
           { status: 400 }
         );
       }
-      throw error;
+      if (isMissingV2SchemaError(error)) {
+        return NextResponse.json(
+          {
+            success: false,
+            needsV2Migration: true,
+            error:
+              "กรุณารัน SQL อัปเกรดระบบใบลา v2 ใน Supabase SQL Editor ก่อนใช้งานฟีเจอร์ใหม่ (ลายเซ็น/ครึ่งวัน/ตีกลับ/ขอยกเลิกวันลา)",
+          },
+          { status: 400 }
+        );
+      }
+      if (error.code !== "23505") {
+        throw error;
+      }
+    }
+
+    if (!inserted) {
+      throw lastInsertErr || new Error("ไม่สามารถสร้างเลขที่ใบลาได้");
     }
 
     return NextResponse.json({
       success: true,
       request: mapRowToLeaveRequest(inserted),
     });
-  } catch (err) {
+  } catch (err: unknown) {
     console.error("POST /api/leave error:", err);
+    const pgErr = err as { code?: string; message?: string };
+    if (isMissingV2SchemaError(pgErr)) {
+      return NextResponse.json(
+        {
+          success: false,
+          needsV2Migration: true,
+          error:
+            "กรุณารัน SQL อัปเกรดระบบใบลา v2 ใน Supabase SQL Editor ก่อนใช้งานฟีเจอร์ใหม่ (ลายเซ็น/ครึ่งวัน/ตีกลับ/ขอยกเลิกวันลา)",
+        },
+        { status: 400 }
+      );
+    }
     return NextResponse.json(
       {
         success: false,
@@ -603,6 +1012,30 @@ export async function PATCH(req: NextRequest) {
       actorRole,
       comment,
       decision,
+      signature,
+      // สำหรับ action === "resubmit"
+      startDate,
+      endDate,
+      leaveDayPeriod,
+      reason,
+      contactInfo,
+      contactPhone,
+      attachmentUrl,
+      attachmentName,
+      attachmentStorage,
+      applicantSignature,
+      actingPersonUserId,
+      actingPersonName,
+      actingPersonPosition,
+      verifierUserId,
+      verifierName,
+      verifierPosition,
+      supervisorUserId,
+      supervisorName,
+      supervisorPosition,
+      approverUserId,
+      approverName,
+      approverPosition,
     } = body || {};
 
     if (!id || !action || !actorId) {
@@ -629,9 +1062,10 @@ export async function PATCH(req: NextRequest) {
     const nowIso = new Date().toISOString();
     const isAdmin = actorRole === "admin";
     const isManager = actorRole === "manager";
-    const [isEditor, customLeaveRole] = await Promise.all([
+    const [isEditor, customLeaveRole, { holidayMap }] = await Promise.all([
       isAttendanceEditor(actorId, actorName),
       getUserLeaveAuthorizedRole(actorId),
+      loadHolidayData(),
     ]);
     const canVerify =
       isAdmin ||
@@ -649,7 +1083,10 @@ export async function PATCH(req: NextRequest) {
     if (action === "verify") {
       if (!canVerify) {
         return NextResponse.json(
-          { success: false, error: "เฉพาะผู้ตรวจสอบ (HR / ผู้ได้รับมอบสิทธิ์) หรือ Admin เท่านั้น" },
+          {
+            success: false,
+            error: "เฉพาะผู้ตรวจสอบ (HR / ผู้ได้รับมอบสิทธิ์) หรือ Admin เท่านั้น",
+          },
           { status: 403 }
         );
       }
@@ -660,14 +1097,26 @@ export async function PATCH(req: NextRequest) {
         );
       }
 
+      // คำนวณยอดลามาแล้วล่าสุด ณ เวลาที่ผู้ตรวจสอบลงนาม (ป้องกันตัวเลขค้างจากตอนยื่นหลายใบพร้อมกัน)
+      const liveStats = await computeLivePreviousStats(
+        existing.applicantUserId,
+        existing.fiscalYear,
+        existing.id
+      );
+
       const { data: updated, error } = await requireSupabase()
         .from("leave_requests")
         .update({
           status: "pending_supervisor",
+          prev_sick_days: liveStats.prevSickDays,
+          prev_personal_days: liveStats.prevPersonalDays,
+          prev_maternity_days: liveStats.prevMaternityDays,
+          prev_vacation_days: liveStats.prevVacationDays,
           verifier_user_id: actorId,
           verifier_name: actorName || "",
           verifier_position: actorPosition || "",
           verifier_note: comment || "ตรวจสอบสถิติการลาถูกต้อง",
+          verifier_signature: signature || existing.verifierSignature || null,
           verified_at: nowIso,
           updated_at: nowIso,
         })
@@ -682,7 +1131,10 @@ export async function PATCH(req: NextRequest) {
     if (action === "supervisor_review") {
       if (!canSupervisor) {
         return NextResponse.json(
-          { success: false, error: "เฉพาะผู้บังคับบัญชา (Manager / ผู้ได้รับมอบสิทธิ์) หรือ Admin เท่านั้น" },
+          {
+            success: false,
+            error: "เฉพาะผู้บังคับบัญชา (Manager / ผู้ได้รับมอบสิทธิ์) หรือ Admin เท่านั้น",
+          },
           { status: 403 }
         );
       }
@@ -701,7 +1153,254 @@ export async function PATCH(req: NextRequest) {
           supervisor_name: actorName || "",
           supervisor_position: actorPosition || "",
           supervisor_comment: comment || "เห็นควรอนุญาต",
+          supervisor_signature: signature || existing.supervisorSignature || null,
           supervisor_reviewed_at: nowIso,
+          updated_at: nowIso,
+        })
+        .eq("id", id)
+        .select("*")
+        .single();
+
+      if (error) throw error;
+      return NextResponse.json({ success: true, request: mapRowToLeaveRequest(updated) });
+    }
+
+    if (action === "return") {
+      const canReturnStage =
+        (existing.status === "pending_verifier" && canVerify) ||
+        (existing.status === "pending_supervisor" && canSupervisor) ||
+        (existing.status === "pending_approver" && canApprove);
+
+      if (!canReturnStage) {
+        return NextResponse.json(
+          { success: false, error: "ไม่มีสิทธิ์ตีกลับใบลาในขั้นตอนนี้" },
+          { status: 403 }
+        );
+      }
+
+      const reasonNote = String(comment || "").trim();
+      if (!reasonNote) {
+        return NextResponse.json(
+          { success: false, error: "กรุณาระบุเหตุผลหรือสิ่งที่ต้องการให้ผู้ขอลาแก้ไข" },
+          { status: 400 }
+        );
+      }
+
+      const { data: updated, error } = await requireSupabase()
+        .from("leave_requests")
+        .update({
+          status: "returned",
+          returned_by_name: actorName || "ผู้พิจารณา",
+          returned_note: reasonNote,
+          returned_at: nowIso,
+          updated_at: nowIso,
+        })
+        .eq("id", id)
+        .select("*")
+        .single();
+
+      if (error) throw error;
+      return NextResponse.json({ success: true, request: mapRowToLeaveRequest(updated) });
+    }
+
+    if (action === "resubmit") {
+      const isOwner = existing.applicantUserId === actorId;
+      if (!isOwner && !isAdmin) {
+        return NextResponse.json(
+          { success: false, error: "เฉพาะผู้ขอลาหรือ Admin เท่านั้นที่ส่งแก้ไขใหม่ได้" },
+          { status: 403 }
+        );
+      }
+      if (existing.status !== "returned") {
+        return NextResponse.json(
+          { success: false, error: "ส่งใหม่ได้เฉพาะใบลาที่ถูกตีกลับให้แก้ไขเท่านั้น" },
+          { status: 400 }
+        );
+      }
+
+      const nextStart = String(startDate || existing.startDate).slice(0, 10);
+      const nextEnd = String(endDate || existing.endDate).slice(0, 10);
+      if (nextEnd < nextStart) {
+        return NextResponse.json(
+          { success: false, error: "วันที่สิ้นสุดต้องไม่น้อยกว่าวันที่เริ่มต้น" },
+          { status: 400 }
+        );
+      }
+
+      const nextPeriod: LeaveDayPeriod =
+        nextStart === nextEnd &&
+        existing.leaveType !== "maternity_leave" &&
+        (leaveDayPeriod === "morning" || leaveDayPeriod === "afternoon")
+          ? leaveDayPeriod
+          : "full";
+
+      const nextReason = reason !== undefined ? String(reason) : existing.reason;
+      if (
+        (existing.leaveType === "sick_leave" ||
+          existing.leaveType === "personal_leave" ||
+          existing.leaveType === "cancel_leave") &&
+        !nextReason.trim()
+      ) {
+        return NextResponse.json(
+          { success: false, error: "กรุณาระบุเหตุผลการลา" },
+          { status: 400 }
+        );
+      }
+
+      if (existing.leaveType !== "cancel_leave") {
+        const { data: userActiveRows } = await requireSupabase()
+          .from("leave_requests")
+          .select("*")
+          .eq("applicant_user_id", existing.applicantUserId)
+          .in("status", [
+            "pending_verifier",
+            "pending_supervisor",
+            "pending_approver",
+            "returned",
+            "approved",
+          ]);
+        const overlap = detectLeaveOverlap({
+          candidateStart: nextStart,
+          candidateEnd: nextEnd,
+          candidatePeriod: nextPeriod,
+          existingRequests: (userActiveRows || []).map(mapRowToLeaveRequest),
+          excludeLeaveId: existing.id,
+        });
+        if (overlap.hasOverlap) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: `พบวันลาซ้อนทับกับคำขอ ${overlap.conflicts
+                .map((c) => c.requestNo)
+                .join(", ")}`,
+            },
+            { status: 409 }
+          );
+        }
+      }
+
+      const calc = calculateLeavePeriodDetails({
+        startDate: nextStart,
+        endDate: nextEnd,
+        leaveType: existing.leaveType,
+        leaveDayPeriod: nextPeriod,
+        holidayMap,
+      });
+
+      if (calc.totalWorkingDays <= 0) {
+        return NextResponse.json(
+          { success: false, error: "ช่วงวันที่เลือกไม่มีวันทำการ" },
+          { status: 400 }
+        );
+      }
+
+      const nextFy = getFiscalYear(nextStart);
+      const liveStats = await computeLivePreviousStats(
+        existing.applicantUserId,
+        nextFy,
+        existing.id
+      );
+
+      if (existing.leaveType === "vacation_leave") {
+        const acc = Number(
+          liveStats.balRow?.vacation_accumulated_days ??
+            existing.vacationAccumulatedDays
+        );
+        const ann = Number(
+          liveStats.balRow?.vacation_annual_days ?? existing.vacationAnnualDays
+        );
+        const rem = Math.max(0, Math.round((acc + ann - liveStats.prevVacationDays) * 10) / 10);
+        if (calc.totalWorkingDays > rem) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: `วันลาพักผ่อนคงเหลือไม่เพียงพอ (คงเหลือ ${rem} วันทำการ)`,
+            },
+            { status: 400 }
+          );
+        }
+      }
+
+      const { data: updated, error } = await requireSupabase()
+        .from("leave_requests")
+        .update({
+          start_date: nextStart,
+          end_date: nextEnd,
+          leave_day_period: nextPeriod,
+          total_working_days: calc.totalWorkingDays,
+          excluded_holidays: calc.skippedHolidays,
+          fiscal_year: nextFy,
+          reason: nextReason,
+          contact_info: contactInfo !== undefined ? contactInfo : existing.contactInfo,
+          contact_phone:
+            contactPhone !== undefined ? contactPhone : existing.contactPhone,
+          attachment_url:
+            attachmentUrl !== undefined ? attachmentUrl : existing.attachmentUrl,
+          attachment_name:
+            attachmentName !== undefined ? attachmentName : existing.attachmentName,
+          attachment_storage:
+            attachmentStorage !== undefined
+              ? attachmentStorage
+              : existing.attachmentStorage,
+          applicant_signature:
+            applicantSignature !== undefined
+              ? applicantSignature
+              : existing.applicantSignature,
+          acting_person_user_id:
+            actingPersonUserId !== undefined
+              ? actingPersonUserId || null
+              : existing.actingPersonUserId,
+          acting_person_name:
+            actingPersonName !== undefined
+              ? actingPersonName
+              : existing.actingPersonName,
+          acting_person_position:
+            actingPersonPosition !== undefined
+              ? actingPersonPosition
+              : existing.actingPersonPosition,
+          verifier_user_id:
+            verifierUserId !== undefined ? verifierUserId : existing.verifierUserId,
+          verifier_name:
+            verifierName !== undefined ? verifierName : existing.verifierName,
+          verifier_position:
+            verifierPosition !== undefined
+              ? verifierPosition
+              : existing.verifierPosition,
+          supervisor_user_id:
+            supervisorUserId !== undefined
+              ? supervisorUserId
+              : existing.supervisorUserId,
+          supervisor_name:
+            supervisorName !== undefined ? supervisorName : existing.supervisorName,
+          supervisor_position:
+            supervisorPosition !== undefined
+              ? supervisorPosition
+              : existing.supervisorPosition,
+          approver_user_id:
+            approverUserId !== undefined ? approverUserId : existing.approverUserId,
+          approver_name:
+            approverName !== undefined ? approverName : existing.approverName,
+          approver_position:
+            approverPosition !== undefined
+              ? approverPosition
+              : existing.approverPosition,
+          prev_sick_days: liveStats.prevSickDays,
+          prev_personal_days: liveStats.prevPersonalDays,
+          prev_maternity_days: liveStats.prevMaternityDays,
+          prev_vacation_days: liveStats.prevVacationDays,
+          status:
+            existing.leaveType === "cancel_leave"
+              ? "pending_supervisor"
+              : "pending_verifier",
+          verified_at: null,
+          verifier_note: null,
+          verifier_signature: null,
+          supervisor_reviewed_at: null,
+          supervisor_comment: null,
+          supervisor_signature: null,
+          returned_by_name: null,
+          returned_note: null,
+          returned_at: null,
           updated_at: nowIso,
         })
         .eq("id", id)
@@ -715,10 +1414,20 @@ export async function PATCH(req: NextRequest) {
     if (action === "order") {
       if (!canApprove) {
         return NextResponse.json(
-          { success: false, error: "เฉพาะผู้มีอำนาจสั่งอนุญาต (Admin / ผู้ได้รับมอบสิทธิ์) เท่านั้น" },
+          {
+            success: false,
+            error: "เฉพาะผู้มีอำนาจสั่งอนุญาต (Admin / ผู้ได้รับมอบสิทธิ์) เท่านั้น",
+          },
           { status: 403 }
         );
       }
+      if (existing.status !== "pending_approver" && !isAdmin) {
+        return NextResponse.json(
+          { success: false, error: "ใบลานี้ยังไม่อยู่ในขั้นตอนรอคำสั่งอนุญาต" },
+          { status: 400 }
+        );
+      }
+
       const orderDecision = decision === "rejected" ? "rejected" : "approved";
       const nextStatus = orderDecision === "approved" ? "approved" : "rejected";
 
@@ -727,14 +1436,68 @@ export async function PATCH(req: NextRequest) {
       let syncNote: string | null = null;
 
       if (orderDecision === "approved") {
-        const syncResult = await syncApprovedLeaveToAttendance(
-          existing,
-          actorId,
-          actorName
-        );
-        syncedToAttendance = syncResult.synced;
-        syncedAt = syncResult.synced ? nowIso : null;
-        syncNote = syncResult.note;
+        if (existing.leaveType === "cancel_leave" && existing.cancelTargetLeaveId) {
+          const { data: targetRow } = await requireSupabase()
+            .from("leave_requests")
+            .select("*")
+            .eq("id", existing.cancelTargetLeaveId)
+            .maybeSingle();
+
+          const cancelWorkingDates = getWorkingDatesBetween(
+            existing.startDate,
+            existing.endDate,
+            holidayMap
+          );
+
+          if (cancelWorkingDates.length > 0) {
+            await requireSupabase()
+              .from("attendance_daily_notes")
+              .delete()
+              .eq("ref_type", "leave_request")
+              .eq("ref_id", existing.cancelTargetLeaveId)
+              .in("work_date", cancelWorkingDates);
+          }
+
+          if (targetRow) {
+            const targetItem = mapRowToLeaveRequest(targetRow);
+            const newCancelled = Math.min(
+              targetItem.totalWorkingDays,
+              Math.round(
+                (targetItem.cancelledDays + existing.totalWorkingDays) * 10
+              ) / 10
+            );
+            const fullyCancelled = newCancelled >= targetItem.totalWorkingDays;
+
+            await requireSupabase()
+              .from("leave_requests")
+              .update({
+                cancelled_days: newCancelled,
+                status: fullyCancelled ? "cancelled" : targetItem.status,
+                synced_to_attendance: fullyCancelled
+                  ? false
+                  : targetItem.syncedToAttendance,
+                sync_note: fullyCancelled
+                  ? `ยกเลิกเต็มจำนวนตามใบขอยกเลิกวันลา ${existing.requestNo}`
+                  : `ยกเลิกบางส่วน ${newCancelled} จาก ${targetItem.totalWorkingDays} วัน ตาม ${existing.requestNo}`,
+                updated_at: nowIso,
+              })
+              .eq("id", targetItem.id);
+          }
+
+          syncedToAttendance = true;
+          syncedAt = nowIso;
+          syncNote = `ปรับลดวันลาเดิม ${existing.totalWorkingDays} วัน และลบหมายเหตุลงเวลา ${cancelWorkingDates.length} วันทำการแล้ว`;
+        } else {
+          const syncResult = await syncApprovedLeaveToAttendance(
+            existing,
+            actorId,
+            actorName,
+            holidayMap
+          );
+          syncedToAttendance = syncResult.synced;
+          syncedAt = syncResult.synced ? nowIso : null;
+          syncNote = syncResult.note;
+        }
       }
 
       const { data: updated, error } = await requireSupabase()
@@ -746,6 +1509,7 @@ export async function PATCH(req: NextRequest) {
           approver_position: actorPosition || "",
           order_decision: orderDecision,
           order_comment: comment || "",
+          approver_signature: signature || existing.approverSignature || null,
           ordered_at: nowIso,
           synced_to_attendance: syncedToAttendance,
           synced_at: syncedAt,
@@ -767,9 +1531,12 @@ export async function PATCH(req: NextRequest) {
           { status: 403 }
         );
       }
-      if (existing.status !== "approved") {
+      if (existing.status !== "approved" || existing.leaveType === "cancel_leave") {
         return NextResponse.json(
-          { success: false, error: "ซิงก์ได้เฉพาะใบลาที่ได้รับคำสั่งอนุญาตแล้วเท่านั้น" },
+          {
+            success: false,
+            error: "ซิงก์ได้เฉพาะใบลาปกติที่ได้รับคำสั่งอนุญาตแล้วเท่านั้น",
+          },
           { status: 400 }
         );
       }
@@ -777,7 +1544,8 @@ export async function PATCH(req: NextRequest) {
       const syncResult = await syncApprovedLeaveToAttendance(
         existing,
         actorId,
-        actorName
+        actorName,
+        holidayMap
       );
       const { data: updated, error } = await requireSupabase()
         .from("leave_requests")
@@ -801,13 +1569,13 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json(
           {
             success: false,
-            error: "ไม่สามารถยกเลิกใบลาที่อนุมัติแล้วได้ (ติดต่อ Admin หากต้องการยกเลิก)",
+            error:
+              "ไม่สามารถยกเลิกใบลาที่อนุมัติแล้วได้ (กรุณาใช้แบบฟอร์ม 3 ขอยกเลิกวันลา หรือติดต่อ Admin)",
           },
           { status: 403 }
         );
       }
 
-      // ลบหมายเหตุใน attendance_daily_notes ที่ซิงก์จากใบลานี้ออกด้วย
       if (existing.syncedToAttendance || existing.status === "approved") {
         await requireSupabase()
           .from("attendance_daily_notes")
@@ -821,7 +1589,10 @@ export async function PATCH(req: NextRequest) {
         .update({
           status: "cancelled",
           synced_to_attendance: false,
-          sync_note: existing.status === "approved" ? "ยกเลิกใบลาและลบออกจากรายงานลงเวลาแล้ว" : null,
+          sync_note:
+            existing.status === "approved"
+              ? "ยกเลิกใบลาและลบออกจากรายงานลงเวลาแล้ว"
+              : null,
           updated_at: nowIso,
         })
         .eq("id", id)
@@ -836,8 +1607,20 @@ export async function PATCH(req: NextRequest) {
       { success: false, error: `ไม่รู้จัก action: ${action}` },
       { status: 400 }
     );
-  } catch (err) {
+  } catch (err: unknown) {
     console.error("PATCH /api/leave error:", err);
+    const pgErr = err as { code?: string; message?: string };
+    if (isMissingV2SchemaError(pgErr)) {
+      return NextResponse.json(
+        {
+          success: false,
+          needsV2Migration: true,
+          error:
+            "กรุณารัน SQL อัปเกรดระบบใบลา v2 ใน Supabase SQL Editor ก่อนใช้งานฟีเจอร์ใหม่ (ลายเซ็น/ครึ่งวัน/ตีกลับ/ขอยกเลิกวันลา)",
+        },
+        { status: 400 }
+      );
+    }
     return NextResponse.json(
       {
         success: false,
