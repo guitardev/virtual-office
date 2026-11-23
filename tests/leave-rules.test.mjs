@@ -465,3 +465,160 @@ describe("Vacation Leave Word DOCX Template Alignment", async () => {
     assert.ok(!xml.includes("บันทึกคำสั่งในระบบแทนโดย"));
   });
 });
+
+describe("Individual Leave Control Register (ทะเบียนคุมวันลารายบุคคล)", async () => {
+  const JSZip = (await import("jszip")).default;
+  const { buildLeaveRegisterData, buildLeaveRegisterXlsxUint8Array } = await import(
+    "../lib/leave-register.ts"
+  );
+
+  it("should compute chronological counts, running totals, and remaining vacation balance accurately", () => {
+    const member = {
+      userId: "syno_ธนวัฒน์",
+      name: "นายธนวัฒน์ แกมขุนทด",
+      position: "นักพัฒนาสังคม",
+      division: "กลุ่มนโยบายและวิชาการ",
+    };
+
+    const balance = {
+      userId: "syno_ธนวัฒน์",
+      fiscalYear: 2570,
+      sickDaysCarried: 1,
+      personalDaysCarried: 0,
+      maternityDaysCarried: 0,
+      vacationAccumulatedDays: 5,
+      vacationAnnualDays: 10,
+      vacationDaysCarried: 0,
+    };
+
+    const requests = [
+      // Deliberately out of chronological order to verify sorting
+      makeMockLeave({
+        id: "r-vac-1",
+        requestNo: "LV-2570-003",
+        applicantUserId: "syno_ธนวัฒน์",
+        leaveType: "vacation_leave",
+        startDate: "2026-11-30",
+        endDate: "2026-12-01",
+        totalWorkingDays: 2,
+        status: "approved",
+      }),
+      makeMockLeave({
+        id: "r-sick-1",
+        requestNo: "LV-2570-001",
+        applicantUserId: "syno_ธนวัฒน์",
+        leaveType: "sick_leave",
+        leaveDayPeriod: "morning",
+        startDate: "2026-10-15",
+        endDate: "2026-10-15",
+        totalWorkingDays: 0.5,
+        status: "approved",
+      }),
+      makeMockLeave({
+        id: "r-per-1",
+        requestNo: "LV-2570-002",
+        applicantUserId: "syno_ธนวัฒน์",
+        leaveType: "personal_leave",
+        startDate: "2026-11-05",
+        endDate: "2026-11-06",
+        totalWorkingDays: 2,
+        cancelledDays: 1,
+        status: "approved",
+      }),
+      // Pending leave must be excluded from official register
+      makeMockLeave({
+        id: "r-pending",
+        requestNo: "LV-2570-004",
+        applicantUserId: "syno_ธนวัฒน์",
+        leaveType: "vacation_leave",
+        startDate: "2026-12-15",
+        endDate: "2026-12-16",
+        totalWorkingDays: 2,
+        status: "pending_approver",
+      }),
+    ];
+
+    const reg = buildLeaveRegisterData({
+      member,
+      fiscalYear: 2570,
+      requests,
+      balance,
+    });
+
+    assert.equal(reg.openingNote, "สะสม 5 ประจำปี 10");
+    assert.equal(reg.vacationEntitledDays, 15);
+    assert.equal(reg.rows.length, 3);
+
+    // Row 1: sick leave 0.5 day + carried 1 = total 1.5
+    assert.equal(reg.rows[0].sickCount, 1);
+    assert.equal(reg.rows[0].sickDays, 0.5);
+    assert.equal(reg.rows[0].sickTotal, 1.5);
+    assert.ok(reg.rows[0].note.includes("ครึ่งเช้า"));
+
+    // Row 2: personal leave 2 - 1 cancelled = 1 day
+    assert.equal(reg.rows[1].personalCount, 1);
+    assert.equal(reg.rows[1].personalDays, 1);
+    assert.equal(reg.rows[1].personalTotal, 1);
+    assert.ok(reg.rows[1].note.includes("ยกเลิกบางส่วน -1 วัน"));
+
+    // Row 3: vacation leave 2 days -> remaining 15 - 2 = 13
+    assert.equal(reg.rows[2].vacationCount, 1);
+    assert.equal(reg.rows[2].vacationDays, 2);
+    assert.equal(reg.rows[2].vacationTotal, 2);
+    assert.equal(reg.rows[2].vacationRemaining, 13);
+
+    assert.equal(reg.summary.sickTotal, 1.5);
+    assert.equal(reg.summary.personalTotal, 1);
+    assert.equal(reg.summary.vacationTotal, 2);
+    assert.equal(reg.summary.vacationRemaining, 13);
+  });
+
+  it("should export a valid Excel (.xlsx) workbook matching the 12-column A1:L merged register template", async () => {
+    const reg = buildLeaveRegisterData({
+      member: {
+        userId: "syno_ธนวัฒน์",
+        name: "นายธนวัฒน์ แกมขุนทด",
+        position: "นักพัฒนาสังคม",
+      },
+      fiscalYear: 2570,
+      requests: [
+        makeMockLeave({
+          id: "r-vac-xlsx",
+          requestNo: "LV-2570-009",
+          applicantUserId: "syno_ธนวัฒน์",
+          leaveType: "vacation_leave",
+          startDate: "2026-11-30",
+          endDate: "2026-12-01",
+          totalWorkingDays: 2,
+          status: "approved",
+        }),
+      ],
+      balance: {
+        userId: "syno_ธนวัฒน์",
+        fiscalYear: 2570,
+        sickDaysCarried: 0,
+        personalDaysCarried: 0,
+        maternityDaysCarried: 0,
+        vacationAccumulatedDays: 5,
+        vacationAnnualDays: 10,
+        vacationDaysCarried: 0,
+      },
+    });
+
+    const bytes = await buildLeaveRegisterXlsxUint8Array(reg);
+    assert.ok(bytes instanceof Uint8Array);
+    assert.ok(bytes.byteLength > 500);
+
+    const zip = await JSZip.loadAsync(bytes);
+    const sheetXml = await zip.file("xl/worksheets/sheet1.xml")?.async("string");
+    assert.ok(sheetXml);
+    assert.ok(
+      sheetXml.includes("สถิติวันลาของข้าราชการ/พนักงานราชการ/พนักงานกองทุน")
+    );
+    assert.ok(sheetXml.includes("นายธนวัฒน์ แกมขุนทด"));
+    assert.ok(sheetXml.includes("สะสม 5 ประจำปี 10"));
+    assert.ok(sheetXml.includes('<mergeCell ref="B5:D5"/>'));
+    assert.ok(sheetXml.includes('<mergeCell ref="H5:K5"/>'));
+    assert.ok(sheetXml.includes('<mergeCell ref="L5:L6"/>'));
+  });
+});

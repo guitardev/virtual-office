@@ -36,6 +36,7 @@ import {
 } from "@/lib/thai-holidays";
 import LeaveSignaturePad from "./LeaveSignaturePad";
 import LeavePreviewModal from "./LeavePreviewModal";
+import LeaveControlRegisterModal from "./LeaveControlRegisterModal";
 import PreloadSkeleton from "@/components/ui/PreloadSkeleton";
 
 const LEAVE_MIGRATION_SQL = `-- รันคำสั่งนี้ใน Supabase SQL Editor เพื่อสร้างตารางระบบใบลา (ครั้งแรก)
@@ -321,8 +322,9 @@ export default function LeavePage() {
   );
   const [submitting, setSubmitting] = useState(false);
 
-  // Preview Modal
+  // Preview & Register Modals
   const [previewLeave, setPreviewLeave] = useState<LeaveRequestItem | null>(null);
+  const [registerMemberId, setRegisterMemberId] = useState<string | null>(null);
 
   // Review / Modal state
   const [reviewFilter, setReviewFilter] = useState<string>("actionable");
@@ -2329,6 +2331,25 @@ export default function LeavePage() {
       {/* TAB 2: ใบลาของฉัน */}
       {activeTab === "my" && (
         <div className="space-y-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 px-4 py-3 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+            <div>
+              <div className="text-sm font-bold text-slate-900 dark:text-white">
+                รายการคำขอลาของฉัน (ปีงบประมาณ {fiscalYear})
+              </div>
+              <div className="text-xs text-slate-500 dark:text-slate-400">
+                สามารถเปิดดู พิมพ์ A4 หรือดาวน์โหลดทะเบียนคุมวันลารายบุคคลแบบตารางราชการ (Excel) ได้ตลอดเวลา
+              </div>
+            </div>
+            {currentUser && (
+              <button
+                type="button"
+                onClick={() => setRegisterMemberId(currentUser.id)}
+                className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs cursor-pointer"
+              >
+                📒 ทะเบียนคุมวันลาของฉัน (ปีงบฯ {fiscalYear})
+              </button>
+            )}
+          </div>
           {loading ? (
             <PreloadSkeleton
               variant="cards"
@@ -2877,31 +2898,40 @@ export default function LeavePage() {
                               )}
                             </td>
                             <td className="px-4 py-3 text-right">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setBalanceModalUser({
-                                    userId: m.id,
-                                    name: m.name,
-                                  });
-                                  setBalanceForm({
-                                    sickDaysCarried: bal?.sickDaysCarried || 0,
-                                    personalDaysCarried:
-                                      bal?.personalDaysCarried || 0,
-                                    maternityDaysCarried:
-                                      bal?.maternityDaysCarried || 0,
-                                    vacationAccumulatedDays:
-                                      bal?.vacationAccumulatedDays || 0,
-                                    vacationAnnualDays:
-                                      bal?.vacationAnnualDays ?? 10,
-                                    vacationDaysCarried:
-                                      bal?.vacationDaysCarried || 0,
-                                  });
-                                }}
-                                className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
-                              >
-                                ตั้งค่ายอดยกมา
-                              </button>
+                              <div className="inline-flex items-center justify-end gap-2 flex-wrap">
+                                <button
+                                  type="button"
+                                  onClick={() => setRegisterMemberId(m.id)}
+                                  className="px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 text-xs font-semibold text-emerald-700 dark:text-emerald-300 cursor-pointer"
+                                >
+                                  📒 ทะเบียนคุมวันลา
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setBalanceModalUser({
+                                      userId: m.id,
+                                      name: m.name,
+                                    });
+                                    setBalanceForm({
+                                      sickDaysCarried: bal?.sickDaysCarried || 0,
+                                      personalDaysCarried:
+                                        bal?.personalDaysCarried || 0,
+                                      maternityDaysCarried:
+                                        bal?.maternityDaysCarried || 0,
+                                      vacationAccumulatedDays:
+                                        bal?.vacationAccumulatedDays || 0,
+                                      vacationAnnualDays:
+                                        bal?.vacationAnnualDays ?? 10,
+                                      vacationDaysCarried:
+                                        bal?.vacationDaysCarried || 0,
+                                    });
+                                  }}
+                                  className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                                >
+                                  ตั้งค่ายอดยกมา
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -3560,6 +3590,54 @@ export default function LeavePage() {
           downloadingId={downloadingId}
         />
       )}
+
+      {/* Modal: ทะเบียนคุมวันลารายบุคคล (ตามแบบฟอร์มตารางสถิติวันลา 12 คอลัมน์ + Excel) */}
+      {registerMemberId && (() => {
+        const found =
+          members.find((m) => m.id === registerMemberId) ||
+          (currentUser && currentUser.id === registerMemberId
+            ? currentUser
+            : null);
+        const regMember = found
+          ? {
+              userId: found.id,
+              name: found.name,
+              position: found.position || "-",
+              division: found.division || "",
+            }
+          : {
+              userId: registerMemberId,
+              name: registerMemberId,
+              position: "-",
+              division: "",
+            };
+        const regBalance =
+          balances.find((b) => b.userId === registerMemberId) || null;
+        const switchableMembers =
+          isAdmin || isVerifier
+            ? members
+                .filter((m) => m.status === "active")
+                .map((m) => ({
+                  userId: m.id,
+                  name: m.name,
+                  position: m.position || "-",
+                  division: m.division || "",
+                }))
+            : undefined;
+        return (
+          <LeaveControlRegisterModal
+            member={regMember}
+            fiscalYear={fiscalYear}
+            requests={requests}
+            balance={regBalance}
+            availableMembers={switchableMembers}
+            onSelectMember={
+              isAdmin || isVerifier ? setRegisterMemberId : undefined
+            }
+            onClose={() => setRegisterMemberId(null)}
+          />
+        );
+      })()}
     </div>
   );
 }

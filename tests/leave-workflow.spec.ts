@@ -310,4 +310,34 @@ test.describe("ระบบใบลาอิเล็กทรอนิกส�
     ).toBeVisible();
     await expect(page.getByText("ลายมือชื่อผู้พิจารณา")).toHaveCount(0);
   });
+
+  test("5. เปิดดูทะเบียนคุมวันลารายบุคคลตรงตาม Template (12 คอลัมน์ + ยอดสะสม/ประจำปี + ปุ่มดาวน์โหลด Excel)", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: /ใบลาของฉัน/ }).click();
+    const openRegisterBtn = page.getByRole("button", {
+      name: /ทะเบียนคุมวันลาของฉัน/,
+    });
+    await expect(openRegisterBtn).toBeVisible();
+    await openRegisterBtn.click();
+
+    const sheet = page.locator("#leave-register-sheet");
+    await expect(sheet).toBeVisible();
+    await expect(sheet).toContainText(
+      "สถิติวันลาของข้าราชการ/พนักงานราชการ/พนักงานกองทุน"
+    );
+    await expect(sheet).toContainText(
+      "สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"
+    );
+    await expect(sheet).toContainText("นายเสกพล ดิษฐโชติ");
+    await expect(sheet).toContainText("ลาป่วย");
+    await expect(sheet).toContainText("ลากิจ");
+    await expect(sheet).toContainText("ลาพักผ่อน");
+    await expect(sheet).toContainText("คงเหลือ");
+    await expect(sheet).toContainText("สะสม 10 ประจำปี 10");
+    await expect(sheet).toContainText("LEAVE-2570-001");
+    await expect(
+      page.getByRole("button", { name: /ดาวน์โหลด Excel/ })
+    ).toBeVisible();
+  });
 });
