@@ -14,28 +14,29 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const isProduction = process.env.NODE_ENV === "production";
+    const configuredSecret = (process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY || "").trim();
+    const hasProductionSecret = Boolean(
+      configuredSecret && configuredSecret !== CF_TEST_SECRET
+    );
 
-    // Bypass ONLY in non-production (local development / automated tests)
-    if (!isProduction && token === "cf-turnstile-dummy-pass-token") {
+    // Strictly reject dummy token whenever a real Turnstile Secret Key is configured
+    if (token === "cf-turnstile-dummy-pass-token") {
+      if (hasProductionSecret) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Cloudflare Turnstile token ไม่ถูกต้อง",
+          },
+          { status: 403 }
+        );
+      }
       return NextResponse.json({
         success: true,
-        message: "Development mode dummy verification passed",
+        message: "Turnstile test/unconfigured fallback passed",
       });
     }
 
-    const configuredSecret = (process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY || "").trim();
-    if (isProduction && !configuredSecret) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "ยังไม่ได้ตั้งค่า CLOUDFLARE_TURNSTILE_SECRET_KEY บน Production",
-        },
-        { status: 503 }
-      );
-    }
-
-    const secretKey = configuredSecret || CF_TEST_SECRET;
+    const secretKey = hasProductionSecret ? configuredSecret : CF_TEST_SECRET;
 
     // Get client IP
     const clientIp =
