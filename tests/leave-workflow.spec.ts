@@ -224,4 +224,90 @@ test.describe("ระบบใบลาอิเล็กทรอนิกส�
     await expect(page.locator("#leave-print-sheet")).toBeVisible();
     await expect(page.locator("#leave-print-sheet")).toContainText("นายเสกพล ดิษฐโชติ");
   });
+
+  test("4. ล็อกผู้มีอำนาจสั่งอนุญาตเป็น นางสาวมะลิวัน สิทธิโยธี เพียงคนเดียว และรองรับการบันทึกผลแทนในระบบโดยไม่สวมลายเซ็น", async ({
+    page,
+  }) => {
+    const pendingOrderLeave = {
+      ...MOCK_EXISTING_APPROVED_LEAVE,
+      id: "mock-leave-pending-order",
+      requestNo: "LV-2570-0088",
+      applicantUserId: "syno_ธนวัฒน์",
+      applicantName: "นายธนวัฒน์ แกมขุนทด",
+      status: "pending_approver",
+      orderDecision: null,
+      orderComment: null,
+      orderedAt: null,
+      approverUserId: "syno_มะลิวัน",
+      approverName: "นางสาวมะลิวัน สิทธิโยธี",
+      approverPosition: "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
+      verifierUserId: "syno_ยุทธนา",
+      verifierName: "นายยุทธนา เจนจบ",
+      verifierPosition: "เจ้าพนักงานธุรการปฏิบัติงาน",
+      verifiedAt: "2026-11-23T08:00:00Z",
+      supervisorUserId: "syno_วรวุฒิ",
+      supervisorName: "นายวรวุฒิ พึ่งพัก",
+      supervisorPosition: "นักพัฒนาสังคมชำนาญการพิเศษ",
+      supervisorComment: "เห็นควรอนุญาต",
+      supervisorReviewedAt: "2026-11-23T08:30:00Z",
+    };
+
+    await page.route("**/api/leave?*", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          needsMigration: false,
+          needsV2Migration: false,
+          needsRoleMigration: false,
+          requests: [MOCK_EXISTING_APPROVED_LEAVE, pendingOrderLeave],
+          balances: [],
+          mappedUserIds: ["syno_เสกพล"],
+          authorizedEditorIds: ["syno_เสกพล"],
+          leaveRoles: [],
+          holidays: [],
+        }),
+      });
+    });
+
+    await page.reload();
+    await expect(page.getByText("ระบบใบลาอิเล็กทรอนิกส์ (Leave Request)")).toBeVisible();
+
+    // Tab 1: 4-step workflow strip & sole approver locked without picker dropdown + operator note
+    await expect(page.getByText(/เสนอแฟ้มกระดาษให้ พมจ\./).first()).toBeVisible();
+    await expect(page.getByText("นางสาวมะลิวัน สิทธิโยธี").first()).toBeVisible();
+    await expect(
+      page.getByText(/ผู้มีอำนาจสั่งอนุญาตเพียงผู้เดียว/).first()
+    ).toBeVisible();
+    await expect(page.getByText(/นายยุทธนา เจนจบ/).first()).toBeVisible();
+
+    // Switch to Tab 3 (พิจารณาใบลา)
+    await page.getByRole("button", { name: /พิจารณาใบลา/ }).click();
+    await expect(page.getByText("LV-2570-0088").first()).toBeVisible();
+
+    const recordOrderBtn = page.getByRole("button", {
+      name: /3\. ปรับสถานะอนุญาต \(หลัง พมจ\. เซ็น\)/,
+    });
+    await expect(recordOrderBtn).toBeVisible();
+    await recordOrderBtn.click();
+
+    // Proxy order modal should display paper-handoff exports, notice, lock legal approver, and hide signature canvas
+    await expect(
+      page.getByText(/3\. ปรับสถานะคำสั่งอนุญาต \(หลัง พมจ\. เซ็นเอกสาร\)/)
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Word เสนอแฟ้ม/ })
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /PDF เสนอแฟ้ม/ })
+    ).toBeVisible();
+    await expect(
+      page.getByText(/ผู้มีอำนาจสั่งอนุญาตตามเอกสารยังคงเป็น/)
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /ยืนยันบันทึกผลตามเอกสาร/ })
+    ).toBeVisible();
+    await expect(page.getByText("ลายมือชื่อผู้พิจารณา")).toHaveCount(0);
+  });
 });

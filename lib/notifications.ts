@@ -14,9 +14,11 @@ import { getGroupMembers } from "./chat-data";
 import { getAttendeeName, getMeetingIsoDate } from "./calendar";
 import { getDeadlineStatus, getMissionGroupInfo } from "./task-missions";
 import {
+  DEFAULT_LEAVE_ORDER_OPERATOR,
   formatThaiDateShort,
   LEAVE_TYPE_META,
   LeaveRequestItem,
+  SOLE_LEAVE_APPROVER,
 } from "./leave-utils";
 
 export const NOTIFICATION_READ_IDS_KEY = "smartmso_read_notif_ids";
@@ -706,17 +708,20 @@ export function buildUnifiedNotifications({
       currentUser.id === "syno_ยุทธนา" ||
       r.verifierUserId === currentUser.id;
 
-    const isSupervisorUser =
-      currentUserRole === "admin" ||
-      currentUserRole === "manager" ||
-      Boolean(myLeaveRole?.canSupervisor) ||
-      r.supervisorUserId === currentUser.id;
+    const isSupervisorUser = r.supervisorUserId
+      ? r.supervisorUserId === currentUser.id || currentUserRole === "admin"
+      : (currentUserRole === "admin" ||
+          currentUserRole === "manager" ||
+          Boolean(myLeaveRole?.canSupervisor)) &&
+        currentUser.id !== SOLE_LEAVE_APPROVER.userId;
 
     const isApproverUser =
       currentUserRole === "admin" ||
       Boolean(myLeaveRole?.canApprove) ||
-      currentUser.id === "syno_มะลิวัน" ||
+      currentUser.id === SOLE_LEAVE_APPROVER.userId ||
+      currentUser.id === DEFAULT_LEAVE_ORDER_OPERATOR.userId ||
       r.approverUserId === currentUser.id;
+    const isOperatorUser = currentUser.id === DEFAULT_LEAVE_ORDER_OPERATOR.userId;
 
     if (r.status === "pending_verifier" && isVerifierUser && !isApplicant) {
       const notifId = `leave_pending_verifier_${r.id}`;
@@ -746,13 +751,22 @@ export function buildUnifiedNotifications({
         senderName: r.verifierName || r.applicantName,
         link: { page: "leave", targetId: r.id, subTab: "review" },
       });
-    } else if (r.status === "pending_approver" && isApproverUser && !isApplicant) {
+    } else if (
+      r.status === "pending_approver" &&
+      isApproverUser &&
+      (!isApplicant || isOperatorUser)
+    ) {
       const notifId = `leave_pending_approver_${r.id}`;
+      const isProxyOperator = currentUser.id !== SOLE_LEAVE_APPROVER.userId;
       notifs.push({
         id: notifId,
         type: "leave",
-        title: `รอคำสั่งอนุญาตใบลา (${r.requestNo})`,
-        message: `${r.applicantName} (${typeLabel} ${r.totalWorkingDays} วัน · ${dateSpan}) ผ่านความเห็นชอบแล้ว`,
+        title: isProxyOperator
+          ? `📁 เสนอแฟ้ม พมจ. & ปรับสถานะ (${r.requestNo})`
+          : `รอคำสั่งอนุญาตใบลา (${r.requestNo})`,
+        message: isProxyOperator
+          ? `${r.applicantName} (${typeLabel} ${r.totalWorkingDays} วัน · ${dateSpan}) ผ่านความเห็นหัวหน้ากลุ่ม/ฝ่ายแล้ว — พิมพ์เอกสารเสนอ ${SOLE_LEAVE_APPROVER.name} ลงนามและปรับสถานะในระบบ`
+          : `${r.applicantName} (${typeLabel} ${r.totalWorkingDays} วัน · ${dateSpan}) ผ่านความเห็นชอบแล้ว`,
         timestamp: formatThaiDateShort(r.supervisorReviewedAt || r.writtenDate),
         createdAt: r.updatedAt || r.createdAt || new Date().toISOString(),
         isRead: readIds.has(notifId),

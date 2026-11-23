@@ -179,7 +179,7 @@ function drawCancelLeaveForm(
   const writtenParts = formatThaiDateParts(leave.writtenDate);
   const targetLabel =
     leave.cancelTargetLeaveType &&
-    LEAVE_TYPE_META[leave.cancelTargetLeaveType as LeaveType]
+      LEAVE_TYPE_META[leave.cancelTargetLeaveType as LeaveType]
       ? LEAVE_TYPE_META[leave.cancelTargetLeaveType as LeaveType].label
       : "ลา";
 
@@ -203,8 +203,7 @@ function drawCancelLeaveForm(
   );
   y = drawWrappedText(
     ctx,
-    `วันที่ ${writtenParts.day || "...."} เดือน ${
-      writtenParts.month || "............"
+    `วันที่ ${writtenParts.day || "...."} เดือน ${writtenParts.month || "............"
     } พ.ศ. ${writtenParts.yearBE || "......"}`,
     800,
     y + 2,
@@ -241,10 +240,8 @@ function drawCancelLeaveForm(
 
   y = drawWrappedText(
     ctx,
-    `        ข้าพเจ้า ${leave.applicantName}   ตำแหน่ง ${
-      leave.applicantPosition || "-"
-    }  กลุ่ม/ฝ่าย ${
-      leave.applicantDivision || "-"
+    `        ข้าพเจ้า ${leave.applicantName}   ตำแหน่ง ${leave.applicantPosition || "-"
+    }  กลุ่ม/ฝ่าย ${leave.applicantDivision || "-"
     }   สังกัด สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร`,
     MARGIN_LEFT,
     y,
@@ -255,16 +252,13 @@ function drawCancelLeaveForm(
 
   y = drawWrappedText(
     ctx,
-    `        ได้รับอนุญาตให้${targetLabel} (เลขที่ ${
-      leave.cancelTargetRequestNo || "-"
-    }) ตั้งแต่วันที่ ${
-      leave.cancelTargetStartDate
-        ? formatThaiDateFull(leave.cancelTargetStartDate)
-        : "-"
-    } ถึงวันที่ ${
-      leave.cancelTargetEndDate
-        ? formatThaiDateFull(leave.cancelTargetEndDate)
-        : "-"
+    `        ได้รับอนุญาตให้${targetLabel} (เลขที่ ${leave.cancelTargetRequestNo || "-"
+    }) ตั้งแต่วันที่ ${leave.cancelTargetStartDate
+      ? formatThaiDateFull(leave.cancelTargetStartDate)
+      : "-"
+    } ถึงวันที่ ${leave.cancelTargetEndDate
+      ? formatThaiDateFull(leave.cancelTargetEndDate)
+      : "-"
     } รวม ${leave.cancelTargetDays ?? "-"} วัน นั้น`,
     MARGIN_LEFT,
     y,
@@ -275,12 +269,10 @@ function drawCancelLeaveForm(
 
   y = drawWrappedText(
     ctx,
-    `        เนื่องจาก ${
-      leave.reason || "-"
+    `        เนื่องจาก ${leave.reason || "-"
     } จึงขอยกเลิกวันลา${targetLabel} ตั้งแต่วันที่ ${formatThaiDateFull(
       leave.startDate
-    )} ถึงวันที่ ${formatThaiDateFull(leave.endDate)} จำนวน ${
-      leave.totalWorkingDays
+    )} ถึงวันที่ ${formatThaiDateFull(leave.endDate)} จำนวน ${leave.totalWorkingDays
     } วันทำการ${getPeriodSuffix(leave)}`,
     MARGIN_LEFT,
     y,
@@ -323,7 +315,7 @@ function drawCancelLeaveForm(
   ly = drawWrappedText(
     ctx,
     leave.supervisorComment ||
-      "........................................................................",
+    "........................................................................",
     leftCenter,
     ly,
     leftW,
@@ -361,10 +353,9 @@ function drawCancelLeaveForm(
   );
   drawWrappedText(
     ctx,
-    `วันที่ ${
-      leave.supervisorReviewedAt
-        ? formatThaiDateSlash(leave.supervisorReviewedAt)
-        : "........ / ........ / ........"
+    `วันที่ ${leave.supervisorReviewedAt
+      ? formatThaiDateSlash(leave.supervisorReviewedAt)
+      : "........ / ........ / ........"
     }`,
     leftCenter,
     ly,
@@ -430,10 +421,9 @@ function drawCancelLeaveForm(
   );
   drawWrappedText(
     ctx,
-    `วันที่ ${
-      leave.orderedAt
-        ? formatThaiDateSlash(leave.orderedAt)
-        : "........ / ........ / ........"
+    `วันที่ ${leave.orderedAt
+      ? formatThaiDateSlash(leave.orderedAt)
+      : "........ / ........ / ........"
     }`,
     rightCenter,
     ry,
@@ -478,8 +468,7 @@ function drawVacationForm(
   );
   y = drawWrappedText(
     ctx,
-    `วันที่ ${writtenParts.day || "...."} เดือน ${
-      writtenParts.month || "............"
+    `วันที่ ${writtenParts.day || "...."} เดือน ${writtenParts.month || "............"
     } พ.ศ. ${writtenParts.yearBE || "......"}`,
     800,
     y + 2,
@@ -517,10 +506,8 @@ function drawVacationForm(
 
   y = drawWrappedText(
     ctx,
-    `        ข้าพเจ้า ${leave.applicantName}   ตำแหน่ง ${
-      leave.applicantPosition || "-"
-    }  กลุ่ม/ฝ่าย ${
-      leave.applicantDivision || "-"
+    `        ข้าพเจ้า ${leave.applicantName}   ตำแหน่ง ${leave.applicantPosition || "-"
+    }  กลุ่ม/ฝ่าย ${leave.applicantDivision || "-"
     }   สังกัด สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร`,
     MARGIN_LEFT,
     y,
@@ -539,8 +526,7 @@ function drawVacationForm(
     ctx,
     `ขอลาพักผ่อนตั้งแต่วันที่ ${startParts.day} เดือน ${startParts.month} พ.ศ. ${startParts.yearBE} ถึงวันที่ ${endParts.day} เดือน ${endParts.month} พ.ศ. ${endParts.yearBE}\nมีกำหนด ${leave.totalWorkingDays} วัน${getPeriodSuffix(
       leave
-    )}  ในระหว่างลาจะติดต่อข้าพเจ้าได้ที่ ${
-      leave.contactInfo || "-"
+    )}  ในระหว่างลาจะติดต่อข้าพเจ้าได้ที่ ${leave.contactInfo || "-"
     }  หมายเลขโทรศัพท์ ${leave.contactPhone || "-"}`,
     MARGIN_LEFT,
     y,
@@ -626,10 +612,9 @@ function drawVacationForm(
   );
   ly = drawWrappedText(
     ctx,
-    `วันที่ ${
-      leave.verifiedAt
-        ? formatThaiDateSlash(leave.verifiedAt)
-        : "........ / ........ / ........"
+    `วันที่ ${leave.verifiedAt
+      ? formatThaiDateSlash(leave.verifiedAt)
+      : "........ / ........ / ........"
     }`,
     leftX,
     ly,
@@ -704,7 +689,7 @@ function drawVacationForm(
   ry = drawWrappedText(
     ctx,
     leave.supervisorComment ||
-      "..................................................................................",
+    "..................................................................................",
     rightX,
     ry,
     rightMaxW,
@@ -741,10 +726,9 @@ function drawVacationForm(
   );
   ry = drawWrappedText(
     ctx,
-    `วันที่ ${
-      leave.supervisorReviewedAt
-        ? formatThaiDateSlash(leave.supervisorReviewedAt)
-        : "........ / ........ / ........"
+    `วันที่ ${leave.supervisorReviewedAt
+      ? formatThaiDateSlash(leave.supervisorReviewedAt)
+      : "........ / ........ / ........"
     }`,
     rightCenterX,
     ry,
@@ -810,10 +794,9 @@ function drawVacationForm(
   );
   drawWrappedText(
     ctx,
-    `วันที่ ${
-      leave.orderedAt
-        ? formatThaiDateSlash(leave.orderedAt)
-        : "........ / ........ / ........"
+    `วันที่ ${leave.orderedAt
+      ? formatThaiDateSlash(leave.orderedAt)
+      : "........ / ........ / ........"
     }`,
     rightCenterX,
     ry,
@@ -860,8 +843,7 @@ function drawGeneralForm(
   );
   y = drawWrappedText(
     ctx,
-    `วันที่ ${writtenParts.day || "...."} เดือน ${
-      writtenParts.month || "............"
+    `วันที่ ${writtenParts.day || "...."} เดือน ${writtenParts.month || "............"
     } พ.ศ. ${writtenParts.yearBE || "......"}`,
     800,
     y + 2,
@@ -907,8 +889,7 @@ function drawGeneralForm(
   );
   y = drawWrappedText(
     ctx,
-    `กลุ่ม/ฝ่าย ${
-      leave.applicantDivision || "-"
+    `กลุ่ม/ฝ่าย ${leave.applicantDivision || "-"
     } สังกัด สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร`,
     MARGIN_LEFT,
     y,
@@ -950,10 +931,9 @@ function drawGeneralForm(
   );
   y = drawWrappedText(
     ctx,
-    `เนื่องจาก ${
-      leave.leaveType === "personal_leave"
-        ? leave.reason || "-"
-        : "........................................................"
+    `เนื่องจาก ${leave.leaveType === "personal_leave"
+      ? leave.reason || "-"
+      : "........................................................"
     }`,
     cx,
     y,
@@ -986,8 +966,7 @@ function drawGeneralForm(
     ctx,
     `ตั้งแต่วันที่ ${formatThaiDateFull(
       leave.startDate
-    )} ถึงวันที่ ${formatThaiDateFull(leave.endDate)} มีกำหนด ${
-      leave.totalWorkingDays
+    )} ถึงวันที่ ${formatThaiDateFull(leave.endDate)} มีกำหนด ${leave.totalWorkingDays
     } วัน${getPeriodSuffix(leave)}`,
     MARGIN_LEFT,
     y,
@@ -1023,10 +1002,9 @@ function drawGeneralForm(
   );
   y = drawWrappedText(
     ctx,
-    `ครั้งสุดท้ายตั้งแต่วันที่ ${
-      leave.lastLeaveStartDate
-        ? formatThaiDateFull(leave.lastLeaveStartDate)
-        : "-"
+    `ครั้งสุดท้ายตั้งแต่วันที่ ${leave.lastLeaveStartDate
+      ? formatThaiDateFull(leave.lastLeaveStartDate)
+      : "-"
     }`,
     cx,
     y,
@@ -1039,12 +1017,10 @@ function drawGeneralForm(
     "-";
   y = drawWrappedText(
     ctx,
-    `ถึงวันที่ ${
-      leave.lastLeaveEndDate
-        ? formatThaiDateFull(leave.lastLeaveEndDate)
-        : "-"
-    } มีกำหนด ${
-      leave.lastLeaveDays ?? "-"
+    `ถึงวันที่ ${leave.lastLeaveEndDate
+      ? formatThaiDateFull(leave.lastLeaveEndDate)
+      : "-"
+    } มีกำหนด ${leave.lastLeaveDays ?? "-"
     } วัน  ในระหว่างลาจะติดต่อข้าพเจ้าได้ที่ ${contactCombined}`,
     MARGIN_LEFT,
     y,
@@ -1155,8 +1131,7 @@ function drawGeneralForm(
   );
   ly = drawWrappedText(
     ctx,
-    `วันที่ ${verifiedParts.day || "...."} เดือน ${
-      verifiedParts.month || "............"
+    `วันที่ ${verifiedParts.day || "...."} เดือน ${verifiedParts.month || "............"
     } พ.ศ. ${verifiedParts.yearBE || "......"}`,
     leftX,
     ly,
@@ -1177,7 +1152,7 @@ function drawGeneralForm(
   ry = drawWrappedText(
     ctx,
     leave.supervisorComment ||
-      "..................................................................................",
+    "..................................................................................",
     rightX,
     ry,
     rightMaxW,
@@ -1214,8 +1189,7 @@ function drawGeneralForm(
   );
   ry = drawWrappedText(
     ctx,
-    `วันที่ ${supParts.day || "...."} เดือน ${
-      supParts.month || "............"
+    `วันที่ ${supParts.day || "...."} เดือน ${supParts.month || "............"
     } พ.ศ. ${supParts.yearBE || "......"}`,
     rightCenterX,
     ry,
@@ -1281,8 +1255,7 @@ function drawGeneralForm(
   );
   ry = drawWrappedText(
     ctx,
-    `วันที่ ${ordParts.day || "...."} เดือน ${
-      ordParts.month || "............"
+    `วันที่ ${ordParts.day || "...."} เดือน ${ordParts.month || "............"
     } พ.ศ. ${ordParts.yearBE || "......"}`,
     rightCenterX,
     ry,

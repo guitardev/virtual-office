@@ -43,13 +43,11 @@ function makeRun(
   opts: { bold?: boolean; underline?: boolean; size?: number } = {}
 ): string {
   const size = opts.size ?? DEFAULT_RUN_SIZE;
-  return `<w:r><w:rPr>${R_FONTS}${
-    opts.bold ? "<w:b/><w:bCs/>" : ""
-  }${
-    opts.underline ? '<w:u w:val="single"/>' : ""
-  }<w:sz w:val="${size}"/><w:szCs w:val="${size}"/><w:color w:val="000000"/></w:rPr><w:t xml:space="preserve">${xmlEsc(
-    text
-  )}</w:t></w:r>`;
+  return `<w:r><w:rPr>${R_FONTS}${opts.bold ? "<w:b/><w:bCs/>" : ""
+    }${opts.underline ? '<w:u w:val="single"/>' : ""
+    }<w:sz w:val="${size}"/><w:szCs w:val="${size}"/><w:color w:val="000000"/></w:rPr><w:t xml:space="preserve">${xmlEsc(
+      text
+    )}</w:t></w:r>`;
 }
 
 function makeBreakRun(size = DEFAULT_RUN_SIZE): string {
@@ -198,7 +196,7 @@ function buildCancelLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels): 
   const writtenParts = formatThaiDateParts(leave.writtenDate);
   const targetLabel =
     leave.cancelTargetLeaveType &&
-    LEAVE_TYPE_META[leave.cancelTargetLeaveType as LeaveType]
+      LEAVE_TYPE_META[leave.cancelTargetLeaveType as LeaveType]
       ? LEAVE_TYPE_META[leave.cancelTargetLeaveType as LeaveType].label
       : "ลา";
 
@@ -214,18 +212,18 @@ function buildCancelLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels): 
   parts.push(
     makePara(
       makeRun("เขียนที่", { bold: true }) +
-        makeRun(` ${formatWrittenAtShort(leave.writtenAt)}`),
+      makeRun(` ${formatWrittenAtShort(leave.writtenAt)}`),
       { leftIndent: 5540, firstLine: 220, after: 20 }
     )
   );
   parts.push(
     makePara(
       makeRun("วันที่", { bold: true }) +
-        makeRun(` ${writtenParts.day || "...."} `) +
-        makeRun("เดือน", { bold: true }) +
-        makeRun(` ${writtenParts.month || "............"} `) +
-        makeRun("พ.ศ.", { bold: true }) +
-        makeRun(` ${writtenParts.yearBE || "......"}`),
+      makeRun(` ${writtenParts.day || "...."} `) +
+      makeRun("เดือน", { bold: true }) +
+      makeRun(` ${writtenParts.month || "............"} `) +
+      makeRun("พ.ศ.", { bold: true }) +
+      makeRun(` ${writtenParts.yearBE || "......"}`),
       { leftIndent: 5100, firstLine: 660, after: 120 }
     )
   );
@@ -233,17 +231,17 @@ function buildCancelLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels): 
   parts.push(
     makePara(
       makeRun("เรื่อง  ", { bold: true }) +
-        makeRun(leave.subject || "ขอยกเลิกวันลา"),
+      makeRun(leave.subject || "ขอยกเลิกวันลา"),
       { after: 40 }
     )
   );
   parts.push(
     makePara(
       makeRun("เรียน  ", { bold: true }) +
-        makeRun(
-          leave.toRecipient ||
-            "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"
-        ),
+      makeRun(
+        leave.toRecipient ||
+        "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"
+      ),
       { after: 100 }
     )
   );
@@ -251,29 +249,26 @@ function buildCancelLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels): 
   parts.push(
     makePara(
       makeRun("ข้าพเจ้า", { bold: true }) +
-        makeRun(` ${leave.applicantName}   `) +
-        makeRun("ตำแหน่ง", { bold: true }) +
-        makeRun(` ${leave.applicantPosition || "-"}  `) +
-        makeRun("กลุ่ม/ฝ่าย", { bold: true }) +
-        makeRun(` ${leave.applicantDivision || "-"}   `) +
-        makeRun("สังกัด", { bold: true }) +
-        makeRun(" สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"),
+      makeRun(` ${leave.applicantName}   `) +
+      makeRun("ตำแหน่ง", { bold: true }) +
+      makeRun(` ${leave.applicantPosition || "-"}  `) +
+      makeRun("กลุ่ม/ฝ่าย", { bold: true }) +
+      makeRun(` ${leave.applicantDivision || "-"}   `) +
+      makeRun("สังกัด", { bold: true }) +
+      makeRun(" สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"),
       { firstLine: 720, after: 60 }
     )
   );
   parts.push(
     makePara(
       makeRun(
-        `ได้รับอนุญาตให้${targetLabel} (เลขที่ ${
-          leave.cancelTargetRequestNo || "-"
-        }) ตั้งแต่วันที่ ${
-          leave.cancelTargetStartDate
-            ? formatThaiDateFull(leave.cancelTargetStartDate)
-            : "-"
-        } ถึงวันที่ ${
-          leave.cancelTargetEndDate
-            ? formatThaiDateFull(leave.cancelTargetEndDate)
-            : "-"
+        `ได้รับอนุญาตให้${targetLabel} (เลขที่ ${leave.cancelTargetRequestNo || "-"
+        }) ตั้งแต่วันที่ ${leave.cancelTargetStartDate
+          ? formatThaiDateFull(leave.cancelTargetStartDate)
+          : "-"
+        } ถึงวันที่ ${leave.cancelTargetEndDate
+          ? formatThaiDateFull(leave.cancelTargetEndDate)
+          : "-"
         } รวม ${leave.cancelTargetDays ?? "-"} วัน นั้น`
       ),
       { firstLine: 720, after: 60 }
@@ -282,12 +277,10 @@ function buildCancelLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels): 
   parts.push(
     makePara(
       makeRun(
-        `เนื่องจาก ${
-          leave.reason || "-"
+        `เนื่องจาก ${leave.reason || "-"
         } จึงขอยกเลิกวันลา${targetLabel} ตั้งแต่วันที่ ${formatThaiDateFull(
           leave.startDate
-        )} ถึงวันที่ ${formatThaiDateFull(leave.endDate)} จำนวน ${
-          leave.totalWorkingDays
+        )} ถึงวันที่ ${formatThaiDateFull(leave.endDate)} จำนวน ${leave.totalWorkingDays
         } วันทำการ${getPeriodSuffix(leave)}`
       ),
       { firstLine: 720, after: 180 }
@@ -312,7 +305,7 @@ function buildCancelLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels): 
   parts.push(
     makePara(
       makeRun("(ลงชื่อ)", { bold: true }) +
-        makeRun("......................................................"),
+      makeRun("......................................................"),
       {
         leftIndent: 4500,
         align: "center",
@@ -330,7 +323,7 @@ function buildCancelLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels): 
   parts.push(
     makePara(
       makeRun("ตำแหน่ง", { bold: true }) +
-        makeRun(` ${leave.applicantPosition || "-"}`),
+      makeRun(` ${leave.applicantPosition || "-"}`),
       {
         leftIndent: 4500,
         align: "center",
@@ -347,14 +340,14 @@ function buildCancelLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels): 
     makePara(
       makeRun(
         leave.supervisorComment ||
-          ".................................................................................."
+        ".................................................................................."
       ),
       { align: "center", after: 100 }
     ),
     makeSignatureDrawingPara(sigRels.supervisor, { align: "center" }),
     makePara(
       makeRun("(ลงชื่อ)", { bold: true }) +
-        makeRun(" ..............................................."),
+      makeRun(" ..............................................."),
       { align: "center", after: 20 }
     ),
     makePara(
@@ -365,18 +358,17 @@ function buildCancelLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels): 
     ),
     makePara(
       makeRun("(ตำแหน่ง)", { bold: true }) +
-        buildPositionRuns(leave.supervisorPosition),
+      buildPositionRuns(leave.supervisorPosition),
       { align: "center", after: 20 }
     ),
     makePara(
       makeRun("วันที่", { bold: true }) +
-        makeRun(
-          ` ${
-            leave.supervisorReviewedAt
-              ? formatThaiDateSlash(leave.supervisorReviewedAt)
-              : "........ / ........ / ........"
-          }`
-        ),
+      makeRun(
+        ` ${leave.supervisorReviewedAt
+          ? formatThaiDateSlash(leave.supervisorReviewedAt)
+          : "........ / ........ / ........"
+        }`
+      ),
       { align: "center", after: 0 }
     ),
   ].join("");
@@ -384,11 +376,11 @@ function buildCancelLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels): 
   const rightColXml = [
     makePara(
       makeRun("คำสั่ง   ", { bold: true }) +
-        makeRun(
-          `${chk(leave.orderDecision === "approved")} อนุญาต    ${chk(
-            leave.orderDecision === "rejected"
-          )} ไม่อนุญาต`
-        ),
+      makeRun(
+        `${chk(leave.orderDecision === "approved")} อนุญาต    ${chk(
+          leave.orderDecision === "rejected"
+        )} ไม่อนุญาต`
+      ),
       { align: "center", after: 60 }
     ),
     leave.orderComment
@@ -397,7 +389,7 @@ function buildCancelLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels): 
     makeSignatureDrawingPara(sigRels.approver, { align: "center" }),
     makePara(
       makeRun("(ลงชื่อ)", { bold: true }) +
-        makeRun(" ................................................."),
+      makeRun(" ................................................."),
       { align: "center", after: 20 }
     ),
     makePara(
@@ -408,18 +400,17 @@ function buildCancelLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels): 
     ),
     makePara(
       makeRun("(ตำแหน่ง)", { bold: true }) +
-        buildPositionRuns(leave.approverPosition),
+      buildPositionRuns(leave.approverPosition),
       { align: "center", after: 20 }
     ),
     makePara(
       makeRun("วันที่", { bold: true }) +
-        makeRun(
-          ` ${
-            leave.orderedAt
-              ? formatThaiDateSlash(leave.orderedAt)
-              : "........ / ........ / ........"
-          }`
-        ),
+      makeRun(
+        ` ${leave.orderedAt
+          ? formatThaiDateSlash(leave.orderedAt)
+          : "........ / ........ / ........"
+        }`
+      ),
       { align: "center", after: 0 }
     ),
   ].join("");
@@ -472,18 +463,18 @@ function buildVacationLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels)
   parts.push(
     makePara(
       makeRun("เขียนที่", { bold: true }) +
-        makeRun(` ${formatWrittenAtShort(leave.writtenAt)}`),
+      makeRun(` ${formatWrittenAtShort(leave.writtenAt)}`),
       { leftIndent: 5540, firstLine: 220, after: 20 }
     )
   );
   parts.push(
     makePara(
       makeRun("วันที่", { bold: true }) +
-        makeRun(` ${writtenParts.day || "...."} `) +
-        makeRun("เดือน", { bold: true }) +
-        makeRun(` ${writtenParts.month || "............"} `) +
-        makeRun("พ.ศ.", { bold: true }) +
-        makeRun(` ${writtenParts.yearBE || "......"}`),
+      makeRun(` ${writtenParts.day || "...."} `) +
+      makeRun("เดือน", { bold: true }) +
+      makeRun(` ${writtenParts.month || "............"} `) +
+      makeRun("พ.ศ.", { bold: true }) +
+      makeRun(` ${writtenParts.yearBE || "......"}`),
       { leftIndent: 5100, firstLine: 660, after: 100 }
     )
   );
@@ -492,17 +483,17 @@ function buildVacationLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels)
   parts.push(
     makePara(
       makeRun("เรื่อง  ", { bold: true }) +
-        makeRun(leave.subject || "ขอลาพักผ่อน"),
+      makeRun(leave.subject || "ขอลาพักผ่อน"),
       { after: 40 }
     )
   );
   parts.push(
     makePara(
       makeRun("เรียน  ", { bold: true }) +
-        makeRun(
-          leave.toRecipient ||
-            "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"
-        ),
+      makeRun(
+        leave.toRecipient ||
+        "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"
+      ),
       { after: 80 }
     )
   );
@@ -511,13 +502,13 @@ function buildVacationLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels)
   parts.push(
     makePara(
       makeRun("ข้าพเจ้า", { bold: true }) +
-        makeRun(` ${leave.applicantName}   `) +
-        makeRun("ตำแหน่ง", { bold: true }) +
-        makeRun(` ${leave.applicantPosition || "-"}  `) +
-        makeRun("กลุ่ม/ฝ่าย", { bold: true }) +
-        makeRun(` ${leave.applicantDivision || "-"}   `) +
-        makeRun("สังกัด", { bold: true }) +
-        makeRun(" สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"),
+      makeRun(` ${leave.applicantName}   `) +
+      makeRun("ตำแหน่ง", { bold: true }) +
+      makeRun(` ${leave.applicantPosition || "-"}  `) +
+      makeRun("กลุ่ม/ฝ่าย", { bold: true }) +
+      makeRun(` ${leave.applicantDivision || "-"}   `) +
+      makeRun("สังกัด", { bold: true }) +
+      makeRun(" สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"),
       { firstLine: 720, after: 40 }
     )
   );
@@ -526,16 +517,16 @@ function buildVacationLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels)
   parts.push(
     makePara(
       makeRun("มีวันลาพักผ่อนสะสม", { bold: true }) +
-        makeRun(` ${leave.vacationAccumulatedDays} `) +
-        makeRun("วันทำการ", { bold: true }) +
-        makeRun("  ") +
-        makeRun("มีสิทธิลาพักผ่อนประจำปีอีก", { bold: true }) +
-        makeRun(` ${leave.vacationAnnualDays} `) +
-        makeRun("วันทำการ", { bold: true }) +
-        makeRun("  ") +
-        makeRun("รวมเป็น", { bold: true }) +
-        makeRun(` ${totalEntitled} `) +
-        makeRun("วันทำการ", { bold: true }),
+      makeRun(` ${leave.vacationAccumulatedDays} `) +
+      makeRun("วันทำการ", { bold: true }) +
+      makeRun("  ") +
+      makeRun("มีสิทธิลาพักผ่อนประจำปีอีก", { bold: true }) +
+      makeRun(` ${leave.vacationAnnualDays} `) +
+      makeRun("วันทำการ", { bold: true }) +
+      makeRun("  ") +
+      makeRun("รวมเป็น", { bold: true }) +
+      makeRun(` ${totalEntitled} `) +
+      makeRun("วันทำการ", { bold: true }),
       { after: 40 }
     )
   );
@@ -545,29 +536,28 @@ function buildVacationLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels)
   parts.push(
     makePara(
       makeRun("ขอลาพักผ่อนตั้งแต่วันที่", { bold: true }) +
-        makeRun(` ${startParts.day} `) +
-        makeRun("เดือน", { bold: true }) +
-        makeRun(` ${startParts.month} `) +
-        makeRun("พ.ศ.", { bold: true }) +
-        makeRun(` ${startParts.yearBE} `) +
-        makeRun("ถึงวันที่", { bold: true }) +
-        makeRun(` ${endParts.day} `) +
-        makeRun("เดือน", { bold: true }) +
-        makeRun(` ${endParts.month} `) +
-        makeRun("พ.ศ.", { bold: true }) +
-        makeRun(` ${endParts.yearBE} `) +
-        makeBreakRun() +
-        makeRun("มีกำหนด", { bold: true }) +
-        makeRun(` ${leave.totalWorkingDays} `) +
-        makeRun("วัน", { bold: true }) +
-        (periodSuffix ? makeRun(periodSuffix) : "") +
-        makeRun("  ") +
-        makeRun("ในระหว่างลาจะติดต่อข้าพเจ้าได้ที่", { bold: true }) +
-        makeRun(
-          ` ${leave.contactInfo || "-"}  หมายเลขโทรศัพท์ ${
-            leave.contactPhone || "-"
-          }`
-        ),
+      makeRun(` ${startParts.day} `) +
+      makeRun("เดือน", { bold: true }) +
+      makeRun(` ${startParts.month} `) +
+      makeRun("พ.ศ.", { bold: true }) +
+      makeRun(` ${startParts.yearBE} `) +
+      makeRun("ถึงวันที่", { bold: true }) +
+      makeRun(` ${endParts.day} `) +
+      makeRun("เดือน", { bold: true }) +
+      makeRun(` ${endParts.month} `) +
+      makeRun("พ.ศ.", { bold: true }) +
+      makeRun(` ${endParts.yearBE} `) +
+      makeBreakRun() +
+      makeRun("มีกำหนด", { bold: true }) +
+      makeRun(` ${leave.totalWorkingDays} `) +
+      makeRun("วัน", { bold: true }) +
+      (periodSuffix ? makeRun(periodSuffix) : "") +
+      makeRun("  ") +
+      makeRun("ในระหว่างลาจะติดต่อข้าพเจ้าได้ที่", { bold: true }) +
+      makeRun(
+        ` ${leave.contactInfo || "-"}  หมายเลขโทรศัพท์ ${leave.contactPhone || "-"
+        }`
+      ),
       { after: 40 }
     )
   );
@@ -584,7 +574,7 @@ function buildVacationLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels)
   parts.push(
     makePara(
       makeRun("(ลงชื่อ)", { bold: true }) +
-        makeRun("......................................................"),
+      makeRun("......................................................"),
       {
         leftIndent: 4500,
         align: "center",
@@ -602,7 +592,7 @@ function buildVacationLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels)
   parts.push(
     makePara(
       makeRun("ตำแหน่ง", { bold: true }) +
-        makeRun(` ${leave.applicantPosition || "-"}`),
+      makeRun(` ${leave.applicantPosition || "-"}`),
       {
         leftIndent: 4500,
         align: "center",
@@ -633,56 +623,56 @@ function buildVacationLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels)
     <w:tr>
       <w:trPr><w:trHeight w:val="901"/></w:trPr>
       ${makeTableCell(
-        makePara(makeRun("ลามาแล้ว (วันทำการ)", { bold: true, size: 32 }), {
-          align: "center",
-          after: 0,
-        }),
-        1495,
-        { borders: true, vAlign: "center" }
-      )}
+    makePara(makeRun("ลามาแล้ว (วันทำการ)", { bold: true, size: 32 }), {
+      align: "center",
+      after: 0,
+    }),
+    1495,
+    { borders: true, vAlign: "center" }
+  )}
       ${makeTableCell(
-        makePara(makeRun("ลาครั้งนี้ (วันทำการ)", { bold: true, size: 32 }), {
-          align: "center",
-          after: 0,
-        }),
-        1495,
-        { borders: true, vAlign: "center" }
-      )}
+    makePara(makeRun("ลาครั้งนี้ (วันทำการ)", { bold: true, size: 32 }), {
+      align: "center",
+      after: 0,
+    }),
+    1495,
+    { borders: true, vAlign: "center" }
+  )}
       ${makeTableCell(
-        makePara(makeRun("รวมเป็น (วันทำการ)", { bold: true, size: 32 }), {
-          align: "center",
-          after: 0,
-        }),
-        1495,
-        { borders: true, vAlign: "center" }
-      )}
+    makePara(makeRun("รวมเป็น (วันทำการ)", { bold: true, size: 32 }), {
+      align: "center",
+      after: 0,
+    }),
+    1495,
+    { borders: true, vAlign: "center" }
+  )}
     </w:tr>
     <w:tr>
       <w:trPr><w:trHeight w:val="462"/></w:trPr>
       ${makeTableCell(
-        makePara(makeRun(String(leave.prevVacationDays), { size: 32 }), {
-          align: "center",
-          after: 0,
-        }),
-        1495,
-        { borders: true, vAlign: "center" }
-      )}
+    makePara(makeRun(String(leave.prevVacationDays), { size: 32 }), {
+      align: "center",
+      after: 0,
+    }),
+    1495,
+    { borders: true, vAlign: "center" }
+  )}
       ${makeTableCell(
-        makePara(makeRun(String(leave.totalWorkingDays), { size: 32 }), {
-          align: "center",
-          after: 0,
-        }),
-        1495,
-        { borders: true, vAlign: "center" }
-      )}
+    makePara(makeRun(String(leave.totalWorkingDays), { size: 32 }), {
+      align: "center",
+      after: 0,
+    }),
+    1495,
+    { borders: true, vAlign: "center" }
+  )}
       ${makeTableCell(
-        makePara(makeRun(String(totalUsed), { bold: true, size: 32 }), {
-          align: "center",
-          after: 0,
-        }),
-        1495,
-        { borders: true, vAlign: "center" }
-      )}
+    makePara(makeRun(String(totalUsed), { bold: true, size: 32 }), {
+      align: "center",
+      after: 0,
+    }),
+    1495,
+    { borders: true, vAlign: "center" }
+  )}
     </w:tr>
   </w:tbl>`;
 
@@ -695,8 +685,8 @@ function buildVacationLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels)
     makeSignatureDrawingPara(sigRels.verifier, { align: "left", leftIndent: 500 }),
     makePara(
       makeRun("(ลงชื่อ)", { bold: true }) +
-        makeRun("                               ", { bold: true }) +
-        makeRun("ผู้ตรวจสอบ", { bold: true }),
+      makeRun("                               ", { bold: true }) +
+      makeRun("ผู้ตรวจสอบ", { bold: true }),
       { before: sigRels.verifier ? 20 : 160, after: 20 }
     ),
     makePara(
@@ -707,19 +697,18 @@ function buildVacationLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels)
     ),
     makePara(
       makeRun("(ตำแหน่ง)", { bold: true }) +
-        makeRun(` ${leave.verifierPosition || "...................................."}`),
+      makeRun(` ${leave.verifierPosition || "...................................."}`),
       { after: 20 }
     ),
     makePara(
       makeRun("         ") +
-        makeRun("วันที่", { bold: true }) +
-        makeRun(
-          ` ${
-            leave.verifiedAt
-              ? formatThaiDateSlash(leave.verifiedAt)
-              : "........ / ........ / ........"
-          }`
-        ),
+      makeRun("วันที่", { bold: true }) +
+      makeRun(
+        ` ${leave.verifiedAt
+          ? formatThaiDateSlash(leave.verifiedAt)
+          : "........ / ........ / ........"
+        }`
+      ),
       { after: 180 }
     ),
     makePara(makeRun("ในระหว่างที่ข้าพเจ้าลาพักผ่อนมอบหมายให้"), { after: 20 }),
@@ -729,8 +718,8 @@ function buildVacationLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels)
     makeSignatureDrawingPara(sigRels.applicant, { align: "left", leftIndent: 500 }),
     makePara(
       makeRun("(ลงชื่อ)", { bold: true }) +
-        makeRun(".......................................... ") +
-        makeRun("ผู้มอบ", { bold: true }),
+      makeRun(".......................................... ") +
+      makeRun("ผู้มอบ", { bold: true }),
       { after: 20 }
     ),
     makePara(makeRun(`(${leave.applicantName})`), {
@@ -743,8 +732,8 @@ function buildVacationLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels)
     }),
     makePara(
       makeRun("(ลงชื่อ)", { bold: true }) +
-        makeRun("........................................... ") +
-        makeRun("ผู้ปฏิบัติหน้าที่แทน", { bold: true }),
+      makeRun("........................................... ") +
+      makeRun("ผู้ปฏิบัติหน้าที่แทน", { bold: true }),
       { after: 20 }
     ),
     makePara(
@@ -763,14 +752,14 @@ function buildVacationLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels)
     makePara(
       makeRun(
         leave.supervisorComment ||
-          ".................................................................................."
+        ".................................................................................."
       ),
       { after: 100 }
     ),
     makeSignatureDrawingPara(sigRels.supervisor, { align: "center" }),
     makePara(
       makeRun("(ลงชื่อ)", { bold: true }) +
-        makeRun(" ..............................................."),
+      makeRun(" ..............................................."),
       { align: "center", after: 20 }
     ),
     makePara(
@@ -781,27 +770,26 @@ function buildVacationLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels)
     ),
     makePara(
       makeRun("(ตำแหน่ง)", { bold: true }) +
-        buildPositionRuns(leave.supervisorPosition),
+      buildPositionRuns(leave.supervisorPosition),
       { align: "center", after: 20 }
     ),
     makePara(
       makeRun("วันที่", { bold: true }) +
-        makeRun(
-          ` ${
-            leave.supervisorReviewedAt
-              ? formatThaiDateSlash(leave.supervisorReviewedAt)
-              : "........ / ........ / ........"
-          }`
-        ),
+      makeRun(
+        ` ${leave.supervisorReviewedAt
+          ? formatThaiDateSlash(leave.supervisorReviewedAt)
+          : "........ / ........ / ........"
+        }`
+      ),
       { align: "center", after: 200 }
     ),
     makePara(
       makeRun("คำสั่ง   ", { bold: true }) +
-        makeRun(
-          `${chk(leave.orderDecision === "approved")} อนุญาต    ${chk(
-            leave.orderDecision === "rejected"
-          )} ไม่อนุญาต`
-        ),
+      makeRun(
+        `${chk(leave.orderDecision === "approved")} อนุญาต    ${chk(
+          leave.orderDecision === "rejected"
+        )} ไม่อนุญาต`
+      ),
       { align: "center", after: 60 }
     ),
     leave.orderComment
@@ -810,7 +798,7 @@ function buildVacationLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels)
     makeSignatureDrawingPara(sigRels.approver, { align: "center" }),
     makePara(
       makeRun("(ลงชื่อ)", { bold: true }) +
-        makeRun(" ................................................."),
+      makeRun(" ................................................."),
       { align: "center", after: 20 }
     ),
     makePara(
@@ -821,18 +809,17 @@ function buildVacationLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels)
     ),
     makePara(
       makeRun("(ตำแหน่ง)", { bold: true }) +
-        buildPositionRuns(leave.approverPosition),
+      buildPositionRuns(leave.approverPosition),
       { align: "center", after: 20 }
     ),
     makePara(
       makeRun("วันที่", { bold: true }) +
-        makeRun(
-          ` ${
-            leave.orderedAt
-              ? formatThaiDateSlash(leave.orderedAt)
-              : "........ / ........ / ........"
-          }`
-        ),
+      makeRun(
+        ` ${leave.orderedAt
+          ? formatThaiDateSlash(leave.orderedAt)
+          : "........ / ........ / ........"
+        }`
+      ),
       { align: "center", after: 0 }
     ),
   ].join("");
@@ -885,18 +872,18 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels):
   parts.push(
     makePara(
       makeRun("เขียนที่", { bold: true }) +
-        makeRun(` ${formatWrittenAtShort(leave.writtenAt)}`),
+      makeRun(` ${formatWrittenAtShort(leave.writtenAt)}`),
       { leftIndent: 5540, firstLine: 220, after: 20 }
     )
   );
   parts.push(
     makePara(
       makeRun("วันที่", { bold: true }) +
-        makeRun(` ${writtenParts.day || "...."} `) +
-        makeRun("เดือน", { bold: true }) +
-        makeRun(` ${writtenParts.month || "............"} `) +
-        makeRun("พ.ศ.", { bold: true }) +
-        makeRun(` ${writtenParts.yearBE || "......"}`),
+      makeRun(` ${writtenParts.day || "...."} `) +
+      makeRun("เดือน", { bold: true }) +
+      makeRun(` ${writtenParts.month || "............"} `) +
+      makeRun("พ.ศ.", { bold: true }) +
+      makeRun(` ${writtenParts.yearBE || "......"}`),
       { leftIndent: 5100, firstLine: 660, after: 100 }
     )
   );
@@ -909,10 +896,10 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels):
   parts.push(
     makePara(
       makeRun("เรียน  ", { bold: true }) +
-        makeRun(
-          leave.toRecipient ||
-            "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"
-        ),
+      makeRun(
+        leave.toRecipient ||
+        "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"
+      ),
       { after: 80 }
     )
   );
@@ -920,13 +907,13 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels):
   parts.push(
     makePara(
       makeRun("ข้าพเจ้า", { bold: true }) +
-        makeRun(` ${leave.applicantName}   `) +
-        makeRun("ตำแหน่ง", { bold: true }) +
-        makeRun(` ${leave.applicantPosition || "-"}  `) +
-        makeRun("กลุ่ม/ฝ่าย", { bold: true }) +
-        makeRun(` ${leave.applicantDivision || "-"}   `) +
-        makeRun("สังกัด", { bold: true }) +
-        makeRun(" สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"),
+      makeRun(` ${leave.applicantName}   `) +
+      makeRun("ตำแหน่ง", { bold: true }) +
+      makeRun(` ${leave.applicantPosition || "-"}  `) +
+      makeRun("กลุ่ม/ฝ่าย", { bold: true }) +
+      makeRun(` ${leave.applicantDivision || "-"}   `) +
+      makeRun("สังกัด", { bold: true }) +
+      makeRun(" สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร"),
       { firstLine: 720, after: 60 }
     )
   );
@@ -934,10 +921,9 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels):
   parts.push(
     makePara(
       makeRun(
-        `${chk(leave.leaveType === "sick_leave")} ป่วย${
-          leave.leaveType === "sick_leave" && leave.reason
-            ? `  เนื่องจาก ${leave.reason}`
-            : ""
+        `${chk(leave.leaveType === "sick_leave")} ป่วย${leave.leaveType === "sick_leave" && leave.reason
+          ? `  เนื่องจาก ${leave.reason}`
+          : ""
         }`
       ),
       { leftIndent: 900, after: 20 }
@@ -948,10 +934,9 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels):
       makeRun(
         `ขอลา   ${chk(
           leave.leaveType === "personal_leave"
-        )} กิจส่วนตัว   เนื่องจาก ${
-          leave.leaveType === "personal_leave"
-            ? leave.reason || "-"
-            : "............................................................"
+        )} กิจส่วนตัว   เนื่องจาก ${leave.leaveType === "personal_leave"
+          ? leave.reason || "-"
+          : "............................................................"
         }`
       ),
       { leftIndent: 260, after: 20 }
@@ -960,10 +945,9 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels):
   parts.push(
     makePara(
       makeRun(
-        `${chk(leave.leaveType === "maternity_leave")} คลอดบุตร${
-          leave.leaveType === "maternity_leave" && leave.reason
-            ? ` (${leave.reason})`
-            : ""
+        `${chk(leave.leaveType === "maternity_leave")} คลอดบุตร${leave.leaveType === "maternity_leave" && leave.reason
+          ? ` (${leave.reason})`
+          : ""
         }`
       ),
       { leftIndent: 900, after: 60 }
@@ -975,8 +959,7 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels):
       makeRun(
         `ตั้งแต่วันที่ ${formatThaiDateFull(
           leave.startDate
-        )} ถึงวันที่ ${formatThaiDateFull(leave.endDate)} มีกำหนด ${
-          leave.totalWorkingDays
+        )} ถึงวันที่ ${formatThaiDateFull(leave.endDate)} มีกำหนด ${leave.totalWorkingDays
         } วัน${getPeriodSuffix(leave)}`
       ),
       { after: 40 }
@@ -990,10 +973,9 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels):
           leave.lastLeaveType === "personal_leave"
         )} กิจส่วนตัว  ${chk(
           leave.lastLeaveType === "maternity_leave"
-        )} คลอดบุตร  ครั้งสุดท้ายตั้งแต่วันที่ ${
-          leave.lastLeaveStartDate
-            ? formatThaiDateFull(leave.lastLeaveStartDate)
-            : "-"
+        )} คลอดบุตร  ครั้งสุดท้ายตั้งแต่วันที่ ${leave.lastLeaveStartDate
+          ? formatThaiDateFull(leave.lastLeaveStartDate)
+          : "-"
         }`
       ),
       { after: 20 }
@@ -1006,12 +988,10 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels):
   parts.push(
     makePara(
       makeRun(
-        `ถึงวันที่ ${
-          leave.lastLeaveEndDate
-            ? formatThaiDateFull(leave.lastLeaveEndDate)
-            : "-"
-        } มีกำหนด ${
-          leave.lastLeaveDays ?? "-"
+        `ถึงวันที่ ${leave.lastLeaveEndDate
+          ? formatThaiDateFull(leave.lastLeaveEndDate)
+          : "-"
+        } มีกำหนด ${leave.lastLeaveDays ?? "-"
         } วัน  ในระหว่างลาจะติดต่อข้าพเจ้าได้ที่ ${contactCombined}`
       ),
       { after: 90 }
@@ -1036,7 +1016,7 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels):
   parts.push(
     makePara(
       makeRun("(ลงชื่อ)", { bold: true }) +
-        makeRun("......................................................"),
+      makeRun("......................................................"),
       {
         leftIndent: 4500,
         align: "center",
@@ -1054,7 +1034,7 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels):
   parts.push(
     makePara(
       makeRun("ตำแหน่ง", { bold: true }) +
-        makeRun(` ${leave.applicantPosition || "-"}`),
+      makeRun(` ${leave.applicantPosition || "-"}`),
       {
         leftIndent: 4500,
         align: "center",
@@ -1069,33 +1049,33 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels):
     cur: number
   ) => `<w:tr>
     ${makeTableCell(makePara(makeRun(label, { size: 28 }), { after: 0 }), 1121, {
-      borders: true,
-      vAlign: "center",
-    })}
+    borders: true,
+    vAlign: "center",
+  })}
     ${makeTableCell(
-      makePara(makeRun(String(prev), { size: 28 }), {
-        align: "center",
-        after: 0,
-      }),
-      1121,
-      { borders: true, vAlign: "center" }
-    )}
+    makePara(makeRun(String(prev), { size: 28 }), {
+      align: "center",
+      after: 0,
+    }),
+    1121,
+    { borders: true, vAlign: "center" }
+  )}
     ${makeTableCell(
-      makePara(makeRun(cur ? String(cur) : "", { size: 28 }), {
-        align: "center",
-        after: 0,
-      }),
-      1121,
-      { borders: true, vAlign: "center" }
-    )}
+    makePara(makeRun(cur ? String(cur) : "", { size: 28 }), {
+      align: "center",
+      after: 0,
+    }),
+    1121,
+    { borders: true, vAlign: "center" }
+  )}
     ${makeTableCell(
-      makePara(makeRun(String(prev + cur), { bold: true, size: 28 }), {
-        align: "center",
-        after: 0,
-      }),
-      1122,
-      { borders: true, vAlign: "center" }
-    )}
+    makePara(makeRun(String(prev + cur), { bold: true, size: 28 }), {
+      align: "center",
+      after: 0,
+    }),
+    1122,
+    { borders: true, vAlign: "center" }
+  )}
   </w:tr>`;
 
   const statsTable = `<w:tbl>
@@ -1114,37 +1094,37 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels):
     <w:tblGrid><w:gridCol w:w="1121"/><w:gridCol w:w="1121"/><w:gridCol w:w="1121"/><w:gridCol w:w="1122"/></w:tblGrid>
     <w:tr>
       ${makeTableCell(
-        makePara(makeRun("ประเภทลา", { bold: true, size: 28 }), {
-          align: "center",
-          after: 0,
-        }),
-        1121,
-        { borders: true, vAlign: "center" }
-      )}
+    makePara(makeRun("ประเภทลา", { bold: true, size: 28 }), {
+      align: "center",
+      after: 0,
+    }),
+    1121,
+    { borders: true, vAlign: "center" }
+  )}
       ${makeTableCell(
-        makePara(makeRun("ลามาแล้ว\n(วันทำการ)", { bold: true, size: 26 }), {
-          align: "center",
-          after: 0,
-        }),
-        1121,
-        { borders: true, vAlign: "center" }
-      )}
+    makePara(makeRun("ลามาแล้ว\n(วันทำการ)", { bold: true, size: 26 }), {
+      align: "center",
+      after: 0,
+    }),
+    1121,
+    { borders: true, vAlign: "center" }
+  )}
       ${makeTableCell(
-        makePara(makeRun("ลาครั้งนี้\n(วันทำการ)", { bold: true, size: 26 }), {
-          align: "center",
-          after: 0,
-        }),
-        1121,
-        { borders: true, vAlign: "center" }
-      )}
+    makePara(makeRun("ลาครั้งนี้\n(วันทำการ)", { bold: true, size: 26 }), {
+      align: "center",
+      after: 0,
+    }),
+    1121,
+    { borders: true, vAlign: "center" }
+  )}
       ${makeTableCell(
-        makePara(makeRun("รวมเป็น\n(วันทำการ)", { bold: true, size: 26 }), {
-          align: "center",
-          after: 0,
-        }),
-        1122,
-        { borders: true, vAlign: "center" }
-      )}
+    makePara(makeRun("รวมเป็น\n(วันทำการ)", { bold: true, size: 26 }), {
+      align: "center",
+      after: 0,
+    }),
+    1122,
+    { borders: true, vAlign: "center" }
+  )}
     </w:tr>
     ${statRow("ป่วย", leave.prevSickDays, curSick)}
     ${statRow("กิจส่วนตัว", leave.prevPersonalDays, curPersonal)}
@@ -1160,8 +1140,8 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels):
     makeSignatureDrawingPara(sigRels.verifier, { align: "left", leftIndent: 500 }),
     makePara(
       makeRun("(ลงชื่อ)", { bold: true }) +
-        makeRun("                               ", { bold: true }) +
-        makeRun("ผู้ตรวจสอบ", { bold: true }),
+      makeRun("                               ", { bold: true }) +
+      makeRun("ผู้ตรวจสอบ", { bold: true }),
       { before: sigRels.verifier ? 20 : 120, after: 20 }
     ),
     makePara(
@@ -1172,16 +1152,15 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels):
     ),
     makePara(
       makeRun("(ตำแหน่ง)", { bold: true }) +
-        makeRun(` ${leave.verifierPosition || "...................................."}`),
+      makeRun(` ${leave.verifierPosition || "...................................."}`),
       { after: 20 }
     ),
     makePara(
       makeRun("วันที่", { bold: true }) +
-        makeRun(
-          ` ${verifiedParts.day || "...."} เดือน ${
-            verifiedParts.month || "............"
-          } พ.ศ. ${verifiedParts.yearBE || "......"}`
-        ),
+      makeRun(
+        ` ${verifiedParts.day || "...."} เดือน ${verifiedParts.month || "............"
+        } พ.ศ. ${verifiedParts.yearBE || "......"}`
+      ),
       { after: 0 }
     ),
   ].join("");
@@ -1194,14 +1173,14 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels):
     makePara(
       makeRun(
         leave.supervisorComment ||
-          ".................................................................................."
+        ".................................................................................."
       ),
       { after: 80 }
     ),
     makeSignatureDrawingPara(sigRels.supervisor, { align: "center" }),
     makePara(
       makeRun("(ลงชื่อ)", { bold: true }) +
-        makeRun(" ..............................................."),
+      makeRun(" ..............................................."),
       { align: "center", after: 20 }
     ),
     makePara(
@@ -1212,25 +1191,24 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels):
     ),
     makePara(
       makeRun("(ตำแหน่ง)", { bold: true }) +
-        buildPositionRuns(leave.supervisorPosition),
+      buildPositionRuns(leave.supervisorPosition),
       { align: "center", after: 20 }
     ),
     makePara(
       makeRun("วันที่", { bold: true }) +
-        makeRun(
-          ` ${supParts.day || "...."} เดือน ${
-            supParts.month || "............"
-          } พ.ศ. ${supParts.yearBE || "......"}`
-        ),
+      makeRun(
+        ` ${supParts.day || "...."} เดือน ${supParts.month || "............"
+        } พ.ศ. ${supParts.yearBE || "......"}`
+      ),
       { align: "center", after: 140 }
     ),
     makePara(
       makeRun("คำสั่ง   ", { bold: true }) +
-        makeRun(
-          `${chk(leave.orderDecision === "approved")} อนุญาต    ${chk(
-            leave.orderDecision === "rejected"
-          )} ไม่อนุญาต`
-        ),
+      makeRun(
+        `${chk(leave.orderDecision === "approved")} อนุญาต    ${chk(
+          leave.orderDecision === "rejected"
+        )} ไม่อนุญาต`
+      ),
       { align: "center", after: 60 }
     ),
     leave.orderComment
@@ -1239,7 +1217,7 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels):
     makeSignatureDrawingPara(sigRels.approver, { align: "center" }),
     makePara(
       makeRun("(ลงชื่อ)", { bold: true }) +
-        makeRun(" ................................................."),
+      makeRun(" ................................................."),
       { align: "center", after: 20 }
     ),
     makePara(
@@ -1250,16 +1228,15 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels):
     ),
     makePara(
       makeRun("(ตำแหน่ง)", { bold: true }) +
-        buildPositionRuns(leave.approverPosition),
+      buildPositionRuns(leave.approverPosition),
       { align: "center", after: 20 }
     ),
     makePara(
       makeRun("วันที่", { bold: true }) +
-        makeRun(
-          ` ${ordParts.day || "...."} เดือน ${
-            ordParts.month || "............"
-          } พ.ศ. ${ordParts.yearBE || "......"}`
-        ),
+      makeRun(
+        ` ${ordParts.day || "...."} เดือน ${ordParts.month || "............"
+        } พ.ศ. ${ordParts.yearBE || "......"}`
+      ),
       { align: "center", after: 0 }
     ),
   ].join("");
@@ -1288,10 +1265,10 @@ function buildGeneralLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels):
   parts.push(
     makePara(
       makeRun("หมายเหตุ :-  ", { bold: true, size: 28 }) +
-        makeRun(
-          "การลากิจ + ลาป่วย ต้องไม่เกิน 23 วันทำการ จึงมีสิทธิเลื่อนขั้นเงินเดือน/ค่าจ้าง\n                ในรอบ 6 เดือน คือ 1 ต.ค. – 31 มี.ค. , 1 เม.ย. – 30 ก.ย.",
-          { size: 28 }
-        ),
+      makeRun(
+        "การลากิจ + ลาป่วย ต้องไม่เกิน 23 วันทำการ จึงมีสิทธิเลื่อนขั้นเงินเดือน/ค่าจ้าง\n                ในรอบ 6 เดือน คือ 1 ต.ค. – 31 มี.ค. , 1 เม.ย. – 30 ก.ย.",
+        { size: 28 }
+      ),
       { before: 120, after: 0 }
     )
   );
@@ -1308,8 +1285,8 @@ export function buildLeaveDocumentXml(
     leave.leaveType === "cancel_leave"
       ? buildCancelLeaveBody(leave, sigRels)
       : leave.leaveType === "vacation_leave"
-      ? buildVacationLeaveBody(leave, sigRels)
-      : buildGeneralLeaveBody(leave, sigRels);
+        ? buildVacationLeaveBody(leave, sigRels)
+        : buildGeneralLeaveBody(leave, sigRels);
 
   const section = `<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="720" w:right="1134" w:bottom="720" w:left="1417" w:header="360" w:footer="360" w:gutter="0"/><w:cols w:space="720"/><w:docGrid w:linePitch="360"/></w:sectPr>`;
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="${W_NS}" xmlns:r="${R_NS}" xmlns:wp="${WP_NS}" xmlns:a="${A_NS}" xmlns:pic="${PIC_NS}"><w:body>${body}${section}</w:body></w:document>`;

@@ -420,4 +420,48 @@ describe("Vacation Leave Word DOCX Template Alignment", async () => {
     assert.ok(stylesXml && stylesXml.includes('<w:sz w:val="32"/>'));
     assert.ok(stylesXml && stylesXml.includes('<w:lang w:val="th-TH"'));
   });
+
+  it("should enforce sole legal approver (นางสาวมะลิวัน) and proxy operator (นายยุทธนา)", async () => {
+    const {
+      SOLE_LEAVE_APPROVER,
+      DEFAULT_LEAVE_ORDER_OPERATOR,
+      LEAVE_STATUS_META,
+    } = await import("../lib/leave-utils.ts");
+
+    assert.equal(
+      LEAVE_STATUS_META.pending_supervisor.label,
+      "รอหัวหน้ากลุ่ม/ฝ่ายลงความเห็น"
+    );
+    assert.equal(
+      LEAVE_STATUS_META.pending_approver.label,
+      "รอเสนอแฟ้ม พมจ. / ปรับสถานะ"
+    );
+
+    assert.deepEqual(SOLE_LEAVE_APPROVER, {
+      userId: "syno_มะลิวัน",
+      name: "นางสาวมะลิวัน สิทธิโยธี",
+      position: "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
+    });
+    assert.deepEqual(DEFAULT_LEAVE_ORDER_OPERATOR, {
+      userId: "syno_ยุทธนา",
+      name: "นายยุทธนา เจนจบ",
+      position: "เจ้าพนักงานธุรการปฏิบัติงาน",
+    });
+
+    const proxyRecordedLeave = makeMockLeave({
+      ...templateSampleLeave,
+      status: "approved",
+      orderDecision: "approved",
+      orderedAt: "2026-11-23T10:00:00Z",
+      approverUserId: SOLE_LEAVE_APPROVER.userId,
+      approverName: SOLE_LEAVE_APPROVER.name,
+      approverPosition: SOLE_LEAVE_APPROVER.position,
+      approverSignature: null,
+      syncNote: `ซิงก์ลงรายงานลงเวลาแล้ว 2 วันทำการ (บันทึกคำสั่งในระบบแทนโดย ${DEFAULT_LEAVE_ORDER_OPERATOR.name})`,
+    });
+
+    const xml = buildLeaveDocumentXml(proxyRecordedLeave);
+    assert.ok(xml.includes(SOLE_LEAVE_APPROVER.name));
+    assert.ok(!xml.includes("บันทึกคำสั่งในระบบแทนโดย"));
+  });
 });

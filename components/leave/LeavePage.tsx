@@ -9,6 +9,7 @@ import { uploadSmartFile } from "@/lib/smart-upload";
 import {
   calculateLeavePeriodDetails,
   countWorkingDaysInRange,
+  DEFAULT_LEAVE_ORDER_OPERATOR,
   detectLeaveOverlap,
   formatThaiDateFull,
   formatThaiDateShort,
@@ -26,6 +27,7 @@ import {
   LeaveRequestItem,
   LeaveType,
   resolveLeaveAttachmentUrl,
+  SOLE_LEAVE_APPROVER,
 } from "@/lib/leave-utils";
 import {
   buildHolidayMap,
@@ -175,46 +177,52 @@ function ApprovalStepper({ leave }: { leave: LeaveRequestItem }) {
   const isCancel = leave.leaveType === "cancel_leave";
   const steps = isCancel
     ? [
-        {
-          label: "2. ผู้บังคับบัญชา",
-          done: Boolean(leave.supervisorReviewedAt),
-          active: leave.status === "pending_supervisor",
-          actor: leave.supervisorName || "รอระบุ",
-          note: leave.supervisorComment,
-        },
-        {
-          label: "3. คำสั่งอนุญาต",
-          done: Boolean(leave.orderedAt),
-          active: leave.status === "pending_approver",
-          rejected: leave.status === "rejected",
-          actor: leave.approverName || "ผู้อนุญาต",
-          note: leave.orderComment,
-        },
-      ]
+      {
+        label: "2. หัวหน้ากลุ่ม/ฝ่าย",
+        done: Boolean(leave.supervisorReviewedAt),
+        active: leave.status === "pending_supervisor",
+        actor: leave.supervisorName || "รอระบุ",
+        note: leave.supervisorComment,
+      },
+      {
+        label: "3. เสนอแฟ้ม พมจ. & อนุญาต",
+        done: Boolean(leave.orderedAt),
+        active: leave.status === "pending_approver",
+        rejected: leave.status === "rejected",
+        actor:
+          leave.status === "pending_approver"
+            ? `${leave.approverName || SOLE_LEAVE_APPROVER.name} (แฟ้มกระดาษ)`
+            : leave.approverName || SOLE_LEAVE_APPROVER.name,
+        note: leave.orderComment,
+      },
+    ]
     : [
-        {
-          label: "1. ผู้ตรวจสอบสถิติ",
-          done: Boolean(leave.verifiedAt),
-          active: leave.status === "pending_verifier",
-          actor: leave.verifierName || "ผู้ตรวจสอบ",
-          note: leave.verifierNote,
-        },
-        {
-          label: "2. ผู้บังคับบัญชา",
-          done: Boolean(leave.supervisorReviewedAt),
-          active: leave.status === "pending_supervisor",
-          actor: leave.supervisorName || "รอระบุ",
-          note: leave.supervisorComment,
-        },
-        {
-          label: "3. คำสั่งอนุญาต",
-          done: Boolean(leave.orderedAt),
-          active: leave.status === "pending_approver",
-          rejected: leave.status === "rejected",
-          actor: leave.approverName || "ผู้อนุญาต",
-          note: leave.orderComment,
-        },
-      ];
+      {
+        label: "1. ผู้ตรวจสอบสถิติ",
+        done: Boolean(leave.verifiedAt),
+        active: leave.status === "pending_verifier",
+        actor: leave.verifierName || "ผู้ตรวจสอบ",
+        note: leave.verifierNote,
+      },
+      {
+        label: "2. หัวหน้ากลุ่ม/ฝ่าย",
+        done: Boolean(leave.supervisorReviewedAt),
+        active: leave.status === "pending_supervisor",
+        actor: leave.supervisorName || "รอระบุ",
+        note: leave.supervisorComment,
+      },
+      {
+        label: "3. เสนอแฟ้ม พมจ. & อนุญาต",
+        done: Boolean(leave.orderedAt),
+        active: leave.status === "pending_approver",
+        rejected: leave.status === "rejected",
+        actor:
+          leave.status === "pending_approver"
+            ? `${leave.approverName || SOLE_LEAVE_APPROVER.name} (แฟ้มกระดาษ)`
+            : leave.approverName || SOLE_LEAVE_APPROVER.name,
+        note: leave.orderComment,
+      },
+    ];
 
   return (
     <div className="flex flex-wrap items-center gap-2 pt-1.5">
@@ -222,15 +230,14 @@ function ApprovalStepper({ leave }: { leave: LeaveRequestItem }) {
         <React.Fragment key={st.label}>
           <div
             title={st.note || undefined}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-medium ${
-              st.rejected
-                ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800/60"
-                : st.done
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-medium ${st.rejected
+              ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800/60"
+              : st.done
                 ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800/60"
                 : st.active
-                ? "bg-indigo-50 text-indigo-700 border-indigo-300 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-700"
-                : "bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-800/60 dark:text-slate-400 dark:border-slate-700"
-            }`}
+                  ? "bg-indigo-50 text-indigo-700 border-indigo-300 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-700"
+                  : "bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-800/60 dark:text-slate-400 dark:border-slate-700"
+              }`}
           >
             <span>{st.rejected ? "✗" : st.done ? "✓" : st.active ? "⏳" : "•"}</span>
             <span className="font-semibold">{st.label}:</span>
@@ -297,9 +304,10 @@ export default function LeavePage() {
     useState<number>(0);
   const [vacationAnnualDays, setVacationAnnualDays] = useState<number>(10);
   const [actingPersonUserId, setActingPersonUserId] = useState("");
-  const [verifierUserId, setVerifierUserId] = useState("syno_ยุทธนา");
+  const [verifierUserId, setVerifierUserId] = useState<string>(
+    DEFAULT_LEAVE_ORDER_OPERATOR.userId
+  );
   const [supervisorUserId, setSupervisorUserId] = useState("");
-  const [approverUserId, setApproverUserId] = useState("syno_มะลิวัน");
 
   // Form 3 (ขอยกเลิกวันลา) & Attachment & Signature
   const [cancelTargetLeaveId, setCancelTargetLeaveId] = useState("");
@@ -371,7 +379,7 @@ export default function LeavePage() {
     if (!currentUser) return false;
     return (
       isAdmin ||
-      currentUser.id === "syno_ยุทธนา" ||
+      currentUser.id === DEFAULT_LEAVE_ORDER_OPERATOR.userId ||
       authorizedEditorIds.includes(currentUser.id) ||
       Boolean(myLeaveRole?.canVerify)
     );
@@ -380,8 +388,11 @@ export default function LeavePage() {
   const isSupervisor = isAdmin || isManager || Boolean(myLeaveRole?.canSupervisor);
   const isApprover =
     isAdmin ||
-    currentUser?.id === "syno_มะลิวัน" ||
+    currentUser?.id === SOLE_LEAVE_APPROVER.userId ||
+    currentUser?.id === DEFAULT_LEAVE_ORDER_OPERATOR.userId ||
     Boolean(myLeaveRole?.canApprove);
+  const isOrderOperatorOnly =
+    isApprover && currentUser?.id !== SOLE_LEAVE_APPROVER.userId;
   const canReviewAny = isVerifier || isSupervisor || isApprover;
 
   const verifierCandidates = useMemo(() => {
@@ -392,7 +403,7 @@ export default function LeavePage() {
     return members.filter(
       (m) =>
         m.status === "active" &&
-        (m.id === "syno_ยุทธนา" ||
+        (m.id === DEFAULT_LEAVE_ORDER_OPERATOR.userId ||
           editorSet.has(m.id) ||
           customVerIds.has(m.id) ||
           m.role === "admin")
@@ -403,6 +414,13 @@ export default function LeavePage() {
     const customSupIds = new Set(
       leaveRoles.filter((r) => r.canSupervisor).map((r) => r.userId)
     );
+    const list = members.filter(
+      (m) =>
+        m.status === "active" &&
+        m.id !== SOLE_LEAVE_APPROVER.userId &&
+        (m.role === "manager" || customSupIds.has(m.id))
+    );
+    if (list.length > 0) return list;
     return members.filter(
       (m) =>
         m.status === "active" &&
@@ -410,18 +428,14 @@ export default function LeavePage() {
     );
   }, [members, leaveRoles]);
 
-  const approverCandidates = useMemo(() => {
-    const customAppIds = new Set(
-      leaveRoles.filter((r) => r.canApprove).map((r) => r.userId)
-    );
-    return members.filter(
-      (m) =>
-        m.status === "active" &&
-        (m.id === "syno_มะลิวัน" ||
-          m.role === "admin" ||
-          customAppIds.has(m.id))
-    );
-  }, [members, leaveRoles]);
+  const soleApproverMember = useMemo(() => {
+    const found = members.find((m) => m.id === SOLE_LEAVE_APPROVER.userId);
+    return {
+      id: SOLE_LEAVE_APPROVER.userId,
+      name: found?.name || SOLE_LEAVE_APPROVER.name,
+      position: found?.position || SOLE_LEAVE_APPROVER.position,
+    };
+  }, [members]);
 
   useEffect(() => {
     if (!currentUser || supervisorCandidates.length === 0) return;
@@ -431,7 +445,7 @@ export default function LeavePage() {
       supervisorCandidates.find(
         (m) =>
           m.id !== currentUser.id &&
-          m.id !== "syno_มะลิวัน" &&
+          m.id !== SOLE_LEAVE_APPROVER.userId &&
           (m.division || "").trim() === myDiv &&
           myDiv !== ""
       ) ||
@@ -447,15 +461,6 @@ export default function LeavePage() {
       setSupervisorUserId(divMatch.id);
     }
   }, [currentUser, supervisorCandidates, supervisorUserId]);
-
-  useEffect(() => {
-    if (approverCandidates.length === 0) return;
-    const hasCurrent = approverCandidates.some((m) => m.id === approverUserId);
-    if (!hasCurrent) {
-      const maliwan = approverCandidates.find((m) => m.id === "syno_มะลิวัน");
-      setApproverUserId(maliwan ? maliwan.id : approverCandidates[0].id);
-    }
-  }, [approverCandidates, approverUserId]);
 
   const loadLeaveData = useCallback(async () => {
     setLoading(true);
@@ -719,7 +724,7 @@ export default function LeavePage() {
         (leaveType === "sick_leave" || leaveType === "personal_leave"
           ? totalWorkingDays
           : 0)) *
-        10
+      10
     ) / 10;
 
   const isVacationOverQuota =
@@ -769,8 +774,8 @@ export default function LeavePage() {
       leave.leaveType === "cancel_leave"
         ? "cancel"
         : leave.leaveType === "vacation_leave"
-        ? "vacation"
-        : "general"
+          ? "vacation"
+          : "general"
     );
     setLeaveType(leave.leaveType);
     setLeaveDayPeriod(leave.leaveDayPeriod || "full");
@@ -791,7 +796,6 @@ export default function LeavePage() {
     setActingPersonUserId(leave.actingPersonUserId || "");
     if (leave.verifierUserId) setVerifierUserId(leave.verifierUserId);
     if (leave.supervisorUserId) setSupervisorUserId(leave.supervisorUserId);
-    if (leave.approverUserId) setApproverUserId(leave.approverUserId);
     if (leave.cancelTargetLeaveId) setCancelTargetLeaveId(leave.cancelTargetLeaveId);
     setActiveTab("form");
     showToast(`✏️ กำลังแก้ไขใบลา ${leave.requestNo} เพื่อส่งพิจารณาใหม่`);
@@ -841,8 +845,8 @@ export default function LeavePage() {
         leaveType === "sick_leave"
           ? "⚠️ กรุณาระบุอาการป่วย / เหตุผลการลาป่วย"
           : leaveType === "cancel_leave"
-          ? "⚠️ กรุณาระบุเหตุผลการขอยกเลิกวันลา"
-          : "⚠️ กรุณาระบุเหตุผลการลากิจส่วนตัว"
+            ? "⚠️ กรุณาระบุเหตุผลการขอยกเลิกวันลา"
+            : "⚠️ กรุณาระบุเหตุผลการลากิจส่วนตัว"
       );
       return;
     }
@@ -854,7 +858,6 @@ export default function LeavePage() {
     const actingMember = members.find((m) => m.id === actingPersonUserId);
     const verifierMember = members.find((m) => m.id === verifierUserId);
     const supervisorMember = members.find((m) => m.id === supervisorUserId);
-    const approverMember = members.find((m) => m.id === approverUserId);
 
     setSubmitting(true);
     try {
@@ -881,18 +884,16 @@ export default function LeavePage() {
             actingPersonUserId: actingMember?.id || null,
             actingPersonName: actingMember?.name || "",
             actingPersonPosition: actingMember?.position || "",
-            verifierUserId: verifierMember?.id || "syno_ยุทธนา",
-            verifierName: verifierMember?.name || "นายยุทธนา เจนจบ",
+            verifierUserId: verifierMember?.id || DEFAULT_LEAVE_ORDER_OPERATOR.userId,
+            verifierName: verifierMember?.name || DEFAULT_LEAVE_ORDER_OPERATOR.name,
             verifierPosition:
-              verifierMember?.position || "เจ้าพนักงานธุรการปฏิบัติงาน",
+              verifierMember?.position || DEFAULT_LEAVE_ORDER_OPERATOR.position,
             supervisorUserId: supervisorMember?.id || null,
             supervisorName: supervisorMember?.name || "",
             supervisorPosition: supervisorMember?.position || "",
-            approverUserId: approverMember?.id || "syno_มะลิวัน",
-            approverName: approverMember?.name || "นางสาวมะลิวัน สิทธิโยธี",
-            approverPosition:
-              approverMember?.position ||
-              "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
+            approverUserId: soleApproverMember.id,
+            approverName: soleApproverMember.name,
+            approverPosition: soleApproverMember.position,
           }),
         });
         const data = await res.json();
@@ -939,18 +940,16 @@ export default function LeavePage() {
           actingPersonUserId: actingMember?.id || null,
           actingPersonName: actingMember?.name || "",
           actingPersonPosition: actingMember?.position || "",
-          verifierUserId: verifierMember?.id || "syno_ยุทธนา",
-          verifierName: verifierMember?.name || "นายยุทธนา เจนจบ",
+          verifierUserId: verifierMember?.id || DEFAULT_LEAVE_ORDER_OPERATOR.userId,
+          verifierName: verifierMember?.name || DEFAULT_LEAVE_ORDER_OPERATOR.name,
           verifierPosition:
-            verifierMember?.position || "เจ้าพนักงานธุรการปฏิบัติงาน",
+            verifierMember?.position || DEFAULT_LEAVE_ORDER_OPERATOR.position,
           supervisorUserId: supervisorMember?.id || null,
           supervisorName: supervisorMember?.name || "",
           supervisorPosition: supervisorMember?.position || "",
-          approverUserId: approverMember?.id || "syno_มะลิวัน",
-          approverName: approverMember?.name || "นางสาวมะลิวัน สิทธิโยธี",
-          approverPosition:
-            approverMember?.position ||
-            "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
+          approverUserId: soleApproverMember.id,
+          approverName: soleApproverMember.name,
+          approverPosition: soleApproverMember.position,
           applicantSignature,
           attachmentUrl,
           attachmentName,
@@ -1020,7 +1019,11 @@ export default function LeavePage() {
           actorRole: currentUserRole,
           comment: actionComment,
           decision: orderDecision,
-          signature: actionModal.action !== "return" ? actionSignature : null,
+          signature:
+            actionModal.action !== "return" &&
+            !(actionModal.action === "order" && isOrderOperatorOnly)
+              ? actionSignature
+              : null,
         }),
       });
       const data = await res.json();
@@ -1214,14 +1217,23 @@ export default function LeavePage() {
     }
   };
 
+  const canActSupervisorOnLeave = useCallback(
+    (leave: LeaveRequestItem) =>
+      isAdmin ||
+      (leave.supervisorUserId
+        ? leave.supervisorUserId === currentUser?.id
+        : isSupervisor && currentUser?.id !== SOLE_LEAVE_APPROVER.userId),
+    [isAdmin, currentUser?.id, isSupervisor]
+  );
+
   const actionableCount = useMemo(() => {
     return requests.filter((r) => {
       if (r.status === "pending_verifier" && isVerifier) return true;
-      if (r.status === "pending_supervisor" && isSupervisor) return true;
+      if (r.status === "pending_supervisor" && canActSupervisorOnLeave(r)) return true;
       if (r.status === "pending_approver" && isApprover) return true;
       return false;
     }).length;
-  }, [requests, isVerifier, isSupervisor, isApprover]);
+  }, [requests, isVerifier, canActSupervisorOnLeave, isApprover]);
 
   const filteredReviewRequests = useMemo(() => {
     const q = reviewSearch.trim().toLowerCase();
@@ -1229,7 +1241,7 @@ export default function LeavePage() {
       if (reviewFilter === "actionable") {
         const canAct =
           (r.status === "pending_verifier" && isVerifier) ||
-          (r.status === "pending_supervisor" && isSupervisor) ||
+          (r.status === "pending_supervisor" && canActSupervisorOnLeave(r)) ||
           (r.status === "pending_approver" && isApprover);
         if (!canAct) return false;
       } else if (reviewFilter !== "all" && r.status !== reviewFilter) {
@@ -1252,7 +1264,7 @@ export default function LeavePage() {
     reviewTypeFilter,
     reviewSearch,
     isVerifier,
-    isSupervisor,
+    canActSupervisorOnLeave,
     isApprover,
   ]);
 
@@ -1323,11 +1335,10 @@ export default function LeavePage() {
               📝 ระบบใบลาอิเล็กทรอนิกส์ (Leave Request)
             </h1>
             <span
-              className={`text-xs px-2.5 py-0.5 rounded-full border font-medium ${
-                isCurrentUserMapped
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800"
-                  : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800"
-              }`}
+              className={`text-xs px-2.5 py-0.5 rounded-full border font-medium ${isCurrentUserMapped
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800"
+                : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800"
+                }`}
             >
               {isCurrentUserMapped
                 ? "🔗 เชื่อมเครื่องสแกนนิ้วแล้ว"
@@ -1383,26 +1394,24 @@ export default function LeavePage() {
               📋 เกณฑ์ 23 วัน (กิจ+ป่วย)
             </span>
             <span
-              className={`text-[11px] font-bold ${
-                myStats.halfYearSickPersonal > 23
-                  ? "text-rose-600 dark:text-rose-400"
-                  : myStats.halfYearSickPersonal >= 18
+              className={`text-[11px] font-bold ${myStats.halfYearSickPersonal > 23
+                ? "text-rose-600 dark:text-rose-400"
+                : myStats.halfYearSickPersonal >= 18
                   ? "text-amber-600 dark:text-amber-400"
                   : "text-indigo-600 dark:text-indigo-400"
-              }`}
+                }`}
             >
               {myStats.halfYearSickPersonal} / 23 วัน
             </span>
           </div>
           <div className="mt-2.5 h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all ${
-                myStats.halfYearSickPersonal > 23
-                  ? "bg-rose-500"
-                  : myStats.halfYearSickPersonal >= 18
+              className={`h-full rounded-full transition-all ${myStats.halfYearSickPersonal > 23
+                ? "bg-rose-500"
+                : myStats.halfYearSickPersonal >= 18
                   ? "bg-amber-500"
                   : "bg-indigo-600"
-              }`}
+                }`}
               style={{ width: `${halfYearPct}%` }}
             />
           </div>
@@ -1510,22 +1519,20 @@ export default function LeavePage() {
         <button
           type="button"
           onClick={() => setActiveTab("form")}
-          className={`px-4 py-2 rounded-xl text-sm font-semibold transition cursor-pointer ${
-            activeTab === "form"
-              ? "bg-indigo-600 text-white shadow-sm"
-              : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
-          }`}
+          className={`px-4 py-2 rounded-xl text-sm font-semibold transition cursor-pointer ${activeTab === "form"
+            ? "bg-indigo-600 text-white shadow-sm"
+            : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+            }`}
         >
           ✍️ {editingReturnedLeave ? `แก้ไขใบลา (${editingReturnedLeave.requestNo})` : "ยื่นใบลาใหม่"}
         </button>
         <button
           type="button"
           onClick={() => setActiveTab("my")}
-          className={`px-4 py-2 rounded-xl text-sm font-semibold transition cursor-pointer ${
-            activeTab === "my"
-              ? "bg-indigo-600 text-white shadow-sm"
-              : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
-          }`}
+          className={`px-4 py-2 rounded-xl text-sm font-semibold transition cursor-pointer ${activeTab === "my"
+            ? "bg-indigo-600 text-white shadow-sm"
+            : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+            }`}
         >
           📄 ใบลาของฉัน ({myRequests.length})
         </button>
@@ -1533,11 +1540,10 @@ export default function LeavePage() {
           <button
             type="button"
             onClick={() => setActiveTab("review")}
-            className={`px-4 py-2 rounded-xl text-sm font-semibold transition cursor-pointer flex items-center gap-2 ${
-              activeTab === "review"
-                ? "bg-indigo-600 text-white shadow-sm"
-                : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
-            }`}
+            className={`px-4 py-2 rounded-xl text-sm font-semibold transition cursor-pointer flex items-center gap-2 ${activeTab === "review"
+              ? "bg-indigo-600 text-white shadow-sm"
+              : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+              }`}
           >
             <span>✅ พิจารณาใบลา</span>
             {actionableCount > 0 && (
@@ -1551,11 +1557,10 @@ export default function LeavePage() {
           <button
             type="button"
             onClick={() => setActiveTab("summary")}
-            className={`px-4 py-2 rounded-xl text-sm font-semibold transition cursor-pointer ${
-              activeTab === "summary"
-                ? "bg-indigo-600 text-white shadow-sm"
-                : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
-            }`}
+            className={`px-4 py-2 rounded-xl text-sm font-semibold transition cursor-pointer ${activeTab === "summary"
+              ? "bg-indigo-600 text-white shadow-sm"
+              : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+              }`}
           >
             📊 สถิติและวันลาสะสม
           </button>
@@ -1564,11 +1569,10 @@ export default function LeavePage() {
           <button
             type="button"
             onClick={() => setActiveTab("permissions")}
-            className={`px-4 py-2 rounded-xl text-sm font-semibold transition cursor-pointer ${
-              activeTab === "permissions"
-                ? "bg-indigo-600 text-white shadow-sm"
-                : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
-            }`}
+            className={`px-4 py-2 rounded-xl text-sm font-semibold transition cursor-pointer ${activeTab === "permissions"
+              ? "bg-indigo-600 text-white shadow-sm"
+              : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+              }`}
           >
             ⚙️ จัดการสิทธิ์ใบลา
           </button>
@@ -1611,11 +1615,10 @@ export default function LeavePage() {
                 type="button"
                 disabled={Boolean(editingReturnedLeave)}
                 onClick={() => handleSelectFormKind("general")}
-                className={`p-4 rounded-xl border-2 text-left transition cursor-pointer disabled:opacity-70 ${
-                  formKind === "general"
-                    ? "border-indigo-600 bg-indigo-50/70 dark:bg-indigo-950/40"
-                    : "border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-slate-900"
-                }`}
+                className={`p-4 rounded-xl border-2 text-left transition cursor-pointer disabled:opacity-70 ${formKind === "general"
+                  ? "border-indigo-600 bg-indigo-50/70 dark:bg-indigo-950/40"
+                  : "border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-slate-900"
+                  }`}
               >
                 <div className="font-bold text-slate-900 dark:text-white text-sm">
                   🤒 แบบฟอร์ม 1: ป่วย / กิจ / คลอด
@@ -1629,11 +1632,10 @@ export default function LeavePage() {
                 type="button"
                 disabled={Boolean(editingReturnedLeave)}
                 onClick={() => handleSelectFormKind("vacation")}
-                className={`p-4 rounded-xl border-2 text-left transition cursor-pointer disabled:opacity-70 ${
-                  formKind === "vacation"
-                    ? "border-emerald-600 bg-emerald-50/70 dark:bg-emerald-950/40"
-                    : "border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-slate-900"
-                }`}
+                className={`p-4 rounded-xl border-2 text-left transition cursor-pointer disabled:opacity-70 ${formKind === "vacation"
+                  ? "border-emerald-600 bg-emerald-50/70 dark:bg-emerald-950/40"
+                  : "border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-slate-900"
+                  }`}
               >
                 <div className="font-bold text-slate-900 dark:text-white text-sm">
                   🌴 แบบฟอร์ม 2: ใบลาพักผ่อน
@@ -1647,11 +1649,10 @@ export default function LeavePage() {
                 type="button"
                 disabled={Boolean(editingReturnedLeave)}
                 onClick={() => handleSelectFormKind("cancel")}
-                className={`p-4 rounded-xl border-2 text-left transition cursor-pointer disabled:opacity-70 ${
-                  formKind === "cancel"
-                    ? "border-violet-600 bg-violet-50/70 dark:bg-violet-950/40"
-                    : "border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-slate-900"
-                }`}
+                className={`p-4 rounded-xl border-2 text-left transition cursor-pointer disabled:opacity-70 ${formKind === "cancel"
+                  ? "border-violet-600 bg-violet-50/70 dark:bg-violet-950/40"
+                  : "border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-slate-900"
+                  }`}
               >
                 <div className="font-bold text-slate-900 dark:text-white text-sm">
                   ↩️ แบบฟอร์ม 3: ขอยกเลิกวันลา
@@ -1679,11 +1680,10 @@ export default function LeavePage() {
                         type="button"
                         disabled={Boolean(editingReturnedLeave)}
                         onClick={() => handleSelectGeneralLeaveType(t)}
-                        className={`px-4 py-2 rounded-xl border text-sm font-semibold transition cursor-pointer ${
-                          leaveType === t
-                            ? "bg-indigo-600 text-white border-indigo-600"
-                            : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-50"
-                        }`}
+                        className={`px-4 py-2 rounded-xl border text-sm font-semibold transition cursor-pointer ${leaveType === t
+                          ? "bg-indigo-600 text-white border-indigo-600"
+                          : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-50"
+                          }`}
                       >
                         {meta.icon} {meta.label}
                       </button>
@@ -1887,11 +1887,10 @@ export default function LeavePage() {
                       key={period}
                       type="button"
                       onClick={() => setLeaveDayPeriod(period)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold border cursor-pointer transition ${
-                        leaveDayPeriod === period
-                          ? "bg-indigo-600 text-white border-indigo-600"
-                          : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50"
-                      }`}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold border cursor-pointer transition ${leaveDayPeriod === period
+                        ? "bg-indigo-600 text-white border-indigo-600"
+                        : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50"
+                        }`}
                     >
                       {LEAVE_DAY_PERIOD_LABELS[period]}
                     </button>
@@ -1983,8 +1982,8 @@ export default function LeavePage() {
                   {(leaveType === "sick_leave" ||
                     leaveType === "personal_leave" ||
                     leaveType === "cancel_leave") && (
-                    <span className="text-rose-500">*</span>
-                  )}
+                      <span className="text-rose-500">*</span>
+                    )}
                 </label>
                 <input
                   type="text"
@@ -2062,11 +2061,10 @@ export default function LeavePage() {
                     onChange={(e) =>
                       setVacationAccumulatedDays(Number(e.target.value))
                     }
-                    className={`w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm ${
-                      canEditVacationBalance
-                        ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
-                        : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 cursor-not-allowed"
-                    }`}
+                    className={`w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm ${canEditVacationBalance
+                      ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 cursor-not-allowed"
+                      }`}
                   />
                 </div>
                 <div>
@@ -2080,11 +2078,10 @@ export default function LeavePage() {
                     readOnly={!canEditVacationBalance}
                     value={vacationAnnualDays}
                     onChange={(e) => setVacationAnnualDays(Number(e.target.value))}
-                    className={`w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm ${
-                      canEditVacationBalance
-                        ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
-                        : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 cursor-not-allowed"
-                    }`}
+                    className={`w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm ${canEditVacationBalance
+                      ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 cursor-not-allowed"
+                      }`}
                   />
                 </div>
                 <div>
@@ -2092,11 +2089,10 @@ export default function LeavePage() {
                     สิทธิคงเหลือหลังหักการลาครั้งนี้
                   </label>
                   <div
-                    className={`rounded-xl border px-3 py-2 text-sm font-bold ${
-                      isVacationOverQuota
-                        ? "bg-rose-50 border-rose-300 text-rose-700"
-                        : "bg-white dark:bg-slate-900 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300"
-                    }`}
+                    className={`rounded-xl border px-3 py-2 text-sm font-bold ${isVacationOverQuota
+                      ? "bg-rose-50 border-rose-300 text-rose-700"
+                      : "bg-white dark:bg-slate-900 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300"
+                      }`}
                   >
                     มีสิทธิ {myStats.vacationEntitled} วัน · เหลือสุทธิ{" "}
                     {Math.max(
@@ -2233,63 +2229,67 @@ export default function LeavePage() {
           </div>
 
           {/* สายการพิจารณา */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-indigo-50/40 dark:bg-indigo-950/20 p-4 rounded-xl border border-indigo-100 dark:border-indigo-900/50">
-            {formKind !== "cancel" ? (
+          <div className="space-y-3 bg-indigo-50/40 dark:bg-indigo-950/20 p-4 rounded-xl border border-indigo-100 dark:border-indigo-900/50">
+            <div className="text-[11px] font-medium text-indigo-900 dark:text-indigo-200 bg-white/80 dark:bg-slate-900/70 px-3 py-2 rounded-lg border border-indigo-100 dark:border-indigo-900/60">
+              <strong className="font-bold">ขั้นตอนดำเนินการ:</strong>{" "}
+              1. ผู้ขอลายื่นในระบบ ➔ 2. นายยุทธนา ตรวจสอบสถิติ ➔ 3. หัวหน้ากลุ่ม/ฝ่าย ใส่ความเห็นและลงนาม ➔ 4. นายยุทธนา เสนอแฟ้มกระดาษให้ พมจ. ({soleApproverMember.name}) เซ็นแล้วปรับสถานะอนุญาต
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {formKind !== "cancel" ? (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1">
+                    1. ผู้ตรวจสอบสถิติ
+                  </label>
+                  <select
+                    value={verifierUserId}
+                    onChange={(e) => setVerifierUserId(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                  >
+                    {verifierCandidates.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center">
+                  ℹ️ แบบฟอร์มขอยกเลิกวันลาส่งตรงสู่หัวหน้ากลุ่ม/ฝ่าย (ข้ามขั้นผู้ตรวจสอบ)
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1">
-                  1. ผู้ตรวจสอบสถิติ
+                  2. หัวหน้ากลุ่ม/ฝ่าย (ผู้บังคับบัญชา)
                 </label>
                 <select
-                  value={verifierUserId}
-                  onChange={(e) => setVerifierUserId(e.target.value)}
+                  value={supervisorUserId}
+                  onChange={(e) => setSupervisorUserId(e.target.value)}
                   className="w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
                 >
-                  {verifierCandidates.map((m) => (
+                  <option value="">-- เลือกหัวหน้ากลุ่ม/ฝ่าย --</option>
+                  {supervisorCandidates.map((m) => (
                     <option key={m.id} value={m.id}>
-                      {m.name}
+                      {m.name} {m.division ? `(${m.division})` : ""}
                     </option>
                   ))}
                 </select>
               </div>
-            ) : (
-              <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center">
-                ℹ️ แบบฟอร์มขอยกเลิกวันลาส่งตรงสู่ผู้บังคับบัญชา (ข้ามขั้นผู้ตรวจสอบ)
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1">
+                  3. ผู้มีอำนาจสั่งอนุญาต (ตามระเบียบ)
+                </label>
+                <div className="w-full rounded-xl border border-indigo-200 dark:border-indigo-800/60 bg-indigo-50/60 dark:bg-indigo-950/30 px-3 py-2 text-sm text-slate-900 dark:text-white">
+                  <div className="font-semibold flex items-center gap-1.5">
+                    <span>🔒 {soleApproverMember.name}</span>
+                  </div>
+                  <div className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5 leading-snug">
+                    ผู้มีอำนาจสั่งอนุญาตเพียงผู้เดียว · บันทึกผลในระบบหลังอนุมัติเอกสารโดย{" "}
+                    {DEFAULT_LEAVE_ORDER_OPERATOR.name}
+                  </div>
+                </div>
               </div>
-            )}
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1">
-                2. ผู้บังคับบัญชา
-              </label>
-              <select
-                value={supervisorUserId}
-                onChange={(e) => setSupervisorUserId(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
-              >
-                <option value="">-- เลือกผู้บังคับบัญชา --</option>
-                {supervisorCandidates.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} {m.division ? `(${m.division})` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1">
-                3. ผู้มีอำนาจสั่งอนุญาต
-              </label>
-              <select
-                value={approverUserId}
-                onChange={(e) => setApproverUserId(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
-              >
-                {approverCandidates.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
             </div>
           </div>
 
@@ -2317,10 +2317,10 @@ export default function LeavePage() {
               {submitting
                 ? "กำลังบันทึก..."
                 : editingReturnedLeave
-                ? "📨 ยืนยันแก้ไขและส่งพิจารณาใหม่"
-                : formKind === "cancel"
-                ? "↩️ ส่งแบบใบขอยกเลิกวันลา"
-                : "📨 ส่งใบลาเข้าสู่สายการพิจารณา"}
+                  ? "📨 ยืนยันแก้ไขและส่งพิจารณาใหม่"
+                  : formKind === "cancel"
+                    ? "↩️ ส่งแบบใบขอยกเลิกวันลา"
+                    : "📨 ส่งใบลาเข้าสู่สายการพิจารณา"}
             </button>
           </div>
         </form>
@@ -2377,11 +2377,10 @@ export default function LeavePage() {
                       )}
                       {item.status === "approved" && (
                         <span
-                          className={`text-xs px-2.5 py-0.5 rounded-full border ${
-                            item.syncedToAttendance
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300"
-                              : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300"
-                          }`}
+                          className={`text-xs px-2.5 py-0.5 rounded-full border ${item.syncedToAttendance
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300"
+                            : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300"
+                            }`}
                         >
                           {item.syncedToAttendance
                             ? "🔗 ซิงก์ลงรายงานลงเวลาแล้ว"
@@ -2500,8 +2499,8 @@ export default function LeavePage() {
               {[
                 { id: "actionable", label: `รอฉันดำเนินการ (${actionableCount})` },
                 { id: "pending_verifier", label: "รอผู้ตรวจสอบ" },
-                { id: "pending_supervisor", label: "รอผู้บังคับบัญชา" },
-                { id: "pending_approver", label: "รอคำสั่งอนุญาต" },
+                { id: "pending_supervisor", label: "รอหัวหน้ากลุ่ม/ฝ่าย" },
+                { id: "pending_approver", label: "รอเสนอแฟ้ม พมจ." },
                 { id: "returned", label: "ตีกลับแก้ไข" },
                 { id: "approved", label: "อนุญาตแล้ว" },
                 { id: "all", label: "ทั้งหมด" },
@@ -2510,11 +2509,10 @@ export default function LeavePage() {
                   key={f.id}
                   type="button"
                   onClick={() => setReviewFilter(f.id)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold border cursor-pointer ${
-                    reviewFilter === f.id
-                      ? "bg-slate-900 text-white border-slate-900 dark:bg-indigo-600 dark:border-indigo-600"
-                      : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50"
-                  }`}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold border cursor-pointer ${reviewFilter === f.id
+                    ? "bg-slate-900 text-white border-slate-900 dark:bg-indigo-600 dark:border-indigo-600"
+                    : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50"
+                    }`}
                 >
                   {f.label}
                 </button>
@@ -2561,7 +2559,8 @@ export default function LeavePage() {
               const attachHref = resolveLeaveAttachmentUrl(item.attachmentUrl);
               const canReturnItem =
                 (item.status === "pending_verifier" && isVerifier) ||
-                (item.status === "pending_supervisor" && isSupervisor) ||
+                (item.status === "pending_supervisor" &&
+                  canActSupervisorOnLeave(item)) ||
                 (item.status === "pending_approver" && isApprover);
 
               return (
@@ -2589,15 +2588,21 @@ export default function LeavePage() {
                           {LEAVE_DAY_PERIOD_SHORT[item.leaveDayPeriod]}
                         </span>
                       )}
-                      {((item.status === "pending_verifier" &&
-                        item.verifierUserId === currentUser?.id) ||
-                        (item.status === "pending_supervisor" &&
-                          item.supervisorUserId === currentUser?.id) ||
-                        (item.status === "pending_approver" &&
-                          item.approverUserId === currentUser?.id)) && (
+                      {item.status === "pending_approver" && isOrderOperatorOnly ? (
                         <span className="text-xs px-2.5 py-0.5 rounded-full border bg-indigo-50 text-indigo-700 border-indigo-200 font-semibold">
-                          📌 มอบหมายถึงคุณ
+                          📁 เสนอแฟ้ม พมจ. → ปรับสถานะ
                         </span>
+                      ) : (
+                        ((item.status === "pending_verifier" &&
+                          item.verifierUserId === currentUser?.id) ||
+                          (item.status === "pending_supervisor" &&
+                            item.supervisorUserId === currentUser?.id) ||
+                          (item.status === "pending_approver" &&
+                            item.approverUserId === currentUser?.id)) && (
+                          <span className="text-xs px-2.5 py-0.5 rounded-full border bg-indigo-50 text-indigo-700 border-indigo-200 font-semibold">
+                            📌 มอบหมายถึงคุณ
+                          </span>
+                        )
                       )}
                     </div>
 
@@ -2689,22 +2694,23 @@ export default function LeavePage() {
                       </button>
                     )}
 
-                    {item.status === "pending_supervisor" && isSupervisor && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActionComment("เห็นควรอนุญาต");
-                          setActionSignature(null);
-                          setActionModal({
-                            leave: item,
-                            action: "supervisor_review",
-                          });
-                        }}
-                        className="px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold cursor-pointer"
-                      >
-                        2. ความเห็นผู้บังคับบัญชา
-                      </button>
-                    )}
+                    {item.status === "pending_supervisor" &&
+                      canActSupervisorOnLeave(item) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActionComment("เห็นควรอนุญาต");
+                            setActionSignature(null);
+                            setActionModal({
+                              leave: item,
+                              action: "supervisor_review",
+                            });
+                          }}
+                          className="px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold cursor-pointer"
+                        >
+                          2. ใส่ความเห็นและลงนาม
+                        </button>
+                      )}
 
                     {item.status === "pending_approver" && isApprover && (
                       <button
@@ -2717,7 +2723,9 @@ export default function LeavePage() {
                         }}
                         className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold cursor-pointer"
                       >
-                        3. ออกคำสั่งอนุญาต
+                        {isOrderOperatorOnly
+                          ? "3. ปรับสถานะอนุญาต (หลัง พมจ. เซ็น)"
+                          : "3. ออกคำสั่งอนุญาต"}
                       </button>
                     )}
 
@@ -3009,7 +3017,15 @@ export default function LeavePage() {
                 ⚙️ มอบสิทธิ์ผู้พิจารณาใบลารายบุคคล
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                สิทธิ์พื้นฐาน: <code>admin</code> ทำได้ทุกขั้น, <code>manager</code> ลงความเห็นผู้บังคับบัญชาได้, และผู้ดูแลลงเวลา (<code>attendance_authorized_editors</code>) ตรวจสอบสถิติได้ — ส่วนนี้ใช้สำหรับมอบสิทธิ์เพิ่มเติมเป็นรายบุคคล
+                สิทธิ์พื้นฐาน: <code>admin</code> ทำได้ทุกขั้น, <code>manager</code> ลงความเห็นผู้บังคับบัญชาได้, และผู้ดูแลลงเวลา (<code>attendance_authorized_editors</code>) ตรวจสอบสถิติได้ — สำหรับขั้นคำสั่งอนุญาต ผู้มีอำนาจสั่งอนุญาตตามเอกสารมีเพียง{" "}
+                <strong className="text-slate-700 dark:text-slate-200">
+                  {SOLE_LEAVE_APPROVER.name}
+                </strong>{" "}
+                เพียงผู้เดียว ส่วนช่อง &ldquo;3. บันทึกผลอนุญาต (แทน พมจ.)&rdquo; ใช้กำหนดผู้มีสิทธิ์บันทึกผลคำสั่งลงในระบบหลังอนุมัติในเอกสารแล้ว (ค่าเริ่มต้นคือ{" "}
+                <strong className="text-slate-700 dark:text-slate-200">
+                  {DEFAULT_LEAVE_ORDER_OPERATOR.name}
+                </strong>
+                )
               </p>
             </div>
 
@@ -3073,7 +3089,7 @@ export default function LeavePage() {
                     onChange={(e) => setPermCanApprove(e.target.checked)}
                     className="rounded border-slate-300"
                   />
-                  <span>3. ผู้มีอำนาจสั่งอนุญาต</span>
+                  <span>3. บันทึกผลอนุญาต (แทน พมจ.)</span>
                 </label>
               </div>
 
@@ -3103,7 +3119,7 @@ export default function LeavePage() {
                     <th className="px-4 py-3">ชื่อ-สกุล</th>
                     <th className="px-4 py-3 text-center">1. ผู้ตรวจสอบ</th>
                     <th className="px-4 py-3 text-center">2. ผู้บังคับบัญชา</th>
-                    <th className="px-4 py-3 text-center">3. ผู้อนุญาต</th>
+                    <th className="px-4 py-3 text-center">3. บันทึกผลอนุญาต (แทน พมจ.)</th>
                     <th className="px-4 py-3">มอบสิทธิ์โดย</th>
                     <th className="px-4 py-3 text-right">จัดการ</th>
                   </tr>
@@ -3213,25 +3229,77 @@ export default function LeavePage() {
       {/* Modal: ดำเนินการพิจารณา / ตีกลับใบลา + ลายเซ็นดิจิทัล */}
       {actionModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-xl my-auto">
-            <div className="flex items-center justify-between gap-2">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl max-w-xl w-full p-6 space-y-4 shadow-xl my-auto">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-lg font-bold text-slate-900 dark:text-white">
                 {actionModal.action === "verify"
                   ? "1. ลงนามผู้ตรวจสอบสถิติการลา"
                   : actionModal.action === "supervisor_review"
-                  ? "2. ความเห็นผู้บังคับบัญชา"
-                  : actionModal.action === "return"
-                  ? "↩️ ตีกลับใบลาให้ผู้ขอลาแก้ไข"
-                  : "3. คำสั่งผู้มีอำนาจอนุญาต"}
+                    ? "2. ความเห็นผู้บังคับบัญชา"
+                    : actionModal.action === "return"
+                      ? "↩️ ตีกลับใบลาให้ผู้ขอลาแก้ไข"
+                      : isOrderOperatorOnly
+                        ? "3. ปรับสถานะคำสั่งอนุญาต (หลัง พมจ. เซ็นเอกสาร)"
+                        : "3. คำสั่งผู้มีอำนาจอนุญาต"}
               </h3>
-              <button
-                type="button"
-                onClick={() => setPreviewLeave(actionModal.leave)}
-                className="px-2.5 py-1 rounded-lg bg-teal-50 text-teal-700 border border-teal-200 text-xs font-semibold cursor-pointer"
-              >
-                👁️ ดูแบบฟอร์ม A4
-              </button>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setPreviewLeave(actionModal.leave)}
+                  className="px-2.5 py-1 rounded-lg bg-teal-50 text-teal-700 border border-teal-200 text-xs font-semibold cursor-pointer"
+                >
+                  👁️ ดูแบบฟอร์ม A4
+                </button>
+                {actionModal.action === "order" && (
+                  <>
+                    <button
+                      type="button"
+                      disabled={
+                        downloadingId === `${actionModal.leave.id}:docx`
+                      }
+                      onClick={() => handleDownloadDocx(actionModal.leave)}
+                      className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-semibold disabled:opacity-50 cursor-pointer"
+                    >
+                      {downloadingId === `${actionModal.leave.id}:docx`
+                        ? "⏳..."
+                        : "📝 Word เสนอแฟ้ม"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={
+                        downloadingId === `${actionModal.leave.id}:pdf`
+                      }
+                      onClick={() => handleDownloadPdf(actionModal.leave)}
+                      className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold disabled:opacity-50 cursor-pointer"
+                    >
+                      {downloadingId === `${actionModal.leave.id}:pdf`
+                        ? "⏳..."
+                        : "📄 PDF เสนอแฟ้ม"}
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
+
+            {actionModal.action === "order" && isOrderOperatorOnly && (
+              <div className="rounded-xl border border-indigo-200 dark:border-indigo-800/60 bg-indigo-50 dark:bg-indigo-950/30 p-3 text-xs text-indigo-900 dark:text-indigo-200 space-y-1 leading-relaxed">
+                <div className="font-bold">
+                  📁 ขั้นตอนเสนอแฟ้มกระดาษ & ปรับสถานะในระบบ:
+                </div>
+                <div>
+                  1) พิมพ์เอกสาร (Word / PDF / A4) เสนอแฟ้มกระดาษให้{" "}
+                  <strong>{SOLE_LEAVE_APPROVER.name}</strong> ลงนามสั่งอนุญาต
+                </div>
+                <div>
+                  2) เมื่อ พมจ. เซ็นเอกสารแล้ว กดเลือกอนุญาต/ไม่อนุญาตด้านล่างเพื่อปรับสถานะและซิงก์ตารางลงเวลา —{" "}
+                  <strong>
+                    ผู้มีอำนาจสั่งอนุญาตตามเอกสารยังคงเป็น{" "}
+                    {SOLE_LEAVE_APPROVER.name}
+                  </strong>{" "}
+                  ({SOLE_LEAVE_APPROVER.position}) โดยไม่สวมลายเซ็น
+                </div>
+              </div>
+            )}
 
             <div className="text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 p-3 rounded-xl space-y-1">
               <div>
@@ -3271,22 +3339,20 @@ export default function LeavePage() {
                 <button
                   type="button"
                   onClick={() => setOrderDecision("approved")}
-                  className={`flex-1 py-2.5 rounded-xl border text-sm font-bold cursor-pointer ${
-                    orderDecision === "approved"
-                      ? "bg-emerald-600 text-white border-emerald-600"
-                      : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700"
-                  }`}
+                  className={`flex-1 py-2.5 rounded-xl border text-sm font-bold cursor-pointer ${orderDecision === "approved"
+                    ? "bg-emerald-600 text-white border-emerald-600"
+                    : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700"
+                    }`}
                 >
                   ✓ อนุญาต (ซิงก์ลงเวลา)
                 </button>
                 <button
                   type="button"
                   onClick={() => setOrderDecision("rejected")}
-                  className={`flex-1 py-2.5 rounded-xl border text-sm font-bold cursor-pointer ${
-                    orderDecision === "rejected"
-                      ? "bg-rose-600 text-white border-rose-600"
-                      : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700"
-                  }`}
+                  className={`flex-1 py-2.5 rounded-xl border text-sm font-bold cursor-pointer ${orderDecision === "rejected"
+                    ? "bg-rose-600 text-white border-rose-600"
+                    : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700"
+                    }`}
                 >
                   ✗ ไม่อนุญาต
                 </button>
@@ -3312,15 +3378,16 @@ export default function LeavePage() {
               />
             </div>
 
-            {actionModal.action !== "return" && (
-              <LeaveSignaturePad
-                compact
-                userId={currentUser?.id}
-                label="ลายมือชื่อผู้พิจารณา"
-                value={actionSignature}
-                onChange={setActionSignature}
-              />
-            )}
+            {actionModal.action !== "return" &&
+              !(actionModal.action === "order" && isOrderOperatorOnly) && (
+                <LeaveSignaturePad
+                  compact
+                  userId={currentUser?.id}
+                  label="ลายมือชื่อผู้พิจารณา"
+                  value={actionSignature}
+                  onChange={setActionSignature}
+                />
+              )}
 
             <div className="flex justify-end gap-2">
               <button
@@ -3334,17 +3401,18 @@ export default function LeavePage() {
                 type="button"
                 disabled={processingAction}
                 onClick={handleSubmitWorkflowAction}
-                className={`px-4 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50 cursor-pointer ${
-                  actionModal.action === "return"
-                    ? "bg-orange-600 hover:bg-orange-700"
-                    : "bg-indigo-600 hover:bg-indigo-700"
-                }`}
+                className={`px-4 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50 cursor-pointer ${actionModal.action === "return"
+                  ? "bg-orange-600 hover:bg-orange-700"
+                  : "bg-indigo-600 hover:bg-indigo-700"
+                  }`}
               >
                 {processingAction
                   ? "กำลังบันทึก..."
                   : actionModal.action === "return"
-                  ? "↩️ ยืนยันตีกลับให้แก้ไข"
-                  : "✓ ยืนยันและลงนาม"}
+                    ? "↩️ ยืนยันตีกลับให้แก้ไข"
+                    : actionModal.action === "order" && isOrderOperatorOnly
+                      ? "✓ ยืนยันบันทึกผลตามเอกสาร"
+                      : "✓ ยืนยันและลงนาม"}
               </button>
             </div>
           </div>

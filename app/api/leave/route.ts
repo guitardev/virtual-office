@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabase as rawSupabase } from "@/lib/supabase";
 import {
   calculateLeavePeriodDetails,
+  DEFAULT_LEAVE_ORDER_OPERATOR,
   detectLeaveOverlap,
   formatThaiDateShort,
   getEffectiveLeaveDays,
@@ -13,6 +14,7 @@ import {
   LeaveDayPeriod,
   LeaveRequestItem,
   LeaveType,
+  SOLE_LEAVE_APPROVER,
 } from "@/lib/leave-utils";
 import {
   buildHolidayMap,
@@ -334,6 +336,24 @@ async function getUserLeaveAuthorizedRole(userId?: string): Promise<{
   };
 }
 
+async function resolveSoleApproverInfo(): Promise<{
+  userId: string;
+  name: string;
+  position: string;
+}> {
+  const { data } = await requireSupabase()
+    .from("users")
+    .select("id, name, position")
+    .eq("id", SOLE_LEAVE_APPROVER.userId)
+    .maybeSingle();
+
+  return {
+    userId: SOLE_LEAVE_APPROVER.userId,
+    name: data?.name || SOLE_LEAVE_APPROVER.name,
+    position: data?.position || SOLE_LEAVE_APPROVER.position,
+  };
+}
+
 async function syncApprovedLeaveToAttendance(
   leave: LeaveRequestItem,
   actorId?: string,
@@ -378,9 +398,8 @@ async function syncApprovedLeaveToAttendance(
     leave.leaveDayPeriod && leave.leaveDayPeriod !== "full"
       ? ` ${LEAVE_DAY_PERIOD_SHORT[leave.leaveDayPeriod]}`
       : "";
-  const noteText = `${meta.label}${periodLabel} (อนุญาตแล้ว)${
-    leave.reason ? ` — ${leave.reason}` : ""
-  }`;
+  const noteText = `${meta.label}${periodLabel} (อนุญาตแล้ว)${leave.reason ? ` — ${leave.reason}` : ""
+    }`;
   const nowIso = new Date().toISOString();
 
   const rows = workingDates.map((workDate) => ({
@@ -618,8 +637,8 @@ export async function POST(req: NextRequest) {
             leaveType === "sick_leave"
               ? "กรุณาระบุอาการป่วย / เหตุผลการลาป่วย"
               : leaveType === "cancel_leave"
-              ? "กรุณาระบุเหตุผลการขอยกเลิกวันลา"
-              : "กรุณาระบุเหตุผลการลากิจส่วนตัว",
+                ? "กรุณาระบุเหตุผลการขอยกเลิกวันลา"
+                : "กรุณาระบุเหตุผลการลากิจส่วนตัว",
         },
         { status: 400 }
       );
@@ -632,8 +651,8 @@ export async function POST(req: NextRequest) {
     const cleanEnd = String(endDate).slice(0, 10);
     const normalizedPeriod: LeaveDayPeriod =
       cleanStart === cleanEnd &&
-      leaveType !== "maternity_leave" &&
-      (leaveDayPeriod === "morning" || leaveDayPeriod === "afternoon")
+        leaveType !== "maternity_leave" &&
+        (leaveDayPeriod === "morning" || leaveDayPeriod === "afternoon")
         ? leaveDayPeriod
         : "full";
 
@@ -829,29 +848,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // หากไม่ระบุผู้มีอำนาจอนุญาต ให้ใช้ syno_มะลิวัน เป็นค่าเริ่มต้น
-    let resolvedApproverId = approverUserId || "syno_มะลิวัน";
-    let resolvedApproverName = approverName || "";
-    let resolvedApproverPosition = approverPosition || "";
-
-    if (!resolvedApproverName || !resolvedApproverPosition) {
-      const { data: defApprover } = await requireSupabase()
-        .from("users")
-        .select("id, name, position")
-        .eq("id", resolvedApproverId)
-        .maybeSingle();
-      if (defApprover) {
-        resolvedApproverId = defApprover.id;
-        resolvedApproverName = resolvedApproverName || defApprover.name || "";
-        resolvedApproverPosition =
-          resolvedApproverPosition || defApprover.position || "";
-      } else {
-        resolvedApproverName = resolvedApproverName || "นางสาวมะลิวัน สิทธิโยธี";
-        resolvedApproverPosition =
-          resolvedApproverPosition ||
-          "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร";
-      }
-    }
+    // ผู้มีอำนาจสั่งอนุญาตตามระเบียบมีเพียงผู้เดียวคือ นางสาวมะลิวัน สิทธิโยธี (syno_มะลิวัน)
+    const soleApprover = await resolveSoleApproverInfo();
+    const resolvedApproverId = soleApprover.userId;
+    const resolvedApproverName = soleApprover.name;
+    const resolvedApproverPosition = soleApprover.position;
 
     const prefix: "LV" | "CLV" = leaveType === "cancel_leave" ? "CLV" : "LV";
     let seqNum = await nextLeaveSequence(prefix, fiscalYear);
@@ -1070,15 +1071,15 @@ export async function PATCH(req: NextRequest) {
     const canVerify =
       isAdmin ||
       isEditor ||
-      actorId === "syno_ยุทธนา" ||
+      actorId === DEFAULT_LEAVE_ORDER_OPERATOR.userId ||
       customLeaveRole.canVerify ||
       (Boolean(existing.verifierUserId) && existing.verifierUserId === actorId);
     const canSupervisor = isAdmin || isManager || customLeaveRole.canSupervisor;
     const canApprove =
       isAdmin ||
-      actorId === "syno_มะลิวัน" ||
-      customLeaveRole.canApprove ||
-      (Boolean(existing.approverUserId) && existing.approverUserId === actorId);
+      actorId === SOLE_LEAVE_APPROVER.userId ||
+      actorId === DEFAULT_LEAVE_ORDER_OPERATOR.userId ||
+      customLeaveRole.canApprove;
 
     if (action === "verify") {
       if (!canVerify) {
@@ -1229,8 +1230,8 @@ export async function PATCH(req: NextRequest) {
 
       const nextPeriod: LeaveDayPeriod =
         nextStart === nextEnd &&
-        existing.leaveType !== "maternity_leave" &&
-        (leaveDayPeriod === "morning" || leaveDayPeriod === "afternoon")
+          existing.leaveType !== "maternity_leave" &&
+          (leaveDayPeriod === "morning" || leaveDayPeriod === "afternoon")
           ? leaveDayPeriod
           : "full";
 
@@ -1304,7 +1305,7 @@ export async function PATCH(req: NextRequest) {
       if (existing.leaveType === "vacation_leave") {
         const acc = Number(
           liveStats.balRow?.vacation_accumulated_days ??
-            existing.vacationAccumulatedDays
+          existing.vacationAccumulatedDays
         );
         const ann = Number(
           liveStats.balRow?.vacation_annual_days ?? existing.vacationAnnualDays
@@ -1320,6 +1321,8 @@ export async function PATCH(req: NextRequest) {
           );
         }
       }
+
+      const soleApprover = await resolveSoleApproverInfo();
 
       const { data: updated, error } = await requireSupabase()
         .from("leave_requests")
@@ -1376,14 +1379,9 @@ export async function PATCH(req: NextRequest) {
             supervisorPosition !== undefined
               ? supervisorPosition
               : existing.supervisorPosition,
-          approver_user_id:
-            approverUserId !== undefined ? approverUserId : existing.approverUserId,
-          approver_name:
-            approverName !== undefined ? approverName : existing.approverName,
-          approver_position:
-            approverPosition !== undefined
-              ? approverPosition
-              : existing.approverPosition,
+          approver_user_id: soleApprover.userId,
+          approver_name: soleApprover.name,
+          approver_position: soleApprover.position,
           prev_sick_days: liveStats.prevSickDays,
           prev_personal_days: liveStats.prevPersonalDays,
           prev_maternity_days: liveStats.prevMaternityDays,
@@ -1416,7 +1414,8 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json(
           {
             success: false,
-            error: "เฉพาะผู้มีอำนาจสั่งอนุญาต (Admin / ผู้ได้รับมอบสิทธิ์) เท่านั้น",
+            error:
+              "เฉพาะผู้มีอำนาจสั่งอนุญาต หรือผู้ได้รับมอบหมายบันทึกผลในระบบ (นายยุทธนา / Admin) เท่านั้น",
           },
           { status: 403 }
         );
@@ -1428,6 +1427,8 @@ export async function PATCH(req: NextRequest) {
         );
       }
 
+      const soleApprover = await resolveSoleApproverInfo();
+      const isActingOnBehalf = actorId !== SOLE_LEAVE_APPROVER.userId;
       const orderDecision = decision === "rejected" ? "rejected" : "approved";
       const nextStatus = orderDecision === "approved" ? "approved" : "rejected";
 
@@ -1500,16 +1501,25 @@ export async function PATCH(req: NextRequest) {
         }
       }
 
+      if (isActingOnBehalf) {
+        const operatorTag = `ปรับสถานะคำสั่งในระบบโดย ${
+          actorName || DEFAULT_LEAVE_ORDER_OPERATOR.name
+        } หลัง ${soleApprover.name} ลงนามเอกสาร`;
+        syncNote = syncNote ? `${syncNote} (${operatorTag})` : operatorTag;
+      }
+
       const { data: updated, error } = await requireSupabase()
         .from("leave_requests")
         .update({
           status: nextStatus,
-          approver_user_id: actorId,
-          approver_name: actorName || "",
-          approver_position: actorPosition || "",
+          approver_user_id: soleApprover.userId,
+          approver_name: soleApprover.name,
+          approver_position: soleApprover.position,
           order_decision: orderDecision,
           order_comment: comment || "",
-          approver_signature: signature || existing.approverSignature || null,
+          approver_signature: isActingOnBehalf
+            ? existing.approverSignature || null
+            : signature || existing.approverSignature || null,
           ordered_at: nowIso,
           synced_to_attendance: syncedToAttendance,
           synced_at: syncedAt,

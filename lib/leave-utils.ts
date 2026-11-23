@@ -115,6 +115,18 @@ export interface LeaveBalanceItem {
   updatedAt?: string;
 }
 
+export const SOLE_LEAVE_APPROVER = {
+  userId: "syno_มะลิวัน",
+  name: "นางสาวมะลิวัน สิทธิโยธี",
+  position: "พัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร",
+} as const;
+
+export const DEFAULT_LEAVE_ORDER_OPERATOR = {
+  userId: "syno_ยุทธนา",
+  name: "นายยุทธนา เจนจบ",
+  position: "เจ้าพนักงานธุรการปฏิบัติงาน",
+} as const;
+
 export const LEAVE_DAY_PERIOD_LABELS: Record<LeaveDayPeriod, string> = {
   full: "เต็มวัน",
   morning: "ครึ่งเช้า (08:30–12:00 น.)",
@@ -196,12 +208,12 @@ export const LEAVE_STATUS_META: Record<
     stepIndex: 1,
   },
   pending_supervisor: {
-    label: "รอความเห็นผู้บังคับบัญชา",
+    label: "รอหัวหน้ากลุ่ม/ฝ่ายลงความเห็น",
     badgeClass: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/50 dark:text-sky-300 dark:border-sky-800/60",
     stepIndex: 2,
   },
   pending_approver: {
-    label: "รอคำสั่งอนุญาต",
+    label: "รอเสนอแฟ้ม พมจ. / ปรับสถานะ",
     badgeClass: "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-800/60",
     stepIndex: 3,
   },

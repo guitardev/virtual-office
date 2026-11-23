@@ -171,7 +171,7 @@ export default function LeaveFormPrintView({
   if (leave.leaveType === "cancel_leave") {
     const targetLabel =
       leave.cancelTargetLeaveType &&
-      LEAVE_TYPE_META[leave.cancelTargetLeaveType as LeaveType]
+        LEAVE_TYPE_META[leave.cancelTargetLeaveType as LeaveType]
         ? LEAVE_TYPE_META[leave.cancelTargetLeaveType as LeaveType].label
         : "ลา";
 
