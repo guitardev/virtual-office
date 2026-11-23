@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase as rawSupabase } from "@/lib/supabase";
+import { resolveRequestActor } from "@/lib/server-session";
 
 export const dynamic = "force-dynamic";
 
@@ -92,9 +93,24 @@ export async function POST(req: NextRequest) {
       canVerify,
       canSupervisor,
       canApprove,
-      actorRole,
-      actorName,
+      actorId: bodyActorId,
+      actorRole: bodyActorRole,
+      actorName: bodyActorName,
     } = body || {};
+
+    const auth = resolveRequestActor(req, {
+      actorId: bodyActorId || "dev_admin",
+      actorName: bodyActorName,
+      actorRole: bodyActorRole,
+    });
+    if (!auth.ok) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status }
+      );
+    }
+    const actorRole = auth.actor.role;
+    const actorName = auth.actor.name || bodyActorName || "Admin";
 
     if (actorRole !== "admin") {
       return NextResponse.json(
@@ -184,9 +200,20 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const body = await req.json();
-    const { userId, actorRole } = body || {};
+    const { userId, actorId: bodyActorId, actorRole: bodyActorRole } = body || {};
 
-    if (actorRole !== "admin") {
+    const auth = resolveRequestActor(req, {
+      actorId: bodyActorId || "dev_admin",
+      actorRole: bodyActorRole,
+    });
+    if (!auth.ok) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status }
+      );
+    }
+
+    if (auth.actor.role !== "admin") {
       return NextResponse.json(
         { success: false, error: "เฉพาะ Admin เท่านั้นที่ถอนสิทธิ์ระบบใบลาได้" },
         { status: 403 }

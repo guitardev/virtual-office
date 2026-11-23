@@ -1150,6 +1150,7 @@ function AppProviderInner({ children }: { children: React.ReactNode }) {
       } catch (e) {}
     }
     clearUserNasSid();
+    fetch("/api/auth/session", { method: "DELETE" }).catch(() => {});
     signOutUser().catch(console.error);
     setCurrentUser(null);
     setShowLogoutModal(false);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase as rawSupabase } from "@/lib/supabase";
+import { resolveRequestActor } from "@/lib/server-session";
 import {
   getHolidayFiscalYear,
   listHolidaysForFiscalYear,
@@ -109,8 +110,29 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { holidayDate, name, isActive = true, actorId, actorName, actorRole } =
-      body || {};
+    const {
+      holidayDate,
+      name,
+      isActive = true,
+      actorId: bodyActorId,
+      actorName: bodyActorName,
+      actorRole: bodyActorRole,
+    } = body || {};
+
+    const auth = resolveRequestActor(req, {
+      actorId: bodyActorId,
+      actorName: bodyActorName,
+      actorRole: bodyActorRole,
+    });
+    if (!auth.ok) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status }
+      );
+    }
+    const actorId = auth.actor.id;
+    const actorName = auth.actor.name || bodyActorName || "";
+    const actorRole = auth.actor.role;
 
     if (!holidayDate || !String(name || "").trim()) {
       return NextResponse.json(
@@ -176,7 +198,27 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const body = await req.json();
-    const { holidayDate, actorId, actorName, actorRole } = body || {};
+    const {
+      holidayDate,
+      actorId: bodyActorId,
+      actorName: bodyActorName,
+      actorRole: bodyActorRole,
+    } = body || {};
+
+    const auth = resolveRequestActor(req, {
+      actorId: bodyActorId,
+      actorName: bodyActorName,
+      actorRole: bodyActorRole,
+    });
+    if (!auth.ok) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status }
+      );
+    }
+    const actorId = auth.actor.id;
+    const actorName = auth.actor.name || bodyActorName || "";
+    const actorRole = auth.actor.role;
 
     if (!holidayDate) {
       return NextResponse.json(

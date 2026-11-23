@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { getFiscalYear } from "@/lib/leave-utils";
+import { resolveRequestActor } from "@/lib/server-session";
 
 export const dynamic = "force-dynamic";
 
@@ -16,10 +17,25 @@ export async function POST(req: NextRequest) {
       vacationAccumulatedDays,
       vacationAnnualDays,
       vacationDaysCarried,
-      actorId,
-      actorRole,
-      actorName,
+      actorId: bodyActorId,
+      actorRole: bodyActorRole,
+      actorName: bodyActorName,
     } = body || {};
+
+    const auth = resolveRequestActor(req, {
+      actorId: bodyActorId,
+      actorName: bodyActorName,
+      actorRole: bodyActorRole,
+    });
+    if (!auth.ok) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status }
+      );
+    }
+    const actorId = auth.actor.id;
+    const actorRole = auth.actor.role;
+    const actorName = auth.actor.name || bodyActorName || "";
 
     if (!userId) {
       return NextResponse.json(

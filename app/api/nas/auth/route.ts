@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { loginSynology } from "@/lib/synology";
 import { Member } from "@/lib/types";
 import { supabase, mapRowToMember } from "@/lib/supabase";
+import { attachSessionCookie } from "@/lib/server-session";
 
 export async function POST(req: NextRequest) {
   try {
@@ -142,13 +143,23 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       sid: authResult.sid,
       account: authResult.account,
       user: member,
       message: "เข้าสู่ระบบสำเร็จผ่าน Database Auth",
     });
+
+    attachSessionCookie(response, {
+      userId: member.id,
+      name: member.name,
+      role: member.role,
+      position: member.position,
+      division: member.division,
+    });
+
+    return response;
   } catch (err: any) {
     console.error("Auth API error:", err);
     return NextResponse.json(

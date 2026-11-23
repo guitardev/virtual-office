@@ -14,16 +14,28 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Bypass in development if dummy token
-    if (token === "cf-turnstile-dummy-pass-token") {
+    const isProduction = process.env.NODE_ENV === "production";
+
+    // Bypass ONLY in non-production (local development / automated tests)
+    if (!isProduction && token === "cf-turnstile-dummy-pass-token") {
       return NextResponse.json({
         success: true,
         message: "Development mode dummy verification passed",
       });
     }
 
-    const secretKey =
-      process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY || CF_TEST_SECRET;
+    const configuredSecret = (process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY || "").trim();
+    if (isProduction && !configuredSecret) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "ยังไม่ได้ตั้งค่า CLOUDFLARE_TURNSTILE_SECRET_KEY บน Production",
+        },
+        { status: 503 }
+      );
+    }
+
+    const secretKey = configuredSecret || CF_TEST_SECRET;
 
     // Get client IP
     const clientIp =

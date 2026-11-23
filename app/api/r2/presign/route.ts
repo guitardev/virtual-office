@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { getSessionFromRequest } from "@/lib/server-session";
 
 export const dynamic = "force-dynamic";
 
@@ -101,6 +102,18 @@ function createR2PresignedPutUrl(opts: {
 
 export async function POST(req: NextRequest) {
   try {
+    const session = getSessionFromRequest(req);
+    if (process.env.NODE_ENV === "production" && !session) {
+      return NextResponse.json(
+        {
+          success: false,
+          configured: true,
+          error: "กรุณาเข้าสู่ระบบก่อนอัปโหลดไฟล์ (Unauthorized)",
+        },
+        { status: 401 }
+      );
+    }
+
     const accountId = (process.env.R2_ACCOUNT_ID || "").trim();
     const accessKeyId = (process.env.R2_ACCESS_KEY_ID || "").trim();
     const secretAccessKey = (process.env.R2_SECRET_ACCESS_KEY || "").trim();

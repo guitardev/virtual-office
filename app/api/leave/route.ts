@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase as rawSupabase } from "@/lib/supabase";
+import { resolveRequestActor } from "@/lib/server-session";
 import {
   calculateLeavePeriodDetails,
   canUserDeleteInactiveLeave,
@@ -612,6 +613,27 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const auth = resolveRequestActor(req, {
+      actorId: applicantUserId,
+      actorName: applicantName,
+    });
+    if (!auth.ok) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status }
+      );
+    }
+    if (
+      auth.verifiedByCookie &&
+      auth.actor.role !== "admin" &&
+      applicantUserId !== auth.actor.id
+    ) {
+      return NextResponse.json(
+        { success: false, error: "ไม่สามารถยื่นใบลาแทนบุคลากรอื่นได้" },
+        { status: 403 }
+      );
+    }
+
     if (String(endDate).slice(0, 10) < String(startDate).slice(0, 10)) {
       return NextResponse.json(
         { success: false, error: "วันที่สิ้นสุดต้องไม่น้อยกว่าวันที่เริ่มต้น" },
@@ -1021,10 +1043,10 @@ export async function PATCH(req: NextRequest) {
     const {
       id,
       action,
-      actorId,
-      actorName,
-      actorPosition,
-      actorRole,
+      actorId: bodyActorId,
+      actorName: bodyActorName,
+      actorPosition: bodyActorPosition,
+      actorRole: bodyActorRole,
       comment,
       decision,
       signature,
@@ -1056,6 +1078,24 @@ export async function PATCH(req: NextRequest) {
       approverName,
       approverPosition,
     } = body || {};
+
+    const auth = resolveRequestActor(req, {
+      actorId: bodyActorId,
+      actorName: bodyActorName,
+      actorPosition: bodyActorPosition,
+      actorRole: bodyActorRole,
+    });
+    if (!auth.ok) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status }
+      );
+    }
+
+    const actorId = auth.actor.id;
+    const actorName = auth.actor.name || bodyActorName || "";
+    const actorPosition = auth.actor.position || bodyActorPosition || "";
+    const actorRole = auth.actor.role;
 
     if (!id || !action || !actorId) {
       return NextResponse.json(
@@ -1707,7 +1747,27 @@ export async function PATCH(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const body = await req.json();
-    const { id, ids, actorId, actorRole } = body || {};
+    const {
+      id,
+      ids,
+      actorId: bodyActorId,
+      actorName: bodyActorName,
+      actorRole: bodyActorRole,
+    } = body || {};
+
+    const auth = resolveRequestActor(req, {
+      actorId: bodyActorId,
+      actorName: bodyActorName,
+      actorRole: bodyActorRole,
+    });
+    if (!auth.ok) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status }
+      );
+    }
+    const actorId = auth.actor.id;
+    const actorRole = auth.actor.role;
 
     const targetIds: string[] = Array.from(
       new Set(
