@@ -447,6 +447,44 @@ export function formatMeetingSpanText(meeting: MeetingItem): string {
 }
 
 /**
+ * Format a Date to strict 24-hour time string: HH:mm (00:00 - 23:59)
+ */
+export function formatTime24h(date: Date): string {
+  const h = String(date.getHours()).padStart(2, "0");
+  const m = String(date.getMinutes()).padStart(2, "0");
+  return `${h}:${m}`;
+}
+
+/**
+ * Format a meeting's start & end Date range strictly in 24-hour Thai notation:
+ * - Single-day: "14:30 - 16:00 น."
+ * - Multi-day:  "09:00 น. (4 พ.ย.) - 16:30 น. (6 พ.ย.)"
+ */
+export function formatMeetingTimeRange24h(
+  start: Date,
+  end: Date,
+  isMultiDay?: boolean
+): string {
+  const multi =
+    typeof isMultiDay === "boolean"
+      ? isMultiDay
+      : formatIsoDateOnly(start) !== formatIsoDateOnly(end);
+
+  const startTime = formatTime24h(start);
+  const endTime = formatTime24h(end);
+
+  if (multi) {
+    const startD = start.getDate();
+    const startM = THAI_SHORT_MONTH_NAMES[start.getMonth()];
+    const endD = end.getDate();
+    const endM = THAI_SHORT_MONTH_NAMES[end.getMonth()];
+    return `${startTime} น. (${startD} ${startM}) - ${endTime} น. (${endD} ${endM})`;
+  }
+
+  return `${startTime} - ${endTime} น.`;
+}
+
+/**
  * Format a Date to full Thai formal string (e.g. วันพุธที่ 4 พฤศจิกายน 2569)
  */
 export function formatThaiDateHeader(date: Date): string {

@@ -280,4 +280,108 @@ test.describe("ระบบการประชุมและนัดหม�
 
     await expect(page.locator("h3:has-text('Archive Only Mock')")).toBeVisible();
   });
+
+  test("8. ระบบเลือกเวลาและแสดงผลเวลาการประชุมใช้รูปแบบ 24 ชม. (ไม่มี AM/PM)", async ({
+    page,
+  }) => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const afternoonStart = new Date(
+      tomorrow.getFullYear(),
+      tomorrow.getMonth(),
+      tomorrow.getDate(),
+      14,
+      30,
+      0
+    ).toISOString();
+    const afternoonEnd = new Date(
+      tomorrow.getFullYear(),
+      tomorrow.getMonth(),
+      tomorrow.getDate(),
+      16,
+      0,
+      0
+    ).toISOString();
+
+    await page.route("**/rest/v1/meetings*", async (route) => {
+      const method = route.request().method();
+      if (method === "GET") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([
+            {
+              id: "55555555-5555-4555-8555-555555555555",
+              title: "ประชุมภาคบ่าย 24 ชม. (Afternoon 24h Mock)",
+              start_time: afternoonStart,
+              end_time: afternoonEnd,
+              location: "ห้องประชุมชั้น 2",
+              type: "onsite",
+              category: "general",
+              status: "confirmed",
+              attendees: [],
+            },
+          ]),
+        });
+        return;
+      }
+      if (method === "POST") {
+        const body = route.request().postDataJSON();
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify({
+            id: "66666666-6666-4666-8666-666666666666",
+            ...body,
+          }),
+        });
+        return;
+      }
+      await route.continue();
+    });
+
+    await page.goto("/meetings", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("h1:has-text('การประชุมและนัดหมาย')")).toBeVisible();
+
+    // Hydrated afternoon meeting must display strict 24-hour format without AM/PM
+    await expect(page.locator("h3:has-text('Afternoon 24h Mock')")).toBeVisible();
+    await expect(page.getByText("14:30 - 16:00 น.")).toBeVisible();
+
+    // Open Create Meeting Modal
+    await page.locator("button:has-text('สร้างการประชุมใหม่')").first().click();
+    await expect(page.locator("h3:has-text('สร้างการประชุมและนัดหมายใหม่')")).toBeVisible();
+
+    // Must not use native <input type="time"> which renders AM/PM on en-US browsers
+    await expect(page.locator('input[type="time"]')).toHaveCount(0);
+
+    // 24-hour selects should allow selecting 15:30 - 18:00
+    const startHourSelect = page.getByLabel("เวลาเริ่มต้น (ชั่วโมง)");
+    const startMinSelect = page.getByLabel("เวลาเริ่มต้น (นาที)");
+    const endHourSelect = page.getByLabel("เวลาสิ้นสุด (ชั่วโมง)");
+    const endMinSelect = page.getByLabel("เวลาสิ้นสุด (นาที)");
+
+    await expect(startHourSelect.locator('option[value="23"]')).toHaveCount(1);
+    await startHourSelect.selectOption("15");
+    await startMinSelect.selectOption("30");
+    await endHourSelect.selectOption("18");
+    await endMinSelect.selectOption("00");
+
+    // Multi-day mode must also use 24-hour selects (zero native time inputs)
+    const multiDayCheckbox = page
+      .locator("label:has-text('การประชุมต่อเนื่องหลายวัน') input[type='checkbox']");
+    await multiDayCheckbox.check();
+    await expect(page.locator('input[type="time"]')).toHaveCount(0);
+    await expect(page.getByLabel("เวลาเริ่ม (ชั่วโมง)")).toHaveValue("15");
+    await expect(page.getByLabel("เวลาสิ้นสุด (ชั่วโมง)")).toHaveValue("18");
+
+    // Switch back to single-day and submit
+    await multiDayCheckbox.uncheck();
+    await page
+      .locator("input[placeholder*='ประชุมชี้แจงแนวทาง']")
+      .fill("ทดสอบสร้างนัดหมาย 24 ชม.");
+    await page.locator("button[type='submit']").click();
+
+    await expect(page.locator("h3:has-text('ทดสอบสร้างนัดหมาย 24 ชม.')")).toBeVisible();
+    await expect(page.getByText("15:30 - 18:00 น.")).toBeVisible();
+  });
 });

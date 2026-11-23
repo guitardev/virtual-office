@@ -38,7 +38,11 @@ import {
 } from "./carbooking-data";
 import { DEFAULT_CHAT_GROUPS, INITIAL_CHAT_MESSAGES } from "./chat-data";
 import { DEFAULT_ROOMS } from "./meeting-data";
-import { formatIsoDateOnly, THAI_SHORT_MONTH_NAMES } from "./calendar";
+import {
+  formatIsoDateOnly,
+  formatMeetingTimeRange24h,
+  THAI_SHORT_MONTH_NAMES,
+} from "./calendar";
 import {
   getFiscalYear,
   LeaveDayPeriod,
@@ -1850,21 +1854,14 @@ export function mapRowToMeeting(row: any): MeetingItem {
       dateStr = `${startD} ${startM} - ${endD} ${endM} ${endY} (${totalDays} วัน)`;
     }
 
-    const startH = String(start.getHours()).padStart(2, "0");
-    const startMin = String(start.getMinutes()).padStart(2, "0");
-    const endH = String(end.getHours()).padStart(2, "0");
-    const endMin = String(end.getMinutes()).padStart(2, "0");
-    timeStr = `${startH}:${startMin} น. (${startD} ${startM}) - ${endH}:${endMin} น. (${endD} ${endM})`;
+    timeStr = formatMeetingTimeRange24h(start, end, true);
   } else {
     dateStr = start.toLocaleDateString("th-TH", {
       year: "numeric",
       month: "short",
       day: "numeric",
     });
-    timeStr = `${start.toLocaleTimeString("th-TH", {
-      hour: "2-digit",
-      minute: "2-digit",
-    })} - ${end.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.`;
+    timeStr = formatMeetingTimeRange24h(start, end, false);
   }
 
   let attendees: any[] = [];

@@ -18,6 +18,7 @@ import {
   getAttendeeName,
   getAttendeeEmail,
   formatIsoDateOnly,
+  formatTime24h,
   formatMeetingSpanText,
   THAI_SHORT_MONTH_NAMES,
 } from "@/lib/calendar";
@@ -33,6 +34,7 @@ import {
 import { isOperationalMember } from "@/lib/rbac";
 import { MeetingCalendarView } from "./MeetingCalendarView";
 import { RoomBookingView } from "./RoomBookingView";
+import { Time24Select } from "./Time24Select";
 
 interface MeetingsPageProps {
   meetings: MeetingItem[];
@@ -259,14 +261,14 @@ export function MeetingsPage({
       const s = new Date(meeting.startTime);
       if (!isNaN(s.getTime())) {
         dateVal = formatIsoDateOnly(s);
-        startVal = s.toTimeString().slice(0, 5);
+        startVal = formatTime24h(s);
       }
     }
     if (meeting.endTime) {
       const e = new Date(meeting.endTime);
       if (!isNaN(e.getTime())) {
         endDateVal = formatIsoDateOnly(e);
-        endVal = e.toTimeString().slice(0, 5);
+        endVal = formatTime24h(e);
         if (endDateVal !== dateVal) {
           isMulti = true;
         }
@@ -1749,27 +1751,23 @@ export function MeetingsPage({
 
                   <div>
                     <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                      เวลาเริ่มต้น <span className="text-rose-500">*</span>
+                      เวลาเริ่มต้น (24 ชม.) <span className="text-rose-500">*</span>
                     </label>
-                    <input
-                      type="time"
-                      required
+                    <Time24Select
                       value={formStartTime}
-                      onChange={(e) => setFormStartTime(e.target.value)}
-                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:border-indigo-500 transition-colors font-mono"
+                      onChange={setFormStartTime}
+                      ariaLabelPrefix="เวลาเริ่มต้น"
                     />
                   </div>
 
                   <div>
                     <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                      เวลาสิ้นสุด <span className="text-rose-500">*</span>
+                      เวลาสิ้นสุด (24 ชม.) <span className="text-rose-500">*</span>
                     </label>
-                    <input
-                      type="time"
-                      required
+                    <Time24Select
                       value={formEndTime}
-                      onChange={(e) => setFormEndTime(e.target.value)}
-                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:border-indigo-500 transition-colors font-mono"
+                      onChange={setFormEndTime}
+                      ariaLabelPrefix="เวลาสิ้นสุด"
                     />
                   </div>
                 </div>
@@ -1793,13 +1791,12 @@ export function MeetingsPage({
                           />
                         </div>
                         <div>
-                          <label className="block text-[10px] text-slate-500 font-bold mb-0.5">เวลาเริ่ม</label>
-                          <input
-                            type="time"
-                            required
+                          <label className="block text-[10px] text-slate-500 font-bold mb-0.5">เวลาเริ่ม (24 ชม.)</label>
+                          <Time24Select
                             value={formStartTime}
-                            onChange={(e) => setFormStartTime(e.target.value)}
-                            className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:bg-white font-mono"
+                            onChange={setFormStartTime}
+                            ariaLabelPrefix="เวลาเริ่ม"
+                            compact
                           />
                         </div>
                       </div>
@@ -1823,13 +1820,12 @@ export function MeetingsPage({
                           />
                         </div>
                         <div>
-                          <label className="block text-[10px] text-slate-500 font-bold mb-0.5">เวลาสิ้นสุด</label>
-                          <input
-                            type="time"
-                            required
+                          <label className="block text-[10px] text-slate-500 font-bold mb-0.5">เวลาสิ้นสุด (24 ชม.)</label>
+                          <Time24Select
                             value={formEndTime}
-                            onChange={(e) => setFormEndTime(e.target.value)}
-                            className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:bg-white font-mono"
+                            onChange={setFormEndTime}
+                            ariaLabelPrefix="เวลาสิ้นสุด"
+                            compact
                           />
                         </div>
                       </div>
