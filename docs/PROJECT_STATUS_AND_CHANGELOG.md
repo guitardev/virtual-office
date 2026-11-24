@@ -2,7 +2,8 @@
 
 > **อัปเดตล่าสุด:** 23 พฤศจิกายน 2569 (2026-11-23)  
 > **Branch:** `main` (`origin/main`)  
-> **Latest Commit:** `0c35894` (`fix(chat): remove mock seed data and legacy localStorage cache, use live Supabase only`)  
+> **Latest Commit:** `5e2b7db` (`fix(auth): enforce strict Turnstile only when real secret is configured`)  
+> **Production URL:** `https://www.smso.site`  
 > **หน่วยงาน:** สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร (พมจ.กำแพงเพชร)
 
 ---
@@ -89,6 +90,23 @@
 
 ---
 
+### 2.5 ความปลอดภัยของระบบ (Security Hardening — Vercel, Cloudflare & Supabase) (`25a2f47`, `5e2b7db`)
+- **Signed `HttpOnly` Session Cookie (`smso_session`):**
+  - สร้าง [server-session.ts](file:///c:/Users/GuitarDev/virtual-office/lib/server-session.ts) ลงนามคุกกี้ด้วย HMAC-SHA256 (`HttpOnly; SameSite=Lax; Secure`, อายุ 7 วัน) และตรวจด้วย `crypto.timingSafeEqual`
+  - ออกคุกกี้อัตโนมัติเมื่อล็อกอินผ่าน [app/api/nas/auth/route.ts](file:///c:/Users/GuitarDev/virtual-office/app/api/nas/auth/route.ts) และล้างคุกกี้เมื่อออกจากระบบผ่าน `DELETE /api/auth/session`
+- **ป้องกันการปลอมสิทธิ์ใน API Routes:**
+  - บังคับตรวจ Session ฝั่งเซิร์ฟเวอร์ใน `/api/leave` (`POST`/`PATCH`/`DELETE`), `/api/leave/permissions`, `/api/leave/balances`, `/api/leave/holidays`, และ `/api/r2/presign` (คืน `401` เมื่อไม่มี Session Cookie ใน Production)
+- **Cloudflare Turnstile Production Enforcement:**
+  - ปรับ [app/api/auth/turnstile/verify/route.ts](file:///c:/Users/GuitarDev/virtual-office/app/api/auth/turnstile/verify/route.ts) ให้เปิดโหมดบังคับตรวจ Turnstile จริงและปฏิเสธ dummy token (`403`) อัตโนมัติเมื่อตั้งค่า `CLOUDFLARE_TURNSTILE_SECRET_KEY` จริงบน Vercel
+- **HTTP Security Headers & Secret Hygiene:**
+  - เพิ่ม `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Strict-Transport-Security`, `Referrer-Policy`, `Permissions-Policy` และ `poweredByHeader: false` ใน [next.config.js](file:///c:/Users/GuitarDev/virtual-office/next.config.js)
+  - ลบ hardcoded Supabase anon key ออกจาก `scripts/check-supabase.mjs` และ `scripts/seed-users.js` (สแกนทั้งโปรเจ็คแล้ว: **0 hardcoded secrets**)
+- **Supabase Database Security:**
+  - รัน migration [20261123000002_fix_function_search_path.sql](file:///c:/Users/GuitarDev/virtual-office/supabase/migrations/20261123000002_fix_function_search_path.sql) ล็อก `search_path = public, pg_temp` ให้ฟังก์ชันทั้ง 3 ตัว (คำเตือน `function_search_path_mutable` ใน Supabase Security Advisor หายหมดแล้ว)
+- **ผลการตรวจระบบจริงบน `https://www.smso.site`:** Security Headers ผ่านครบ, Turnstile dummy token ถูกบล็อก (`403`), และ `DELETE /api/leave` / `POST /api/r2/presign` ที่ไม่มี Session Cookie ถูกบล็อก (`401`) ครบทุกจุด
+
+---
+
 ## 3. แผนผังไฟล์สำคัญสำหรับพัฒนาต่อ (Key Files Reference)
 
 ### ระบบใบลาอิเล็กทรอนิกส์ (Leave)
@@ -109,6 +127,11 @@
 - **UI:** [ChatPage.tsx](file:///c:/Users/GuitarDev/virtual-office/components/chat/ChatPage.tsx), [CreateGroupModal.tsx](file:///c:/Users/GuitarDev/virtual-office/components/chat/CreateGroupModal.tsx), [GroupMembersDrawer.tsx](file:///c:/Users/GuitarDev/virtual-office/components/chat/GroupMembersDrawer.tsx)
 - **Utilities & Supabase:** [chat-data.ts](file:///c:/Users/GuitarDev/virtual-office/lib/chat-data.ts), [supabase.ts](file:///c:/Users/GuitarDev/virtual-office/lib/supabase.ts)
 
+### ระบบความปลอดภัยและ Session (Security)
+- **Signed Session & Auth:** [server-session.ts](file:///c:/Users/GuitarDev/virtual-office/lib/server-session.ts), [app/api/nas/auth/route.ts](file:///c:/Users/GuitarDev/virtual-office/app/api/nas/auth/route.ts), [app/api/auth/session/route.ts](file:///c:/Users/GuitarDev/virtual-office/app/api/auth/session/route.ts), [app/api/auth/turnstile/verify/route.ts](file:///c:/Users/GuitarDev/virtual-office/app/api/auth/turnstile/verify/route.ts)
+- **Headers & Migration:** [next.config.js](file:///c:/Users/GuitarDev/virtual-office/next.config.js), [20261123000002_fix_function_search_path.sql](file:///c:/Users/GuitarDev/virtual-office/supabase/migrations/20261123000002_fix_function_search_path.sql)
+- **Security Unit Tests:** [security-session.test.mjs](file:///c:/Users/GuitarDev/virtual-office/tests/security-session.test.mjs) (4 เคส)
+
 ---
 
 ## 4. กติกาธุรกิจและข้อควรระวังในการพัฒนาต่อ (Guardrails)
@@ -119,6 +142,7 @@
 4. **เวลาการประชุม 24 ชม.:** ห้ามใช้ `<input type="time">` หรือ `toLocaleTimeString` โดยไม่กำหนดรูปแบบ 24 ชม. — ให้ใช้ `Time24Select` และ `formatTime24h` / `formatMeetingTimeRange24h` เสมอ
 5. **แชทกลุ่มราชการ:** ห้ามนำข้อมูล mock/seed หรือ `localStorage` fallback กลับมาใช้ — ต้องอ่านจาก Supabase `chat_channels` และ `messages` โดยตรงเท่านั้น
 6. **การทดสอบอัตโนมัติ (Playwright):** เมื่อเขียน E2E test ที่มีการสร้าง/แก้ไขข้อมูล ให้ mock write route (`POST`/`PATCH`/`DELETE`) เสมอเพื่อไม่ให้ข้อมูลทดสอบไปปนในฐานข้อมูล Supabase จริง
+7. **การยืนยันตัวตนฝั่งเซิร์ฟเวอร์:** API Route ที่มีการเปลี่ยนแปลงข้อมูลต้องใช้ `resolveRequestActor(req)` / `getSessionFromRequest(req)` จาก `lib/server-session.ts` เสมอ ห้ามเชื่อ `actorRole` หรือ `actorId` จาก JSON body โดยตรงใน Production
 
 ---
 
@@ -127,8 +151,8 @@
 > หมายเหตุ: บน Windows PowerShell 5.1 ให้เชื่อมคำสั่งด้วย `; if ($?) { ... }` แทน `&&`
 
 ```powershell
-# 1. รัน Unit Tests ระบบใบลา (19 เคส)
-node --test tests/leave-rules.test.mjs
+# 1. รัน Unit Tests ระบบใบลา + ความปลอดภัย Session (23 เคส)
+node --test tests/security-session.test.mjs tests/leave-rules.test.mjs
 
 # 2. ตรวจ TypeScript ทั้งโปรเจ็ค
 npx tsc --noEmit
