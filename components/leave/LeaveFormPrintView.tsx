@@ -92,16 +92,16 @@ function SignatureBlock({
 }) {
   const dateParts = formatThaiDateParts(dateStr);
   const alignCls = align === "center" ? "text-center" : "text-left";
-  const imgCls = align === "center" ? "mx-auto" : "ml-10";
+  const imgCls = align === "center" ? "mx-auto" : "ml-12";
 
   return (
     <div className={`space-y-1 ${alignCls}`}>
       {signatureUrl ? (
-        <div className="pt-1">
+        <div className="pt-0.5 leading-none">
           <img
             src={signatureUrl}
             alt="ลายเซ็น"
-            className={`h-10 max-w-[155px] object-contain ${imgCls} -mb-1`}
+            className={`h-[46px] max-w-[168px] object-contain ${imgCls} -mb-2.5 relative z-10`}
           />
         </div>
       ) : null}
@@ -541,7 +541,7 @@ export default function LeaveFormPrintView({
                   <img
                     src={leave.applicantSignature}
                     alt="ลายเซ็นผู้มอบ"
-                    className="h-9 max-w-[130px] object-contain ml-8 -mb-1"
+                    className="h-[40px] max-w-[144px] object-contain ml-11 -mb-2 relative z-10"
                   />
                 )}
                 <div>
@@ -556,7 +556,7 @@ export default function LeaveFormPrintView({
                   <img
                     src={leave.actingPersonSignature}
                     alt="ลายเซ็นผู้ปฏิบัติหน้าที่แทน"
-                    className="h-9 max-w-[130px] object-contain ml-8 -mb-1"
+                    className="h-[40px] max-w-[144px] object-contain ml-11 -mb-2 relative z-10"
                   />
                 )}
                 <div>

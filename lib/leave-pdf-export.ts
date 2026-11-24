@@ -8,6 +8,10 @@ import {
   LeaveRequestItem,
   LeaveType,
 } from "./leave-utils";
+import {
+  fitSignatureBox,
+  LEAVE_SIGNATURE_BOXES,
+} from "./leave-signature-utils";
 
 // A4 Portrait at ~200 DPI: 21.0 cm x 29.7 cm -> 1654 x 2339 px
 const PAGE_W = 1654;
@@ -49,14 +53,12 @@ function drawSigImgCentered(
   img: HTMLImageElement | null,
   centerX: number,
   aboveLineY: number,
-  maxW = 240,
-  maxH = 74
+  maxW: number = LEAVE_SIGNATURE_BOXES.pdfStandardPx.width,
+  maxH: number = LEAVE_SIGNATURE_BOXES.pdfStandardPx.height
 ) {
   if (!img || !img.width || !img.height) return;
-  const scale = Math.min(maxW / img.width, maxH / img.height);
-  const dw = img.width * scale;
-  const dh = img.height * scale;
-  ctx.drawImage(img, centerX - dw / 2, aboveLineY - dh + 8, dw, dh);
+  const { width: dw, height: dh } = fitSignatureBox(img.width, img.height, maxW, maxH);
+  ctx.drawImage(img, centerX - dw / 2, aboveLineY - dh + 10, dw, dh);
 }
 
 function segmentThaiWords(text: string): string[] {
@@ -285,8 +287,8 @@ function drawCancelLeaveForm(
   ctx.textAlign = "center";
   ctx.font = `400 30px ${fontFamily}`;
   ctx.fillText("ขอแสดงความนับถือ", sigCenterX, y);
-  y += 68;
-  drawSigImgCentered(ctx, sigs.applicant, sigCenterX, y - 28);
+  y += 74;
+  drawSigImgCentered(ctx, sigs.applicant, sigCenterX, y - 14);
   ctx.fillText(
     "(ลงชื่อ)......................................................",
     sigCenterX,
@@ -323,7 +325,7 @@ function drawCancelLeaveForm(
     "center"
   );
   ly += 56;
-  drawSigImgCentered(ctx, sigs.supervisor, leftCenter, ly - 26);
+  drawSigImgCentered(ctx, sigs.supervisor, leftCenter, ly - 14);
   ly = drawWrappedText(
     ctx,
     "(ลงชื่อ) ...............................................",
@@ -391,7 +393,7 @@ function drawCancelLeaveForm(
     ry = drawWrappedText(ctx, leave.orderComment, rightCenter, ry, rightW, 42, "center");
   }
   ry += 56;
-  drawSigImgCentered(ctx, sigs.approver, rightCenter, ry - 26);
+  drawSigImgCentered(ctx, sigs.approver, rightCenter, ry - 14);
   ry = drawWrappedText(
     ctx,
     "(ลงชื่อ) .................................................",
@@ -539,9 +541,9 @@ function drawVacationForm(
   ctx.textAlign = "center";
   ctx.font = `400 30px ${fontFamily}`;
   ctx.fillText("ขอแสดงความนับถือ", sigCenterX, y);
-  y += 58;
+  y += 72;
 
-  drawSigImgCentered(ctx, sigs.applicant, sigCenterX, y - 28);
+  drawSigImgCentered(ctx, sigs.applicant, sigCenterX, y - 14);
   ctx.fillText(
     "(ลงชื่อ)......................................................",
     sigCenterX,
@@ -587,7 +589,14 @@ function drawVacationForm(
   }
 
   let ly = row1Y + 185;
-  drawSigImgCentered(ctx, sigs.verifier, leftX + 200, ly - 26, 200, 64);
+  drawSigImgCentered(
+    ctx,
+    sigs.verifier,
+    leftX + 205,
+    ly - 14,
+    LEAVE_SIGNATURE_BOXES.pdfCompactPx.width,
+    LEAVE_SIGNATURE_BOXES.pdfCompactPx.height
+  );
   ctx.font = `400 28px ${fontFamily}`;
   ly = drawWrappedText(
     ctx,
@@ -642,8 +651,15 @@ function drawVacationForm(
     leftMaxW,
     42
   );
-  ly += 42;
-  drawSigImgCentered(ctx, sigs.applicant, leftX + 180, ly - 24, 180, 56);
+  ly += 46;
+  drawSigImgCentered(
+    ctx,
+    sigs.applicant,
+    leftX + 185,
+    ly - 14,
+    LEAVE_SIGNATURE_BOXES.pdfCompactPx.width,
+    LEAVE_SIGNATURE_BOXES.pdfCompactPx.height
+  );
   ly = drawWrappedText(
     ctx,
     "(ลงชื่อ).......................................... ผู้มอบ",
@@ -660,8 +676,15 @@ function drawVacationForm(
     leftMaxW - 70,
     42
   );
-  ly += 38;
-  drawSigImgCentered(ctx, sigs.actingPerson, leftX + 180, ly - 24, 180, 56);
+  ly += 44;
+  drawSigImgCentered(
+    ctx,
+    sigs.actingPerson,
+    leftX + 185,
+    ly - 14,
+    LEAVE_SIGNATURE_BOXES.pdfCompactPx.width,
+    LEAVE_SIGNATURE_BOXES.pdfCompactPx.height
+  );
   ly = drawWrappedText(
     ctx,
     "(ลงชื่อ)........................................... ผู้ปฏิบัติหน้าที่แทน",
@@ -698,8 +721,8 @@ function drawVacationForm(
     rightMaxW,
     42
   );
-  ry += 44;
-  drawSigImgCentered(ctx, sigs.supervisor, rightCenterX, ry - 26, 220, 68);
+  ry += 50;
+  drawSigImgCentered(ctx, sigs.supervisor, rightCenterX, ry - 14);
   ry = drawWrappedText(
     ctx,
     "(ลงชื่อ) ...............................................",
@@ -766,8 +789,8 @@ function drawVacationForm(
   if (leave.orderComment) {
     ry = drawWrappedText(ctx, leave.orderComment, rightCenterX, ry, rightMaxW, 42, "center");
   }
-  ry += 44;
-  drawSigImgCentered(ctx, sigs.approver, rightCenterX, ry - 26, 220, 68);
+  ry += 50;
+  drawSigImgCentered(ctx, sigs.approver, rightCenterX, ry - 14);
   ry = drawWrappedText(
     ctx,
     "(ลงชื่อ) .................................................",
@@ -1035,9 +1058,9 @@ function drawGeneralForm(
   const sigCenterX = RIGHT_LIMIT - 285;
   ctx.textAlign = "center";
   ctx.font = `400 30px ${fontFamily}`;
-  ctx.fillText("ขอแสดงความนับถือ", sigCenterX, y - 34);
-  drawSigImgCentered(ctx, sigs.applicant, sigCenterX, y - 24, 210, 62);
-  y += 28;
+  ctx.fillText("ขอแสดงความนับถือ", sigCenterX, y);
+  y += 72;
+  drawSigImgCentered(ctx, sigs.applicant, sigCenterX, y - 14);
   ctx.fillText(
     "(ลงชื่อ)......................................................",
     sigCenterX,
@@ -1047,7 +1070,7 @@ function drawGeneralForm(
   ctx.fillText(`(${leave.applicantName})`, sigCenterX, y);
   y += 40;
   ctx.fillText(`ตำแหน่ง ${leave.applicantPosition || "-"}`, sigCenterX, y);
-  y += 58;
+  y += 52;
 
   // Left: Stats table + Verifier
   const leftX = MARGIN_LEFT;
@@ -1105,8 +1128,15 @@ function drawGeneralForm(
     ty += 46;
   }
 
-  let ly = ty + 76;
-  drawSigImgCentered(ctx, sigs.verifier, leftX + 200, ly - 26, 200, 64);
+  let ly = ty + 82;
+  drawSigImgCentered(
+    ctx,
+    sigs.verifier,
+    leftX + 205,
+    ly - 14,
+    LEAVE_SIGNATURE_BOXES.pdfCompactPx.width,
+    LEAVE_SIGNATURE_BOXES.pdfCompactPx.height
+  );
   ctx.font = `400 28px ${fontFamily}`;
   ly = drawWrappedText(
     ctx,
@@ -1161,8 +1191,8 @@ function drawGeneralForm(
     rightMaxW,
     40
   );
-  ry += 42;
-  drawSigImgCentered(ctx, sigs.supervisor, rightCenterX, ry - 26, 210, 62);
+  ry += 48;
+  drawSigImgCentered(ctx, sigs.supervisor, rightCenterX, ry - 14);
   ry = drawWrappedText(
     ctx,
     "(ลงชื่อ) ...............................................",
@@ -1227,8 +1257,8 @@ function drawGeneralForm(
   if (leave.orderComment) {
     ry = drawWrappedText(ctx, leave.orderComment, rightCenterX, ry, rightMaxW, 40, "center");
   }
-  ry += 42;
-  drawSigImgCentered(ctx, sigs.approver, rightCenterX, ry - 26, 210, 62);
+  ry += 48;
+  drawSigImgCentered(ctx, sigs.approver, rightCenterX, ry - 14);
   ry = drawWrappedText(
     ctx,
     "(ลงชื่อ) .................................................",

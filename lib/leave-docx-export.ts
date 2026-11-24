@@ -8,6 +8,11 @@ import {
   type LeaveRequestItem,
   type LeaveType,
 } from "./leave-utils";
+import {
+  fitSignatureBox,
+  LEAVE_SIGNATURE_BOXES,
+  readPngDimensions,
+} from "./leave-signature-utils";
 
 const W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -19,12 +24,20 @@ const FONT = "TH Sarabun New";
 const R_FONTS = `<w:rFonts w:ascii="${FONT}" w:hAnsi="${FONT}" w:eastAsia="${FONT}" w:cs="${FONT}"/>`;
 const DEFAULT_RUN_SIZE = 32; // 16pt TH Sarabun New
 
+export interface SignatureRelMeta {
+  rId: string;
+  width?: number;
+  height?: number;
+}
+
+export type SignatureRelValue = string | SignatureRelMeta;
+
 export interface SignatureRels {
-  applicant?: string;
-  actingPerson?: string;
-  verifier?: string;
-  supervisor?: string;
-  approver?: string;
+  applicant?: SignatureRelValue;
+  actingPerson?: SignatureRelValue;
+  verifier?: SignatureRelValue;
+  supervisor?: SignatureRelValue;
+  approver?: SignatureRelValue;
 }
 
 let docPrCounter = 1;
@@ -94,13 +107,28 @@ function formatActingPersonLine(actingPersonName?: string | null): string {
 }
 
 function makeSignatureDrawingPara(
-  rId?: string,
-  opts: { align?: "left" | "center" | "right"; leftIndent?: number } = {}
+  rel?: SignatureRelValue,
+  opts: {
+    align?: "left" | "center" | "right";
+    leftIndent?: number;
+    compact?: boolean;
+  } = {}
 ): string {
+  if (!rel) return "";
+  const rId = typeof rel === "string" ? rel : rel.rId;
   if (!rId) return "";
   const idNum = docPrCounter++;
-  const cx = 1080000; // ~3.0 cm
-  const cy = 300000; // ~0.83 cm (compact to keep entire form on 1 A4 page)
+  const maxBox = opts.compact
+    ? LEAVE_SIGNATURE_BOXES.docxCompactEmu
+    : LEAVE_SIGNATURE_BOXES.docxStandardEmu;
+  const imgW = typeof rel === "string" ? undefined : rel.width;
+  const imgH = typeof rel === "string" ? undefined : rel.height;
+  const fitted =
+    imgW && imgH
+      ? fitSignatureBox(imgW, imgH, maxBox.width, maxBox.height)
+      : { width: maxBox.width, height: maxBox.height };
+  const cx = fitted.width;
+  const cy = fitted.height;
   const align = opts.align ?? "center";
   const indXml = opts.leftIndent ? `<w:ind w:left="${opts.leftIndent}"/>` : "";
   const drawing = `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="${idNum}" name="Signature_${idNum}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="${A_NS}" noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic xmlns:a="${A_NS}"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="${PIC_NS}"><pic:nvPicPr><pic:cNvPr id="0" name="Signature_${idNum}.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${rId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
@@ -689,7 +717,7 @@ function buildVacationLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels)
       after: 20,
     }),
     statsTable,
-    makeSignatureDrawingPara(sigRels.verifier, { align: "left", leftIndent: 500 }),
+    makeSignatureDrawingPara(sigRels.verifier, { align: "left", leftIndent: 500, compact: true }),
     makePara(
       makeRun("(ลงชื่อ)", { bold: true }) +
       makeRun("                               ", { bold: true }) +
@@ -722,7 +750,7 @@ function buildVacationLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels)
     makePara(makeRun(formatActingPersonLine(leave.actingPersonName)), {
       after: 30,
     }),
-    makeSignatureDrawingPara(sigRels.applicant, { align: "left", leftIndent: 500 }),
+    makeSignatureDrawingPara(sigRels.applicant, { align: "left", leftIndent: 500, compact: true }),
     makePara(
       makeRun("(ลงชื่อ)", { bold: true }) +
       makeRun(".......................................... ") +
@@ -736,6 +764,7 @@ function buildVacationLeaveBody(leave: LeaveRequestItem, sigRels: SignatureRels)
     makeSignatureDrawingPara(sigRels.actingPerson, {
       align: "left",
       leftIndent: 500,
+      compact: true,
     }),
     makePara(
       makeRun("(ลงชื่อ)", { bold: true }) +
@@ -1329,7 +1358,12 @@ export async function buildLeaveDocxUint8Array(
     if (bytes) {
       const rId = `rId${relIdx++}`;
       const fileName = `sig_${key}.png`;
-      sigRels[key] = rId;
+      const dims = readPngDimensions(bytes);
+      sigRels[key] = {
+        rId,
+        width: dims?.width,
+        height: dims?.height,
+      };
       zip.file(`word/media/${fileName}`, bytes);
       extraWordRels.push(
         `<Relationship Id="${rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${fileName}"/>`

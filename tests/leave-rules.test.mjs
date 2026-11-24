@@ -828,3 +828,110 @@ describe("Last Leave History Calculation & Validation (ประวัติก�
     );
   });
 });
+
+describe("Leave Digital Signature Sizing & Aspect-Ratio Preservation", () => {
+  it("should parse PNG IHDR dimensions and scale without distortion in fitSignatureBox", async () => {
+    const {
+      readPngDimensions,
+      fitSignatureBox,
+      findInkBoundingBox,
+      stripNearWhiteBackground,
+      LEAVE_SIGNATURE_BOXES,
+    } = await import("../lib/leave-signature-utils.ts");
+
+    // Construct minimal valid PNG header (24 bytes) with width=400, height=200 (2:1)
+    const header = new Uint8Array(24);
+    header.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
+    const view = new DataView(header.buffer);
+    view.setUint32(16, 400, false);
+    view.setUint32(20, 200, false);
+
+    assert.deepEqual(readPngDimensions(header), { width: 400, height: 200 });
+    assert.equal(readPngDimensions(new Uint8Array([1, 2, 3])), null);
+
+    // 2:1 image inside standard Word box (1,224,000 × 360,000 EMU) -> height-bound: 720,000 × 360,000
+    const docxFit = fitSignatureBox(
+      400,
+      200,
+      LEAVE_SIGNATURE_BOXES.docxStandardEmu.width,
+      LEAVE_SIGNATURE_BOXES.docxStandardEmu.height
+    );
+    assert.deepEqual(docxFit, { width: 720000, height: 360000 });
+
+    // Wide 6:1 image -> width-bound: 1,224,000 × 204,000
+    const wideFit = fitSignatureBox(
+      600,
+      100,
+      LEAVE_SIGNATURE_BOXES.docxStandardEmu.width,
+      LEAVE_SIGNATURE_BOXES.docxStandardEmu.height
+    );
+    assert.deepEqual(wideFit, { width: 1224000, height: 204000 });
+
+    // Strip white paper background while preserving blue ink & locate tight ink bbox
+    // 3x2 RGBA buffer: white pixels except (1,1) dark blue ink
+    const rgba = new Uint8ClampedArray(3 * 2 * 4);
+    for (let i = 0; i < rgba.length; i += 4) {
+      rgba[i] = 250;
+      rgba[i + 1] = 250;
+      rgba[i + 2] = 250;
+      rgba[i + 3] = 255;
+    }
+    const inkIdx = (1 * 3 + 1) * 4;
+    rgba[inkIdx] = 30;
+    rgba[inkIdx + 1] = 58;
+    rgba[inkIdx + 2] = 138;
+    rgba[inkIdx + 3] = 255;
+
+    stripNearWhiteBackground(rgba);
+    assert.equal(rgba[3], 0); // white background made transparent
+    assert.equal(rgba[inkIdx + 3], 255); // blue ink kept opaque
+    assert.deepEqual(findInkBoundingBox(rgba, 3, 2), {
+      minX: 1,
+      minY: 1,
+      maxX: 1,
+      maxY: 1,
+    });
+  });
+
+  it("should embed aspect-ratio-preserved PNG signature dimensions in Word .docx export", async () => {
+    const JSZip = (await import("jszip")).default;
+    const { buildLeaveDocxUint8Array } = await import("../lib/leave-docx-export.ts");
+    const { LEAVE_SIGNATURE_BOXES } = await import("../lib/leave-signature-utils.ts");
+
+    // 2:1 PNG header encoded as base64 data URL (width=400, height=200)
+    const pngBytes = new Uint8Array(32);
+    pngBytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
+    const dv = new DataView(pngBytes.buffer);
+    dv.setUint32(16, 400, false);
+    dv.setUint32(20, 200, false);
+    const dataUrl = `data:image/png;base64,${Buffer.from(pngBytes).toString("base64")}`;
+
+    const docxBytes = await buildLeaveDocxUint8Array(
+      makeMockLeave({
+        leaveType: "vacation_leave",
+        applicantSignature: dataUrl,
+        verifierSignature: dataUrl,
+      })
+    );
+
+    const zip = await JSZip.loadAsync(docxBytes);
+    const docXml = await zip.file("word/document.xml").async("string");
+
+    // Strict 1-page A4 size preserved
+    assert.match(docXml, /w:pgSz w:w="11906" w:h="16838"/);
+
+    // Applicant standard slot: 2:1 inside 1224000×360000 -> 720000×360000
+    assert.match(docXml, /wp:extent cx="720000" cy="360000"/);
+
+    // Verifier / acting compact slot in vacation form: 2:1 inside 1044000×306000 -> 612000×306000
+    const compactExpectedW = Math.round(
+      (400 / 200) * LEAVE_SIGNATURE_BOXES.docxCompactEmu.height
+    );
+    assert.match(
+      docXml,
+      new RegExp(
+        `wp:extent cx="${compactExpectedW}" cy="${LEAVE_SIGNATURE_BOXES.docxCompactEmu.height}"`
+      )
+    );
+  });
+});
