@@ -1,7 +1,8 @@
 # 🏛️ บันทึกการปฏิบัติงานและประวัติการพัฒนาฉบับรวมสมบูรณ์ (Master Work Log)
 **ระบบสำนักงานเสมือนจริง (Smart MSO - Virtual Office)**  
 **สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร (พมจ.กำแพงเพชร)**  
-*รวบรวมประวัติการพัฒนา: 3 พฤศจิกายน – 5 พฤศจิกายน 2569 (รวมทุก Session)*
+*รวบรวมประวัติการพัฒนา: 3 พฤศจิกายน – 24 พฤศจิกายน 2569 (รวมทุก Session)*  
+*สรุปสถานะล่าสุดฉบับย่อสำหรับนักพัฒนา:* [`docs/PROJECT_STATUS_AND_CHANGELOG.md`](file:///c:/Users/GuitarDev/virtual-office/docs/PROJECT_STATUS_AND_CHANGELOG.md)
 
 ---
 
@@ -11,6 +12,7 @@
    - [เซสชันที่ 1: วันที่ 3 พฤศจิกายน 2569 (Fleet & Navigation Redesign)](#21-เซสชันที่-1-วันที่-3-พฤศจิกายน-2569)
    - [เซสชันที่ 2: วันที่ 4 พฤศจิกายน 2569 (Meetings, Circular & Smart Tools)](#22-เซสชันที่-2-วันที่-4-พฤศจิกายน-2569)
    - [เซสชันที่ 3: วันที่ 5 พฤศจิกายน 2569 (Tasks, NAS DMS/Photos, Data Hub & Authentic Chat)](#23-เซสชันที่-3-วันที่-5-พฤศจิกายน-2569)
+   - [เซสชันที่ 4: วันที่ 18–24 พฤศจิกายน 2569 (Leave v2, Meetings 24h, Live Chat, Security & Vercel `sin1`)](#24-เซสชันที่-4-วันที่-1824-พฤศจิกายน-2569)
 3. [ทำเนียบบุคลากรทางการ Single Source of Truth](#3-ทำเนียบบุคลากรทางการ-single-source-of-truth)
 4. [ผลการตรวจสอบและชุดทดสอบอัตโนมัติ (Automated Testing & Verification)](#4-ผลการตรวจสอบและชุดทดสอบอัตโนมัติ-automated-testing--verification)
 5. [ประวัติ Git Commits สำคัญ](#5-ประวัติ-git-commits-สำคัญ)
@@ -103,6 +105,30 @@
 
 ---
 
+### 2.4 เซสชันที่ 4: วันที่ 18–24 พฤศจิกายน 2569
+*เน้นระบบใบลาอิเล็กทรอนิกส์ v2 ครบวงจร, การประชุม 24 ชม., แชท Supabase ล้วน, ความปลอดภัยระดับ Production และ Vercel `sin1`*
+
+1. **ระบบใบลาอิเล็กทรอนิกส์ v2 & เอกสารราชการ A4 แผ่นเดียว (`/leave`):**
+   - รองรับ 3 แบบฟอร์ม (ป่วย/กิจ/คลอด, ลาพักผ่อน, ขอยกเลิกวันลา), ลาครึ่งวัน, หักวันหยุดราชการไทย, ตรวจวันลาซ้อนทับ, ลายเซ็นดิจิทัล, ตีกลับแก้ไข และซิงก์เข้าตารางลงเวลาราชการ
+   - กำหนดผู้มีอำนาจสั่งอนุญาตเพียงผู้เดียว (`นางสาวมะลิวัน สิทธิโยธี`) และผู้ตรวจสอบสถิติ/ผู้ดำเนินการในระบบแทนหลัง พมจ. เซ็นแฟ้มกระดาษ (`นายยุทธนา เจนจบ`)
+   - เพิ่ม **ทะเบียนคุมวันลารายบุคคล** (UI + พิมพ์ A4 + ส่งออก Excel `.xlsx` 12 คอลัมน์ `A1:L`)
+   - แก้ไขการคำนวณและตรวจสอบ "จำนวนวันลาครั้งสุดท้าย" อัตโนมัติทั้งฝั่ง UI และ API
+   - เพิ่มแท็บเมนู **🗑️ จัดการใบลาไม่ผ่าน/ยกเลิก** พร้อม `DELETE /api/leave` เฉพาะผู้ได้รับสิทธิ์ (ยุทธนา / Admin / `canApprove`) โดยล็อกให้ลบได้เฉพาะสถานะ `rejected` / `cancelled`
+   - เพิ่มคำลงท้าย **"ขอแสดงความนับถือ"** ในใบลาพักผ่อนครบทั้ง 3 รูปแบบ และปรับแบบฟอร์ม `.docx` ทั้งใบลาป่วย/กิจ/คลอด และใบลาพักผ่อนให้จัดลง **กระดาษ A4 แผ่นเดียวพอดี**
+2. **ระบบการประชุมและนัดหมาย 24 ชั่วโมง (`/meetings`):**
+   - สร้าง [`Time24Select.tsx`](file:///c:/Users/GuitarDev/virtual-office/components/meetings/Time24Select.tsx) แทน `<input type="time">` และปรับการแสดงผลทุกจุดเป็น `HH:mm - HH:mm น.` (Playwright `tests/meetings-workflow.spec.ts` ผ่าน 8/8)
+3. **ระบบแชทกลุ่มราชการ Supabase-Only (`/chat`):**
+   - ลบข้อมูลจำลอง `DEFAULT_CHAT_GROUPS` / `INITIAL_CHAT_MESSAGES` และแคชเก่า `localStorage` ทั้งหมด ใช้ข้อมูลจริงจาก Supabase `chat_channels` และ `messages` 100%
+4. **ศูนย์ข้อมูล TPMAP 2565–2569 & ลิงก์ระบบงาน (`/data-hub`):**
+   - เพิ่มแท็บวิเคราะห์ TPMAP จ.กำแพงเพชร พร้อม API `/api/tpmap`, อัปเดตลิงก์ 4 กลุ่มภารกิจ และลิงก์ `MSO e-Office` (`https://mso.eoffice.go.th`)
+5. **Security Hardening & Vercel Production Optimization:**
+   - สร้าง Signed `HttpOnly` Session Cookie (`smso_session`) ด้วย HMAC-SHA256 ([`lib/server-session.ts`](file:///c:/Users/GuitarDev/virtual-office/lib/server-session.ts)) และบังคับตรวจ Session ฝั่งเซิร์ฟเวอร์ใน `/api/leave/*` และ `/api/r2/presign`
+   - เปิดใช้ Cloudflare Turnstile จริงบน Production, เพิ่ม HTTP Security Headers ใน [`next.config.js`](file:///c:/Users/GuitarDev/virtual-office/next.config.js), ลบ hardcoded anon key ออกจาก `scripts/`, และล็อก `search_path` ให้ 3 ฟังก์ชันบน Supabase (`20261123000002_fix_function_search_path.sql`)
+   - เพิ่ม [`vercel.json`](file:///c:/Users/GuitarDev/virtual-office/vercel.json) ล็อกภูมิภาค Functions เป็น **Singapore (`sin1`)** และแก้ `attendance-db.ts` ให้ใช้ `os.tmpdir()` บน Vercel Serverless (แก้ `ENOENT: mkdir '/var/task/data'`)
+   - ชุดทดสอบ Unit Tests (`tests/leave-rules.test.mjs` + `tests/security-session.test.mjs`) ผ่าน **23/23** และตรวจระบบจริงบน `https://www.smso.site` ผ่านครบทุกจุด
+
+---
+
 ## 3. ทำเนียบบุคลากรทางการ Single Source of Truth
 
 ข้อมูลบุคลากรทั้งหมดได้รับการจัดระเบียบใน [`lib/office-personnel.ts`](file:///c:/Users/GuitarDev/virtual-office/lib/office-personnel.ts) ดังนี้:
@@ -146,6 +172,18 @@ Status:      100% PASS
 ## 5. ประวัติ Git Commits สำคัญ
 
 ```
+407f7e1 fix(attendance): use os.tmpdir on Vercel serverless and skip mkdir during read
+93769d9 chore(vercel): pin Serverless Functions region to sin1 (Singapore) and update project changelog
+5e2b7db fix(auth): enforce strict Turnstile only when real secret is configured
+25a2f47 security: add signed HttpOnly session, harden APIs, headers, Turnstile, and DB search_path
+0c35894 fix(chat): remove mock seed data and legacy localStorage cache, use live Supabase only
+4add3b8 feat(leave): add inactive leave delete menu, vacation salutation, and 1-page A4 docx
+88dd4c8 feat(meetings): enforce 24-hour time selection and display
+0a6656c fix(leave): auto-calculate and validate last leave days across UI, API, and resubmit
+b807b04 feat(leave): add individual leave control register UI, A4 print, and Excel export
+00c3d5f feat(leave): align vacation docx template, sole approver, and paper-handoff workflow
+063e753 feat: implement comprehensive leave management system with UI, API, and database migration
+a39cb75 feat(datahub): add TPMAP Kamphaeng Phet (2565-2569) analytics tab, API & Supabase schema
 acbcfcc feat(chat): connect authentic office personnel roster and realistic initial chats for Kamphaeng Phet MSO
 e9af50c feat(data-hub): connect authentic office personnel roster and division heads for Kamphaeng Phet MSO
 015f8a0 feat(datahub): implement Kamphaeng Phet 11-district social data hub, TPMAP dimensions and official GBC report export

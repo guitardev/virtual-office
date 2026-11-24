@@ -3,6 +3,7 @@
 ระบบสื่อสาร ทำงานร่วมกัน และบริหารจัดการทรัพยากรภายในองค์กรและหน่วยงานราชการ พัฒนาด้วย **Next.js 16 (App Router)**, **React 19**, **TypeScript** และ **Tailwind CSS v4** เชื่อมต่อฐานข้อมูลคลาวด์สด **Supabase PostgreSQL & Supabase Auth** พร้อมระบบยืนยันตัวตนผ่าน **Google OAuth** และ **LINE Login SSO**, สถาปัตยกรรมการจัดการสิทธิ์ขั้นสูง (**Granular Role-Based Access Control - RBAC**), ระบบบริหารคำขอสิทธิ์เข้าใช้งานใหม่ (Access Requests E-Workflow) และโครงสร้างข้อมูลบุคลากรตามระเบียบงานสารบรรณภาครัฐ
 
 > 🌐 **Production URL:** [https://www.smso.site](https://www.smso.site)  
+> 📋 **สรุปสถานะโปรเจ็คและบันทึกการพัฒนาล่าสุด:** [docs/PROJECT_STATUS_AND_CHANGELOG.md](file:///c:/Users/GuitarDev/virtual-office/docs/PROJECT_STATUS_AND_CHANGELOG.md)  
 > 📘 **คู่มือการพัฒนาและสถาปัตยกรรมระบบ (Developer Handbook):** [docs/DEVELOPMENT_HANDBOOK.md](file:///c:/Users/GuitarDev/virtual-office/docs/DEVELOPMENT_HANDBOOK.md)  
 > 🏛️ **บันทึกการพัฒนาฉบับรวมสมบูรณ์ (Master Work Log):** [docs/work-log-master.md](file:///c:/Users/GuitarDev/virtual-office/docs/work-log-master.md)
 
@@ -77,6 +78,9 @@ graph TD
 | **Phase 13** | **Kamphaeng Phet Social Data Hub** | สถิติจริง 11 อำเภอ, 5 มิติ TPMAP, ส่งออก Excel ภาษาไทย, พิมพ์รายงานทางการ กบจ. พร้อมตราครุฑ/พมจ. | ✅ สมบูรณ์ |
 | **Phase 14** | **Authentic Office Directory & Chat** | ทำเนียบบุคลากรจริง 11 ท่าน พมจ.กำแพงเพชร, ซิงก์ห้องแชทประจำฝ่าย, ข้อความเริ่มต้นราชการ | ✅ สมบูรณ์ |
 | **Phase 15** | **Smart Civil-Service Tools** | เครื่องมือตัดขอบและเปลี่ยนสีพื้นหลังรูปติดบัตรข้าราชการ (`/tools/bgremove`), ตัวสร้าง QR Code ถาวร | ✅ สมบูรณ์ |
+| **Phase 16** | **E-Leave v2 & Control Register** | ระบบใบลา 3 แบบฟอร์ม, เสนอแฟ้ม พมจ. (Sole Approver), ทะเบียนคุมวันลารายบุคคล (UI/Excel), เมนูลบใบลาไม่ผ่าน/ยกเลิก, `.docx` A4 แผ่นเดียว | ✅ สมบูรณ์ |
+| **Phase 17** | **Meetings 24h & Live Supabase Chat** | นัดหมายระบบเวลา 24 ชม. (`Time24Select`), แชทกลุ่มราชการดึงข้อมูลสดจาก Supabase 100%, TPMAP 2565–2569 Data Hub | ✅ สมบูรณ์ |
+| **Phase 18** | **Security Hardening & Vercel `sin1`** | Signed `HttpOnly` Session Cookie, API Hardening, Cloudflare Turnstile จริง, Security Headers, Supabase `search_path`, Vercel Region `sin1` | ✅ สมบูรณ์ |
 
 ---
 

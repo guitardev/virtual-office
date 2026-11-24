@@ -568,6 +568,14 @@ npx tsc --noEmit
 - 🗄️ **เชื่อมต่อ Supabase Live จริง (`xkeiuyhkokmecefzzynb.supabase.co`):** ถ่ายโอนฐานข้อมูลขึ้นระบบคลาวด์สด พร้อมเปิดใช้งาน Realtime WebSocket Synchronization
 - 🧹 **Zero Demo Data Migration:** ล้างข้อมูลทดสอบ (Demo Mock Data) ออกทั้งหมด และเชื่อมต่อข้อมูลจริงจากฐานข้อมูลในทุกโมดูล (รถยนต์ราชการ, แชท, กระดานงาน, บันทึกการตรวจสอบ)
 
+### **v2.0.0 (2026-11-24) — E-Leave v2, Meetings 24h, Live Supabase Chat, Security Hardening & Vercel `sin1`**
+- 📝 **ระบบใบลาอิเล็กทรอนิกส์ v2 (`/leave`):** รองรับ 3 แบบฟอร์ม (ป่วย/กิจ/คลอด, พักผ่อน, ยกเลิกวันลา), ลาครึ่งวัน, หักวันหยุดราชการไทย, ตรวจวันลาซ้อนทับ, ลายเซ็นดิจิทัล, Workflow เสนอแฟ้ม พมจ. (`นางสาวมะลิวัน` + `นายยุทธนา`), ทะเบียนคุมวันลารายบุคคล (UI + Excel `.xlsx`), เมนูลบใบลาไม่ผ่าน/ยกเลิก และ `.docx` A4 แผ่นเดียวพร้อมคำลงท้าย "ขอแสดงความนับถือ"
+- ⏰ **การประชุมและนัดหมาย 24 ชม. (`/meetings`):** เปลี่ยนมาใช้ `Time24Select` และรูปแบบ `HH:mm - HH:mm น.` ทั้งระบบ
+- 💬 **แชทกลุ่มราชการ Supabase-Only (`/chat`):** ลบข้อมูลจำลองและแคช `localStorage` ทั้งหมด ใช้ข้อมูลจริงจาก Supabase 100%
+- 📊 **TPMAP Data Hub (`/data-hub`):** เพิ่มแท็บวิเคราะห์ข้อมูล TPMAP จ.กำแพงเพชร (2565–2569) และอัปเดตลิงก์ระบบงานราชการ
+- 🔒 **Security Hardening & Vercel `sin1`:** Signed `HttpOnly` Session Cookie (`smso_session`), ป้องกันการปลอมสิทธิ์ใน `/api/leave/*` และ `/api/r2/presign`, เปิดใช้ Cloudflare Turnstile จริง, HTTP Security Headers, ล็อก `search_path` ฟังก์ชัน Supabase, ล็อกภูมิภาค Vercel เป็น Singapore (`sin1`), และใช้ `os.tmpdir()` ใน `attendance-db.ts`
+- 📋 อ่านรายละเอียดฉบับเต็มได้ที่ [PROJECT_STATUS_AND_CHANGELOG.md](file:///c:/Users/GuitarDev/virtual-office/docs/PROJECT_STATUS_AND_CHANGELOG.md)
+
 ### **v1.4.4 (2026-10-11) — Fullscreen Modal Experience & Prominent Close Controls**
 - ⛶ **โหมด Modal เต็มหน้าจอ (Fullscreen Modal Design):** ปรับโฉมหน้าต่าง Modal ให้สามารถขยายเต็มหน้าจอ (`isFullscreen`) เพื่อใช้พื้นที่หน้าจอคอมพิวเตอร์ (PC / Ultrawide) ได้อย่างเต็มประสิทธิภาพ ไม่ถูกจำกัดในกรอบแคบ พร้อมปุ่มสลับ `⛶ เต็มหน้าจอ` / `🗗 ย่อหน้าต่าง`
 - 🖥️ **เลย์เอาต์ 2 คอลัมน์สำหรับเดสก์ท็อป (Responsive 2-Column Desktop Grid):** ในหน้าต่างแก้ไขข้อมูลส่วนตัว (`EditProfileModal`) จัดสรรพื้นที่ฝั่งซ้ายเป็นระบบจัดการรูปถ่ายโปรไฟล์ (พรีวิวขนาดใหญ่, อัปโหลด, แกลเลอรีทำเนียบ 8 ท่าน, URL) และฝั่งขวาเป็นแบบฟอร์มข้อมูลข้าราชการ/การติดต่ออย่างเป็นสัดส่วน

@@ -1,9 +1,9 @@
 # Smart MSO Virtual Office — สรุปสถานะโปรเจ็คและบันทึกการพัฒนา (Project Status & Changelog)
 
-> **อัปเดตล่าสุด:** 23 พฤศจิกายน 2569 (2026-11-23)  
+> **อัปเดตล่าสุด:** 24 พฤศจิกายน 2569 (2026-11-24)  
 > **Branch:** `main` (`origin/main`)  
-> **Latest Commit:** `5e2b7db` (`fix(auth): enforce strict Turnstile only when real secret is configured`)  
-> **Production URL:** `https://www.smso.site`  
+> **Latest Commit:** `407f7e1` (`fix(attendance): use os.tmpdir on Vercel serverless and skip mkdir during read`)  
+> **Production URL:** `https://www.smso.site` (Vercel Function Region: `sin1` — Singapore)  
 > **หน่วยงาน:** สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัดกำแพงเพชร (พมจ.กำแพงเพชร)
 
 ---
@@ -104,6 +104,12 @@
 - **Supabase Database Security:**
   - รัน migration [20261123000002_fix_function_search_path.sql](file:///c:/Users/GuitarDev/virtual-office/supabase/migrations/20261123000002_fix_function_search_path.sql) ล็อก `search_path = public, pg_temp` ให้ฟังก์ชันทั้ง 3 ตัว (คำเตือน `function_search_path_mutable` ใน Supabase Security Advisor หายหมดแล้ว)
 - **ผลการตรวจระบบจริงบน `https://www.smso.site`:** Security Headers ผ่านครบ, Turnstile dummy token ถูกบล็อก (`403`), และ `DELETE /api/leave` / `POST /api/r2/presign` ที่ไม่มี Session Cookie ถูกบล็อก (`401`) ครบทุกจุด
+
+---
+
+### 2.6 การตั้งค่า Vercel Serverless & แก้ไข Log Read-Only Filesystem (`93769d9`, `407f7e1`)
+- **ล็อกภูมิภาค Serverless Functions เป็น Singapore (`sin1`):** เพิ่ม [vercel.json](file:///c:/Users/GuitarDev/virtual-office/vercel.json) (`"regions": ["sin1"]`) ย้ายจาก US East (`iad1`) มาสิงคโปร์เพื่อลดความหน่วง API ระหว่างไทย, Synology NAS และ Supabase (`ap-southeast-2`)
+- **แก้ Error `ENOENT: mkdir '/var/task/data'` บน Vercel:** ปรับ [attendance-db.ts](file:///c:/Users/GuitarDev/virtual-office/lib/attendance-db.ts) ให้ใช้ `os.tmpdir()` (`/tmp/smartmso-data`) เมื่อรันบน Vercel Serverless (`process.env.VERCEL`) และไม่เรียก `fs.mkdirSync` ใน `loadAttendanceStore()`
 
 ---
 
