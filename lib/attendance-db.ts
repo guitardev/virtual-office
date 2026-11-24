@@ -8,6 +8,7 @@
  */
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import mysql from "mysql2/promise";
 import type { HipAttendanceRecord } from "./hip-cmi681s";
@@ -134,7 +135,12 @@ export interface AttendanceStoreData {
   logs: AttendanceLogItem[];
 }
 
-const DATA_DIR = path.join(process.cwd(), "data");
+const IS_SERVERLESS = Boolean(
+  process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME
+);
+const DATA_DIR = IS_SERVERLESS
+  ? path.join(os.tmpdir(), "smartmso-data")
+  : path.join(process.cwd(), "data");
 const STORE_PATH = path.join(DATA_DIR, "attendance-store.json");
 
 export function getEnvMysqlDefaults(): NasMysqlConfig {
@@ -179,9 +185,6 @@ export function buildDefaultEditors(): AuthorizedAttendanceEditor[] {
 export function loadAttendanceStore(): AttendanceStoreData {
   const envDefaults = getEnvMysqlDefaults();
   try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
     if (fs.existsSync(STORE_PATH)) {
       const raw = fs.readFileSync(STORE_PATH, "utf8");
       const parsed = JSON.parse(raw) as Partial<AttendanceStoreData>;
